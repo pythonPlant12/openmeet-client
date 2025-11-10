@@ -10,7 +10,11 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "typeRoots": ["./node_modules/@types", "src/shared/types"]
+    "typeRoots": ["./node_modules/@types", "src/shared/types"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "ts-node": {
     "files": true

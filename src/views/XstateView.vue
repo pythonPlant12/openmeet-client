@@ -2,7 +2,6 @@
 import { useMachine } from '@xstate/vue';
 import { assign, createMachine } from 'xstate';
 
-// Create a machine, here is where all the logic will be defined.
 const toggleMachine = createMachine({
   id: 'toggle',
   types: {
@@ -11,10 +10,9 @@ const toggleMachine = createMachine({
       maxCount: number;
     },
     events: {} as { type: 'toggle' },
-    input: {} as { maxCount: number }, // Input is how initial data can be provided to a machine actor
+    input: {} as { maxCount: number },
   },
   context: ({ input }) => ({
-    // Initial context values
     count: 0,
     maxCount: input.maxCount,
   }),
@@ -24,9 +22,9 @@ const toggleMachine = createMachine({
       on: {
         toggle: {
           target: 'Active',
-          guard: ({ context }) => context.count < context.maxCount, // Guards are used to conditionally allow transitions
+          guard: ({ context }) => context.count < context.maxCount,
         },
-      }, // Automatically go back to Inactive after 2 seconds
+      },
     },
     Active: {
       entry: assign({
@@ -38,26 +36,16 @@ const toggleMachine = createMachine({
   },
 });
 
-/* 
-  useMachine returns an object with:
-  {
-    snapshot,  // ComputedRef<Snapshot>
-    send,      // Function to send events
-    actorRef   // The actual actor instance
-  }
- */
 const { snapshot, send, actorRef } = useMachine(toggleMachine, {
   input: {
     maxCount: 10,
   },
 });
 
-// Subscribe to changes
 actorRef.subscribe();
 
-// Send events
 function sendEventToMachine() {
-  send({ type: 'toggle' }); // This is 'on' event
+  send({ type: 'toggle' });
 }
 </script>
 <template>

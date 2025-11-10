@@ -6,27 +6,16 @@ import { RouterView, useRouter } from 'vue-router';
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
 
-/**
- * Create the auth machine at app level
- * This makes it available to all child components via provide/inject
- */
 const authActorRef = useMachine(authMachine, {
   input: {
     initialToken: cookieUtils.get('authToken'),
   },
 });
 
-/**
- * Provide the entire actor reference to all child components
- * Children can inject 'authActor' to access the machine
- */
 provide('authActor', authActorRef);
 
 const router = useRouter();
 
-/**
- * Computed properties for navbar buttons
- */
 const snapshot = computed(() => authActorRef.snapshot.value);
 const isAuthenticated = computed(() => snapshot.value.value === 'authenticated');
 const currentUser = computed(() => snapshot.value.context.user);
@@ -40,9 +29,6 @@ watch(
   },
 );
 
-/**
- * Navbar action handlers
- */
 const handleLogin = () => {
   router.push('/');
 };

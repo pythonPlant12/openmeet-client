@@ -2,9 +2,6 @@
 import { computed, inject } from 'vue';
 import { useRouter } from 'vue-router';
 
-/**
- * Inject the auth actor from App.vue
- */
 const authActor = inject<any>('authActor');
 const router = useRouter();
 
@@ -12,26 +9,16 @@ if (!authActor) {
   throw new Error('Auth actor not provided!');
 }
 
-/**
- * Access the snapshot from the injected actor
- */
 const snapshot = computed(() => authActor.snapshot.value);
 const currentUser = computed(() => snapshot.value.context.user);
 
-// Debug: Check what's in the context
 console.log('Dashboard context:', snapshot.value.context);
 
-/**
- * Send LOGOUT event to the machine
- */
 const handleLogout = () => {
   authActor.send({ type: 'LOGOUT' });
   router.push('/');
 };
 
-/**
- * Redirect to login if not authenticated
- */
 const isAuthenticated = computed(() => snapshot.value.value === 'authenticated');
 if (!isAuthenticated.value) {
   router.push('/');

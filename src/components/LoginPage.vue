@@ -3,10 +3,6 @@ import { computed, inject, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import type { Actor } from 'xstate';
 
-/**
- * Inject the auth actor from App.vue
- * The actor is provided at the app level so all components can access it
- */
 const authActor = inject<any>('authActor');
 const router = useRouter();
 
@@ -14,37 +10,23 @@ if (!authActor) {
   throw new Error('Auth actor not provided!');
 }
 
-/**
- * Access the snapshot from the injected actor
- * We use authActor.snapshot to get the current snapshot
- */
 const snapshot = computed(() => authActor.snapshot.value);
 
 const email = ref('');
 const password = ref('');
 const rememberMe = ref(false);
 
-/**
- * Computed properties tracking machine state
- */
 const isAuthenticating = computed(() => snapshot.value.value === 'authenticating');
 const hasError = computed(() => snapshot.value.value === 'authenticationFailed');
 const errorMessage = computed(() => snapshot.value.context.error);
 const isAuthenticated = computed(() => snapshot.value.value === 'authenticated');
 
-/**
- * Watch for successful authentication and redirect to dashboard
- * This will trigger whenever the auth state changes to 'authenticated'
- */
 watch(isAuthenticated, (authenticated) => {
   if (authenticated) {
     router.push('/dashboard');
   }
 });
 
-/**
- * Send LOGIN event to the auth machine
- */
 const handleLogin = () => {
   authActor.send({
     type: 'LOGIN',
