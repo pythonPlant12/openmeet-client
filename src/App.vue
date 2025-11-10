@@ -44,11 +44,7 @@ const handleLogout = () => {
     <nav class="navbar">
       <div class="navbar-container">
         <div class="navbar-brand">
-          <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <circle cx="12" cy="12" r="10" stroke-width="2" />
-            <path d="M12 6v6l4 2" stroke-width="2" stroke-linecap="round" />
-          </svg>
-          <span class="brand-name">XState Auth</span>
+          <span class="brand-name">Xstate + WebRTC for AirConsole</span>
         </div>
 
         <div class="navbar-actions">
@@ -90,6 +86,7 @@ const handleLogout = () => {
   margin: 0 auto;
   padding: var(--spacing-4) var(--spacing-6);
   display: flex;
+  gap: var(--spacing-4);
   align-items: center;
   justify-content: space-between;
 }

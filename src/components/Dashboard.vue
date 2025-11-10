@@ -2,6 +2,8 @@
 import { computed, inject } from 'vue';
 import { useRouter } from 'vue-router';
 
+import VideoCall from './VideoCall.vue';
+
 const authActor = inject<any>('authActor');
 const router = useRouter();
 
@@ -13,11 +15,6 @@ const snapshot = computed(() => authActor.snapshot.value);
 const currentUser = computed(() => snapshot.value.context.user);
 
 console.log('Dashboard context:', snapshot.value.context);
-
-const handleLogout = () => {
-  authActor.send({ type: 'LOGOUT' });
-  router.push('/');
-};
 
 const isAuthenticated = computed(() => snapshot.value.value === 'authenticated');
 if (!isAuthenticated.value) {
@@ -39,30 +36,12 @@ if (!isAuthenticated.value) {
             <span class="role-badge">{{ currentUser?.role }}</span>
           </div>
         </div>
+      </div>
 
-        <div class="user-info">
-          <div class="info-card">
-            <h3>Authentication Status</h3>
-            <div class="status-grid">
-              <div class="status-item">
-                <span class="status-label">State:</span>
-                <span class="status-value">{{ snapshot.value }}</span>
-              </div>
-              <div class="status-item">
-                <span class="status-label">Token:</span>
-                <span class="status-value token">
-                  {{ snapshot.context?.token ? snapshot.context.token.substring(0, 20) + '...' : 'None' }}
-                </span>
-              </div>
-              <div class="status-item">
-                <span class="status-label">Remember Me:</span>
-                <span class="status-value">{{ snapshot.context?.rememberMe ? 'Yes' : 'No' }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <button class="btn-logout" @click="handleLogout">Sign Out</button>
+      <!-- Video Calling Interface -->
+      <div class="video-section">
+        <h2 class="section-title">Video Calling</h2>
+        <VideoCall />
       </div>
     </div>
   </div>
@@ -71,18 +50,20 @@ if (!isAuthenticated.value) {
 <style scoped>
 .dashboard-page {
   min-height: calc(100vh - 80px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-4);
+  padding: var(--spacing-6);
 }
 
 .dashboard-container {
   width: 100%;
-  max-width: 500px;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
 }
 
 .welcome-card {
+  margin-top: 20px;
   background: var(--color-bg-secondary);
   border-radius: var(--radius-2xl);
   padding: var(--spacing-8);
@@ -94,7 +75,6 @@ if (!isAuthenticated.value) {
   display: flex;
   align-items: center;
   gap: var(--spacing-4);
-  margin-bottom: var(--spacing-6);
 }
 
 .avatar {
@@ -134,67 +114,28 @@ if (!isAuthenticated.value) {
   font-weight: var(--font-weight-semibold);
 }
 
-.user-info {
-  margin-bottom: var(--spacing-6);
-}
-
-.info-card {
-  background: var(--color-bg-tertiary);
-  padding: var(--spacing-5);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-surface);
-}
-
-.info-card h3 {
-  font-size: var(--font-size-lg);
-  color: var(--color-text-primary);
-  margin-bottom: var(--spacing-4);
-}
-
-.status-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-}
-
-.status-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.status-label {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-.status-value {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.status-value.token {
-  font-family: monospace;
-  font-size: var(--font-size-xs);
-  color: var(--color-primary);
-}
-
-.btn-logout {
+.video-section {
   width: 100%;
-  padding: var(--spacing-3) var(--spacing-6);
-  border: none;
-  border-radius: var(--radius-lg);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
 }
 
-.btn-logout:hover {
-  background: var(--color-surface-hover);
-  transform: translateY(-1px);
+.section-title {
+  font-size: var(--font-size-2xl);
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-6);
+  font-weight: var(--font-weight-bold);
+}
+
+@media (max-width: 768px) {
+  .dashboard-page {
+    padding: var(--spacing-4);
+  }
+
+  .dashboard-container {
+    gap: var(--spacing-6);
+  }
+
+  .section-title {
+    font-size: var(--font-size-xl);
+  }
 }
 </style>
