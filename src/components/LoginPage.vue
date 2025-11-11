@@ -45,7 +45,7 @@ const handleRetry = () => {
     <div class="login-container">
       <div class="login-card">
         <div class="login-header">
-          <h1>Welcome Back</h1>
+          <h1>Welcome</h1>
           <p>Sign in to continue your gaming experience</p>
         </div>
 
