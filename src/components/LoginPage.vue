@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import type { Actor } from 'xstate';
 
 const authActor = inject<any>('authActor');
 const router = useRouter();
