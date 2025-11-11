@@ -30,7 +30,7 @@ watch(
 );
 
 const handleLogin = () => {
-  router.push('/');
+  router.push('/dashboard');
 };
 
 const handleLogout = () => {

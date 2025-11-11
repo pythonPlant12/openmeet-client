@@ -6,8 +6,8 @@
 :root {
   /* Colors - Primary Palette */
   --color-primary: hsla(154, 94%, 40%, 1);
-  --color-primary-dark: rgba(5, 133, 78, 0.235);
-  --color-primary-light: rgb(129, 207, 173);
+  --color-primary-dark: rgba(6, 198, 115, 0.29);
+  --color-primary-light: rgb(0, 170, 96);
 
   /* Colors - Neutrals */
   --color-bg-primary: hsla(0, 0%, 12%, 1);

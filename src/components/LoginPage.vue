@@ -97,15 +97,11 @@ const handleRetry = () => {
             <span v-else>Sign In</span>
           </button>
 
-          <button v-if="hasError" type="button" class="btn-secondary" @click="handleRetry">
-            Try Again
-          </button>
+          <button v-if="hasError" type="button" class="btn-secondary" @click="handleRetry">Try Again</button>
         </form>
 
         <div class="login-footer">
-          <p class="demo-hint">
-            💡 Demo credentials: <strong>test@test.com</strong> / <strong>password</strong>
-          </p>
+          <p class="demo-hint">💡 Demo credentials: <strong>test@test.com</strong> / <strong>password</strong></p>
         </div>
       </div>
     </div>
@@ -119,31 +115,6 @@ const handleRetry = () => {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-4);
-  position: relative;
-  overflow: hidden;
-}
-
-.login-page::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle, rgba(255, 107, 53, 0.1) 0%, transparent 70%);
-  animation: pulse 8s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.5;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
 }
 
 .login-container {
