@@ -1,25 +1,3 @@
-export interface User {
-  id: string;
-  name?: string;
-}
-
-export interface MediaStreamState {
-  local: MediaStream | null;
-  remote: MediaStream | null;
-}
-
-export interface CallDetails {
-  callId: string;
-  createdAt: Date;
-  participants: string[];
-}
-
-export interface ICECandidate {
-  candidate: string;
-  sdpMLineIndex: number | null;
-  sdpMid: string | null;
-}
-
 export interface SessionDescription {
   type: RTCSdpType;
   sdp: string;
