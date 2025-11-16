@@ -9,6 +9,7 @@ export function useWebRTC() {
   // Computed properties for easy access to state
   const state = computed(() => snapshot.value.value);
   const context = computed(() => snapshot.value.context);
+
   const isIdle = computed(() => state.value === 'idle');
   const isInitializingMedia = computed(() => state.value === 'initializingMedia');
   const isMediaReady = computed(() => state.value === 'mediaReady');

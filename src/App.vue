@@ -3,6 +3,7 @@ import { useMachine } from '@xstate/vue';
 import { computed, provide, watch } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
+import { Button } from '@/components/ui/button';
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
 
@@ -40,130 +41,28 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <div class="app">
-    <nav class="navbar">
-      <div class="navbar-container">
-        <div class="navbar-brand">
-          <span class="brand-name">Xstate + WebRTC for AirConsole</span>
+  <div class="min-h-screen flex flex-col">
+    <nav class="fixed top-0 left-0 right-0 z-[1030] bg-card border-b border-border backdrop-blur-sm">
+      <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="text-xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+            Xstate + WebRTC for AirConsole
+          </span>
         </div>
 
-        <div class="navbar-actions">
-          <button v-if="!isAuthenticated" class="btn-nav" @click="handleLogin">Login</button>
-          <div v-else class="user-menu">
-            <span class="user-name">{{ currentUser?.name }}</span>
-            <button class="btn-nav-logout" @click="handleLogout">Logout</button>
+        <div class="flex items-center gap-3">
+          <Button v-if="!isAuthenticated" @click="handleLogin">Login</Button>
+          <div v-else class="flex items-center gap-3">
+            <span class="text-sm font-medium">{{ currentUser?.name }}</span>
+            <Button variant="outline" @click="handleLogout">Logout</Button>
           </div>
         </div>
       </div>
     </nav>
 
-    <main class="main-content">
+    <main class="flex-1 mt-20">
       <RouterView />
     </main>
   </div>
 </template>
 
-<style scoped>
-.app {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: var(--z-fixed);
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-surface);
-  backdrop-filter: blur(10px);
-}
-
-.navbar-container {
-  max-width: var(--container-xl);
-  margin: 0 auto;
-  padding: var(--spacing-4) var(--spacing-6);
-  display: flex;
-  gap: var(--spacing-4);
-  align-items: center;
-  justify-content: space-between;
-}
-
-.navbar-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.logo {
-  width: 32px;
-  height: 32px;
-  color: var(--color-primary);
-}
-
-.brand-name {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.main-content {
-  flex: 1;
-  margin-top: 80px;
-}
-
-.navbar-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.btn-nav,
-.btn-nav-logout {
-  padding: var(--spacing-2) var(--spacing-5);
-  border: none;
-  border-radius: var(--radius-lg);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.btn-nav {
-  background: var(--color-primary);
-  color: white;
-}
-
-.btn-nav:hover {
-  background: var(--color-primary-dark);
-  transform: translateY(-1px);
-}
-
-.user-menu {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.user-name {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-}
-
-.btn-nav-logout {
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
-.btn-nav-logout:hover {
-  background: var(--color-surface-hover);
-  transform: translateY(-1px);
-}
-</style>
