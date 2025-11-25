@@ -7,17 +7,12 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      environment: 'jsdom',
       exclude: [...configDefaults.exclude, 'e2e/**'],
       root: fileURLToPath(new URL('./', import.meta.url)),
       browser: {
-        provider: 'preview',
         enabled: true,
-        instances: [
-          {
-            browser: 'firefox',
-          },
-        ],
+        provider: 'playwright',
+        name: 'firefox',
       },
     },
   }),

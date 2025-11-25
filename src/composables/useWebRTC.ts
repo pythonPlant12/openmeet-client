@@ -1,10 +1,15 @@
-import { useActor } from '@xstate/vue';
-import { computed } from 'vue';
-
-import { webrtcMachine } from '@/xstate/machines/webrtc';
+import { computed, inject } from 'vue';
 
 export function useWebRTC() {
-  const { snapshot, send, actorRef } = useActor(webrtcMachine);
+  const webrtcActor = inject<any>('webrtcActor');
+
+  if (!webrtcActor) {
+    throw new Error('WebRTC actor not provided! Make sure webrtcActor is provided in App.vue');
+  }
+
+  const snapshot = webrtcActor.snapshot;
+  const send = webrtcActor.send;
+  const actorRef = webrtcActor.actorRef;
 
   // Computed properties for easy access to state
   const state = computed(() => snapshot.value.value);
@@ -28,7 +33,7 @@ export function useWebRTC() {
 
   // Actions
   const initMedia = () => send({ type: 'INIT_MEDIA' });
-  const createCall = () => send({ type: 'CREATE_CALL' });
+  const createCall = (callId: string) => send({ type: 'CREATE_CALL', callId });
   const joinCall = (callId: string) => send({ type: 'JOIN_CALL', callId });
   const endCall = () => send({ type: 'END_CALL' });
   const retry = () => send({ type: 'RETRY' });

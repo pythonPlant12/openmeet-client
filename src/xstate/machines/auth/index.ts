@@ -24,7 +24,6 @@ const loginService = fromPromise<LoginResponse, { email: string; password: strin
 
 const checkSessionService = fromPromise<LoginResponse, { token: string }>(async ({ input }) => {
   await new Promise((resolve) => setTimeout(resolve, 500));
-  console.log('Validating token:', input.token);
 
   if (input.token === 'mock-jwt-token') {
     return {
@@ -88,6 +87,18 @@ export const authMachine = setup({
     clearTokenFromStorage: () => {
       cookieUtils.remove('authToken');
     },
+
+    navigateToDashboard: ({ context }) => {
+      if (context.router) {
+        context.router.push('/dashboard');
+      }
+    },
+
+    navigateToLogin: ({ context }) => {
+      if (context.router) {
+        context.router.push('/');
+      }
+    },
   },
 
   guards: {
@@ -100,6 +111,7 @@ export const authMachine = setup({
     user: null,
     token: input.initialToken ?? null,
     error: null,
+    router: input.router,
   }),
 
   initial: 'checkingSession',
@@ -157,7 +169,7 @@ export const authMachine = setup({
         },
         onDone: {
           target: 'authenticated',
-          actions: ['setUserAndToken', 'saveTokenToStorage'],
+          actions: ['setUserAndToken', 'saveTokenToStorage', 'navigateToDashboard'],
         },
         onError: {
           target: 'authenticationFailed',
@@ -212,11 +224,11 @@ export const authMachine = setup({
         src: 'logoutService',
         onDone: {
           target: 'unauthenticated',
-          actions: 'clearTokenFromStorage',
+          actions: ['clearTokenFromStorage', 'navigateToLogin'],
         },
         onError: {
           target: 'unauthenticated',
-          actions: 'clearTokenFromStorage',
+          actions: ['clearTokenFromStorage', 'navigateToLogin'],
         },
       },
     },

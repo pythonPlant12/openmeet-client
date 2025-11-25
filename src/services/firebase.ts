@@ -1,5 +1,7 @@
-import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { type FirebaseApp, initializeApp } from 'firebase/app';
 import {
+  type Firestore,
+  type Unsubscribe,
   addDoc,
   collection,
   doc,
@@ -8,8 +10,6 @@ import {
   onSnapshot,
   setDoc,
   updateDoc,
-  type Firestore,
-  type Unsubscribe,
 } from 'firebase/firestore';
 
 const firebaseConfig = {

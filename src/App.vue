@@ -1,42 +1,39 @@
 <script setup lang="ts">
 import { useMachine } from '@xstate/vue';
-import { computed, provide, watch } from 'vue';
+import { computed, provide } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
 import { Button } from '@/components/ui/button';
+
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
+import { AuthEventType, AuthState } from './xstate/machines/auth/types';
+import { webrtcMachine } from './xstate/machines/webrtc';
+
+const router = useRouter();
 
 const authActorRef = useMachine(authMachine, {
   input: {
     initialToken: cookieUtils.get('authToken'),
+    router,
   },
 });
 
+const webrtcActorRef = useMachine(webrtcMachine);
+
 provide('authActor', authActorRef);
+provide('webrtcActor', webrtcActorRef);
 
-const router = useRouter();
-
-const snapshot = computed(() => authActorRef.snapshot.value);
-const isAuthenticated = computed(() => snapshot.value.value === 'authenticated');
-const currentUser = computed(() => snapshot.value.context.user);
-console.log('snapshot: ', snapshot.value);
-console.log('isAuthenticated: ', isAuthenticated.value);
-console.log('currentUser: ', currentUser.value);
-watch(
-  () => snapshot.value,
-  (newSnapshot) => {
-    console.log('Auth snapshot changed: ', newSnapshot);
-  },
-);
+const authSnapshot = computed(() => authActorRef.snapshot.value);
+const isAuthenticated = computed(() => authSnapshot.value.value === AuthState.AUTHENTICATED);
+const currentUser = computed(() => authSnapshot.value.context.user);
 
 const handleLogin = () => {
   router.push('/dashboard');
 };
 
 const handleLogout = () => {
-  authActorRef.send({ type: 'LOGOUT' });
-  router.push('/');
+  authActorRef.send({ type: AuthEventType.LOGOUT });
 };
 </script>
 
@@ -65,4 +62,3 @@ const handleLogout = () => {
     </main>
   </div>
 </template>
-

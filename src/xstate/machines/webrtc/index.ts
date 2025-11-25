@@ -19,9 +19,9 @@ const initMediaActor = fromPromise<InitMediaOutput, void>(async () => {
   return { localStream };
 });
 
-const createCallActor = fromPromise<CreateCallOutput, void>(async () => {
-  // Generate a unique call ID
-  const callId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+const createCallActor = fromPromise<CreateCallOutput, { callId: string }>(async ({ input }) => {
+  // Use the provided callId from the meeting room URL
+  const { callId } = input;
 
   // Create peer connection and offer
   webrtcService.createPeerConnection();
@@ -87,8 +87,8 @@ export const webrtcMachine = setup({
 
     setCallId: assign({
       callId: ({ event }) => {
-        const joinEvent = event as Extract<WebRTCEvents, { type: 'JOIN_CALL' }>;
-        return joinEvent.callId;
+        const callEvent = event as Extract<WebRTCEvents, { type: 'CREATE_CALL' | 'JOIN_CALL' }>;
+        return callEvent.callId;
       },
     }),
 
@@ -218,6 +218,7 @@ export const webrtcMachine = setup({
       on: {
         CREATE_CALL: {
           target: 'creatingCall',
+          actions: 'setCallId',
         },
         JOIN_CALL: {
           target: 'joiningCall',
@@ -230,6 +231,7 @@ export const webrtcMachine = setup({
       description: 'Creating a new call (generating offer)',
       invoke: {
         src: 'createCallActor',
+        input: ({ context }) => ({ callId: context.callId! }),
         onDone: {
           target: 'inCall',
           actions: ['setCallCreated', 'setPeerConnection', 'monitorPeerConnection'],

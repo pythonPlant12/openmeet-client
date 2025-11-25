@@ -16,7 +16,7 @@ export interface WebRTCContext {
 
 export type WebRTCEvents =
   | { type: 'INIT_MEDIA' }
-  | { type: 'CREATE_CALL' }
+  | { type: 'CREATE_CALL'; callId: string }
   | { type: 'JOIN_CALL'; callId: string }
   | { type: 'END_CALL' }
   | { type: 'RETRY' }

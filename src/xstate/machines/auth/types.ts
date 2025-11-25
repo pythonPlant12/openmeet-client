@@ -1,3 +1,24 @@
+import type { Router } from 'vue-router';
+
+export enum AuthState {
+  CHECKING_SESSION = 'checkingSession',
+  VALIDATING_SESSION = 'validatingSession',
+  UNAUTHENTICATED = 'unauthenticated',
+  AUTHENTICATING = 'authenticating',
+  AUTHENTICATION_FAILED = 'authenticationFailed',
+  AUTHENTICATED = 'authenticated',
+  REFRESHING_TOKEN = 'refreshingToken',
+  LOGGING_OUT = 'loggingOut',
+}
+
+export enum AuthEventType {
+  LOGIN = 'LOGIN',
+  LOGOUT = 'LOGOUT',
+  REFRESH_TOKEN = 'REFRESH_TOKEN',
+  RETRY = 'RETRY',
+  CHECK_SESSION = 'CHECK_SESSION',
+}
+
 export interface User {
   id: string;
   email: string;
@@ -9,14 +30,15 @@ export interface AuthContext {
   user: User | null;
   token: string | null;
   error: string | null;
+  router?: Router; // Vue Router
 }
 
 export type AuthEvents =
-  | { type: 'LOGIN'; email: string; password: string }
-  | { type: 'LOGOUT' }
-  | { type: 'REFRESH_TOKEN' }
-  | { type: 'RETRY' }
-  | { type: 'CHECK_SESSION' };
+  | { type: AuthEventType.LOGIN; email: string; password: string }
+  | { type: AuthEventType.LOGOUT }
+  | { type: AuthEventType.REFRESH_TOKEN }
+  | { type: AuthEventType.RETRY }
+  | { type: AuthEventType.CHECK_SESSION };
 
 export interface LoginCredentials {
   email: string;
@@ -30,4 +52,5 @@ export interface LoginResponse {
 
 export interface AuthInput {
   initialToken?: string | null;
+  router?: Router; // Vue Router
 }

@@ -1,51 +1,39 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, inject, ref } from 'vue';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useAuth } from '@/composables/useAuth';
+import { AuthEventType, AuthState } from '@/xstate/machines/auth/types';
 
 const authActor = inject<any>('authActor');
-const router = useRouter();
 
 if (!authActor) {
   throw new Error('Auth actor not provided!');
 }
 
-const snapshot = computed(() => authActor.snapshot.value);
+const authSnapshot = computed(() => authActor.snapshot.value);
+const { isAuthenticating, isCheckingSession } = useAuth();
 
 const email = ref('');
 const password = ref('');
-const rememberMe = ref(false);
 
-const isCheckingSession = computed(
-  () => snapshot.value.value === 'checkingSession' || snapshot.value.value === 'validatingSession',
-);
-const isAuthenticating = computed(() => snapshot.value.value === 'authenticating');
-const hasError = computed(() => snapshot.value.value === 'authenticationFailed');
-const errorMessage = computed(() => snapshot.value.context.error);
-const isAuthenticated = computed(() => snapshot.value.value === 'authenticated');
-
-watch(isAuthenticated, (authenticated) => {
-  if (authenticated) {
-    router.push('/dashboard');
-  }
-});
+const hasError = computed(() => authSnapshot.value.value === AuthState.AUTHENTICATION_FAILED);
+const errorMessage = computed(() => authSnapshot.value.context.error);
 
 const handleLogin = () => {
   authActor.send({
-    type: 'LOGIN',
+    type: AuthEventType.LOGIN,
     email: email.value,
     password: password.value,
-    rememberMe: rememberMe.value,
   });
 };
 
 const handleRetry = () => {
-  authActor.send({ type: 'RETRY' });
+  authActor.send({ type: AuthEventType.RETRY });
 };
 </script>
 
@@ -53,7 +41,7 @@ const handleRetry = () => {
   <div class="login-page">
     <div class="login-container">
       <div v-if="isCheckingSession" class="flex flex-col items-center gap-4">
-        <Spinner size="lg" />
+        <Spinner />
         <p class="text-sm text-muted-foreground">Checking authentication...</p>
       </div>
 
@@ -89,7 +77,10 @@ const handleRetry = () => {
               />
             </div>
 
-            <div v-if="hasError" class="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive rounded-lg text-destructive text-sm">
+            <div
+              v-if="hasError"
+              class="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive rounded-lg text-destructive text-sm"
+            >
               <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   stroke-linecap="round"
@@ -111,7 +102,8 @@ const handleRetry = () => {
             </Button>
 
             <p class="text-center text-xs text-muted-foreground pt-4 border-t">
-              💡 Demo: <strong class="text-primary">test@test.com</strong> / <strong class="text-primary">password</strong>
+              💡 Demo: <strong class="text-primary">test@test.com</strong> /
+              <strong class="text-primary">password</strong>
             </p>
           </form>
         </CardContent>
