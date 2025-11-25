@@ -4,6 +4,7 @@ import { computed, provide } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
 import { Button } from '@/components/ui/button';
+import brandingConfig from '@/config/branding.config';
 
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
@@ -38,12 +39,17 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col">
+  <div class="">
     <nav class="fixed top-0 left-0 right-0 z-[1030] bg-card border-b border-border backdrop-blur-sm">
       <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
+          <div
+            class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-sm font-bold text-primary-foreground"
+          >
+            {{ brandingConfig.logoText }}
+          </div>
           <span class="text-xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            Xstate + WebRTC for AirConsole
+            {{ brandingConfig.appName }}
           </span>
         </div>
 

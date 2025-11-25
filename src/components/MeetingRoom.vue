@@ -2,14 +2,18 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import { useAuth } from '@/composables/useAuth';
 import { useWebRTC } from '@/composables/useWebRTC';
 
+import JoinMeetingDialog from './JoinMeetingDialog.vue';
 import MeetingControls from './MeetingControls.vue';
 import VideoGrid from './VideoGrid.vue';
 
 const route = useRoute();
 const router = useRouter();
 const meetingId = computed(() => route.params.id as string);
+
+const { isAuthenticated, isCheckingSession, currentUser } = useAuth();
 
 const {
   isIdle,
@@ -31,6 +35,11 @@ const shouldCreateCall = ref(false);
 const shouldJoinCall = ref(false);
 const pendingCallId = ref<string | null>(null);
 
+const showJoinDialog = ref(false);
+const participantName = ref<string>('');
+
+const hasJoined = computed(() => !!participantName.value);
+
 watch(
   () => state.value,
   (newState) => {
@@ -46,7 +55,18 @@ watch(
   },
 );
 
-onMounted(async () => {
+const initializeMeeting = async () => {
+  const storedName = sessionStorage.getItem('participantName');
+
+  if (isAuthenticated.value) {
+    participantName.value = currentUser.value?.name || 'User';
+  } else if (storedName) {
+    participantName.value = storedName;
+  } else {
+    showJoinDialog.value = true;
+    return;
+  }
+
   if (meetingId.value) {
     const { firebaseService } = await import('@/services/firebase');
     const callData = await firebaseService.getCallDocument(meetingId.value);
@@ -63,7 +83,45 @@ onMounted(async () => {
   if (isIdle.value) {
     initMedia();
   }
+};
+
+watch(isCheckingSession, (checking) => {
+  if (!checking) {
+    initializeMeeting();
+  }
 });
+
+onMounted(() => {
+  if (!isCheckingSession.value) {
+    initializeMeeting();
+  }
+});
+
+const handleJoinMeeting = async (name: string) => {
+  participantName.value = name;
+  showJoinDialog.value = false;
+
+  if (meetingId.value) {
+    const { firebaseService } = await import('@/services/firebase');
+    const callData = await firebaseService.getCallDocument(meetingId.value);
+
+    if (callData?.offer) {
+      shouldJoinCall.value = true;
+      pendingCallId.value = meetingId.value;
+    } else {
+      shouldCreateCall.value = true;
+      pendingCallId.value = meetingId.value;
+    }
+  }
+
+  if (isIdle.value) {
+    initMedia();
+  }
+};
+
+const handleCancelJoin = () => {
+  router.push('/dashboard');
+};
 
 const handleToggleMute = () => {
   if (!localStream.value) return;
@@ -93,7 +151,24 @@ const handleEndCall = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background flex flex-col">
+  <div v-if="isCheckingSession" class="min-h-screen bg-background flex items-center justify-center">
+    <div class="text-center">
+      <div
+        class="inline-block w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"
+      ></div>
+      <p class="text-muted-foreground">Checking authentication...</p>
+    </div>
+  </div>
+
+  <JoinMeetingDialog
+    v-else
+    :open="showJoinDialog"
+    :meeting-id="meetingId"
+    @join="handleJoinMeeting"
+    @cancel="handleCancelJoin"
+  />
+
+  <div v-if="hasJoined && !isCheckingSession" class="min-h-screen bg-background flex flex-col">
     <div class="fixed top-20 right-4 z-50 bg-card border border-border rounded-lg p-3 text-xs space-y-1">
       <div class="flex items-center gap-2">
         <span class="text-muted-foreground">State:</span>
@@ -139,12 +214,12 @@ const handleEndCall = () => {
     </div>
 
     <div v-else class="flex-1 flex flex-col">
-      <VideoGrid :local-stream="localStream" :remote-stream="remoteStream" :is-video-off="isVideoOff.value" />
+      <VideoGrid :local-stream="localStream" :remote-stream="remoteStream" :is-video-off="isVideoOff" />
 
       <MeetingControls
-        :is-muted="isMuted.value"
-        :is-video-off="isVideoOff.value"
-        :meeting-id="meetingId.value"
+        :is-muted="isMuted"
+        :is-video-off="isVideoOff"
+        :meeting-id="meetingId"
         @toggle-mute="handleToggleMute"
         @toggle-video="handleToggleVideo"
         @end-call="handleEndCall"
@@ -152,3 +227,9 @@ const handleEndCall = () => {
     </div>
   </div>
 </template>
+
+<style>
+body {
+  overflow: hidden !important;
+}
+</style>

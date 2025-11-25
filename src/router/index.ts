@@ -24,7 +24,7 @@ const router = createRouter({
       path: '/meet/:id',
       name: 'meeting',
       component: MeetingRoom,
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: false },
     },
   ],
 });
