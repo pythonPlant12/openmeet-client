@@ -20,6 +20,8 @@ const {
   isInitializingMedia,
   localStream,
   remoteStream,
+  participantsArray,
+  localParticipantId,
   connectionState,
   iceConnectionState,
   state,
@@ -27,7 +29,11 @@ const {
   createCall,
   joinCall,
   endCall,
+  toggleParticipantAudio,
+  toggleParticipantVideo,
 } = useWebRTC();
+
+const participantCount = computed(() => participantsArray.value.length);
 
 const isMuted = ref(false);
 const isVideoOff = ref(false);
@@ -45,10 +51,10 @@ watch(
   (newState) => {
     if (newState === 'mediaReady') {
       if (shouldCreateCall.value && pendingCallId.value) {
-        createCall(pendingCallId.value);
+        createCall(pendingCallId.value, participantName.value);
         shouldCreateCall.value = false;
       } else if (shouldJoinCall.value && pendingCallId.value) {
-        joinCall(pendingCallId.value);
+        joinCall(pendingCallId.value, participantName.value);
         shouldJoinCall.value = false;
       }
     }
@@ -81,7 +87,7 @@ const initializeMeeting = async () => {
   }
 
   if (isIdle.value) {
-    initMedia();
+    initMedia(participantName.value);
   }
 };
 
@@ -115,7 +121,7 @@ const handleJoinMeeting = async (name: string) => {
   }
 
   if (isIdle.value) {
-    initMedia();
+    initMedia(participantName.value);
   }
 };
 
@@ -124,24 +130,32 @@ const handleCancelJoin = () => {
 };
 
 const handleToggleMute = () => {
-  if (!localStream.value) return;
+  if (!localStream.value || !localParticipantId.value) return;
 
   const audioTracks = localStream.value.getAudioTracks();
+  const newMutedState = !isMuted.value;
+
   audioTracks.forEach((track) => {
-    track.enabled = !track.enabled;
+    track.enabled = !newMutedState;
   });
-  isMuted.value = !isMuted.value;
+
+  isMuted.value = newMutedState;
+  toggleParticipantAudio(localParticipantId.value, !newMutedState);
 };
 
 const handleToggleVideo = () => {
-  if (!localStream.value) return;
+  if (!localStream.value || !localParticipantId.value) return;
 
   const videoTracks = localStream.value.getVideoTracks();
+  const newVideoOffState = !isVideoOff.value;
+
   videoTracks.forEach((track) => {
-    track.enabled = !track.enabled;
+    track.enabled = !newVideoOffState;
   });
-  console.log('Toggling video. New state:', !isVideoOff.value);
-  isVideoOff.value = !isVideoOff.value;
+
+  console.log('Toggling video. New state:', newVideoOffState);
+  isVideoOff.value = newVideoOffState;
+  toggleParticipantVideo(localParticipantId.value, !newVideoOffState);
 };
 
 const handleEndCall = () => {
@@ -169,6 +183,15 @@ const handleEndCall = () => {
   />
 
   <div v-if="hasJoined && !isCheckingSession" class="min-h-screen bg-background flex flex-col">
+    <!-- Participant Count Badge -->
+    <div class="fixed top-20 left-4 z-50 bg-primary text-primary-foreground rounded-full px-4 py-2 flex items-center gap-2 shadow-lg">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+      </svg>
+      <span class="font-semibold">{{ participantCount }}</span>
+    </div>
+
+    <!-- Debug Info Panel -->
     <div class="fixed top-20 right-4 z-50 bg-card border border-border rounded-lg p-3 text-xs space-y-1">
       <div class="flex items-center gap-2">
         <span class="text-muted-foreground">State:</span>
@@ -202,6 +225,10 @@ const handleEndCall = () => {
           {{ iceConnectionState || 'none' }}
         </span>
       </div>
+      <div class="flex items-center gap-2 pt-1 border-t border-border">
+        <span class="text-muted-foreground">Participants:</span>
+        <span class="font-mono text-primary font-bold">{{ participantCount }}</span>
+      </div>
     </div>
 
     <div v-if="isInitializingMedia" class="flex-1 flex items-center justify-center">
@@ -214,7 +241,7 @@ const handleEndCall = () => {
     </div>
 
     <div v-else class="flex-1 flex flex-col">
-      <VideoGrid :local-stream="localStream" :remote-stream="remoteStream" :is-video-off="isVideoOff" />
+      <VideoGrid :participants="participantsArray" />
 
       <MeetingControls
         :is-muted="isMuted"

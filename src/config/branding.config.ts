@@ -6,7 +6,7 @@ export interface BrandingConfig {
 }
 
 const brandingConfig: BrandingConfig = {
-  appName: import.meta.env.VITE_APP_NAME || 'AirConsole Meet',
+  appName: import.meta.env.VITE_APP_NAME || 'AirConsole',
   appTagline: import.meta.env.VITE_APP_TAGLINE || 'Secure Video Conferencing',
   companyName: import.meta.env.VITE_COMPANY_NAME || 'AirConsole',
   logoText: import.meta.env.VITE_LOGO_TEXT || 'AC',

@@ -92,15 +92,13 @@ const handleInput = () => {
             autofocus
           />
           <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-          <p class="text-xs text-muted-foreground">
-            This name will be visible to other participants
-          </p>
+          <p class="text-xs text-muted-foreground">This name will be visible to other participants</p>
         </div>
       </div>
 
       <DialogFooter class="sm:justify-between">
         <Button variant="outline" @click="handleCancel"> Cancel </Button>
-        <Button @click="handleJoin" :disabled="!participantName.trim()"> Join Meeting </Button>
+        <Button class="mb-2" @click="handleJoin" :disabled="!participantName.trim()"> Join Meeting </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

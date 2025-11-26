@@ -11,6 +11,8 @@ export class WebRTCService {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private unsubscribers: (() => void)[] = [];
+  private onRemoteTrackCallback: ((stream: MediaStream) => void) | null = null;
+  private processedStreamIds: Set<string> = new Set(); // Track processed streams to avoid duplicates
 
   constructor(private iceServers: RTCIceServer[] = DEFAULT_ICE_SERVERS) {}
 
@@ -30,9 +32,11 @@ export class WebRTCService {
 
   createPeerConnection(): RTCPeerConnection {
     if (this.peerConnection) {
+      console.log('[WebRTCService] Closing existing peer connection');
       this.peerConnection.close();
     }
 
+    console.log('[WebRTCService] Creating new peer connection');
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
       iceCandidatePoolSize: 10,
@@ -40,22 +44,56 @@ export class WebRTCService {
 
     // Add local tracks to peer connection
     if (this.localStream) {
+      console.log('[WebRTCService] Adding local tracks to peer connection:', {
+        audioTracks: this.localStream.getAudioTracks().length,
+        videoTracks: this.localStream.getVideoTracks().length,
+      });
       this.localStream.getTracks().forEach((track) => {
+        console.log('[WebRTCService] Adding track:', track.kind, track.id);
         this.peerConnection!.addTrack(track, this.localStream!);
       });
     }
 
-    // Handle remote tracks
+    // Handle remote tracks - ontrack fires once per track (audio and video separately)
     this.peerConnection.ontrack = (event) => {
+      const stream = event.streams[0];
+      console.log('[WebRTCService] Remote track received:', {
+        kind: event.track.kind,
+        trackId: event.track.id,
+        streamId: stream?.id,
+        audioTracks: stream?.getAudioTracks().length,
+        videoTracks: stream?.getVideoTracks().length,
+      });
+
+      // Add track to our remote stream
       event.streams[0].getTracks().forEach((track) => {
         this.remoteStream!.addTrack(track);
       });
+
+      // Deduplicate: Only notify XState once per stream ID (not per track)
+      // ontrack fires twice (audio + video), but we only want one participant
+      if (!this.onRemoteTrackCallback) {
+        console.warn('[WebRTCService] Remote track callback not set yet! Track will be lost:', event.track.kind);
+        return;
+      }
+
+      if (stream && !this.processedStreamIds.has(stream.id)) {
+        console.log('[WebRTCService] New stream detected, notifying XState:', stream.id);
+        this.processedStreamIds.add(stream.id);
+        this.onRemoteTrackCallback(stream);
+      } else if (stream) {
+        console.log('[WebRTCService] Stream already processed (deduplicated):', stream.id);
+      }
     };
 
     return this.peerConnection;
   }
 
-  async createOffer(callId: string): Promise<RTCSessionDescriptionInit> {
+  setOnRemoteTrack(callback: (stream: MediaStream) => void): void {
+    this.onRemoteTrackCallback = callback;
+  }
+
+  async createOffer(callId: string, participantName?: string): Promise<RTCSessionDescriptionInit> {
     if (!this.peerConnection) {
       throw new Error('Peer connection not initialized');
     }
@@ -72,8 +110,8 @@ export class WebRTCService {
     const offer = await this.peerConnection.createOffer();
     await this.peerConnection.setLocalDescription(offer);
 
-    // Save offer to Firestore
-    await firebaseService.createCallDocument(callId, offer);
+    // Save offer to Firestore with participant name
+    await firebaseService.createCallDocument(callId, offer, participantName);
 
     // Listen for answer
     const unsubscribe = firebaseService.subscribeToCall(callId, async (data) => {
@@ -93,7 +131,7 @@ export class WebRTCService {
     return offer;
   }
 
-  async createAnswer(callId: string): Promise<RTCSessionDescriptionInit> {
+  async createAnswer(callId: string, participantName?: string): Promise<RTCSessionDescriptionInit> {
     if (!this.peerConnection) {
       throw new Error('Peer connection not initialized');
     }
@@ -119,8 +157,8 @@ export class WebRTCService {
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
 
-    // Save answer to Firestore
-    await firebaseService.updateCallDocument(callId, answer);
+    // Save answer to Firestore with participant name
+    await firebaseService.updateCallDocument(callId, answer, participantName);
 
     // Listen for offer ICE candidates
     const candidateUnsubscribe = firebaseService.subscribeToICECandidates(callId, 'offer', async (candidate) => {
@@ -143,7 +181,21 @@ export class WebRTCService {
     return this.peerConnection;
   }
 
+  closePeerConnection(): void {
+    console.log('[WebRTCService] Closing peer connection due to disconnect');
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
+    // Clear remote stream
+    this.remoteStream = null;
+    // Clear processed stream IDs so rejoining participants can be added again
+    this.processedStreamIds.clear();
+  }
+
   cleanup(): void {
+    console.log('[WebRTCService] Cleaning up resources');
+
     // Unsubscribe from all Firestore listeners
     this.unsubscribers.forEach((unsubscribe) => unsubscribe());
     this.unsubscribers = [];
@@ -158,5 +210,6 @@ export class WebRTCService {
     this.localStream = null;
     this.remoteStream = null;
     this.peerConnection = null;
+    this.processedStreamIds.clear(); // Reset stream tracking for fresh connections
   }
 }

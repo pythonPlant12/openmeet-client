@@ -36,9 +36,12 @@ class FirebaseService {
     return this.db;
   }
 
-  async createCallDocument(callId: string, offer: RTCSessionDescriptionInit) {
+  async createCallDocument(callId: string, offer: RTCSessionDescriptionInit, participantName?: string) {
     const callDocRef = doc(this.db, 'calls', callId);
-    await setDoc(callDocRef, { offer });
+    await setDoc(callDocRef, {
+      offer,
+      creatorName: participantName || 'User',
+    });
   }
 
   async getCallDocument(callId: string) {
@@ -47,9 +50,12 @@ class FirebaseService {
     return callSnapshot.data();
   }
 
-  async updateCallDocument(callId: string, answer: RTCSessionDescriptionInit) {
+  async updateCallDocument(callId: string, answer: RTCSessionDescriptionInit, participantName?: string) {
     const callDocRef = doc(this.db, 'calls', callId);
-    await updateDoc(callDocRef, { answer });
+    await updateDoc(callDocRef, {
+      answer,
+      joinerName: participantName || 'User',
+    });
   }
 
   async addICECandidate(callId: string, candidateType: 'offer' | 'answer', candidate: RTCIceCandidateInit) {
