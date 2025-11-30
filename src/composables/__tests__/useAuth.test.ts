@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils';
+import { mount } from '@vue/test-utils';
 import { useMachine } from '@xstate/vue';
 import { describe, expect, it } from 'vitest';
 import { defineComponent, h, inject } from 'vue';

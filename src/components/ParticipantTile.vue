@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Maximize2, Mic, MicOff, Video, VideoOff } from 'lucide-vue-next';
+import { Maximize2, MicOff, VideoOff } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 import type { Participant } from '@/xstate/machines/webrtc/types';

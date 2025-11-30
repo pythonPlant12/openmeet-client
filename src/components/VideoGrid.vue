@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { Grid3x3 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-
-import { Button } from '@/components/ui/button';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 import ParticipantTile from './ParticipantTile.vue';

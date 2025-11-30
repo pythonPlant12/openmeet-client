@@ -5,7 +5,7 @@ import { defineComponent, h, provide } from 'vue';
 
 import LoginPage from '@/components/LoginPage.vue';
 import { authMachine } from '@/xstate/machines/auth';
-import { AuthEventType, AuthState } from '@/xstate/machines/auth/types';
+import { AuthState } from '@/xstate/machines/auth/types';
 
 describe('useAuth Browser Integration', () => {
   it('should perform real login flow in browser with LoginPage', async () => {

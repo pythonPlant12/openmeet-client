@@ -157,7 +157,7 @@ export const webrtcMachine = setup({
             type: 'CONNECTION_STATE_CHANGED',
             state: pc.connectionState,
           });
-        } catch (error) {
+        } catch {
           console.warn('[XState] Failed to send CONNECTION_STATE_CHANGED (actor may be stopped)');
         }
 
@@ -179,7 +179,7 @@ export const webrtcMachine = setup({
             type: 'ICE_CONNECTION_STATE_CHANGED',
             state: pc.iceConnectionState,
           });
-        } catch (error) {
+        } catch {
           console.warn('[XState] Failed to send ICE_CONNECTION_STATE_CHANGED (actor may be stopped)');
         }
 
@@ -366,7 +366,7 @@ export const webrtcMachine = setup({
       localParticipantId: null,
     }),
 
-    handlePeerDisconnection: ({ context }) => {
+    handlePeerDisconnection: () => {
       console.log('[XState] Peer connection disconnected, cleaning up');
       // Close the peer connection
       webrtcService.closePeerConnection();

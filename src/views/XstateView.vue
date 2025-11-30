@@ -36,7 +36,7 @@ const toggleMachine = createMachine({
   },
 });
 
-const { snapshot, send, actorRef } = useMachine(toggleMachine, {
+const { send, actorRef } = useMachine(toggleMachine, {
   input: {
     maxCount: 10,
   },
