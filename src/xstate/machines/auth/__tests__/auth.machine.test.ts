@@ -151,7 +151,7 @@ describe('Auth Machine', () => {
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
 
       actor.send({
-        type: 'LOGIN',
+        type: AuthEventType.LOGIN,
         email: 'wrong@test.com',
         password: 'wrongpassword',
       });
@@ -169,14 +169,14 @@ describe('Auth Machine', () => {
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
 
       actor.send({
-        type: 'LOGIN',
+        type: AuthEventType.LOGIN,
         email: 'wrong@test.com',
         password: 'wrongpassword',
       });
 
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATION_FAILED), { timeout: 2000 });
 
-      actor.send({ type: 'RETRY' });
+      actor.send({ type: AuthEventType.RETRY });
 
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
       expect(actor.getSnapshot().value).toBe(AuthState.UNAUTHENTICATED);
@@ -188,7 +188,7 @@ describe('Auth Machine', () => {
 
       // First attempt - fail
       actor.send({
-        type: 'LOGIN',
+        type: AuthEventType.LOGIN,
         email: 'wrong@test.com',
         password: 'wrongpassword',
       });
@@ -197,7 +197,7 @@ describe('Auth Machine', () => {
 
       // Second attempt - success
       actor.send({
-        type: 'LOGIN',
+        type: AuthEventType.LOGIN,
         email: 'test@test.com',
         password: 'password',
       });
@@ -217,12 +217,12 @@ describe('Auth Machine', () => {
     });
 
     it('should transition from authenticated to loggingOut on LOGOUT event', () => {
-      actor.send({ type: 'LOGOUT' });
+      actor.send({ type: AuthEventType.LOGOUT });
       expect(actor.getSnapshot().value).toBe(AuthState.LOGGING_OUT);
     });
 
     it('should transition to unauthenticated after logout', async () => {
-      actor.send({ type: 'LOGOUT' });
+      actor.send({ type: AuthEventType.LOGOUT });
 
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
       const snapshot = actor.getSnapshot();
@@ -235,7 +235,7 @@ describe('Auth Machine', () => {
     it('should navigate to login page after logout', async () => {
       vi.clearAllMocks();
 
-      actor.send({ type: 'LOGOUT' });
+      actor.send({ type: AuthEventType.LOGOUT });
 
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
       expect(mockRouter.push).toHaveBeenCalledWith('/');
@@ -252,12 +252,12 @@ describe('Auth Machine', () => {
     });
 
     it('should handle REFRESH_TOKEN event', () => {
-      actor.send({ type: 'REFRESH_TOKEN' });
+      actor.send({ type: AuthEventType.REFRESH_TOKEN });
       expect(actor.getSnapshot().value).toBe(AuthState.REFRESHING_TOKEN);
     });
 
     it('should remain authenticated after successful token refresh', async () => {
-      actor.send({ type: 'REFRESH_TOKEN' });
+      actor.send({ type: AuthEventType.REFRESH_TOKEN });
 
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
       const snapshot = actor.getSnapshot();
@@ -270,7 +270,7 @@ describe('Auth Machine', () => {
     it('should not navigate to dashboard after token refresh', async () => {
       vi.clearAllMocks();
 
-      actor.send({ type: 'REFRESH_TOKEN' });
+      actor.send({ type: AuthEventType.REFRESH_TOKEN });
 
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
       expect(mockRouter.push).not.toHaveBeenCalled();
@@ -285,7 +285,7 @@ describe('Auth Machine', () => {
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
 
-      actor.send({ type: 'LOGOUT' });
+      actor.send({ type: AuthEventType.LOGOUT });
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
 
       const snapshot = actor.getSnapshot();
@@ -302,12 +302,12 @@ describe('Auth Machine', () => {
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
 
       // Fail first
-      actor.send({ type: 'LOGIN', email: 'wrong', password: 'wrong' });
+      actor.send({ type: AuthEventType.LOGIN, email: 'wrong', password: 'wrong' });
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATION_FAILED), { timeout: 2000 });
       expect(actor.getSnapshot().context.error).toBeTruthy();
 
       // Succeed
-      actor.send({ type: 'LOGIN', email: 'test@test.com', password: 'password' });
+      actor.send({ type: AuthEventType.LOGIN, email: 'test@test.com', password: 'password' });
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
       expect(actor.getSnapshot().context.error).toBeNull();
     });
@@ -322,7 +322,7 @@ describe('Auth Machine', () => {
 
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
 
-      actor.send({ type: 'LOGIN', email: 'test@test.com', password: 'password' });
+      actor.send({ type: AuthEventType.LOGIN, email: 'test@test.com', password: 'password' });
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
 
       expect(actor.getSnapshot().value).toBe(AuthState.AUTHENTICATED);

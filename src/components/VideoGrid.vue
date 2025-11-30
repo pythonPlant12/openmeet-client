@@ -40,11 +40,6 @@ const toggleFocus = (participantId: string) => {
 
   console.log('[VideoGrid] New focusedParticipantId:', focusedParticipantId.value);
 };
-
-const resetLayout = () => {
-  console.log('[VideoGrid] resetLayout called');
-  focusedParticipantId.value = null;
-};
 </script>
 
 <template>
@@ -57,17 +52,7 @@ const resetLayout = () => {
     </div>
 
     <!-- Multiple participants -->
-    <div v-else-if="hasParticipants" class="h-[74vh] md:h-[84vh] w-full relative">
-      <Button
-        v-if="focusedParticipantId"
-        variant="secondary"
-        size="icon"
-        @click="resetLayout"
-        class="absolute top-8 right-8 z-10 h-10 w-10 rounded-full"
-      >
-        <Grid3x3 class="h-5 w-5" />
-      </Button>
-
+    <div v-else-if="hasParticipants" class="h-[68vh] md:h-[84vh] w-full relative">
       <!-- Equal grid layout (no one focused) -->
       <div v-if="!focusedParticipantId" class="h-[78vh] w-full flex items-center justify-center p-4">
         <div class="grid md:grid-cols-2 grid-cols-1 gap-4 w-full h-full max-w-7xl">

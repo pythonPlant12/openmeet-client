@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { Users } from 'lucide-vue-next';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { useAuth } from '@/composables/useAuth';
-import { useWebRTC } from '@/composables/useWebRTC';
+import { useFullscreenLock } from '@/composables/useFullscreenLock';
+import { useWebRTCSFU } from '@/composables/useWebRTCSFU';
+
+// Lock viewport to prevent scrolling and zooming on mobile
+useFullscreenLock();
 
 import JoinMeetingDialog from './JoinMeetingDialog.vue';
 import MeetingControls from './MeetingControls.vue';
@@ -19,76 +24,111 @@ const {
   isIdle,
   isInitializingMedia,
   localStream,
-  remoteStream,
   participantsArray,
   localParticipantId,
   connectionState,
   iceConnectionState,
   state,
+  error: webrtcError,
   initMedia,
-  createCall,
-  joinCall,
-  endCall,
+  joinRoom,
+  leaveRoom: endCall,
   toggleParticipantAudio,
   toggleParticipantVideo,
-} = useWebRTC();
+} = useWebRTCSFU();
 
 const participantCount = computed(() => participantsArray.value.length);
 
 const isMuted = ref(false);
 const isVideoOff = ref(false);
-const shouldCreateCall = ref(false);
-const shouldJoinCall = ref(false);
-const pendingCallId = ref<string | null>(null);
+const showStats = ref(false);
+const shouldJoinRoom = ref(false);
+const pendingRoomId = ref<string | null>(null);
+const pendingMediaSettings = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
 
 const showJoinDialog = ref(false);
 const participantName = ref<string>('');
+const initialDialogName = ref<string>('');
+const showNameInput = ref(true);
 
-const hasJoined = computed(() => !!participantName.value);
+const hasJoined = computed(() => !!participantName.value && state.value !== 'idle');
+
+// Track if we need to send initial media state after joining
+const pendingInitialMediaState = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
+
+// Redirect to dashboard if media initialization fails (permission denied)
+watch(
+  () => state.value,
+  (newState) => {
+    if (newState === 'error' && webrtcError.value) {
+      console.error('[MeetingRoom] WebRTC error:', webrtcError.value.message);
+      showJoinDialog.value = true;
+      participantName.value = '';
+    }
+  },
+);
 
 watch(
   () => state.value,
   (newState) => {
     if (newState === 'mediaReady') {
-      if (shouldCreateCall.value && pendingCallId.value) {
-        createCall(pendingCallId.value, participantName.value);
-        shouldCreateCall.value = false;
-      } else if (shouldJoinCall.value && pendingCallId.value) {
-        joinCall(pendingCallId.value, participantName.value);
-        shouldJoinCall.value = false;
+      // Apply initial media settings before joining
+      if (pendingMediaSettings.value && localStream.value) {
+        const { audioEnabled, videoEnabled } = pendingMediaSettings.value;
+
+        // Apply audio setting
+        localStream.value.getAudioTracks().forEach((track) => {
+          track.enabled = audioEnabled;
+        });
+        isMuted.value = !audioEnabled;
+
+        // Apply video setting
+        localStream.value.getVideoTracks().forEach((track) => {
+          track.enabled = videoEnabled;
+        });
+        isVideoOff.value = !videoEnabled;
+
+        // Store for sending after joining if not default (both enabled)
+        if (!audioEnabled || !videoEnabled) {
+          pendingInitialMediaState.value = { audioEnabled, videoEnabled };
+        }
+
+        pendingMediaSettings.value = null;
       }
+
+      if (shouldJoinRoom.value && pendingRoomId.value) {
+        joinRoom(pendingRoomId.value, participantName.value);
+        shouldJoinRoom.value = false;
+      }
+    }
+
+    // Send initial media state to other participants after joining
+    if (newState === 'inCall' && pendingInitialMediaState.value && localParticipantId.value) {
+      const { audioEnabled, videoEnabled } = pendingInitialMediaState.value;
+      toggleParticipantAudio(localParticipantId.value, audioEnabled);
+      toggleParticipantVideo(localParticipantId.value, videoEnabled);
+      pendingInitialMediaState.value = null;
     }
   },
 );
 
-const initializeMeeting = async () => {
+const initializeMeeting = () => {
   const storedName = sessionStorage.getItem('participantName');
 
+  // Always show the join dialog for media settings
+  // Pre-fill name for authenticated users or from session storage
   if (isAuthenticated.value) {
-    participantName.value = currentUser.value?.name || 'User';
+    initialDialogName.value = currentUser.value?.name || 'User';
+    showNameInput.value = false; // Don't show name input for logged-in users
   } else if (storedName) {
-    participantName.value = storedName;
+    initialDialogName.value = storedName;
+    showNameInput.value = true;
   } else {
-    showJoinDialog.value = true;
-    return;
+    initialDialogName.value = '';
+    showNameInput.value = true;
   }
 
-  if (meetingId.value) {
-    const { firebaseService } = await import('@/services/firebase');
-    const callData = await firebaseService.getCallDocument(meetingId.value);
-
-    if (callData?.offer) {
-      shouldJoinCall.value = true;
-      pendingCallId.value = meetingId.value;
-    } else {
-      shouldCreateCall.value = true;
-      pendingCallId.value = meetingId.value;
-    }
-  }
-
-  if (isIdle.value) {
-    initMedia(participantName.value);
-  }
+  showJoinDialog.value = true;
 };
 
 watch(isCheckingSession, (checking) => {
@@ -103,25 +143,40 @@ onMounted(() => {
   }
 });
 
-const handleJoinMeeting = async (name: string) => {
-  participantName.value = name;
+onUnmounted(() => {
+  endCall();
+});
+
+interface JoinSettings {
+  name: string;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+  audioDeviceId: string | null;
+  videoDeviceId: string | null;
+}
+
+const handleJoinMeeting = async (settings: JoinSettings) => {
+  participantName.value = settings.name;
   showJoinDialog.value = false;
 
-  if (meetingId.value) {
-    const { firebaseService } = await import('@/services/firebase');
-    const callData = await firebaseService.getCallDocument(meetingId.value);
+  // Store media settings to apply after media is initialized
+  pendingMediaSettings.value = {
+    audioEnabled: settings.audioEnabled,
+    videoEnabled: settings.videoEnabled,
+  };
 
-    if (callData?.offer) {
-      shouldJoinCall.value = true;
-      pendingCallId.value = meetingId.value;
-    } else {
-      shouldCreateCall.value = true;
-      pendingCallId.value = meetingId.value;
-    }
+  if (meetingId.value) {
+    // In SFU architecture, everyone just "joins" the room
+    shouldJoinRoom.value = true;
+    pendingRoomId.value = meetingId.value;
   }
 
   if (isIdle.value) {
-    initMedia(participantName.value);
+    // Pass device constraints to initMedia
+    initMedia(participantName.value, {
+      audioDeviceId: settings.audioDeviceId,
+      videoDeviceId: settings.videoDeviceId,
+    });
   }
 };
 
@@ -158,6 +213,10 @@ const handleToggleVideo = () => {
   toggleParticipantVideo(localParticipantId.value, !newVideoOffState);
 };
 
+const handleToggleStats = () => {
+  showStats.value = !showStats.value;
+};
+
 const handleEndCall = () => {
   endCall();
   router.push('/dashboard');
@@ -178,21 +237,26 @@ const handleEndCall = () => {
     v-else
     :open="showJoinDialog"
     :meeting-id="meetingId"
+    :initial-name="initialDialogName"
+    :show-name-input="showNameInput"
     @join="handleJoinMeeting"
     @cancel="handleCancelJoin"
   />
 
   <div v-if="hasJoined && !isCheckingSession" class="min-h-screen bg-background flex flex-col">
     <!-- Participant Count Badge -->
-    <div class="fixed top-20 left-4 z-50 bg-primary text-primary-foreground rounded-full px-4 py-2 flex items-center gap-2 shadow-lg">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-      </svg>
+    <div
+      class="fixed top-20 left-4 z-50 bg-primary text-primary-foreground rounded-full px-4 py-2 flex items-center gap-2 shadow-lg"
+    >
+      <Users class="h-5 w-5" />
       <span class="font-semibold">{{ participantCount }}</span>
     </div>
 
     <!-- Debug Info Panel -->
-    <div class="fixed top-20 right-4 z-50 bg-card border border-border rounded-lg p-3 text-xs space-y-1">
+    <div
+      v-if="showStats"
+      class="fixed top-20 right-4 z-50 bg-card border border-border rounded-lg p-3 text-xs space-y-1"
+    >
       <div class="flex items-center gap-2">
         <span class="text-muted-foreground">State:</span>
         <span class="font-mono text-primary">{{ state }}</span>
@@ -247,16 +311,14 @@ const handleEndCall = () => {
         :is-muted="isMuted"
         :is-video-off="isVideoOff"
         :meeting-id="meetingId"
+        :show-stats="showStats"
         @toggle-mute="handleToggleMute"
         @toggle-video="handleToggleVideo"
+        @toggle-stats="handleToggleStats"
         @end-call="handleEndCall"
       />
     </div>
   </div>
 </template>
 
-<style>
-body {
-  overflow: hidden !important;
-}
-</style>
+<style></style>

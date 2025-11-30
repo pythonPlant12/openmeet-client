@@ -54,8 +54,19 @@ const objectFitClass = computed(() => {
 const attachStream = async () => {
   await nextTick();
   if (videoRef.value && props.participant.stream) {
-    console.log(`[ParticipantTile] Attaching stream for ${props.participant.name}`);
-    videoRef.value.srcObject = props.participant.stream;
+    // Only set srcObject if it's different from what's currently set
+    if (videoRef.value.srcObject !== props.participant.stream) {
+      console.log(`[ParticipantTile] Attaching stream for ${props.participant.name}`);
+      videoRef.value.srcObject = props.participant.stream;
+
+      // Explicitly call play() to ensure video starts
+      try {
+        await videoRef.value.play();
+      } catch {
+        // Ignore autoplay errors
+        console.log(`[ParticipantTile] Autoplay may be blocked for ${props.participant.name}`);
+      }
+    }
   }
 };
 
@@ -110,12 +121,7 @@ onMounted(async () => {
     </div>
 
     <!-- Name Badge -->
-    <div
-      :class="[
-        'absolute left-2 px-2 py-1 bg-black/60 rounded text-white flex items-center gap-1',
-        size === 'sidebar' || size === 'mobile' ? 'bottom-4 text-xs' : 'bottom-4 text-sm',
-      ]"
-    >
+    <div :class="['absolute left-2 px-2 py-1 bg-black/60 rounded text-white flex items-center gap-1 bottom-0']">
       <span>{{ participant.name }}</span>
       <span v-if="participant.isLocal" class="text-primary">(You)</span>
     </div>
@@ -133,10 +139,7 @@ onMounted(async () => {
     <!-- Hover Overlay with Expand Icon -->
     <div
       v-if="showExpandIcon"
-      :class="[
-        'absolute inset-0 bg-black/0 transition-colors rounded-lg flex items-center justify-center',
-        size === 'full' || isExpanded ? 'group-hover:bg-black/20' : 'group-hover:bg-black/20',
-      ]"
+      class="absolute inset-0 bg-black/0 transition-colors rounded-lg items-center justify-center hidden md:flex md:group-hover:bg-black/20"
     >
       <Maximize2
         :class="[

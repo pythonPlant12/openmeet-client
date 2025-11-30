@@ -6,9 +6,9 @@ export interface BrandingConfig {
 }
 
 const brandingConfig: BrandingConfig = {
-  appName: import.meta.env.VITE_APP_NAME || 'AirConsole',
+  appName: import.meta.env.VITE_APP_NAME || 'Open Meet',
   appTagline: import.meta.env.VITE_APP_TAGLINE || 'Secure Video Conferencing',
-  companyName: import.meta.env.VITE_COMPANY_NAME || 'AirConsole',
+  companyName: import.meta.env.VITE_COMPANY_NAME || 'Open Meet',
   logoText: import.meta.env.VITE_LOGO_TEXT || 'AC',
 };
 

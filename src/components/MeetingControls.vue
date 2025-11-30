@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Copy, Link2, Mic, MicOff, PhoneOff, Share2, Video, VideoOff } from 'lucide-vue-next';
+import { Check, Code, Copy, Link2, Mic, MicOff, PhoneOff, Share2, Video, VideoOff } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface Props {
+  showStats: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
   meetingId: string;
 }
 
 interface Emits {
+  (e: 'toggle-stats'): void;
   (e: 'toggle-mute'): void;
   (e: 'toggle-video'): void;
   (e: 'end-call'): void;
@@ -63,6 +65,16 @@ const shareOnTelegram = () => {
   <div class="fixed bottom-0 left-0 right-0 bg-card border-t border-border">
     <div class="py-4 flex items-center justify-center">
       <div class="flex items-center justify-center gap-3">
+        <!-- Stats Button -->
+        <Button
+          :variant="showStats ? 'ghost' : 'secondary'"
+          size="icon"
+          @click="emit('toggle-stats')"
+          class="h-12 w-12 rounded-full"
+        >
+          <Code class="h-5 w-5" />
+        </Button>
+
         <!-- Share Dropdown -->
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
@@ -96,7 +108,8 @@ const shareOnTelegram = () => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <!-- Meeting Controls -->
+
+        <!-- Microphone Button -->
         <Button
           :variant="isMuted ? 'destructive' : 'secondary'"
           size="icon"
@@ -107,6 +120,7 @@ const shareOnTelegram = () => {
           <Mic v-else class="h-5 w-5" />
         </Button>
 
+        <!-- Camera Button -->
         <Button
           :variant="isVideoOff ? 'destructive' : 'secondary'"
           size="icon"
@@ -117,6 +131,7 @@ const shareOnTelegram = () => {
           <Video v-else class="h-5 w-5" />
         </Button>
 
+        <!-- End Call Button -->
         <Button variant="destructive" size="icon" @click="emit('end-call')" class="h-12 w-12 rounded-full">
           <PhoneOff class="h-5 w-5" />
         </Button>
