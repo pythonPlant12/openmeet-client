@@ -10,9 +10,9 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
     urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
   },
   {
-    urls: ['turn:192.168.31.43:3478'],
-    username: 'testuser',
-    credential: 'testpass123',
+    urls: [import.meta.env.VITE_TURN_URL || 'turn:turn.openmeets.eu:3478'],
+    username: import.meta.env.VITE_TURN_USER || 'openmeet',
+    credential: import.meta.env.VITE_TURN_PASSWORD || 'openmeet123',
   },
 ];
 
@@ -151,7 +151,9 @@ export class WebRTCServiceSFU {
 
       // Notify callback directly with the original stream
       if (stream && this.onRemoteTrackCallback) {
-        console.log(`[WebRTCServiceSFU] ✓ Notifying callback for stream ${stream.id} (${stream.getTracks().length} tracks)`);
+        console.log(
+          `[WebRTCServiceSFU] ✓ Notifying callback for stream ${stream.id} (${stream.getTracks().length} tracks)`,
+        );
         this.onRemoteTrackCallback(stream.id, stream);
       }
     };
@@ -191,7 +193,6 @@ export class WebRTCServiceSFU {
     await this.peerConnection.setRemoteDescription(answerDescription);
     console.log('[WebRTCServiceSFU] Remote description set');
   }
-
 
   private async handleServerOffer(sdp: string): Promise<void> {
     if (!this.peerConnection) {

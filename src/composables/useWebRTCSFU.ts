@@ -5,9 +5,8 @@ import type { DeviceConstraints } from '@/services/webrtc-sfu';
 import { WebRTCServiceSFU } from '@/services/webrtc-sfu';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
-// SFU server URL - change this to your server's address
-// Use wss:// for secure WebSocket connection
-const SFU_SERVER_URL = 'wss://192.168.31.43:8081/ws';
+// SFU server URL
+const SFU_SERVER_URL = import.meta.env.VITE_SFU_WSS_URL || 'wss://sfu.openmeets.eu/ws';
 
 export function useWebRTCSFU() {
   // State
