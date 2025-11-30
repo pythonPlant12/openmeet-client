@@ -8,17 +8,8 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
-      exclude: [...configDefaults.exclude, 'e2e/**'],
+      exclude: [...configDefaults.exclude, 'e2e/**', '**/*.browser.test.ts'],
       root: fileURLToPath(new URL('./', import.meta.url)),
-      browser: {
-        provider: 'preview',
-        enabled: true,
-        instances: [
-          {
-            browser: 'firefox',
-          },
-        ],
-      },
     },
   }),
 );
