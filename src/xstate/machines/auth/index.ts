@@ -1,48 +1,33 @@
 import { assign, fromPromise, setup } from 'xstate';
 
+import { authApi, type AuthResponse } from '@/services/auth-api';
 import { cookieUtils } from '@/utils';
 
-import type { AuthContext, AuthEvents, AuthInput, LoginResponse } from './types';
+import type { AuthContext, AuthEvents, AuthInput, User } from './types';
 
-const loginService = fromPromise<LoginResponse, { email: string; password: string }>(async ({ input }) => {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  if (input.email === 'test@test.com' && input.password === 'password') {
-    return {
-      user: {
-        id: '1',
-        email: input.email,
-        name: 'Test User',
-        role: 'user' as const,
-      },
-      token: 'mock-jwt-token',
-    };
-  }
-
-  throw new Error('Invalid credentials');
+const loginService = fromPromise<AuthResponse, { email: string; password: string }>(async ({ input }) => {
+  return authApi.login(input);
 });
 
-const checkSessionService = fromPromise<LoginResponse, { token: string }>(async ({ input }) => {
-  await new Promise((resolve) => setTimeout(resolve, 500));
+const registerService = fromPromise<AuthResponse, { email: string; name: string; password: string }>(
+  async ({ input }) => {
+    return authApi.register(input);
+  },
+);
 
-  if (input.token === 'mock-jwt-token') {
-    return {
-      user: {
-        id: '1',
-        email: 'test@test.com',
-        name: 'Test User',
-        role: 'user' as const,
-      },
-      token: input.token,
-    };
-  }
-
-  throw new Error('Invalid token');
+const checkSessionService = fromPromise<User, { accessToken: string }>(async ({ input }) => {
+  return authApi.me(input.accessToken);
 });
 
-const logoutService = fromPromise(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  cookieUtils.remove('authToken');
+const refreshTokenService = fromPromise<string, { refreshToken: string }>(async ({ input }) => {
+  const response = await authApi.refresh(input.refreshToken);
+  return response.access_token;
+});
+
+const logoutService = fromPromise<void, { refreshToken: string | null }>(async ({ input }) => {
+  if (input.refreshToken) {
+    await authApi.logout(input.refreshToken);
+  }
 });
 
 export const authMachine = setup({
@@ -54,15 +39,27 @@ export const authMachine = setup({
 
   actors: {
     loginService,
+    registerService,
     checkSessionService,
+    refreshTokenService,
     logoutService,
   },
 
   actions: {
-    setUserAndToken: assign({
+    setAuthFromResponse: assign({
       user: ({ event }) => (event as any).output.user,
-      token: ({ event }) => (event as any).output.token,
+      accessToken: ({ event }) => (event as any).output.access_token,
+      refreshToken: ({ event }) => (event as any).output.refresh_token,
       error: null,
+    }),
+
+    setUserFromSession: assign({
+      user: ({ event }) => (event as any).output,
+      error: null,
+    }),
+
+    setAccessToken: assign({
+      accessToken: ({ event }) => (event as any).output,
     }),
 
     setError: assign({
@@ -74,18 +71,27 @@ export const authMachine = setup({
 
     clearAuth: assign({
       user: null,
-      token: null,
+      accessToken: null,
+      refreshToken: null,
       error: null,
     }),
 
-    saveTokenToStorage: ({ context }) => {
-      if (context.token) {
-        cookieUtils.set('authToken', context.token, 7);
+    clearError: assign({
+      error: null,
+    }),
+
+    saveTokensToStorage: ({ context }) => {
+      if (context.accessToken) {
+        cookieUtils.set('accessToken', context.accessToken, 1); // 1 day for access token cookie
+      }
+      if (context.refreshToken) {
+        cookieUtils.set('refreshToken', context.refreshToken, 7); // 7 days for refresh token
       }
     },
 
-    clearTokenFromStorage: () => {
-      cookieUtils.remove('authToken');
+    clearTokensFromStorage: () => {
+      cookieUtils.remove('accessToken');
+      cookieUtils.remove('refreshToken');
     },
 
     navigateToDashboard: ({ context }) => {
@@ -96,20 +102,28 @@ export const authMachine = setup({
 
     navigateToLogin: ({ context }) => {
       if (context.router) {
-        context.router.push('/');
+        context.router.push('/login');
+      }
+    },
+
+    navigateToRegister: ({ context }) => {
+      if (context.router) {
+        context.router.push('/register');
       }
     },
   },
 
   guards: {
-    hasStoredToken: ({ context }) => !!context.token,
+    hasStoredToken: ({ context }) => !!context.accessToken,
+    hasRefreshToken: ({ context }) => !!context.refreshToken,
   },
 }).createMachine({
   id: 'auth',
 
   context: ({ input }) => ({
     user: null,
-    token: input.initialToken ?? null,
+    accessToken: input.initialAccessToken ?? null,
+    refreshToken: input.initialRefreshToken ?? null,
     error: null,
     router: input.router,
   }),
@@ -134,24 +148,35 @@ export const authMachine = setup({
       description: 'Validate stored token with backend',
       invoke: {
         src: 'checkSessionService',
-        input: ({ context }) => ({ token: context.token! }),
+        input: ({ context }) => ({ accessToken: context.accessToken! }),
         onDone: {
           target: 'authenticated',
-          actions: 'setUserAndToken',
+          actions: 'setUserFromSession',
         },
-        onError: {
-          target: 'unauthenticated',
-          actions: ['clearAuth', 'clearTokenFromStorage'],
-        },
+        onError: [
+          {
+            guard: 'hasRefreshToken',
+            target: 'refreshingToken',
+          },
+          {
+            target: 'unauthenticated',
+            actions: ['clearAuth', 'clearTokensFromStorage'],
+          },
+        ],
       },
     },
 
     unauthenticated: {
       description: 'User is not logged in',
-      entry: 'clearAuth',
       on: {
         LOGIN: {
           target: 'authenticating',
+        },
+        REGISTER: {
+          target: 'registering',
+        },
+        GO_TO_REGISTER: {
+          actions: 'navigateToRegister',
         },
       },
     },
@@ -169,7 +194,7 @@ export const authMachine = setup({
         },
         onDone: {
           target: 'authenticated',
-          actions: ['setUserAndToken', 'saveTokenToStorage', 'navigateToDashboard'],
+          actions: ['setAuthFromResponse', 'saveTokensToStorage', 'navigateToDashboard'],
         },
         onError: {
           target: 'authenticationFailed',
@@ -186,6 +211,51 @@ export const authMachine = setup({
         },
         RETRY: {
           target: 'unauthenticated',
+          actions: 'clearError',
+        },
+        GO_TO_REGISTER: {
+          target: 'unauthenticated',
+          actions: ['clearError', 'navigateToRegister'],
+        },
+      },
+    },
+
+    registering: {
+      description: 'Registering new user',
+      invoke: {
+        src: 'registerService',
+        input: ({ event }) => {
+          const registerEvent = event as Extract<AuthEvents, { type: 'REGISTER' }>;
+          return {
+            email: registerEvent.email,
+            name: registerEvent.name,
+            password: registerEvent.password,
+          };
+        },
+        onDone: {
+          target: 'authenticated',
+          actions: ['setAuthFromResponse', 'saveTokensToStorage', 'navigateToDashboard'],
+        },
+        onError: {
+          target: 'registrationFailed',
+          actions: 'setError',
+        },
+      },
+    },
+
+    registrationFailed: {
+      description: 'Registration failed - show error',
+      on: {
+        REGISTER: {
+          target: 'registering',
+        },
+        RETRY: {
+          target: 'unauthenticated',
+          actions: 'clearError',
+        },
+        GO_TO_LOGIN: {
+          target: 'unauthenticated',
+          actions: ['clearError', 'navigateToLogin'],
         },
       },
     },
@@ -205,15 +275,15 @@ export const authMachine = setup({
     refreshingToken: {
       description: 'Refreshing authentication token',
       invoke: {
-        src: 'checkSessionService',
-        input: ({ context }) => ({ token: context.token! }),
+        src: 'refreshTokenService',
+        input: ({ context }) => ({ refreshToken: context.refreshToken! }),
         onDone: {
           target: 'authenticated',
-          actions: ['setUserAndToken', 'saveTokenToStorage'],
+          actions: ['setAccessToken', 'saveTokensToStorage'],
         },
         onError: {
           target: 'unauthenticated',
-          actions: ['clearAuth', 'clearTokenFromStorage'],
+          actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
         },
       },
     },
@@ -222,13 +292,14 @@ export const authMachine = setup({
       description: 'Logging out user',
       invoke: {
         src: 'logoutService',
+        input: ({ context }) => ({ refreshToken: context.refreshToken }),
         onDone: {
           target: 'unauthenticated',
-          actions: ['clearTokenFromStorage', 'navigateToLogin'],
+          actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
         },
         onError: {
           target: 'unauthenticated',
-          actions: ['clearTokenFromStorage', 'navigateToLogin'],
+          actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
         },
       },
     },

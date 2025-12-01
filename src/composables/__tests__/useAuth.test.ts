@@ -9,10 +9,10 @@ import { AuthEventType, AuthState } from '@/xstate/machines/auth/types';
 import { useAuth } from '../useAuth';
 
 // Helper to create and mount test component with auth actor
-function createAuthTestWrapper(initialToken: string | null = null) {
+function createAuthTestWrapper(initialAccessToken: string | null = null) {
   // Possible to declar the auth actor outside, and then inject it inside the component
   const authActorRef = useMachine(authMachine, {
-    input: { initialToken },
+    input: { initialAccessToken, initialRefreshToken: initialAccessToken ? 'mock-refresh-token' : null },
   });
 
   const TestComponent = defineComponent({
@@ -114,7 +114,7 @@ describe('useAuth Composable', () => {
     });
 
     it('should be true in validatingSession state', async () => {
-      const { wrapper } = createAuthTestWrapper('mock-jwt-token');
+      const { wrapper } = createAuthTestWrapper('mock-access-token');
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(wrapper.vm.auth.isCheckingSession.value).toBe(true);
     });

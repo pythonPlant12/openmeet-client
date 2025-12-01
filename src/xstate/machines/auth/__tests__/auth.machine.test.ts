@@ -18,6 +18,35 @@ vi.mock('@/utils', () => ({
   },
 }));
 
+// Mock auth-api with test responses
+vi.mock('@/services/auth-api', () => ({
+  authApi: {
+    login: vi.fn().mockImplementation(async ({ email, password }) => {
+      if (email === 'test@test.com' && password === 'password') {
+        return {
+          user: { id: '1', email, name: 'Test User', role: 'user' },
+          access_token: 'mock-access-token',
+          refresh_token: 'mock-refresh-token',
+        };
+      }
+      throw new Error('Invalid credentials');
+    }),
+    register: vi.fn().mockImplementation(async ({ email, name }) => ({
+      user: { id: '1', email, name, role: 'user' },
+      access_token: 'mock-access-token',
+      refresh_token: 'mock-refresh-token',
+    })),
+    me: vi.fn().mockImplementation(async ({ accessToken }) => {
+      if (accessToken === 'mock-access-token') {
+        return { id: '1', email: 'test@test.com', name: 'Test User', role: 'user' };
+      }
+      throw new Error('Invalid token');
+    }),
+    refresh: vi.fn().mockResolvedValue({ access_token: 'new-access-token' }),
+    logout: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe('Auth Machine', () => {
   let actor: ReturnType<typeof createActor<typeof authMachine>>;
 
@@ -29,7 +58,7 @@ describe('Auth Machine', () => {
   describe('Initial State - No Token', () => {
     beforeEach(() => {
       actor = createActor(authMachine, {
-        input: { initialToken: null, router: mockRouter },
+        input: { initialAccessToken: null, initialRefreshToken: null, router: mockRouter },
       });
       actor.start();
     });
@@ -44,11 +73,12 @@ describe('Auth Machine', () => {
       expect(actor.getSnapshot().value).toBe(AuthState.UNAUTHENTICATED);
     });
 
-    it('should have null user and token in unauthenticated state', async () => {
+    it('should have null user and tokens in unauthenticated state', async () => {
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
       const snapshot = actor.getSnapshot();
       expect(snapshot.context.user).toBeNull();
-      expect(snapshot.context.token).toBeNull();
+      expect(snapshot.context.accessToken).toBeNull();
+      expect(snapshot.context.refreshToken).toBeNull();
       expect(snapshot.context.error).toBeNull();
     });
   });
@@ -56,7 +86,7 @@ describe('Auth Machine', () => {
   describe('Initial State - With Token', () => {
     beforeEach(() => {
       actor = createActor(authMachine, {
-        input: { initialToken: 'mock-jwt-token', router: mockRouter },
+        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
       });
       actor.start();
     });
@@ -81,7 +111,7 @@ describe('Auth Machine', () => {
         name: 'Test User',
         role: 'user',
       });
-      expect(snapshot.context.token).toBe('mock-jwt-token');
+      expect(snapshot.context.accessToken).toBe('mock-access-token');
     });
 
     it('should not navigate to dashboard when validating existing session', async () => {
@@ -93,7 +123,7 @@ describe('Auth Machine', () => {
   describe('Login Flow', () => {
     beforeEach(() => {
       actor = createActor(authMachine, {
-        input: { initialToken: null, router: mockRouter },
+        input: { initialAccessToken: null, initialRefreshToken: null, router: mockRouter },
       });
       actor.start();
     });
@@ -130,7 +160,7 @@ describe('Auth Machine', () => {
         name: 'Test User',
         role: 'user',
       });
-      expect(snapshot.context.token).toBe('mock-jwt-token');
+      expect(snapshot.context.accessToken).toBe('mock-access-token');
       expect(snapshot.context.error).toBeNull();
     });
 
@@ -161,7 +191,7 @@ describe('Auth Machine', () => {
 
       expect(snapshot.value).toBe(AuthState.AUTHENTICATION_FAILED);
       expect(snapshot.context.user).toBeNull();
-      expect(snapshot.context.token).toBeNull();
+      expect(snapshot.context.accessToken).toBeNull();
       expect(snapshot.context.error).toBe('Invalid credentials');
     });
 
@@ -210,7 +240,7 @@ describe('Auth Machine', () => {
   describe('Logout Flow', () => {
     beforeEach(async () => {
       actor = createActor(authMachine, {
-        input: { initialToken: 'mock-jwt-token', router: mockRouter },
+        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
       });
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
@@ -229,7 +259,7 @@ describe('Auth Machine', () => {
 
       expect(snapshot.value).toBe(AuthState.UNAUTHENTICATED);
       expect(snapshot.context.user).toBeNull();
-      expect(snapshot.context.token).toBeNull();
+      expect(snapshot.context.accessToken).toBeNull();
     });
 
     it('should navigate to login page after logout', async () => {
@@ -238,14 +268,14 @@ describe('Auth Machine', () => {
       actor.send({ type: AuthEventType.LOGOUT });
 
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
-      expect(mockRouter.push).toHaveBeenCalledWith('/');
+      expect(mockRouter.push).toHaveBeenCalledWith('/login');
     });
   });
 
   describe('Token Refresh', () => {
     beforeEach(async () => {
       actor = createActor(authMachine, {
-        input: { initialToken: 'mock-jwt-token', router: mockRouter },
+        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
       });
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
@@ -264,7 +294,7 @@ describe('Auth Machine', () => {
 
       expect(snapshot.value).toBe(AuthState.AUTHENTICATED);
       expect(snapshot.context.user).toBeTruthy();
-      expect(snapshot.context.token).toBe('mock-jwt-token');
+      expect(snapshot.context.accessToken).toBe('new-access-token');
     });
 
     it('should not navigate to dashboard after token refresh', async () => {
@@ -280,7 +310,7 @@ describe('Auth Machine', () => {
   describe('Context Management', () => {
     it('should clear auth context on logout', async () => {
       actor = createActor(authMachine, {
-        input: { initialToken: 'mock-jwt-token', router: mockRouter },
+        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
       });
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
@@ -290,13 +320,14 @@ describe('Auth Machine', () => {
 
       const snapshot = actor.getSnapshot();
       expect(snapshot.context.user).toBeNull();
-      expect(snapshot.context.token).toBeNull();
+      expect(snapshot.context.accessToken).toBeNull();
+      expect(snapshot.context.refreshToken).toBeNull();
       expect(snapshot.context.error).toBeNull();
     });
 
     it('should clear error on successful login', async () => {
       actor = createActor(authMachine, {
-        input: { initialToken: null, router: mockRouter },
+        input: { initialAccessToken: null, initialRefreshToken: null, router: mockRouter },
       });
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
@@ -316,7 +347,7 @@ describe('Auth Machine', () => {
   describe('Router Integration', () => {
     it('should work without router provided', async () => {
       actor = createActor(authMachine, {
-        input: { initialToken: null },
+        input: { initialAccessToken: null, initialRefreshToken: null },
       });
       actor.start();
 

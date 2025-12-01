@@ -5,6 +5,7 @@ import LandingPage from '@/pages/LandingPage.vue';
 import LoginPage from '@/pages/LoginPage.vue';
 import MeetingPage from '@/pages/MeetingPage.vue';
 import NotFoundPage from '@/pages/NotFoundPage.vue';
+import RegisterPage from '@/pages/RegisterPage.vue';
 import { cookieUtils } from '../utils';
 
 const showLandingPage = import.meta.env.VITE_LANDING_PAGE !== 'false';
@@ -22,7 +23,13 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginPage,
-      meta: { requiresAuth: false },
+      meta: { requiresAuth: false, isAuthPage: true },
+    },
+    {
+      path: '/register',
+      name: 'register',
+      component: RegisterPage,
+      meta: { requiresAuth: false, isAuthPage: true },
     },
     {
       path: '/dashboard',
@@ -50,13 +57,16 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
-  const token = cookieUtils.get('authToken');
+  const token = cookieUtils.get('accessToken');
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+  const isAuthPage = to.matched.some((record) => record.meta.isAuthPage);
 
-  if (to.path === '/login' && token) {
+  // Redirect to dashboard if already logged in and trying to access auth pages
+  if (isAuthPage && token) {
     return next('/dashboard');
   }
 
+  // Redirect to login if trying to access protected route without token
   if (requiresAuth && !token) {
     return next('/login');
   }

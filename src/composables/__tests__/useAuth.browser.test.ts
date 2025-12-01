@@ -14,7 +14,7 @@ describe('useAuth Browser Integration', () => {
       setup() {
         // Create the auth actor inside the component lifecycle
         const authActorRef = useMachine(authMachine, {
-          input: { initialToken: null },
+          input: { initialAccessToken: null, initialRefreshToken: null },
         });
 
         provide('authActor', authActorRef);

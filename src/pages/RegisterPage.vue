@@ -17,15 +17,25 @@ if (!authActor) {
   throw new Error('Auth actor not provided!');
 }
 
-const { isAuthenticating, isCheckingSession, hasLoginError, errorMessage } = useAuth();
+const { isRegistering, isCheckingSession, hasRegisterError, errorMessage } = useAuth();
 
+const name = ref('');
 const email = ref('');
 const password = ref('');
+const confirmPassword = ref('');
+const passwordMismatch = ref(false);
 
-const handleLogin = () => {
+const handleRegister = () => {
+  if (password.value !== confirmPassword.value) {
+    passwordMismatch.value = true;
+    return;
+  }
+  passwordMismatch.value = false;
+
   authActor.send({
-    type: AuthEventType.LOGIN,
+    type: AuthEventType.REGISTER,
     email: email.value,
+    name: name.value,
     password: password.value,
   });
 };
@@ -36,8 +46,8 @@ const handleRetry = () => {
 </script>
 
 <template>
-  <div class="login-page">
-    <div class="login-container">
+  <div class="register-page">
+    <div class="register-container">
       <div v-if="isCheckingSession" class="flex flex-col items-center gap-4">
         <Spinner />
         <p class="text-sm text-muted-foreground">Checking authentication...</p>
@@ -45,12 +55,24 @@ const handleRetry = () => {
 
       <Card v-else class="w-full max-w-md">
         <CardHeader class="text-center">
-          <CardTitle class="text-3xl font-bold">Welcome back</CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
+          <CardTitle class="text-3xl font-bold">Create account</CardTitle>
+          <CardDescription>Sign up to start video conferencing</CardDescription>
         </CardHeader>
 
         <CardContent>
-          <form @submit.prevent="handleLogin" class="space-y-4">
+          <form @submit.prevent="handleRegister" class="space-y-4">
+            <div class="space-y-2">
+              <Label for="name">Name</Label>
+              <Input
+                id="name"
+                v-model="name"
+                type="text"
+                placeholder="Your name"
+                required
+                :disabled="isRegistering"
+              />
+            </div>
+
             <div class="space-y-2">
               <Label for="email">Email</Label>
               <Input
@@ -59,7 +81,7 @@ const handleRetry = () => {
                 type="email"
                 placeholder="your.email@example.com"
                 required
-                :disabled="isAuthenticating"
+                :disabled="isRegistering"
               />
             </div>
 
@@ -69,32 +91,55 @@ const handleRetry = () => {
                 id="password"
                 v-model="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder="Create a password"
                 required
-                :disabled="isAuthenticating"
+                minlength="6"
+                :disabled="isRegistering"
+              />
+            </div>
+
+            <div class="space-y-2">
+              <Label for="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                v-model="confirmPassword"
+                type="password"
+                placeholder="Confirm your password"
+                required
+                :disabled="isRegistering"
               />
             </div>
 
             <div
-              v-if="hasLoginError"
+              v-if="passwordMismatch"
+              class="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive rounded-lg text-destructive text-sm"
+            >
+              <AlertCircle class="w-5 h-5 flex-shrink-0" />
+              Passwords do not match
+            </div>
+
+            <div
+              v-if="hasRegisterError"
               class="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive rounded-lg text-destructive text-sm"
             >
               <AlertCircle class="w-5 h-5 flex-shrink-0" />
               {{ errorMessage }}
             </div>
 
-            <Button type="submit" class="w-full" :disabled="isAuthenticating">
-              <Spinner v-if="isAuthenticating" size="sm" class="mr-2" />
-              {{ isAuthenticating ? 'Signing In...' : 'Sign In' }}
+            <Button type="submit" class="w-full" :disabled="isRegistering">
+              <Spinner v-if="isRegistering" size="sm" class="mr-2" />
+              {{ isRegistering ? 'Creating Account...' : 'Create Account' }}
             </Button>
 
-            <Button v-if="hasLoginError" type="button" variant="outline" class="w-full" @click="handleRetry">
+            <Button v-if="hasRegisterError" type="button" variant="outline" class="w-full" @click="handleRetry">
               Try Again
             </Button>
 
             <p class="text-center text-sm text-muted-foreground pt-4 border-t">
-              Don't have an account?
-              <RouterLink to="/register" class="text-primary hover:underline font-medium"> Sign up </RouterLink>
+              Already have an account?
+              <RouterLink to="/login" class="text-primary hover:underline font-medium">
+                Sign in
+              </RouterLink>
             </p>
           </form>
         </CardContent>
@@ -104,7 +149,7 @@ const handleRetry = () => {
 </template>
 
 <style scoped>
-.login-page {
+.register-page {
   min-height: calc(100vh - 80px);
   display: flex;
   align-items: center;
@@ -112,7 +157,7 @@ const handleRetry = () => {
   padding: 1rem;
 }
 
-.login-container {
+.register-container {
   width: 100%;
   display: flex;
   justify-content: center;

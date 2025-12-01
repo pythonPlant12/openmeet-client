@@ -9,6 +9,8 @@ export enum AuthState {
   AUTHENTICATED = 'authenticated',
   REFRESHING_TOKEN = 'refreshingToken',
   LOGGING_OUT = 'loggingOut',
+  REGISTERING = 'registering',
+  REGISTRATION_FAILED = 'registrationFailed',
 }
 
 export enum AuthEventType {
@@ -17,6 +19,9 @@ export enum AuthEventType {
   REFRESH_TOKEN = 'REFRESH_TOKEN',
   RETRY = 'RETRY',
   CHECK_SESSION = 'CHECK_SESSION',
+  REGISTER = 'REGISTER',
+  GO_TO_LOGIN = 'GO_TO_LOGIN',
+  GO_TO_REGISTER = 'GO_TO_REGISTER',
 }
 
 export interface User {
@@ -28,29 +33,24 @@ export interface User {
 
 export interface AuthContext {
   user: User | null;
-  token: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
   error: string | null;
-  router?: Router; // Vue Router
+  router?: Router;
 }
 
 export type AuthEvents =
   | { type: AuthEventType.LOGIN; email: string; password: string }
+  | { type: AuthEventType.REGISTER; email: string; name: string; password: string }
   | { type: AuthEventType.LOGOUT }
   | { type: AuthEventType.REFRESH_TOKEN }
   | { type: AuthEventType.RETRY }
-  | { type: AuthEventType.CHECK_SESSION };
-
-export interface LoginCredentials {
-  email: string;
-  password: string;
-}
-
-export interface LoginResponse {
-  user: User;
-  token: string;
-}
+  | { type: AuthEventType.CHECK_SESSION }
+  | { type: AuthEventType.GO_TO_LOGIN }
+  | { type: AuthEventType.GO_TO_REGISTER };
 
 export interface AuthInput {
-  initialToken?: string | null;
-  router?: Router; // Vue Router
+  initialAccessToken?: string | null;
+  initialRefreshToken?: string | null;
+  router?: Router;
 }

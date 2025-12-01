@@ -13,7 +13,8 @@ const router = useRouter();
 
 const authActorRef = useMachine(authMachine, {
   input: {
-    initialToken: cookieUtils.get('authToken'),
+    initialAccessToken: cookieUtils.get('accessToken'),
+    initialRefreshToken: cookieUtils.get('refreshToken'),
     router,
   },
 });
