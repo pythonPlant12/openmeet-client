@@ -49,7 +49,7 @@ const handleRetry = () => {
       <Card v-else class="w-full max-w-md">
         <CardHeader class="text-center">
           <CardTitle class="text-3xl font-bold">Welcome</CardTitle>
-          <CardDescription>Sign in to continue your gaming experience</CardDescription>
+          <CardDescription>Sign in to create chat rooms</CardDescription>
         </CardHeader>
 
         <CardContent>

@@ -18,12 +18,12 @@ const meetingCode = ref('');
 const createNewMeeting = () => {
   const meetingId = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
-  router.push(`/meet/${meetingId}`);
+  router.push(`/room/${meetingId}`);
 };
 
 const joinMeeting = () => {
   if (meetingCode.value.trim()) {
-    router.push(`/meet/${meetingCode.value.trim()}`);
+    router.push(`/room/${meetingCode.value.trim()}`);
   }
 };
 </script>

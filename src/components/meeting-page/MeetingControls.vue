@@ -32,7 +32,7 @@ const copiedLink = ref(false);
 const copiedId = ref(false);
 
 const copyMeetingLink = async () => {
-  const link = `${window.location.origin}/meet/${props.meetingId}`;
+  const link = `${window.location.origin}/room/${props.meetingId}`;
   await navigator.clipboard.writeText(link);
   copiedLink.value = true;
   setTimeout(() => {
@@ -49,13 +49,13 @@ const copyMeetingId = async () => {
 };
 
 const shareOnWhatsApp = () => {
-  const link = `${window.location.origin}/meet/${props.meetingId}`;
+  const link = `${window.location.origin}/room/${props.meetingId}`;
   const text = `Join my video call: ${link}`;
   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 };
 
 const shareOnTelegram = () => {
-  const link = `${window.location.origin}/meet/${props.meetingId}`;
+  const link = `${window.location.origin}/room/${props.meetingId}`;
   const text = `Join my video call`;
   window.open(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`, '_blank');
 };

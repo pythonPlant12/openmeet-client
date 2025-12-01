@@ -1,0 +1,28 @@
+{
+  "branding": {
+    "appName": "OpenMeet",
+    "appTagline": "Free & Open Video Conferencing",
+    "companyName": "OpenMeet",
+    "logoText": "OM"
+  },
+  "colors": {
+    "primary": "154 94% 40%",
+    "primaryForeground": "0 0% 100%",
+    "secondary": "0 0% 28%",
+    "secondaryForeground": "0 0% 100%",
+    "background": "0 0% 12%",
+    "foreground": "0 0% 100%",
+    "card": "0 0% 18%",
+    "cardForeground": "0 0% 100%",
+    "muted": "0 0% 28%",
+    "mutedForeground": "220 13% 69%",
+    "accent": "154 94% 40%",
+    "accentForeground": "0 0% 100%",
+    "destructive": "0 84% 60%",
+    "destructiveForeground": "0 0% 100%",
+    "border": "154 94% 40% / 0.29",
+    "input": "0 0% 28%",
+    "ring": "154 94% 40%"
+  },
+  "radius": "0.75rem"
+}

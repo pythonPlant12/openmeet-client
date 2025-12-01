@@ -3,16 +3,15 @@ import { Users } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import JoinMeetingDialog from '@/components/meeting-page/JoinMeetingDialog.vue';
+import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
+import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useWebRTCSFU } from '@/composables/useWebRTCSFU';
 
 // Lock viewport to prevent scrolling and zooming on mobile
 useFullscreenLock();
-
-import JoinMeetingDialog from './JoinMeetingDialog.vue';
-import MeetingControls from './MeetingControls.vue';
-import VideoGrid from './VideoGrid.vue';
 
 const route = useRoute();
 const router = useRouter();

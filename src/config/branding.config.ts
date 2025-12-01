@@ -1,15 +1,6 @@
-export interface BrandingConfig {
-  appName: string;
-  appTagline: string;
-  companyName: string;
-  logoText: string;
+import { useTheme } from '@/composables/useTheme';
+
+export function useBranding() {
+  const { theme } = useTheme();
+  return theme.branding;
 }
-
-const brandingConfig: BrandingConfig = {
-  appName: import.meta.env.VITE_APP_NAME || 'Open Meet',
-  appTagline: import.meta.env.VITE_APP_TAGLINE || 'Secure Video Conferencing',
-  companyName: import.meta.env.VITE_COMPANY_NAME || 'Open Meet',
-  logoText: import.meta.env.VITE_LOGO_TEXT || 'AC',
-};
-
-export default brandingConfig;
