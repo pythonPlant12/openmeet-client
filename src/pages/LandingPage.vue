@@ -36,7 +36,9 @@ const colorInputs = computed(() => [
   { key: 'primary' as keyof ThemeColors, label: 'Primary', description: 'Main brand color' },
   { key: 'secondary' as keyof ThemeColors, label: 'Secondary', description: 'Supporting color' },
   { key: 'background' as keyof ThemeColors, label: 'Background', description: 'Page background' },
+  { key: 'foreground' as keyof ThemeColors, label: 'Foreground', description: 'Default text color' },
   { key: 'card' as keyof ThemeColors, label: 'Card', description: 'Card backgrounds' },
+  { key: 'cardForeground' as keyof ThemeColors, label: 'Card Text', description: 'Text inside cards' },
   { key: 'muted' as keyof ThemeColors, label: 'Muted', description: 'Subtle backgrounds' },
   { key: 'destructive' as keyof ThemeColors, label: 'Destructive', description: 'Error states' },
 ]);
@@ -139,7 +141,7 @@ const features = [
   {
     icon: Video,
     title: 'HD Video Calls',
-    description: 'Crystal clear video with adaptive bitrate that adjusts to your connection.',
+    description: 'Clear video with adaptive bitrate that adjusts to your connection.',
   },
   {
     icon: Users,
@@ -170,7 +172,7 @@ const features = [
 
 const techStack = [
   { icon: Zap, name: 'Vue 3', description: 'Modern reactive frontend' },
-  { icon: Server, name: 'Rust SFU', description: 'High-performance media server' },
+  { icon: Server, name: 'Rust SFU', description: 'High performance media server' },
   { icon: Shield, name: 'TURN Server', description: 'Reliable NAT traversal' },
   { icon: Database, name: 'PostgreSQL', description: 'Robust data storage' },
 ];
@@ -184,30 +186,32 @@ const techStack = [
     >
       <div class="max-w-3xl mx-auto">
         <div
-          class="inline-block px-4 py-2 mb-6 text-sm rounded-full bg-primary/10 border border-primary/30 text-primary"
+          class="inline-block px-4 py-2 mb-6 text-sm rounded-full bg-primary/10 border border-primary/30 text-primary opacity-0 animate-fade-in"
         >
           Open Source Video Conferencing
         </div>
 
         <h1
-          class="text-5xl md:text-7xl font-extrabold leading-tight mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent"
+          class="text-5xl md:text-7xl font-extrabold leading-tight mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent opacity-0 animate-fade-in [animation-delay:100ms]"
         >
           {{ theme.branding.appName }}
         </h1>
 
-        <p class="text-xl text-primary mb-6">{{ theme.branding.appTagline }}</p>
+        <p class="text-xl text-primary mb-6 opacity-0 animate-fade-in [animation-delay:200ms]">
+          {{ theme.branding.appTagline }}
+        </p>
 
-        <p class="text-lg text-muted-foreground leading-relaxed mb-8">
+        <p class="text-lg text-muted-foreground leading-relaxed mb-8 opacity-0 animate-fade-in [animation-delay:300ms]">
           A free, open-source alternative to Google Meet and Microsoft Teams. Self-host on any VPS, customize the
           branding, and own your video conferencing infrastructure. No time limits, no tracking, no compromises.
         </p>
 
-        <div class="flex gap-4 justify-center flex-wrap">
+        <div class="flex gap-4 justify-center flex-wrap opacity-0 animate-fade-in [animation-delay:400ms]">
           <Button size="lg" @click="router.push('/login')">
             Start a Meeting
             <ArrowRight class="w-4 h-4 ml-2" />
           </Button>
-          <Button size="lg" variant="outline" as="a" href="https://github.com" target="_blank">
+          <Button size="lg" variant="outline" as="a" href="https://github.com/pythonPlant12/openmeet" target="_blank">
             <Github class="w-4 h-4 mr-2" />
             View on GitHub
           </Button>
@@ -220,7 +224,12 @@ const techStack = [
       <div class="max-w-5xl mx-auto px-6">
         <p class="text-center text-sm text-muted-foreground mb-6">Built with modern technologies</p>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div v-for="tech in techStack" :key="tech.name" class="flex items-center gap-3">
+          <div
+            v-for="(tech, index) in techStack"
+            :key="tech.name"
+            class="flex items-center gap-3 opacity-0 animate-fade-in-up transition-transform hover:scale-105"
+            :style="{ animationDelay: `${500 + index * 100}ms` }"
+          >
             <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
               <component :is="tech.icon" class="w-5 h-5" />
             </div>
@@ -241,11 +250,13 @@ const techStack = [
 
         <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           <FeatureCard
-            v-for="feature in features"
+            v-for="(feature, index) in features"
             :key="feature.title"
             :icon="feature.icon"
             :title="feature.title"
             :description="feature.description"
+            class="opacity-0 animate-fade-in-up"
+            :style="{ animationDelay: `${index * 100}ms` }"
           />
         </div>
       </div>
@@ -308,7 +319,7 @@ const techStack = [
                         :id="color.key"
                         type="color"
                         :value="hslToHex(theme.colors[color.key])"
-                        class="w-12 h-9 rounded-lg cursor-pointer border-2 border-border bg-transparent"
+                        class="w-12 h-9 cursor-pointer bg-transparent"
                         @input="handleColorChange(color.key, $event)"
                       />
                       <span class="text-xs font-mono text-muted-foreground">{{ theme.colors[color.key] }}</span>
