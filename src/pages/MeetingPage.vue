@@ -3,6 +3,7 @@ import { Users } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
 import JoinMeetingDialog from '@/components/meeting-page/JoinMeetingDialog.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
@@ -46,6 +47,7 @@ const pendingRoomId = ref<string | null>(null);
 const pendingMediaSettings = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
 
 const showJoinDialog = ref(false);
+const showConnectionError = ref(false);
 const participantName = ref<string>('');
 const initialDialogName = ref<string>('');
 const showNameInput = ref(true);
@@ -110,6 +112,13 @@ watch(
     }
   },
 );
+
+// Show connection error dialog when connection fails or disconnects
+watch(connectionState, (newState) => {
+  if (newState === 'failed' || newState === 'disconnected') {
+    showConnectionError.value = true;
+  }
+});
 
 const initializeMeeting = () => {
   const storedName = sessionStorage.getItem('participantName');
@@ -318,6 +327,14 @@ const handleEndCall = () => {
       />
     </div>
   </div>
+
+  <!-- Connection Error Dialog -->
+  <ConnectionErrorDialog
+    :open="showConnectionError"
+    :connection-state="connectionState"
+    @leave="handleEndCall"
+    @close="showConnectionError = false"
+  />
 </template>
 
 <style></style>

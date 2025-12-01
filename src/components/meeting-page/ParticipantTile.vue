@@ -99,17 +99,25 @@ onMounted(async () => {
     :class="['relative cursor-pointer group rounded-lg overflow-hidden bg-[hsl(0,0%,12%)]', sizeClasses]"
     @click="emit('click')"
   >
-    <!-- Video or Avatar -->
-    <div v-if="participant.stream && participant.videoEnabled" class="w-full h-full">
-      <video
-        ref="videoRef"
-        autoplay
-        playsinline
-        :muted="participant.isLocal"
-        :class="['w-full h-full rounded-lg bg-[hsl(0,0%,12%)]', objectFitClass]"
-      />
-    </div>
-    <div v-else class="w-full h-full flex items-center justify-center bg-[hsl(0,0%,12%)]">
+    <!-- Video element (always present for audio playback, hidden when video disabled) -->
+    <video
+      v-if="participant.stream"
+      ref="videoRef"
+      autoplay
+      playsinline
+      :muted="participant.isLocal"
+      :class="[
+        'w-full h-full rounded-lg bg-[hsl(0,0%,12%)]',
+        objectFitClass,
+        { hidden: !participant.videoEnabled },
+      ]"
+    />
+
+    <!-- Avatar (shown when no stream or video disabled) -->
+    <div
+      v-if="!participant.stream || !participant.videoEnabled"
+      class="absolute inset-0 flex items-center justify-center bg-[hsl(0,0%,12%)]"
+    >
       <div
         :class="[
           'rounded-full bg-primary flex items-center justify-center font-bold text-white',

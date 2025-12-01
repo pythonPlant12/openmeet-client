@@ -49,7 +49,7 @@ export class SignalingService {
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as SignalingMessage;
-          console.log('[SignalingService] Received message');
+          console.log('[SignalingService] Received message:', message.type);
           this.handleMessage(message);
         } catch (error) {
           console.error('[SignalingService] Failed to parse message:', error);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 import ParticipantTile from './ParticipantTile.vue';
@@ -14,6 +15,7 @@ const focusedParticipantId = ref<string | null>(null);
 
 const hasParticipants = computed(() => props.participants.length > 0);
 const isSingleParticipant = computed(() => props.participants.length === 1);
+const shouldUseTwoColumnsOnMobile = computed(() => props.participants.length > 3);
 
 const focusedParticipant = computed(() => {
   if (!focusedParticipantId.value) return null;
@@ -41,7 +43,7 @@ const toggleFocus = (participantId: string) => {
 
 <template>
   <div class="flex-1 relative bg-[hsl(0,0%,8%)] w-full h-full">
-    <!-- Single participant - centered large video -->
+    <!-- Single participant -->
     <div v-if="isSingleParticipant" class="absolute h-[78vh] inset-0 flex items-center justify-center p-8">
       <div class="relative w-full h-full max-w-6xl">
         <ParticipantTile :participant="participants[0]" size="full" :show-expand-icon="false" />
@@ -49,10 +51,15 @@ const toggleFocus = (participantId: string) => {
     </div>
 
     <!-- Multiple participants -->
-    <div v-else-if="hasParticipants" class="h-[68vh] md:h-[84vh] w-full relative">
+    <div v-else-if="hasParticipants" class="h-[68vh] mt-3 md:h-[84vh] w-full relative">
       <!-- Equal grid layout (no one focused) -->
-      <div v-if="!focusedParticipantId" class="h-[78vh] w-full flex items-center justify-center p-4">
-        <div class="grid md:grid-cols-2 grid-cols-1 gap-4 w-full h-full max-w-7xl">
+      <div v-if="!focusedParticipantId" class="h-[82vh] sm:h-[84vh] w-full flex items-center justify-center p-4">
+        <div
+          :class="[
+            'grid gap-4 w-full h-full max-w-7xl',
+            shouldUseTwoColumnsOnMobile ? 'grid-cols-2' : 'grid-cols-1 md:grid-cols-2',
+          ]"
+        >
           <ParticipantTile
             v-for="participant in participants"
             :key="participant.id"
