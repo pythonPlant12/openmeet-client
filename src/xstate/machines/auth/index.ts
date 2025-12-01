@@ -1,6 +1,6 @@
 import { assign, fromPromise, setup } from 'xstate';
 
-import { authApi, type AuthResponse } from '@/services/auth-api';
+import { type AuthResponse, authApi } from '@/services/auth-api';
 import { cookieUtils } from '@/utils';
 
 import type { AuthContext, AuthEvents, AuthInput, User } from './types';
@@ -15,8 +15,11 @@ const registerService = fromPromise<AuthResponse, { email: string; name: string;
   },
 );
 
-const checkSessionService = fromPromise<User, { accessToken: string }>(async ({ input }) => {
-  return authApi.me(input.accessToken);
+const checkSessionService = fromPromise<
+  User & { newAccessToken?: string },
+  { accessToken: string; refreshToken: string | null }
+>(async ({ input }) => {
+  return authApi.me(input.accessToken, input.refreshToken ?? undefined);
 });
 
 const refreshTokenService = fromPromise<string, { refreshToken: string }>(async ({ input }) => {
@@ -54,7 +57,14 @@ export const authMachine = setup({
     }),
 
     setUserFromSession: assign({
-      user: ({ event }) => (event as any).output,
+      user: ({ event }) => {
+        const { newAccessToken: _, ...user } = (event as any).output;
+        return user;
+      },
+      accessToken: ({ context, event }) => {
+        const output = (event as any).output;
+        return output.newAccessToken ?? context.accessToken;
+      },
       error: null,
     }),
 
@@ -114,8 +124,7 @@ export const authMachine = setup({
   },
 
   guards: {
-    hasStoredToken: ({ context }) => !!context.accessToken,
-    hasRefreshToken: ({ context }) => !!context.refreshToken,
+    hasAuthTokens: ({ context }) => !!context.accessToken,
   },
 }).createMachine({
   id: 'auth',
@@ -135,7 +144,7 @@ export const authMachine = setup({
       description: 'Check if user has a valid stored session',
       always: [
         {
-          guard: 'hasStoredToken',
+          guard: 'hasAuthTokens',
           target: 'validatingSession',
         },
         {
@@ -148,21 +157,18 @@ export const authMachine = setup({
       description: 'Validate stored token with backend',
       invoke: {
         src: 'checkSessionService',
-        input: ({ context }) => ({ accessToken: context.accessToken! }),
+        input: ({ context }) => ({
+          accessToken: context.accessToken!,
+          refreshToken: context.refreshToken,
+        }),
         onDone: {
           target: 'authenticated',
-          actions: 'setUserFromSession',
+          actions: ['setUserFromSession', 'saveTokensToStorage'],
         },
-        onError: [
-          {
-            guard: 'hasRefreshToken',
-            target: 'refreshingToken',
-          },
-          {
-            target: 'unauthenticated',
-            actions: ['clearAuth', 'clearTokensFromStorage'],
-          },
-        ],
+        onError: {
+          target: 'unauthenticated',
+          actions: ['clearAuth', 'clearTokensFromStorage'],
+        },
       },
     },
 

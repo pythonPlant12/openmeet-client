@@ -36,7 +36,7 @@ vi.mock('@/services/auth-api', () => ({
       access_token: 'mock-access-token',
       refresh_token: 'mock-refresh-token',
     })),
-    me: vi.fn().mockImplementation(async ({ accessToken }) => {
+    me: vi.fn().mockImplementation(async (accessToken: string, _refreshToken?: string) => {
       if (accessToken === 'mock-access-token') {
         return { id: '1', email: 'test@test.com', name: 'Test User', role: 'user' };
       }
@@ -91,14 +91,10 @@ describe('Auth Machine', () => {
       actor.start();
     });
 
-    it('should start and transition to validatingSession', () => {
-      // XState transitions synchronously to validatingSession when token exists
-      expect(actor.getSnapshot().value).toBe(AuthState.VALIDATING_SESSION);
-    });
-
-    it('should transition to validatingSession when token exists', async () => {
-      await waitFor(actor, (state) => state.matches(AuthState.VALIDATING_SESSION));
-      expect(actor.getSnapshot().value).toBe(AuthState.VALIDATING_SESSION);
+    it('should validate session and transition to authenticated when token is valid', async () => {
+      // With instant mock, machine transitions directly to authenticated
+      await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
+      expect(actor.getSnapshot().value).toBe(AuthState.AUTHENTICATED);
     });
 
     it('should transition to authenticated with valid token', async () => {

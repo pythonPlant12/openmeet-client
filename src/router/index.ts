@@ -6,7 +6,7 @@ import LoginPage from '@/pages/LoginPage.vue';
 import MeetingPage from '@/pages/MeetingPage.vue';
 import NotFoundPage from '@/pages/NotFoundPage.vue';
 import RegisterPage from '@/pages/RegisterPage.vue';
-import { cookieUtils } from '../utils';
+import { cookieUtils, jwtUtils } from '../utils';
 
 const showLandingPage = import.meta.env.VITE_LANDING_PAGE !== 'false';
 
@@ -57,17 +57,26 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
-  const token = cookieUtils.get('accessToken');
+  const accessToken = cookieUtils.get('accessToken');
+  const refreshToken = cookieUtils.get('refreshToken');
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
   const isAuthPage = to.matched.some((record) => record.meta.isAuthPage);
 
-  // Redirect to dashboard if already logged in and trying to access auth pages
-  if (isAuthPage && token) {
+  const hasValidAccessToken = accessToken && jwtUtils.isValid(accessToken);
+  // Refresh token is UUID, not JWT - can only check existence, backend validates it
+  const hasRefreshToken = !!refreshToken;
+  // Allow if valid access token OR has refresh token (API client will refresh)
+  const canAuthenticate = hasValidAccessToken || hasRefreshToken;
+
+  // Redirect to dashboard if can authenticate and trying to access auth pages
+  if (isAuthPage && canAuthenticate) {
     return next('/dashboard');
   }
 
-  // Redirect to login if trying to access protected route without token
-  if (requiresAuth && !token) {
+  // Redirect to login if trying to access protected route without valid tokens
+  if (requiresAuth && !canAuthenticate) {
+    cookieUtils.remove('accessToken');
+    cookieUtils.remove('refreshToken');
     return next('/login');
   }
 

@@ -1,3 +1,42 @@
+export interface JwtPayload {
+  exp?: number;
+  iat?: number;
+  sub?: string;
+  [key: string]: unknown;
+}
+
+export const jwtUtils = {
+  parse(token: string): JwtPayload | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+
+      const payload = parts[1];
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const json = atob(base64);
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  },
+
+  isExpired(token: string): boolean {
+    const payload = this.parse(token);
+    if (!payload?.exp) return true;
+
+    const now = Math.floor(Date.now() / 1000);
+    return payload.exp < now;
+  },
+
+  isValid(token: string): boolean {
+    const payload = this.parse(token);
+    if (!payload) return false;
+    if (!payload.exp) return false;
+
+    return !this.isExpired(token);
+  },
+};
+
 export const cookieUtils = {
   set(name: string, value: string, days: number) {
     const expires = new Date();

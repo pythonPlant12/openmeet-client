@@ -82,14 +82,31 @@ export const authApi = {
     });
   },
 
-  async me(accessToken: string): Promise<User> {
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+  async me(accessToken: string, refreshToken?: string): Promise<User & { newAccessToken?: string }> {
+    let response = await fetch(`${API_BASE_URL}/auth/me`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
     });
+
+    // If 401 and we have refresh token, try to refresh and retry
+    if (response.status === 401 && refreshToken) {
+      const refreshResult = await this.refresh(refreshToken).catch(() => null);
+      if (refreshResult) {
+        response = await fetch(`${API_BASE_URL}/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${refreshResult.access_token}`,
+          },
+        });
+        const user = await handleResponse<User>(response);
+        return { ...user, newAccessToken: refreshResult.access_token };
+      }
+    }
+
     return handleResponse<User>(response);
   },
 };

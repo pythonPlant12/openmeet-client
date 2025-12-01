@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import { Plus, Video } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { ref, watchEffect } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/composables/useAuth';
 
 const router = useRouter();
 
-const { currentUser } = useAuth();
+const { currentUser, isCheckingSession, isAuthenticated } = useAuth();
+
+// Redirect to login if not authenticated after session check
+watchEffect(() => {
+  if (!isCheckingSession.value && !isAuthenticated.value) {
+    router.push('/login');
+  }
+});
 
 const meetingCode = ref('');
 
@@ -29,7 +37,13 @@ const joinMeeting = () => {
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-80px)] p-6">
+  <!-- Loading state while checking auth -->
+  <div v-if="isCheckingSession" class="min-h-[calc(100vh-80px)] flex items-center justify-center">
+    <Spinner class="size-8" />
+  </div>
+
+  <!-- Dashboard content -->
+  <div v-else-if="isAuthenticated" class="min-h-[calc(100vh-80px)] p-6">
     <div class="w-full max-w-7xl mx-auto flex flex-col gap-8">
       <Card class="mt-5">
         <CardHeader>
