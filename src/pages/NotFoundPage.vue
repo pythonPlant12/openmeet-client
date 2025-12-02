@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Home, ArrowLeft } from 'lucide-vue-next';
+import { ArrowLeft, Home } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 
 import { Button } from '@/components/ui/button';

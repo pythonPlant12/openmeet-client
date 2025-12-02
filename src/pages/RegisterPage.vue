@@ -78,14 +78,7 @@ const handleRetry = () => {
           <form @submit.prevent="handleRegister" class="space-y-4">
             <div class="space-y-2">
               <Label for="name">Name</Label>
-              <Input
-                id="name"
-                v-model="name"
-                type="text"
-                placeholder="Your name"
-                required
-                :disabled="isRegistering"
-              />
+              <Input id="name" v-model="name" type="text" placeholder="Your name" required :disabled="isRegistering" />
             </div>
 
             <div class="space-y-2">
@@ -152,9 +145,7 @@ const handleRetry = () => {
 
             <p class="text-center text-sm text-muted-foreground pt-4 border-t">
               Already have an account?
-              <RouterLink to="/login" class="text-primary hover:underline font-medium">
-                Sign in
-              </RouterLink>
+              <RouterLink to="/login" class="text-primary hover:underline font-medium"> Sign in </RouterLink>
             </p>
           </form>
         </CardContent>

@@ -1,8 +1,9 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Router } from 'vue-router';
 import { createActor, waitFor } from 'xstate';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { authMachine } from '../index';
 import { AuthEventType, AuthState } from '../types';
-import type { Router } from 'vue-router';
 
 // Mock router
 const mockRouter: Router = {
@@ -86,7 +87,11 @@ describe('Auth Machine', () => {
   describe('Initial State - With Token', () => {
     beforeEach(() => {
       actor = createActor(authMachine, {
-        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
+        input: {
+          initialAccessToken: 'mock-access-token',
+          initialRefreshToken: 'mock-refresh-token',
+          router: mockRouter,
+        },
       });
       actor.start();
     });
@@ -236,7 +241,11 @@ describe('Auth Machine', () => {
   describe('Logout Flow', () => {
     beforeEach(async () => {
       actor = createActor(authMachine, {
-        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
+        input: {
+          initialAccessToken: 'mock-access-token',
+          initialRefreshToken: 'mock-refresh-token',
+          router: mockRouter,
+        },
       });
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
@@ -271,7 +280,11 @@ describe('Auth Machine', () => {
   describe('Token Refresh', () => {
     beforeEach(async () => {
       actor = createActor(authMachine, {
-        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
+        input: {
+          initialAccessToken: 'mock-access-token',
+          initialRefreshToken: 'mock-refresh-token',
+          router: mockRouter,
+        },
       });
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
@@ -306,7 +319,11 @@ describe('Auth Machine', () => {
   describe('Context Management', () => {
     it('should clear auth context on logout', async () => {
       actor = createActor(authMachine, {
-        input: { initialAccessToken: 'mock-access-token', initialRefreshToken: 'mock-refresh-token', router: mockRouter },
+        input: {
+          initialAccessToken: 'mock-access-token',
+          initialRefreshToken: 'mock-refresh-token',
+          router: mockRouter,
+        },
       });
       actor.start();
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });

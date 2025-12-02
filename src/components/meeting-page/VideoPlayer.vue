@@ -34,13 +34,7 @@ onMounted(() => {
 <template>
   <div class="video-player">
     <div class="video-container">
-      <video
-        ref="videoRef"
-        :muted="muted"
-        autoplay
-        playsinline
-        class="video"
-      />
+      <video ref="videoRef" :muted="muted" autoplay playsinline class="video" />
       <div class="video-label">
         {{ label }}
       </div>

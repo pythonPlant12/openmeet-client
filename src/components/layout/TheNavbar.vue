@@ -2,8 +2,8 @@
 import { RouterLink, useRouter } from 'vue-router';
 
 import { Button } from '@/components/ui/button';
-import { useBranding } from '@/config/branding.config';
 import { useAuth } from '@/composables/useAuth';
+import { useBranding } from '@/config/branding.config';
 import { AuthEventType } from '@/xstate/machines/auth/types';
 
 const router = useRouter();

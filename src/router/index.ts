@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage.vue';
 import MeetingPage from '@/pages/MeetingPage.vue';
 import NotFoundPage from '@/pages/NotFoundPage.vue';
 import RegisterPage from '@/pages/RegisterPage.vue';
+
 import { cookieUtils, jwtUtils } from '../utils';
 
 const showLandingPage = import.meta.env.VITE_LANDING_PAGE === 'true';

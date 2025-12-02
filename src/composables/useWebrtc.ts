@@ -123,9 +123,6 @@ export function useWebrtc() {
     send: webrtcActor.send,
     actorRef: webrtcActor.actorRef,
 
-    // Legacy aliases for compatibility
-    createCall: joinRoom,
-    joinCall: joinRoom,
     endCall: leaveRoom,
   };
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, type Component } from 'vue';
+import { type Component, ref } from 'vue';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -42,17 +42,15 @@ const handleMouseLeave = () => {
 </script>
 
 <template>
-  <div
-    class="cursor-pointer"
-    @mousemove="handleMouseMove"
-    @mouseleave="handleMouseLeave"
-  >
+  <div class="cursor-pointer" @mousemove="handleMouseMove" @mouseleave="handleMouseLeave">
     <Card
       class="h-full transition-all duration-100 ease-out hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10"
       :style="{ transform: cardTransform }"
     >
       <CardHeader>
-        <div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-4 transition-colors group-hover:bg-primary/20">
+        <div
+          class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-4 transition-colors group-hover:bg-primary/20"
+        >
           <component :is="icon" class="w-6 h-6" />
         </div>
         <CardTitle class="text-lg">{{ title }}</CardTitle>

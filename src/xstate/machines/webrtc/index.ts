@@ -432,5 +432,3 @@ export const webrtcMachine = setup({
     },
   },
 });
-
-export type webrtcMachine = typeof webrtcMachine;

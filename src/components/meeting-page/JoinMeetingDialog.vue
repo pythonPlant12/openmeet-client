@@ -116,10 +116,8 @@ watch(
 const enumerateDevices = async () => {
   // If permissions are not yet granted, request them via getUserMedia
   // Note: 'prompt' means user hasn't been asked yet, 'unknown' means Permissions API isn't supported
-  const needsAudioPermission =
-    audioPermission.value === 'unknown' || audioPermission.value === 'prompt';
-  const needsVideoPermission =
-    videoPermission.value === 'unknown' || videoPermission.value === 'prompt';
+  const needsAudioPermission = audioPermission.value === 'unknown' || audioPermission.value === 'prompt';
+  const needsVideoPermission = videoPermission.value === 'unknown' || videoPermission.value === 'prompt';
 
   if (needsAudioPermission || needsVideoPermission) {
     // Try to get permissions - request each separately to properly track state
