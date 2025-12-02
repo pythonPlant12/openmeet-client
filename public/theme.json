@@ -6,7 +6,7 @@
     "logoText": "OM"
   },
   "colors": {
-    "primary": "154 94% 40%",
+    "primary": "37.73 40.25% 47.25%",
     "primaryForeground": "0 0% 100%",
     "secondary": "0 0% 28%",
     "secondaryForeground": "0 0% 100%",
@@ -16,13 +16,13 @@
     "cardForeground": "0 0% 100%",
     "muted": "0 0% 28%",
     "mutedForeground": "220 13% 69%",
-    "accent": "154 94% 40%",
+    "accent": "37.73 40.25% 47.25%",
     "accentForeground": "0 0% 100%",
     "destructive": "0 84% 60%",
     "destructiveForeground": "0 0% 100%",
-    "border": "154 94% 40% / 0.29",
+    "border": "37.73 40.25% 47.25%",
     "input": "0 0% 28%",
-    "ring": "154 94% 40%"
+    "ring": "37.73 40.25% 47.25%"
   },
   "backgroundImageUrl": "https://www.entrepreneur.com/wp-content/uploads/sites/2/2020/05/20200501194050-GettyImages-1217241160.jpeg",
   "radius": "0.75rem"
