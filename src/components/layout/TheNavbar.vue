@@ -20,7 +20,7 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <nav class="sticky top-0 left-0 right-0 z-[1030] bg-card border-b border-border backdrop-blur-sm">
+  <nav class="sticky top-0 left-0 right-0 z-[1030] bg-card border-b border-primary backdrop-blur-sm">
     <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
       <RouterLink to="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
         <div

@@ -27,21 +27,40 @@ import { Label } from '@/components/ui/label';
 import { type ThemeColors, useTheme } from '@/composables/useTheme';
 
 const router = useRouter();
-const { theme, setColor, setBranding, resetTheme, exportTheme } = useTheme();
+const { theme, setColor, setBranding, setBackgroundImageUrl, resetTheme, exportTheme } = useTheme();
 
 const copied = ref(false);
 const activeTab = ref<'colors' | 'branding'>('colors');
 
 const colorInputs = computed(() => [
   { key: 'primary' as keyof ThemeColors, label: 'Primary', description: 'Main brand color' },
-  { key: 'secondary' as keyof ThemeColors, label: 'Secondary', description: 'Supporting color' },
   { key: 'background' as keyof ThemeColors, label: 'Background', description: 'Page background' },
-  { key: 'foreground' as keyof ThemeColors, label: 'Foreground', description: 'Default text color' },
+  { key: 'foreground' as keyof ThemeColors, label: 'Main Text', description: 'Default text color' },
+  { key: 'mutedForeground' as keyof ThemeColors, label: 'Muted Text', description: 'Secondary text color' },
   { key: 'card' as keyof ThemeColors, label: 'Card', description: 'Card backgrounds' },
   { key: 'cardForeground' as keyof ThemeColors, label: 'Card Text', description: 'Text inside cards' },
-  { key: 'muted' as keyof ThemeColors, label: 'Muted', description: 'Subtle backgrounds' },
-  { key: 'destructive' as keyof ThemeColors, label: 'Destructive', description: 'Error states' },
 ]);
+
+const backgroundUrlError = ref('');
+
+function isValidUrl(url: string): boolean {
+  if (!url) return true; // Empty is valid (optional field)
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function handleBackgroundUrlChange(value: string) {
+  if (isValidUrl(value)) {
+    backgroundUrlError.value = '';
+    setBackgroundImageUrl(value);
+  } else {
+    backgroundUrlError.value = 'Please enter a valid URL';
+  }
+}
 
 function hslToHex(hsl: string): string {
   const parts = hsl.split(' ');
@@ -367,6 +386,20 @@ const techStack = [
                       placeholder="OM"
                       maxlength="2"
                     />
+                  </div>
+                  <div class="flex flex-col gap-2 sm:col-span-2">
+                    <Label for="backgroundImageUrl">
+                      Login Page Background URL
+                      <span class="text-xs text-muted-foreground font-normal ml-1">(optional)</span>
+                    </Label>
+                    <Input
+                      id="backgroundImageUrl"
+                      :model-value="theme.backgroundImageUrl || ''"
+                      @update:model-value="handleBackgroundUrlChange($event)"
+                      placeholder="https://example.com/background.jpg"
+                      :class="{ 'border-destructive': backgroundUrlError }"
+                    />
+                    <span v-if="backgroundUrlError" class="text-xs text-destructive">{{ backgroundUrlError }}</span>
                   </div>
                 </div>
               </div>

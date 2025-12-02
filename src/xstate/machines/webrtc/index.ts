@@ -18,7 +18,6 @@ const initialContext: SFUContext = {
   connectionState: null,
   iceConnectionState: null,
   streamOwnerMap: new Map(),
-  knownRemoteParticipants: new Set(),
   error: null,
 };
 
@@ -75,11 +74,6 @@ export const webrtcMachine = setup({
         });
         return newParticipants;
       },
-      knownRemoteParticipants: ({ context }, params: { participantId: string }) => {
-        const newSet = new Set(context.knownRemoteParticipants);
-        newSet.add(params.participantId);
-        return newSet;
-      },
     }),
 
     removeParticipant: assign({
@@ -87,11 +81,6 @@ export const webrtcMachine = setup({
         const newParticipants = new Map(context.participants);
         newParticipants.delete(params.participantId);
         return newParticipants;
-      },
-      knownRemoteParticipants: ({ context }, params: { participantId: string }) => {
-        const newSet = new Set(context.knownRemoteParticipants);
-        newSet.delete(params.participantId);
-        return newSet;
       },
     }),
 
@@ -227,7 +216,6 @@ export const webrtcMachine = setup({
       connectionState: null,
       iceConnectionState: null,
       streamOwnerMap: () => new Map<string, string>(),
-      knownRemoteParticipants: () => new Set<string>(),
       error: null,
     }),
   },

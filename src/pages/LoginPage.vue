@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertCircle } from 'lucide-vue-next';
-import { inject, ref } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/composables/useAuth';
+import { useFullscreenLock } from '@/composables/useFullscreenLock';
+import { useTheme } from '@/composables/useTheme';
 import { AuthEventType } from '@/xstate/machines/auth/types';
+
+useFullscreenLock();
+
+const { theme } = useTheme();
+const backgroundImageUrl = computed(() => theme.backgroundImageUrl);
 
 const authActor = inject<any>('authActor');
 
@@ -37,7 +44,15 @@ const handleRetry = () => {
 
 <template>
   <div class="login-page">
-    <div class="login-container">
+    <!-- Background image with blur -->
+    <div
+      v-if="backgroundImageUrl"
+      class="absolute inset-0 bg-cover bg-center blur-sm scale-105"
+      :style="{ backgroundImage: `url(${backgroundImageUrl})` }"
+    />
+    <div v-if="backgroundImageUrl" class="absolute inset-0 bg-black/50" />
+
+    <div class="login-container relative z-10">
       <div v-if="isCheckingSession" class="flex flex-col items-center gap-4">
         <Spinner />
         <p class="text-sm text-muted-foreground">Checking authentication...</p>
@@ -110,6 +125,8 @@ const handleRetry = () => {
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  position: relative;
+  overflow: hidden;
 }
 
 .login-container {

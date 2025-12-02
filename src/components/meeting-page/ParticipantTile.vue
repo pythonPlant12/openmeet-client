@@ -106,7 +106,11 @@ onMounted(async () => {
       autoplay
       playsinline
       :muted="participant.isLocal"
-      :class="['w-full h-full rounded-lg bg-[hsl(0,0%,12%)]', objectFitClass, { hidden: !participant.videoEnabled }]"
+      :class="[
+        'w-full h-full rounded-lg bg-[hsl(0,0%,12%)]',
+        objectFitClass,
+        { hidden: !participant.videoEnabled, '-scale-x-100': participant.isLocal },
+      ]"
     />
 
     <!-- Avatar (shown when no stream or video disabled) -->

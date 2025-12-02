@@ -8,7 +8,8 @@ import NotFoundPage from '@/pages/NotFoundPage.vue';
 import RegisterPage from '@/pages/RegisterPage.vue';
 import { cookieUtils, jwtUtils } from '../utils';
 
-const showLandingPage = import.meta.env.VITE_LANDING_PAGE !== 'false';
+const showLandingPage = import.meta.env.VITE_LANDING_PAGE === 'true';
+// const showLandingPage = false;
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

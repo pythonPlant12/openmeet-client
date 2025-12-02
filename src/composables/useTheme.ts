@@ -31,6 +31,7 @@ export interface ThemeConfig {
   branding: ThemeBranding;
   colors: ThemeColors;
   radius: string;
+  backgroundImageUrl?: string;
 }
 
 const defaultTheme: ThemeConfig = {
@@ -146,11 +147,24 @@ export function useTheme() {
 
   const setColor = (key: keyof ThemeColors, value: string) => {
     state.theme.colors[key] = value;
+
+    // Sync accent, ring, and border with primary for consistent hover/focus effects
+    if (key === 'primary') {
+      state.theme.colors.accent = value;
+      state.theme.colors.ring = value;
+      // Update border with opacity
+      state.theme.colors.border = `${value} / 0.29`;
+    }
+
     applyThemeToDocument(state.theme);
   };
 
   const setBranding = (key: keyof ThemeBranding, value: string) => {
     state.theme.branding[key] = value;
+  };
+
+  const setBackgroundImageUrl = (url: string) => {
+    state.theme.backgroundImageUrl = url || undefined;
   };
 
   const resetTheme = () => {
@@ -168,6 +182,7 @@ export function useTheme() {
     setTheme,
     setColor,
     setBranding,
+    setBackgroundImageUrl,
     resetTheme,
     exportTheme,
   };

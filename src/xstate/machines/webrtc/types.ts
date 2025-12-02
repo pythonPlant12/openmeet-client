@@ -27,7 +27,6 @@ export interface SFUContext {
 
   // Internal tracking
   streamOwnerMap: Map<string, string>;
-  knownRemoteParticipants: Set<string>;
 
   // Error
   error: string | null;
