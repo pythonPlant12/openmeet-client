@@ -4,9 +4,9 @@ import path from 'node:path';
 import { defineConfig } from 'vite';
 import vueDevTools from 'vite-plugin-vue-devtools';
 
-const certPath = '../certs/localhost+3.pem';
-const keyPath = '../certs/localhost+3-key.pem';
-const certsExist = fs.existsSync(certPath) && fs.existsSync(keyPath);
+// const certPath = '../certs/localhost+3.pem';
+// const keyPath = '../certs/localhost+3-key.pem';
+// const certsExist = fs.existsSync(certPath) && fs.existsSync(keyPath);
 
 // https://vite.dev/config/
 export default defineConfig({
