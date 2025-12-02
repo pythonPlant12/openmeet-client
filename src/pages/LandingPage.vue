@@ -395,7 +395,7 @@ const techStack = [
                     <Input
                       id="backgroundImageUrl"
                       :model-value="theme.backgroundImageUrl || ''"
-                      @update:model-value="handleBackgroundUrlChange($event)"
+                      @update:model-value="handleBackgroundUrlChange($event as string)"
                       placeholder="https://example.com/background.jpg"
                       :class="{ 'border-destructive': backgroundUrlError }"
                     />
