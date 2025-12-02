@@ -1,580 +1,448 @@
-import { assign, fromPromise, setup } from 'xstate';
+import { assign, setup } from 'xstate';
 
-import { firebaseService } from '@/services/firebase';
-import { WebRTCService } from '@/services/webrtc';
+import type { DeviceConstraints } from '@/services/webrtc-sfu';
 
-import type {
-  CreateCallOutput,
-  InitMediaOutput,
-  JoinCallOutput,
-  WebRTCContext,
-  WebRTCEvents,
-  WebRTCInput,
-} from './types';
+import { clearServices, getServices, getSignalingService, initMediaActor, joinRoomActor } from './actors';
+import type { Participant, SFUContext, SFUEvents } from './types';
 
-const webrtcService = new WebRTCService();
+// Re-export for convenience
+export { getServices } from './actors';
 
-// Actors (async operations)
-const initMediaActor = fromPromise<InitMediaOutput, void>(async () => {
-  const localStream = await webrtcService.initializeMedia();
-  return { localStream };
-});
+// Initial context
+const initialContext: SFUContext = {
+  localStream: null,
+  participants: new Map(),
+  localParticipantId: null,
+  localParticipantName: '',
+  roomId: null,
+  connectionState: null,
+  iceConnectionState: null,
+  streamOwnerMap: new Map(),
+  knownRemoteParticipants: new Set(),
+  error: null,
+};
 
-const createCallActor = fromPromise<CreateCallOutput, { callId: string; participantName?: string }>(
-  async ({ input }) => {
-    // Use the provided callId from the meeting room URL
-    const { callId, participantName } = input;
-
-    // Create peer connection and offer
-    webrtcService.createPeerConnection();
-    const offer = await webrtcService.createOffer(callId, participantName);
-
-    return {
-      callId,
-      offer: {
-        type: offer.type!,
-        sdp: offer.sdp!,
-      },
-    };
-  },
-);
-
-const joinCallActor = fromPromise<JoinCallOutput, { callId: string; participantName?: string }>(async ({ input }) => {
-  const { callId, participantName } = input;
-
-  // Create peer connection and answer
-  webrtcService.createPeerConnection();
-  const answer = await webrtcService.createAnswer(callId, participantName);
-
-  return {
-    answer: {
-      type: answer.type!,
-      sdp: answer.sdp!,
-    },
-  };
-});
-
+// The SFU XState machine
 export const webrtcMachine = setup({
   types: {
-    context: {} as WebRTCContext,
-    events: {} as WebRTCEvents,
-    input: {} as WebRTCInput,
+    context: {} as SFUContext,
+    events: {} as SFUEvents,
+    input: {} as { participantName?: string; deviceConstraints?: DeviceConstraints },
   },
-
   actors: {
-    initMediaActor,
-    createCallActor,
-    joinCallActor,
+    initMedia: initMediaActor,
+    joinRoom: joinRoomActor,
   },
-
   actions: {
     setLocalStream: assign({
-      localStream: ({ event }) => {
-        const output = (event as any).output as InitMediaOutput;
-        return output.localStream;
-      },
-      error: null,
-    }),
-
-    setCallCreated: assign({
-      callId: ({ event }) => {
-        const output = (event as any).output as CreateCallOutput;
-        return output.callId;
-      },
-      isInitiator: true,
-      error: null,
-    }),
-
-    setCallJoined: assign({
-      isInitiator: false,
-      error: null,
-    }),
-
-    setCallId: assign({
-      callId: ({ event }) => {
-        const callEvent = event as Extract<WebRTCEvents, { type: 'CREATE_CALL' | 'JOIN_CALL' }>;
-        return callEvent.callId;
-      },
-    }),
-
-    setPeerConnection: assign({
-      peerConnection: () => webrtcService.getPeerConnection(),
-    }),
-
-    setRemoteStream: assign({
-      remoteStream: () => webrtcService.getRemoteStream(),
-    }),
-
-    setConnectionState: assign({
-      connectionState: ({ event }) => {
-        const stateEvent = event as Extract<WebRTCEvents, { type: 'CONNECTION_STATE_CHANGED' }>;
-        return stateEvent.state;
-      },
-    }),
-
-    setIceConnectionState: assign({
-      iceConnectionState: ({ event }) => {
-        const stateEvent = event as Extract<WebRTCEvents, { type: 'ICE_CONNECTION_STATE_CHANGED' }>;
-        return stateEvent.state;
-      },
-    }),
-
-    setError: assign({
-      error: ({ event }) => {
-        const error = (event as any).error;
-        return error?.message || 'An error occurred';
-      },
-    }),
-
-    clearContext: assign({
-      peerConnection: null,
-      localStream: null,
-      remoteStream: null,
-      participants: () => new Map(),
-      localParticipantId: null,
-      localParticipantName: 'User',
-      callId: null,
-      connectionState: null,
-      iceConnectionState: null,
-      error: null,
-      isInitiator: false,
-    }),
-
-    cleanupResources: () => {
-      webrtcService.cleanup();
-    },
-
-    monitorPeerConnection: ({ context, self }) => {
-      const pc = context.peerConnection;
-      if (!pc) return;
-
-      pc.onconnectionstatechange = () => {
-        console.log('[XState] Connection state changed:', pc.connectionState);
-
-        // Only send events if actor is still active
-        try {
-          self.send({
-            type: 'CONNECTION_STATE_CHANGED',
-            state: pc.connectionState,
-          });
-        } catch {
-          console.warn('[XState] Failed to send CONNECTION_STATE_CHANGED (actor may be stopped)');
-        }
-
-        if (pc.connectionState === 'failed') {
-          console.error('[WebRTC] Connection failed - may need TURN server for NAT traversal');
-        } else if (pc.connectionState === 'disconnected') {
-          console.warn('[WebRTC] Connection disconnected');
-        } else if (pc.connectionState === 'connected') {
-          console.log('[WebRTC] Connection established successfully!');
-        }
-      };
-
-      pc.oniceconnectionstatechange = () => {
-        console.log('[XState] ICE connection state changed:', pc.iceConnectionState);
-
-        // Only send events if actor is still active
-        try {
-          self.send({
-            type: 'ICE_CONNECTION_STATE_CHANGED',
-            state: pc.iceConnectionState,
-          });
-        } catch {
-          console.warn('[XState] Failed to send ICE_CONNECTION_STATE_CHANGED (actor may be stopped)');
-        }
-
-        if (pc.iceConnectionState === 'failed') {
-          console.error('[WebRTC] ICE failed - using STUN only, may need TURN server');
-        } else if (pc.iceConnectionState === 'disconnected') {
-          console.warn('[WebRTC] ICE disconnected');
-        } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-          console.log('[WebRTC] ICE connection established!');
-        }
-      };
-    },
-
-    setupRemoteTrackListener: ({ self, context }) => {
-      console.log('[XState] Setting up remote track listener');
-
-      webrtcService.setOnRemoteTrack(async (stream: MediaStream) => {
-        console.log('[XState] Remote track callback triggered:', {
-          streamId: stream.id,
-          audioTracks: stream.getAudioTracks().length,
-          videoTracks: stream.getVideoTracks().length,
-        });
-
-        // Fetch remote participant name from Firestore
-        let remoteParticipantName = 'Remote Participant';
-        if (context.callId) {
-          try {
-            const callData = await firebaseService.getCallDocument(context.callId);
-            // If we're the initiator (created the call), the remote participant is the joiner
-            // If we're not the initiator (joined the call), the remote participant is the creator
-            if (context.isInitiator) {
-              remoteParticipantName = callData?.joinerName || 'Remote Participant';
-            } else {
-              remoteParticipantName = callData?.creatorName || 'Remote Participant';
-            }
-            console.log('[XState] Fetched remote participant name:', remoteParticipantName);
-          } catch (error) {
-            console.warn('[XState] Failed to fetch remote participant name:', error);
-          }
-        }
-
-        const remoteParticipantId = crypto.randomUUID();
-        console.log('[XState] Creating remote participant with ID:', remoteParticipantId);
-
-        self.send({
-          type: 'PARTICIPANT_JOINED',
-          participantId: remoteParticipantId,
-          participantName: remoteParticipantName,
-        });
-
-        self.send({
-          type: 'STREAM_RECEIVED',
-          participantId: remoteParticipantId,
-          stream,
-        });
-      });
-    },
-
-    updateRemoteStream: assign({
-      remoteStream: () => webrtcService.getRemoteStream(),
+      localStream: (_, params: { stream: MediaStream }) => params.stream,
     }),
 
     setParticipantName: assign({
-      localParticipantName: ({ event }) => {
-        const initEvent = event as Extract<WebRTCEvents, { type: 'INIT_MEDIA' | 'CREATE_CALL' | 'JOIN_CALL' }>;
-        return initEvent.participantName || 'User';
-      },
+      localParticipantName: ({ context }, params: { name?: string }) => params.name || context.localParticipantName,
     }),
 
-    setLocalParticipantId: assign({
-      localParticipantId: () => crypto.randomUUID(),
+    setRoomId: assign({
+      roomId: (_, params: { roomId: string }) => params.roomId,
     }),
 
-    addLocalParticipant: assign({
-      participants: ({ context }) => {
-        console.log('[XState] Adding local participant:', {
-          id: context.localParticipantId,
+    setLocalParticipant: assign({
+      localParticipantId: (_, params: { participantId: string }) => params.participantId,
+      participants: ({ context }, params: { participantId: string }) => {
+        const newParticipants = new Map(context.participants);
+        newParticipants.set(params.participantId, {
+          id: params.participantId,
           name: context.localParticipantName,
-          hasStream: !!context.localStream,
-        });
-        const newParticipants = new Map(context.participants);
-        if (context.localParticipantId && context.localStream) {
-          newParticipants.set(context.localParticipantId, {
-            id: context.localParticipantId,
-            name: context.localParticipantName,
-            isLocal: true,
-            stream: context.localStream,
-            audioEnabled: true,
-            videoEnabled: true,
-          });
-        }
-        console.log('[XState] Total participants after adding local:', newParticipants.size);
-        return newParticipants;
-      },
-    }),
-
-    addParticipant: assign({
-      participants: ({ context, event }) => {
-        const joinEvent = event as Extract<WebRTCEvents, { type: 'PARTICIPANT_JOINED' }>;
-        console.log('[XState] Adding remote participant:', {
-          id: joinEvent.participantId,
-          name: joinEvent.participantName,
-          currentParticipants: context.participants.size,
-        });
-        const newParticipants = new Map(context.participants);
-        newParticipants.set(joinEvent.participantId, {
-          id: joinEvent.participantId,
-          name: joinEvent.participantName,
-          isLocal: false,
-          stream: null,
+          stream: context.localStream,
+          isLocal: true,
           audioEnabled: true,
           videoEnabled: true,
         });
-        console.log('[XState] Total participants after adding remote:', newParticipants.size);
         return newParticipants;
+      },
+    }),
+
+    addRemoteParticipant: assign({
+      participants: ({ context }, params: { participantId: string; participantName: string }) => {
+        const newParticipants = new Map(context.participants);
+        newParticipants.set(params.participantId, {
+          id: params.participantId,
+          name: params.participantName,
+          stream: null,
+          isLocal: false,
+          audioEnabled: true,
+          videoEnabled: true,
+        });
+        return newParticipants;
+      },
+      knownRemoteParticipants: ({ context }, params: { participantId: string }) => {
+        const newSet = new Set(context.knownRemoteParticipants);
+        newSet.add(params.participantId);
+        return newSet;
       },
     }),
 
     removeParticipant: assign({
-      participants: ({ context, event }) => {
-        const leftEvent = event as Extract<WebRTCEvents, { type: 'PARTICIPANT_LEFT' }>;
+      participants: ({ context }, params: { participantId: string }) => {
         const newParticipants = new Map(context.participants);
-        newParticipants.delete(leftEvent.participantId);
+        newParticipants.delete(params.participantId);
         return newParticipants;
+      },
+      knownRemoteParticipants: ({ context }, params: { participantId: string }) => {
+        const newSet = new Set(context.knownRemoteParticipants);
+        newSet.delete(params.participantId);
+        return newSet;
       },
     }),
 
-    updateParticipantStream: assign({
-      participants: ({ context, event }) => {
-        const streamEvent = event as Extract<WebRTCEvents, { type: 'STREAM_RECEIVED' }>;
-        console.log('[XState] Updating participant stream:', {
-          participantId: streamEvent.participantId,
-          streamId: streamEvent.stream.id,
-          audioTracks: streamEvent.stream.getAudioTracks().length,
-          videoTracks: streamEvent.stream.getVideoTracks().length,
-        });
+    setStreamOwner: assign({
+      streamOwnerMap: ({ context }, params: { streamId: string; participantId: string }) => {
+        const newMap = new Map(context.streamOwnerMap);
+        newMap.set(params.streamId, params.participantId);
+        return newMap;
+      },
+    }),
+
+    assignStreamToParticipant: assign({
+      participants: ({ context }, params: { streamId: string; stream: MediaStream }) => {
         const newParticipants = new Map(context.participants);
-        const participant = newParticipants.get(streamEvent.participantId);
-        if (participant) {
-          console.log('[XState] Found participant, attaching stream');
-          newParticipants.set(streamEvent.participantId, {
-            ...participant,
-            stream: streamEvent.stream,
-          });
+        const ownerParticipantId = context.streamOwnerMap.get(params.streamId);
+
+        if (ownerParticipantId) {
+          const participant = newParticipants.get(ownerParticipantId);
+          if (participant) {
+            console.log('[webrtcMachine] Assigning stream to:', participant.name);
+            newParticipants.set(ownerParticipantId, {
+              ...participant,
+              stream: params.stream,
+            });
+          }
         } else {
-          console.warn('[XState] Participant not found for stream update:', streamEvent.participantId);
-        }
-        return newParticipants;
-      },
-    }),
-
-    updateParticipantAudio: assign({
-      participants: ({ context, event }) => {
-        const audioEvent = event as Extract<WebRTCEvents, { type: 'PARTICIPANT_AUDIO_TOGGLED' }>;
-        const newParticipants = new Map(context.participants);
-        const participant = newParticipants.get(audioEvent.participantId);
-        if (participant) {
-          newParticipants.set(audioEvent.participantId, {
-            ...participant,
-            audioEnabled: audioEvent.enabled,
-          });
-        }
-        return newParticipants;
-      },
-    }),
-
-    updateParticipantVideo: assign({
-      participants: ({ context, event }) => {
-        const videoEvent = event as Extract<WebRTCEvents, { type: 'PARTICIPANT_VIDEO_TOGGLED' }>;
-        const newParticipants = new Map(context.participants);
-        const participant = newParticipants.get(videoEvent.participantId);
-        if (participant) {
-          newParticipants.set(videoEvent.participantId, {
-            ...participant,
-            videoEnabled: videoEvent.enabled,
-          });
-        }
-        return newParticipants;
-      },
-    }),
-
-    clearParticipants: assign({
-      participants: () => new Map(),
-      localParticipantId: null,
-    }),
-
-    handlePeerDisconnection: () => {
-      console.log('[XState] Peer connection disconnected, cleaning up');
-      // Close the peer connection
-      webrtcService.closePeerConnection();
-    },
-
-    removeDisconnectedParticipants: assign({
-      participants: ({ context }) => {
-        console.log('[XState] Removing remote participants due to disconnection');
-        const newParticipants = new Map(context.participants);
-        // Remove all remote participants (for 1-to-1, there's only one)
-        // When SFU is implemented, we'll track per-connection participant IDs
-        for (const [id, participant] of newParticipants.entries()) {
-          if (!participant.isLocal) {
-            console.log('[XState] Removing disconnected participant:', id, participant.name);
-            newParticipants.delete(id);
+          // Fallback: find participant without stream
+          const participantWithoutStream = Array.from(newParticipants.values()).find((p) => !p.isLocal && !p.stream);
+          if (participantWithoutStream) {
+            console.log('[webrtcMachine] Fallback: Assigning stream to:', participantWithoutStream.name);
+            newParticipants.set(participantWithoutStream.id, {
+              ...participantWithoutStream,
+              stream: params.stream,
+            });
           }
         }
-        console.log('[XState] Remaining participants after disconnect:', newParticipants.size);
+
         return newParticipants;
       },
-      peerConnection: null, // Clear the failed peer connection
-      remoteStream: null, // Clear the remote stream
+    }),
+
+    updateMediaState: assign({
+      participants: ({ context }, params: { participantId: string; audioEnabled: boolean; videoEnabled: boolean }) => {
+        const participant = context.participants.get(params.participantId);
+        if (!participant || participant.isLocal) return context.participants;
+
+        const newParticipants = new Map(context.participants);
+        newParticipants.set(params.participantId, {
+          ...participant,
+          audioEnabled: params.audioEnabled,
+          videoEnabled: params.videoEnabled,
+        });
+        return newParticipants;
+      },
+    }),
+
+    setConnectionState: assign({
+      connectionState: (_, params: { state: RTCPeerConnectionState }) => params.state,
+    }),
+
+    setIceConnectionState: assign({
+      iceConnectionState: (_, params: { state: RTCIceConnectionState }) => params.state,
+    }),
+
+    setError: assign({
+      error: (_, params: { error: string }) => params.error,
+    }),
+
+    toggleLocalAudio: assign({
+      participants: ({ context }, params: { participantId: string; enabled: boolean }) => {
+        const participant = context.participants.get(params.participantId);
+        if (!participant?.isLocal || !context.localStream) return context.participants;
+
+        context.localStream.getAudioTracks().forEach((track) => {
+          track.enabled = params.enabled;
+        });
+
+        const newParticipants = new Map(context.participants);
+        newParticipants.set(params.participantId, {
+          ...participant,
+          audioEnabled: params.enabled,
+        });
+
+        // Notify server
+        getSignalingService()?.sendMediaStateChanged(params.enabled, participant.videoEnabled);
+
+        return newParticipants;
+      },
+    }),
+
+    toggleLocalVideo: assign({
+      participants: ({ context }, params: { participantId: string; enabled: boolean }) => {
+        const participant = context.participants.get(params.participantId);
+        if (!participant?.isLocal || !context.localStream) return context.participants;
+
+        context.localStream.getVideoTracks().forEach((track) => {
+          track.enabled = params.enabled;
+        });
+
+        const newParticipants = new Map(context.participants);
+        newParticipants.set(params.participantId, {
+          ...participant,
+          videoEnabled: params.enabled,
+        });
+
+        // Notify server
+        getSignalingService()?.sendMediaStateChanged(participant.audioEnabled, params.enabled);
+
+        return newParticipants;
+      },
+    }),
+
+    cleanup: ({ context }) => {
+      console.log('[webrtcMachine] Cleaning up...');
+
+      // Stop local stream tracks
+      context.localStream?.getTracks().forEach((track) => track.stop());
+
+      // Cleanup services
+      const { webrtcService, signalingService } = getServices();
+      webrtcService?.cleanup();
+      signalingService?.disconnect();
+
+      // Clear module-level services
+      clearServices();
+    },
+
+    resetContext: assign({
+      localStream: null,
+      participants: () => new Map<string, Participant>(),
+      localParticipantId: null,
+      roomId: null,
+      connectionState: null,
+      iceConnectionState: null,
+      streamOwnerMap: () => new Map<string, string>(),
+      knownRemoteParticipants: () => new Set<string>(),
+      error: null,
     }),
   },
-
   guards: {
-    hasError: ({ context }) => context.error !== null,
-    isConnected: ({ context }) => context.connectionState === 'connected',
+    isConnectionConnected: ({ context }) => context.connectionState === 'connected',
+    isConnectionFailed: ({ context }) =>
+      context.connectionState === 'failed' || context.connectionState === 'disconnected',
   },
 }).createMachine({
-  id: 'webrtc',
-
-  context: {
-    peerConnection: null,
-    localStream: null,
-    remoteStream: null,
-    participants: new Map(),
-    localParticipantId: null,
-    localParticipantName: 'User',
-    callId: null,
-    connectionState: null,
-    iceConnectionState: null,
-    error: null,
-    isInitiator: false,
-  },
-
+  id: 'webrtcMachine',
   initial: 'idle',
-
+  context: initialContext,
   states: {
     idle: {
-      description: 'Initial state - no media or connection',
       on: {
         INIT_MEDIA: {
           target: 'initializingMedia',
+          actions: [{ type: 'setParticipantName', params: ({ event }) => ({ name: event.participantName }) }],
         },
       },
     },
 
     initializingMedia: {
-      description: 'Requesting access to camera and microphone',
-      entry: ['setParticipantName', 'setLocalParticipantId'],
       invoke: {
-        src: 'initMediaActor',
+        id: 'initMedia',
+        src: 'initMedia',
+        input: ({ event }) => {
+          if (event.type === 'INIT_MEDIA') {
+            return {
+              participantName: event.participantName,
+              deviceConstraints: event.deviceConstraints,
+            };
+          }
+          return {};
+        },
         onDone: {
           target: 'mediaReady',
-          actions: ['setLocalStream', 'addLocalParticipant'],
+          actions: [{ type: 'setLocalStream', params: ({ event }) => ({ stream: event.output }) }],
         },
         onError: {
           target: 'error',
-          actions: 'setError',
+          actions: [
+            {
+              type: 'setError',
+              params: ({ event }) => ({
+                error: event.error instanceof Error ? event.error.message : 'Failed to initialize media',
+              }),
+            },
+          ],
         },
       },
     },
 
     mediaReady: {
-      description: 'Media devices initialized, ready to create or join call',
       on: {
-        CREATE_CALL: {
-          target: 'creatingCall',
-          actions: 'setCallId',
+        JOIN_ROOM: {
+          target: 'connected',
+          actions: [
+            { type: 'setRoomId', params: ({ event }) => ({ roomId: event.roomId }) },
+            { type: 'setParticipantName', params: ({ event }) => ({ name: event.participantName }) },
+          ],
         },
-        JOIN_CALL: {
-          target: 'joiningCall',
-          actions: 'setCallId',
+        LEAVE_ROOM: {
+          target: 'idle',
+          actions: ['cleanup', 'resetContext'],
         },
       },
     },
 
-    creatingCall: {
-      description: 'Creating a new call (generating offer)',
-      entry: 'setupRemoteTrackListener', // Set up callback BEFORE creating peer connection
+    // Parent state that keeps the joinRoom actor alive across joiningRoom and inCall
+    connected: {
+      initial: 'joiningRoom',
       invoke: {
-        src: 'createCallActor',
-        input: ({ context }) => ({ callId: context.callId!, participantName: context.localParticipantName }),
-        onDone: {
-          target: 'inCall',
-          actions: ['setCallCreated', 'setPeerConnection', 'monitorPeerConnection'],
-        },
-        onError: {
-          target: 'error',
-          actions: 'setError',
-        },
+        id: 'joinRoom',
+        src: 'joinRoom',
+        input: ({ context }) => ({
+          roomId: context.roomId!,
+          participantName: context.localParticipantName,
+          localStream: context.localStream!,
+        }),
       },
+      // Events handled at parent level (available in both child states)
       on: {
-        // Handle remote participants joining while creating call
-        PARTICIPANT_JOINED: {
-          actions: 'addParticipant',
+        JOINED: {
+          actions: [{ type: 'setLocalParticipant', params: ({ event }) => ({ participantId: event.participantId }) }],
         },
-        STREAM_RECEIVED: {
-          actions: 'updateParticipantStream',
-        },
-      },
-    },
-
-    joiningCall: {
-      description: 'Joining an existing call (generating answer)',
-      entry: 'setupRemoteTrackListener', // Set up callback BEFORE creating peer connection
-      invoke: {
-        src: 'joinCallActor',
-        input: ({ context }) => ({ callId: context.callId!, participantName: context.localParticipantName }),
-        onDone: {
-          target: 'inCall',
-          actions: ['setCallJoined', 'setPeerConnection', 'monitorPeerConnection'],
-        },
-        onError: {
-          target: 'error',
-          actions: 'setError',
-        },
-      },
-      on: {
-        // Handle remote participants joining while joining call
-        PARTICIPANT_JOINED: {
-          actions: 'addParticipant',
-        },
-        STREAM_RECEIVED: {
-          actions: 'updateParticipantStream',
-        },
-      },
-    },
-
-    inCall: {
-      description: 'Active call in progress',
-      entry: 'updateRemoteStream',
-      on: {
-        CONNECTION_STATE_CHANGED: [
-          {
-            guard: ({ event }) => {
-              const stateEvent = event as Extract<WebRTCEvents, { type: 'CONNECTION_STATE_CHANGED' }>;
-              return stateEvent.state === 'failed' || stateEvent.state === 'disconnected';
+        STREAM_OWNER: {
+          actions: [
+            {
+              type: 'setStreamOwner',
+              params: ({ event }) => ({ streamId: event.streamId, participantId: event.participantId }),
             },
-            actions: ['setConnectionState', 'handlePeerDisconnection', 'removeDisconnectedParticipants'],
-          },
-          {
-            actions: 'setConnectionState',
-          },
-        ],
-        ICE_CONNECTION_STATE_CHANGED: [
-          {
-            guard: ({ event }) => {
-              const stateEvent = event as Extract<WebRTCEvents, { type: 'ICE_CONNECTION_STATE_CHANGED' }>;
-              return stateEvent.state === 'failed' || stateEvent.state === 'disconnected';
-            },
-            actions: ['setIceConnectionState', 'handlePeerDisconnection', 'removeDisconnectedParticipants'],
-          },
-          {
-            actions: 'setIceConnectionState',
-          },
-        ],
+          ],
+        },
         PARTICIPANT_JOINED: {
-          actions: 'addParticipant',
+          actions: [
+            {
+              type: 'addRemoteParticipant',
+              params: ({ event }) => ({ participantId: event.participantId, participantName: event.participantName }),
+            },
+          ],
         },
         PARTICIPANT_LEFT: {
-          actions: 'removeParticipant',
+          actions: [{ type: 'removeParticipant', params: ({ event }) => ({ participantId: event.participantId }) }],
         },
-        STREAM_RECEIVED: {
-          actions: 'updateParticipantStream',
+        REMOTE_TRACK_RECEIVED: {
+          actions: [
+            {
+              type: 'assignStreamToParticipant',
+              params: ({ event }) => ({ streamId: event.streamId, stream: event.stream }),
+            },
+          ],
         },
-        PARTICIPANT_AUDIO_TOGGLED: {
-          actions: 'updateParticipantAudio',
+        MEDIA_STATE_CHANGED: {
+          actions: [
+            {
+              type: 'updateMediaState',
+              params: ({ event }) => ({
+                participantId: event.participantId,
+                audioEnabled: event.audioEnabled,
+                videoEnabled: event.videoEnabled,
+              }),
+            },
+          ],
         },
-        PARTICIPANT_VIDEO_TOGGLED: {
-          actions: 'updateParticipantVideo',
+        ICE_CONNECTION_STATE_CHANGED: {
+          actions: [{ type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) }],
         },
-        END_CALL: {
+        SERVER_ERROR: {
+          target: 'error',
+          actions: [{ type: 'setError', params: ({ event }) => ({ error: event.message }) }],
+        },
+        LEAVE_ROOM: {
           target: 'endingCall',
+        },
+      },
+      states: {
+        joiningRoom: {
+          on: {
+            CONNECTION_STATE_CHANGED: [
+              {
+                guard: ({ event }) => event.state === 'connected',
+                target: 'inCall',
+                actions: [{ type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) }],
+              },
+              {
+                guard: ({ event }) => event.state === 'failed',
+                target: '#webrtcMachine.error',
+                actions: [
+                  { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  { type: 'setError', params: () => ({ error: 'Peer connection failed' }) },
+                ],
+              },
+              {
+                actions: [{ type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) }],
+              },
+            ],
+          },
+        },
+        inCall: {
+          on: {
+            CONNECTION_STATE_CHANGED: [
+              {
+                guard: ({ event }) => event.state === 'failed' || event.state === 'disconnected',
+                target: '#webrtcMachine.error',
+                actions: [
+                  { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  { type: 'setError', params: ({ event }) => ({ error: `Connection ${event.state}` }) },
+                ],
+              },
+              {
+                actions: [{ type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) }],
+              },
+            ],
+            TOGGLE_AUDIO: {
+              actions: [
+                {
+                  type: 'toggleLocalAudio',
+                  params: ({ event }) => ({ participantId: event.participantId, enabled: event.enabled }),
+                },
+              ],
+            },
+            TOGGLE_VIDEO: {
+              actions: [
+                {
+                  type: 'toggleLocalVideo',
+                  params: ({ event }) => ({ participantId: event.participantId, enabled: event.enabled }),
+                },
+              ],
+            },
+          },
         },
       },
     },
 
     endingCall: {
-      description: 'Ending the call and cleaning up resources',
-      entry: ['cleanupResources', 'clearContext'],
+      entry: ['cleanup', 'resetContext'],
       always: {
         target: 'idle',
       },
     },
 
     error: {
-      description: 'An error occurred during WebRTC operations',
       on: {
         RETRY: {
           target: 'idle',
-          actions: ['cleanupResources', 'clearContext'],
+          actions: ['cleanup', 'resetContext'],
         },
-        END_CALL: {
-          target: 'endingCall',
+        LEAVE_ROOM: {
+          target: 'idle',
+          actions: ['cleanup', 'resetContext'],
         },
       },
     },
   },
 });
+
+export type webrtcMachine = typeof webrtcMachine;

@@ -15,12 +15,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     // HTTPS only in development with local certs (not needed for production build)
-    ...(certsExist && {
-      https: {
-        key: fs.readFileSync(keyPath),
-        cert: fs.readFileSync(certPath),
-      },
-    }),
+    // ...(certsExist && {
+    //   https: {
+    //     key: fs.readFileSync(keyPath),
+    //     cert: fs.readFileSync(certPath),
+    //   },
+    // }),
   },
   resolve: {
     alias: {

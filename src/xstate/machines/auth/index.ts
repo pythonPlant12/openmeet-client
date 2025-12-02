@@ -5,29 +5,29 @@ import { cookieUtils } from '@/utils';
 
 import type { AuthContext, AuthEvents, AuthInput, User } from './types';
 
-const loginService = fromPromise<AuthResponse, { email: string; password: string }>(async ({ input }) => {
+const loginActor = fromPromise<AuthResponse, { email: string; password: string }>(async ({ input }) => {
   return authApi.login(input);
 });
 
-const registerService = fromPromise<AuthResponse, { email: string; name: string; password: string }>(
+const registerActor = fromPromise<AuthResponse, { email: string; name: string; password: string }>(
   async ({ input }) => {
     return authApi.register(input);
   },
 );
 
-const checkSessionService = fromPromise<
+const checkSessionActor = fromPromise<
   User & { newAccessToken?: string },
   { accessToken: string; refreshToken: string | null }
 >(async ({ input }) => {
   return authApi.me(input.accessToken, input.refreshToken ?? undefined);
 });
 
-const refreshTokenService = fromPromise<string, { refreshToken: string }>(async ({ input }) => {
+const refreshTokenActor = fromPromise<string, { refreshToken: string }>(async ({ input }) => {
   const response = await authApi.refresh(input.refreshToken);
   return response.access_token;
 });
 
-const logoutService = fromPromise<void, { refreshToken: string | null }>(async ({ input }) => {
+const logoutActor = fromPromise<void, { refreshToken: string | null }>(async ({ input }) => {
   if (input.refreshToken) {
     await authApi.logout(input.refreshToken);
   }
@@ -41,11 +41,11 @@ export const authMachine = setup({
   },
 
   actors: {
-    loginService,
-    registerService,
-    checkSessionService,
-    refreshTokenService,
-    logoutService,
+    loginActor,
+    registerActor,
+    checkSessionActor,
+    refreshTokenActor,
+    logoutActor,
   },
 
   actions: {
@@ -156,7 +156,7 @@ export const authMachine = setup({
     validatingSession: {
       description: 'Validate stored token with backend',
       invoke: {
-        src: 'checkSessionService',
+        src: 'checkSessionActor',
         input: ({ context }) => ({
           accessToken: context.accessToken!,
           refreshToken: context.refreshToken,
@@ -190,7 +190,7 @@ export const authMachine = setup({
     authenticating: {
       description: 'Logging in user',
       invoke: {
-        src: 'loginService',
+        src: 'loginActor',
         input: ({ event }) => {
           const loginEvent = event as Extract<AuthEvents, { type: 'LOGIN' }>;
           return {
@@ -229,7 +229,7 @@ export const authMachine = setup({
     registering: {
       description: 'Registering new user',
       invoke: {
-        src: 'registerService',
+        src: 'registerActor',
         input: ({ event }) => {
           const registerEvent = event as Extract<AuthEvents, { type: 'REGISTER' }>;
           return {
@@ -281,7 +281,7 @@ export const authMachine = setup({
     refreshingToken: {
       description: 'Refreshing authentication token',
       invoke: {
-        src: 'refreshTokenService',
+        src: 'refreshTokenActor',
         input: ({ context }) => ({ refreshToken: context.refreshToken! }),
         onDone: {
           target: 'authenticated',
@@ -297,7 +297,7 @@ export const authMachine = setup({
     loggingOut: {
       description: 'Logging out user',
       invoke: {
-        src: 'logoutService',
+        src: 'logoutActor',
         input: ({ context }) => ({ refreshToken: context.refreshToken }),
         onDone: {
           target: 'unauthenticated',

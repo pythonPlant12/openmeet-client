@@ -19,10 +19,10 @@ const authActorRef = useMachine(authMachine, {
   },
 });
 
-const webrtcActorRef = useMachine(webrtcMachine);
+const webrtcActor = useMachine(webrtcMachine);
 
 provide('authActor', authActorRef);
-provide('webrtcActor', webrtcActorRef);
+provide('webrtcActor', webrtcActor);
 </script>
 
 <template>

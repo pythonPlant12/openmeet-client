@@ -9,7 +9,7 @@ import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
-import { useWebRTCSFU } from '@/composables/useWebRTCSFU';
+import { useWebrtc } from '@/composables/useWebrtc';
 
 // Lock viewport to prevent scrolling and zooming on mobile
 useFullscreenLock();
@@ -35,7 +35,7 @@ const {
   leaveRoom: endCall,
   toggleParticipantAudio,
   toggleParticipantVideo,
-} = useWebRTCSFU();
+} = useWebrtc();
 
 const participantCount = computed(() => participantsArray.value.length);
 

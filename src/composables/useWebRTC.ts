@@ -1,109 +1,131 @@
 import { computed, inject } from 'vue';
 
+import type { DeviceConstraints } from '@/services/webrtc-sfu';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
-export function useWebRTC() {
-  const webrtcActor = inject<any>('webrtcActor');
+// Type for the full useMachine return object
+type WebrtcActor = {
+  snapshot: { value: any };
+  send: (event: any) => void;
+  actorRef: any;
+};
+
+export function useWebrtc() {
+  const webrtcActor = inject<WebrtcActor>('webrtcActor');
 
   if (!webrtcActor) {
-    throw new Error('WebRTC actor not provided! Make sure webrtcActor is provided in App.vue');
+    throw new Error('webrtcActor not provided. Make sure to provide it in App.vue');
   }
 
-  const snapshot = webrtcActor.snapshot;
-  const send = webrtcActor.send;
-  const actorRef = webrtcActor.actorRef;
+  // State computed properties
+  const state = computed(() => {
+    const value = webrtcActor.snapshot.value.value;
+    // Handle nested states - return the deepest state name for compatibility
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null) {
+      // For nested states like { connected: 'joiningRoom' }, return 'joiningRoom'
+      if ('connected' in value) {
+        return value.connected as string;
+      }
+    }
+    return 'idle';
+  });
 
-  // Computed properties for easy access to state
-  const state = computed(() => snapshot.value.value);
-  const context = computed(() => snapshot.value.context);
+  const isIdle = computed(() => webrtcActor.snapshot.value.matches('idle'));
+  const isInitializingMedia = computed(() => webrtcActor.snapshot.value.matches('initializingMedia'));
+  const isMediaReady = computed(() => webrtcActor.snapshot.value.matches('mediaReady'));
+  // Nested states under 'connected' parent
+  const isJoiningRoom = computed(() => webrtcActor.snapshot.value.matches({ connected: 'joiningRoom' }));
+  const isInCall = computed(() => webrtcActor.snapshot.value.matches({ connected: 'inCall' }));
+  const isConnected = computed(() => webrtcActor.snapshot.value.matches('connected'));
+  const isEndingCall = computed(() => webrtcActor.snapshot.value.matches('endingCall'));
+  const isError = computed(() => webrtcActor.snapshot.value.matches('error'));
 
-  const isIdle = computed(() => state.value === 'idle');
-  const isInitializingMedia = computed(() => state.value === 'initializingMedia');
-  const isMediaReady = computed(() => state.value === 'mediaReady');
-  const isCreatingCall = computed(() => state.value === 'creatingCall');
-  const isJoiningCall = computed(() => state.value === 'joiningCall');
-  const isInCall = computed(() => state.value === 'inCall');
-  const isError = computed(() => state.value === 'error');
+  // Context computed properties
+  const localStream = computed(() => webrtcActor.snapshot.value.context.localStream);
+  const participants = computed(() => webrtcActor.snapshot.value.context.participants);
+  const participantsArray = computed(
+    () => Array.from(webrtcActor.snapshot.value.context.participants.values()) as Participant[],
+  );
+  const localParticipantId = computed(() => webrtcActor.snapshot.value.context.localParticipantId);
+  const localParticipantName = computed(() => webrtcActor.snapshot.value.context.localParticipantName);
+  const roomId = computed(() => webrtcActor.snapshot.value.context.roomId);
+  const connectionState = computed(() => webrtcActor.snapshot.value.context.connectionState);
+  const iceConnectionState = computed(() => webrtcActor.snapshot.value.context.iceConnectionState);
+  const error = computed(() =>
+    webrtcActor.snapshot.value.context.error ? new Error(webrtcActor.snapshot.value.context.error) : null,
+  );
 
-  const localStream = computed(() => context.value.localStream);
-  const remoteStream = computed(() => context.value.remoteStream);
-  const participants = computed(() => context.value.participants);
-  const localParticipantId = computed(() => context.value.localParticipantId);
-  const localParticipantName = computed(() => context.value.localParticipantName);
-  const callId = computed(() => context.value.callId);
-  const error = computed(() => context.value.error);
-  const connectionState = computed(() => context.value.connectionState);
-  const iceConnectionState = computed(() => context.value.iceConnectionState);
-  const isInitiator = computed(() => context.value.isInitiator);
-
-  // Convert participants Map to Array for easier iteration in components
-  const participantsArray = computed(() => Array.from(participants.value.values()) as Participant[]);
   const localParticipant = computed(() =>
     localParticipantId.value ? participants.value.get(localParticipantId.value) : null,
   );
   const remoteParticipants = computed(() => participantsArray.value.filter((p) => !p.isLocal));
 
-  // Actions
-  const initMedia = (participantName?: string) => send({ type: 'INIT_MEDIA', participantName });
-  const createCall = (callId: string, participantName?: string) =>
-    send({ type: 'CREATE_CALL', callId, participantName });
-  const joinCall = (callId: string, participantName?: string) => send({ type: 'JOIN_CALL', callId, participantName });
-  const endCall = () => send({ type: 'END_CALL' });
-  const retry = () => send({ type: 'RETRY' });
+  // Actions - wrap send() calls
+  const initMedia = (participantName?: string, deviceConstraints?: DeviceConstraints) => {
+    webrtcActor.send({ type: 'INIT_MEDIA', participantName, deviceConstraints });
+  };
 
-  // Participant management actions
-  const addParticipant = (participantId: string, participantName: string) =>
-    send({ type: 'PARTICIPANT_JOINED', participantId, participantName });
-  const removeParticipant = (participantId: string) => send({ type: 'PARTICIPANT_LEFT', participantId });
-  const updateParticipantStream = (participantId: string, stream: MediaStream) =>
-    send({ type: 'STREAM_RECEIVED', participantId, stream });
-  const toggleParticipantAudio = (participantId: string, enabled: boolean) =>
-    send({ type: 'PARTICIPANT_AUDIO_TOGGLED', participantId, enabled });
-  const toggleParticipantVideo = (participantId: string, enabled: boolean) =>
-    send({ type: 'PARTICIPANT_VIDEO_TOGGLED', participantId, enabled });
+  const joinRoom = (roomIdToJoin: string, participantName?: string) => {
+    webrtcActor.send({ type: 'JOIN_ROOM', roomId: roomIdToJoin, participantName });
+  };
+
+  const leaveRoom = () => {
+    webrtcActor.send({ type: 'LEAVE_ROOM' });
+  };
+
+  const toggleParticipantAudio = (participantId: string, enabled: boolean) => {
+    webrtcActor.send({ type: 'TOGGLE_AUDIO', participantId, enabled });
+  };
+
+  const toggleParticipantVideo = (participantId: string, enabled: boolean) => {
+    webrtcActor.send({ type: 'TOGGLE_VIDEO', participantId, enabled });
+  };
+
+  const retry = () => {
+    webrtcActor.send({ type: 'RETRY' });
+  };
 
   return {
     // State
     state,
-    context,
     isIdle,
     isInitializingMedia,
     isMediaReady,
-    isCreatingCall,
-    isJoiningCall,
+    isJoiningRoom,
     isInCall,
+    isConnected,
+    isEndingCall,
     isError,
 
-    // Context values
+    // Context
     localStream,
-    remoteStream,
     participants,
     participantsArray,
     localParticipant,
     remoteParticipants,
     localParticipantId,
     localParticipantName,
-    callId,
+    roomId,
     error,
     connectionState,
     iceConnectionState,
-    isInitiator,
 
     // Actions
     initMedia,
-    createCall,
-    joinCall,
-    endCall,
-    retry,
-
-    // Participant management actions
-    addParticipant,
-    removeParticipant,
-    updateParticipantStream,
+    joinRoom,
+    leaveRoom,
     toggleParticipantAudio,
     toggleParticipantVideo,
+    retry,
 
-    // Actor ref for advanced use
-    actorRef,
+    // Raw access (like useAuth exposes)
+    send: webrtcActor.send,
+    actorRef: webrtcActor.actorRef,
+
+    // Legacy aliases for compatibility
+    createCall: joinRoom,
+    joinCall: joinRoom,
+    endCall: leaveRoom,
   };
 }

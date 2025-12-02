@@ -26,6 +26,7 @@ export class SignalingService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private intentionalDisconnect = false;
 
   constructor(private serverUrl: string) {}
 
@@ -38,6 +39,7 @@ export class SignalingService {
       this.ws.onopen = () => {
         console.log('[SignalingService] WebSocket connected');
         this.reconnectAttempts = 0;
+        this.intentionalDisconnect = false;
         resolve();
       };
 
@@ -65,6 +67,7 @@ export class SignalingService {
 
   disconnect(): void {
     console.log('[SignalingService] Disconnecting');
+    this.intentionalDisconnect = true;
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -159,6 +162,11 @@ export class SignalingService {
   }
 
   private handleDisconnect(): void {
+    // Don't reconnect if we intentionally disconnected
+    if (this.intentionalDisconnect) {
+      return;
+    }
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       console.log(`[SignalingService] Reconnecting (attempt ${this.reconnectAttempts})...`);
