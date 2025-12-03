@@ -111,6 +111,18 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     }
   });
 
+  signalingService.on('chatMessage', (message) => {
+    if (message.type === 'chatMessage') {
+      sendBack({
+        type: 'CHAT_MESSAGE_RECEIVED',
+        participantId: message.participantId,
+        participantName: message.participantName,
+        message: message.message,
+        timestamp: message.timestamp,
+      });
+    }
+  });
+
   // Setup remote track handler
   webrtcService.setOnRemoteTrack((streamId, stream) => {
     console.log('[webrtcMachine] Remote track received:', streamId);

@@ -1,7 +1,7 @@
 import { computed, inject } from 'vue';
 
 import type { DeviceConstraints } from '@/services/webrtc-sfu';
-import type { Participant } from '@/xstate/machines/webrtc/types';
+import type { ChatMessage, Participant } from '@/xstate/machines/webrtc/types';
 
 // Type for the full useMachine return object
 type WebrtcActor = {
@@ -55,6 +55,9 @@ export function useWebrtc() {
   const error = computed(() =>
     webrtcActor.snapshot.value.context.error ? new Error(webrtcActor.snapshot.value.context.error) : null,
   );
+  const chatMessages = computed(
+    () => webrtcActor.snapshot.value.context.chatMessages as ChatMessage[],
+  );
 
   const localParticipant = computed(() =>
     localParticipantId.value ? participants.value.get(localParticipantId.value) : null,
@@ -86,6 +89,10 @@ export function useWebrtc() {
     webrtcActor.send({ type: 'RETRY' });
   };
 
+  const sendChatMessage = (message: string) => {
+    webrtcActor.send({ type: 'SEND_CHAT_MESSAGE', message });
+  };
+
   return {
     // State
     state,
@@ -110,6 +117,7 @@ export function useWebrtc() {
     error,
     connectionState,
     iceConnectionState,
+    chatMessages,
 
     // Actions
     initMedia,
@@ -117,6 +125,7 @@ export function useWebrtc() {
     leaveRoom,
     toggleParticipantAudio,
     toggleParticipantVideo,
+    sendChatMessage,
     retry,
 
     // Raw access (like useAuth exposes)

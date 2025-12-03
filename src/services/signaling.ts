@@ -16,6 +16,7 @@ export type SignalingMessage =
   | { type: 'participantLeft'; participantId: string }
   | { type: 'streamOwner'; streamId: string; participantId: string; participantName: string }
   | { type: 'mediaStateChanged'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
+  | { type: 'chatMessage'; participantId: string; participantName: string; message: string; timestamp: number }
   | { type: 'error'; message: string };
 
 type MessageHandler = (message: SignalingMessage) => void;
@@ -127,6 +128,16 @@ export class SignalingService {
       participantId: '', // Server will fill this in
       audioEnabled,
       videoEnabled,
+    });
+  }
+
+  sendChatMessage(message: string): void {
+    this.send({
+      type: 'chatMessage',
+      participantId: '', // Server will fill this in
+      participantName: '', // Server will fill this in
+      message,
+      timestamp: Date.now(),
     });
   }
 

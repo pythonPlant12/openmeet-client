@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Code, Copy, Link2, Mic, MicOff, PhoneOff, Share2, Video, VideoOff } from 'lucide-vue-next';
+import { Check, Code, Copy, Link2, MessageSquare, Mic, MicOff, PhoneOff, Share2, Video, VideoOff } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 import { Button } from '@/components/ui/button';
@@ -16,12 +16,15 @@ interface Props {
   isMuted: boolean;
   isVideoOff: boolean;
   meetingId: string;
+  isChatOpen: boolean;
+  unreadCount?: number;
 }
 
 interface Emits {
   (e: 'toggle-stats'): void;
   (e: 'toggle-mute'): void;
   (e: 'toggle-video'): void;
+  (e: 'toggle-chat'): void;
   (e: 'end-call'): void;
 }
 
@@ -108,6 +111,22 @@ const shareOnTelegram = () => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <!-- Chat Button -->
+        <Button
+          :variant="props.isChatOpen ? 'default' : 'secondary'"
+          size="icon"
+          @click="emit('toggle-chat')"
+          class="h-12 w-12 rounded-full relative"
+        >
+          <MessageSquare class="h-5 w-5" />
+          <span
+            v-if="props.unreadCount && props.unreadCount > 0 && !props.isChatOpen"
+            class="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center"
+          >
+            {{ props.unreadCount > 9 ? '9+' : props.unreadCount }}
+          </span>
+        </Button>
 
         <!-- Microphone Button -->
         <Button

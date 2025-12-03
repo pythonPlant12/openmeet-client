@@ -3,6 +3,7 @@ import { Users } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
 import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
 import JoinMeetingDialog from '@/components/meeting-page/JoinMeetingDialog.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
@@ -30,11 +31,13 @@ const {
   iceConnectionState,
   state,
   error: webrtcError,
+  chatMessages,
   initMedia,
   joinRoom,
   leaveRoom: endCall,
   toggleParticipantAudio,
   toggleParticipantVideo,
+  sendChatMessage,
 } = useWebrtc();
 
 const participantCount = computed(() => participantsArray.value.length);
@@ -52,12 +55,32 @@ const participantName = ref<string>('');
 const initialDialogName = ref<string>('');
 const showNameInput = ref(true);
 
+// Chat state
+const isChatOpen = ref(false);
+const unreadCount = ref(0);
+const lastReadMessageCount = ref(0);
+
+// Track unread messages when chat is closed
+watch(chatMessages, (messages) => {
+  if (!isChatOpen.value && messages.length > lastReadMessageCount.value) {
+    unreadCount.value = messages.length - lastReadMessageCount.value;
+  }
+});
+
+// Reset unread count when chat is opened
+watch(isChatOpen, (isOpen) => {
+  if (isOpen) {
+    unreadCount.value = 0;
+    lastReadMessageCount.value = chatMessages.value.length;
+  }
+});
+
 const hasJoined = computed(() => !!participantName.value && state.value !== 'idle');
 
 // Track if we need to send initial media state after joining
 const pendingInitialMediaState = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
 
-// Redirect to dashboard if media initialization fails (permission denied)
+// Redirect to Join Dialog if media initialization fails (permission denied)
 watch(
   () => state.value,
   (newState) => {
@@ -225,6 +248,14 @@ const handleToggleStats = () => {
   showStats.value = !showStats.value;
 };
 
+const handleToggleChat = () => {
+  isChatOpen.value = !isChatOpen.value;
+};
+
+const handleSendMessage = (message: string) => {
+  sendChatMessage(message);
+};
+
 const handleEndCall = () => {
   endCall();
   router.push('/dashboard');
@@ -320,12 +351,23 @@ const handleEndCall = () => {
         :is-video-off="isVideoOff"
         :meeting-id="meetingId"
         :show-stats="showStats"
+        :is-chat-open="isChatOpen"
+        :unread-count="unreadCount"
         @toggle-mute="handleToggleMute"
         @toggle-video="handleToggleVideo"
         @toggle-stats="handleToggleStats"
+        @toggle-chat="handleToggleChat"
         @end-call="handleEndCall"
       />
     </div>
+
+    <!-- Chat Panel -->
+    <ChatPanel
+      v-model:open="isChatOpen"
+      :messages="chatMessages"
+      :local-participant-id="localParticipantId"
+      @send="handleSendMessage"
+    />
   </div>
 
   <!-- Connection Error Dialog -->

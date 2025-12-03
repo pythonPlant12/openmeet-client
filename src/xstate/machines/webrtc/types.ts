@@ -9,6 +9,13 @@ export interface Participant {
   videoEnabled: boolean;
 }
 
+export interface ChatMessage {
+  participantId: string;
+  participantName: string;
+  message: string;
+  timestamp: number;
+}
+
 export interface SFUContext {
   // Media
   localStream: MediaStream | null;
@@ -28,6 +35,9 @@ export interface SFUContext {
   // Internal tracking
   streamOwnerMap: Map<string, string>;
 
+  // Chat
+  chatMessages: ChatMessage[];
+
   // Error
   error: string | null;
 }
@@ -39,6 +49,7 @@ export type SFUUserEvents =
   | { type: 'LEAVE_ROOM' }
   | { type: 'TOGGLE_AUDIO'; participantId: string; enabled: boolean }
   | { type: 'TOGGLE_VIDEO'; participantId: string; enabled: boolean }
+  | { type: 'SEND_CHAT_MESSAGE'; message: string }
   | { type: 'RETRY' };
 
 // Signaling events (from server via WebSocket)
@@ -48,6 +59,7 @@ export type SFUSignalingEvents =
   | { type: 'PARTICIPANT_LEFT'; participantId: string }
   | { type: 'STREAM_OWNER'; streamId: string; participantId: string; participantName: string }
   | { type: 'MEDIA_STATE_CHANGED'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
+  | { type: 'CHAT_MESSAGE_RECEIVED'; participantId: string; participantName: string; message: string; timestamp: number }
   | { type: 'SERVER_ERROR'; message: string };
 
 // WebRTC events (from RTCPeerConnection)

@@ -3,7 +3,7 @@ import { assign, setup } from 'xstate';
 import type { DeviceConstraints } from '@/services/webrtc-sfu';
 
 import { clearServices, getServices, getSignalingService, initMediaActor, joinRoomActor } from './actors';
-import type { Participant, SFUContext, SFUEvents } from './types';
+import type { ChatMessage, Participant, SFUContext, SFUEvents } from './types';
 
 // Re-export for convenience
 export { getServices } from './actors';
@@ -18,6 +18,7 @@ const initialContext: SFUContext = {
   connectionState: null,
   iceConnectionState: null,
   streamOwnerMap: new Map(),
+  chatMessages: [],
   error: null,
 };
 
@@ -149,6 +150,17 @@ export const webrtcMachine = setup({
       error: (_, params: { error: string }) => params.error,
     }),
 
+    addChatMessage: assign({
+      chatMessages: (
+        { context },
+        params: { participantId: string; participantName: string; message: string; timestamp: number },
+      ) => [...context.chatMessages, params],
+    }),
+
+    sendChatMessage: (_, params: { message: string }) => {
+      getSignalingService()?.sendChatMessage(params.message);
+    },
+
     toggleLocalAudio: assign({
       participants: ({ context }, params: { participantId: string; enabled: boolean }) => {
         const participant = context.participants.get(params.participantId);
@@ -216,6 +228,7 @@ export const webrtcMachine = setup({
       connectionState: null,
       iceConnectionState: null,
       streamOwnerMap: () => new Map<string, string>(),
+      chatMessages: () => [] as ChatMessage[],
       error: null,
     }),
   },
@@ -350,6 +363,27 @@ export const webrtcMachine = setup({
         },
         LEAVE_ROOM: {
           target: 'endingCall',
+        },
+        CHAT_MESSAGE_RECEIVED: {
+          actions: [
+            {
+              type: 'addChatMessage',
+              params: ({ event }) => ({
+                participantId: event.participantId,
+                participantName: event.participantName,
+                message: event.message,
+                timestamp: event.timestamp,
+              }),
+            },
+          ],
+        },
+        SEND_CHAT_MESSAGE: {
+          actions: [
+            {
+              type: 'sendChatMessage',
+              params: ({ event }) => ({ message: event.message }),
+            },
+          ],
         },
       },
       states: {
