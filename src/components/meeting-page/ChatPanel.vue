@@ -76,10 +76,8 @@ watch(
 
 <template>
   <Sheet :open="open" @update:open="emit('update:open', $event)">
-    <SheetContent
-      class="w-full sm:max-w-md h-[75vh] top-auto sm:bottom-20 sm:left-1/3 sm:right-4 border rounded-xl flex flex-col p-0"
-    >
-      <SheetHeader class="p-4 pr-12 border-b border-border">
+    <SheetContent class="w-full h-[75vh] top-auto sm:bottom-20 sm:right-4 border rounded-xl flex flex-col p-0 sm:mb-4">
+      <SheetHeader class="p-4 border-b border-border">
         <SheetTitle>Chat</SheetTitle>
       </SheetHeader>
 

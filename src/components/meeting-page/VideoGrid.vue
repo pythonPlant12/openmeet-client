@@ -56,7 +56,7 @@ const toggleFocus = (participantId: string) => {
       <div v-if="!focusedParticipantId" class="h-[82vh] sm:h-[84vh] w-full flex items-center justify-center p-4">
         <div
           :class="[
-            'grid gap-4 w-full h-full max-w-7xl',
+            'grid gap-4 w-full h-full max-w-7xl auto-rows-fr',
             shouldUseTwoColumnsOnMobile ? 'grid-cols-2' : 'grid-cols-1 md:grid-cols-2',
           ]"
         >
