@@ -58,12 +58,15 @@ const showNameInput = ref(true);
 // Chat state
 const isChatOpen = ref(false);
 const unreadCount = ref(0);
-const lastReadMessageCount = ref(0);
+const lastReadMessageIndex = ref(0);
 
-// Track unread messages when chat is closed
+// Track unread messages for chat
 watch(chatMessages, (messages) => {
-  if (!isChatOpen.value && messages.length > lastReadMessageCount.value) {
-    unreadCount.value = messages.length - lastReadMessageCount.value;
+  if (!isChatOpen.value && messages.length > lastReadMessageIndex.value) {
+    // Count only messages from other participants
+    const newMessages = messages.slice(lastReadMessageIndex.value);
+    const unreadFromOthers = newMessages.filter((msg) => msg.participantId !== localParticipantId.value).length;
+    unreadCount.value = unreadFromOthers;
   }
 });
 
@@ -71,7 +74,7 @@ watch(chatMessages, (messages) => {
 watch(isChatOpen, (isOpen) => {
   if (isOpen) {
     unreadCount.value = 0;
-    lastReadMessageCount.value = chatMessages.value.length;
+    lastReadMessageIndex.value = chatMessages.value.length;
   }
 });
 

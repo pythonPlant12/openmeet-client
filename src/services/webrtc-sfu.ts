@@ -39,7 +39,6 @@ export class WebRTCServiceSFU {
     });
 
     // Handle offer from server (for renegotiation when new tracks added)
-    // Pre-allocated transceivers make this faster and more reliable
     this.signalingService.on('offer', (message) => {
       if (message.type === 'offer') {
         console.log('[WebRTCServiceSFU] Received renegotiation offer from server');
@@ -143,7 +142,7 @@ export class WebRTCServiceSFU {
 
       console.log(`[WebRTCServiceSFU] ✓ Received ${track.kind} track from stream ${stream.id} (muted: ${track.muted})`);
 
-      // Ignore our own stream (Chrome bug workaround)
+      // Ignore local stream (Sometimes Chrome sends its own localstream)
       if (this.localStream && stream.id === this.localStream.id) {
         console.log(`[WebRTCServiceSFU] ❌ Ignoring own stream reflected from SFU`);
         return;

@@ -11,7 +11,7 @@ import { webrtcMachine } from './xstate/machines/webrtc';
 
 const router = useRouter();
 
-const authActorRef = useMachine(authMachine, {
+const authActor = useMachine(authMachine, {
   input: {
     initialAccessToken: cookieUtils.get('accessToken'),
     initialRefreshToken: cookieUtils.get('refreshToken'),
@@ -21,7 +21,7 @@ const authActorRef = useMachine(authMachine, {
 
 const webrtcActor = useMachine(webrtcMachine);
 
-provide('authActor', authActorRef);
+provide('authActor', authActor);
 provide('webrtcActor', webrtcActor);
 </script>
 
