@@ -59,7 +59,13 @@ export type SFUSignalingEvents =
   | { type: 'PARTICIPANT_LEFT'; participantId: string }
   | { type: 'STREAM_OWNER'; streamId: string; participantId: string; participantName: string }
   | { type: 'MEDIA_STATE_CHANGED'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
-  | { type: 'CHAT_MESSAGE_RECEIVED'; participantId: string; participantName: string; message: string; timestamp: number }
+  | {
+      type: 'CHAT_MESSAGE_RECEIVED';
+      participantId: string;
+      participantName: string;
+      message: string;
+      timestamp: number;
+    }
   | { type: 'SERVER_ERROR'; message: string };
 
 // WebRTC events (from RTCPeerConnection)

@@ -55,9 +55,7 @@ export function useWebrtc() {
   const error = computed(() =>
     webrtcActor.snapshot.value.context.error ? new Error(webrtcActor.snapshot.value.context.error) : null,
   );
-  const chatMessages = computed(
-    () => webrtcActor.snapshot.value.context.chatMessages as ChatMessage[],
-  );
+  const chatMessages = computed(() => webrtcActor.snapshot.value.context.chatMessages as ChatMessage[]);
 
   const localParticipant = computed(() =>
     localParticipantId.value ? participants.value.get(localParticipantId.value) : null,

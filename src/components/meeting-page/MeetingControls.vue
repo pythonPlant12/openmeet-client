@@ -1,5 +1,17 @@
 <script setup lang="ts">
-import { Check, Code, Copy, Link2, MessageSquare, Mic, MicOff, PhoneOff, Share2, Video, VideoOff } from 'lucide-vue-next';
+import {
+  Check,
+  Code,
+  Copy,
+  Link2,
+  MessageSquare,
+  Mic,
+  MicOff,
+  PhoneOff,
+  Share2,
+  Video,
+  VideoOff,
+} from 'lucide-vue-next';
 import { ref } from 'vue';
 
 import { Button } from '@/components/ui/button';
