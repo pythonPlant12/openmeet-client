@@ -22,22 +22,22 @@ export function useMediaDevices() {
   };
 
   // Check current permission states and track changes
-  const checkPermissions = async () => {
-    try {
-      const [mic, cam] = await Promise.all([
-        navigator.permissions.query({ name: 'microphone' as PermissionName }),
-        navigator.permissions.query({ name: 'camera' as PermissionName }),
-      ]);
+  // const checkPermissions = async () => {
+  //   try {
+  //     const [mic, cam] = await Promise.all([
+  //       navigator.permissions.query({ name: 'microphone' as PermissionName }),
+  //       navigator.permissions.query({ name: 'camera' as PermissionName }),
+  //     ]);
 
-      audioPermission.value = mic.state as PermissionState;
-      videoPermission.value = cam.state as PermissionState;
+  //     audioPermission.value = mic.state as PermissionState;
+  //     videoPermission.value = cam.state as PermissionState;
 
-      mic.onchange = () => (audioPermission.value = mic.state as PermissionState);
-      cam.onchange = () => (videoPermission.value = cam.state as PermissionState);
-    } catch {
-      // Permissions API not supported
-    }
-  };
+  //     mic.onchange = () => (audioPermission.value = mic.state as PermissionState);
+  //     cam.onchange = () => (videoPermission.value = cam.state as PermissionState);
+  //   } catch {
+  //     // Permissions API not supported
+  //   }
+  // };
 
   // Request permissions via getUserMedia
   const requestPermissions = async (): Promise<boolean> => {
@@ -65,7 +65,7 @@ export function useMediaDevices() {
     isAudioDenied,
     isVideoDenied,
     hasAllPermissions,
-    checkPermissions,
+    // checkPermissions,
     requestPermissions,
     enumerateDevices,
   };
