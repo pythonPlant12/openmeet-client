@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useMediaPermissions } from '@/composables/useMediaPermissions';
+import { useMediaDevices } from '@/composables/useMediaDevices';
 
 interface Props {
   open: boolean;
@@ -41,161 +41,110 @@ const props = withDefaults(defineProps<Props>(), {
 });
 const emit = defineEmits<Emits>();
 
+// Form state
 const participantName = ref(props.initialName);
 const audioEnabled = ref(true);
 const videoEnabled = ref(true);
 const error = ref('');
 
 // Device selection
-const audioDevices = ref<MediaDeviceInfo[]>([]);
-const videoDevices = ref<MediaDeviceInfo[]>([]);
-const selectedAudioDeviceId = ref<string>('');
-const selectedVideoDeviceId = ref<string>('');
+const selectedAudioDeviceId = ref('');
+const selectedVideoDeviceId = ref('');
 
-// Preview stream
+// Preview
 const previewStream = ref<MediaStream | null>(null);
 const videoPreviewRef = ref<HTMLVideoElement | null>(null);
 const isLoadingPreview = ref(false);
 
-// Use the media permissions composable
+// Media devices composable
 const {
   audioPermission,
   videoPermission,
-  startWatching: startPermissionWatching,
-  stopWatching: stopPermissionWatching,
-  requestAudioPermission: requestAudioPerm,
-  requestVideoPermission: requestVideoPerm,
-} = useMediaPermissions();
+  audioDevices,
+  videoDevices,
+  isAudioDenied,
+  isVideoDenied,
+  hasAllPermissions,
+  requestPermissions,
+  checkPermissions,
+} = useMediaDevices();
 
-// Computed permission states for template
-const audioPermissionDenied = computed(() => audioPermission.value === 'denied');
-const videoPermissionDenied = computed(() => videoPermission.value === 'denied');
-
-// Both permissions must be granted to join
-const hasRequiredPermissions = computed(() => {
-  return audioPermission.value === 'granted' && videoPermission.value === 'granted';
-});
-
-// Check if join button should be enabled
 const canJoin = computed(() => {
-  return participantName.value.trim().length >= 2 && hasRequiredPermissions.value;
+  return participantName.value.trim().length >= 2 && hasAllPermissions.value;
 });
 
-// Watch permission changes to update UI
-watch(audioPermission, (state) => {
-  if (state === 'denied') {
-    audioEnabled.value = false;
-  } else if (state === 'granted') {
-    enumerateDevices();
+// Set default devices when they become available
+watch(audioDevices, (devices) => {
+  if (!selectedAudioDeviceId.value && devices.length > 0) {
+    selectedAudioDeviceId.value = devices[0].deviceId;
   }
+});
+
+watch(videoDevices, (devices) => {
+  if (!selectedVideoDeviceId.value && devices.length > 0) {
+    selectedVideoDeviceId.value = devices[0].deviceId;
+  }
+});
+
+// Handle permission changes
+watch(audioPermission, (state) => {
+  if (state === 'denied') audioEnabled.value = false;
 });
 
 watch(videoPermission, (state) => {
   if (state === 'denied') {
     videoEnabled.value = false;
     stopPreview();
-  } else if (state === 'granted') {
-    enumerateDevices();
-    if (videoEnabled.value) {
-      startPreview();
-    }
+  } else if (state === 'granted' && videoEnabled.value) {
+    startPreview();
   }
 });
 
-// Update name when initialName prop changes
+// Update name when prop changes
 watch(
   () => props.initialName,
-  (newName) => {
-    if (newName) {
-      participantName.value = newName;
-    }
+  (name) => {
+    if (name) participantName.value = name;
   },
 );
 
-// Enumerate available devices
-const enumerateDevices = async () => {
-  // If permissions are not yet granted, request them via getUserMedia
-  // Note: 'prompt' means user hasn't been asked yet, 'unknown' means Permissions API isn't supported
-  const needsAudioPermission = audioPermission.value === 'unknown' || audioPermission.value === 'prompt';
-  const needsVideoPermission = videoPermission.value === 'unknown' || videoPermission.value === 'prompt';
-
-  if (needsAudioPermission || needsVideoPermission) {
-    // Try to get permissions - request each separately to properly track state
-    // This ensures permission state is updated on mobile where Permissions API may not work
-    try {
-      await requestAudioPerm();
-    } catch {
-      // Audio permission denied or failed
-    }
-    try {
-      await requestVideoPerm();
-    } catch {
-      // Video permission denied or failed
-    }
+// Start/stop preview based on video toggle
+watch(videoEnabled, (enabled) => {
+  if (enabled) {
+    startPreview();
+  } else {
+    stopPreview();
   }
+});
 
-  // Disable toggles if permissions are denied
-  if (audioPermissionDenied.value) {
-    audioEnabled.value = false;
-  }
-  if (videoPermissionDenied.value) {
-    videoEnabled.value = false;
-  }
+// Restart preview when device changes
+watch(selectedVideoDeviceId, () => {
+  if (videoEnabled.value) startPreview();
+});
 
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-
-    audioDevices.value = devices.filter((d) => d.kind === 'audioinput');
-    videoDevices.value = devices.filter((d) => d.kind === 'videoinput');
-
-    // Set defaults if not already set
-    if (!selectedAudioDeviceId.value && audioDevices.value.length > 0) {
-      selectedAudioDeviceId.value = audioDevices.value[0].deviceId;
-    }
-    if (!selectedVideoDeviceId.value && videoDevices.value.length > 0) {
-      selectedVideoDeviceId.value = videoDevices.value[0].deviceId;
-    }
-  } catch (err) {
-    console.error('[JoinMeetingDialog] Failed to enumerate devices:', err);
-  }
-};
-
-// Start camera preview
 const startPreview = async () => {
-  if (!videoEnabled.value || videoPermissionDenied.value) {
+  if (!videoEnabled.value) {
     stopPreview();
     return;
   }
 
   isLoadingPreview.value = true;
+  stopPreview();
 
   try {
-    // Stop existing preview
-    stopPreview();
-
     const constraints: MediaStreamConstraints = {
       video: selectedVideoDeviceId.value ? { deviceId: { exact: selectedVideoDeviceId.value } } : true,
-      audio: false, // Don't need audio for preview
+      audio: false,
     };
 
     previewStream.value = await navigator.mediaDevices.getUserMedia(constraints);
 
     if (videoPreviewRef.value && previewStream.value) {
       videoPreviewRef.value.srcObject = previewStream.value;
-      // play() can throw AbortError if interrupted by another load - this is benign
-      try {
-        await videoPreviewRef.value.play();
-      } catch (playError) {
-        // Ignore AbortError - happens when play() is interrupted by srcObject change
-        if (playError instanceof Error && playError.name !== 'AbortError') {
-          throw playError;
-        }
-      }
+      await videoPreviewRef.value.play().catch(() => {});
     }
   } catch (err) {
     if (err instanceof Error && err.name === 'NotAllowedError') {
-      // Request permission via composable to update its state
-      await requestVideoPerm();
       videoEnabled.value = false;
     } else {
       console.error('[JoinMeetingDialog] Failed to start preview:', err);
@@ -205,114 +154,33 @@ const startPreview = async () => {
   }
 };
 
-// Stop camera preview
 const stopPreview = () => {
-  if (previewStream.value) {
-    previewStream.value.getTracks().forEach((track) => track.stop());
-    previewStream.value = null;
-  }
-  if (videoPreviewRef.value) {
-    videoPreviewRef.value.srcObject = null;
-  }
+  previewStream.value?.getTracks().forEach((track) => track.stop());
+  previewStream.value = null;
+  if (videoPreviewRef.value) videoPreviewRef.value.srcObject = null;
 };
 
-// Watch for video device changes to update preview
-watch(selectedVideoDeviceId, () => {
-  if (videoEnabled.value) {
-    startPreview();
-  }
-});
-
-// Watch for video toggle to start/stop preview
-watch(videoEnabled, (enabled) => {
-  if (enabled) {
-    startPreview();
-  } else {
-    stopPreview();
-  }
-});
-
-// Watch for dialog open state
-watch(
-  () => props.open,
-  async (isOpen) => {
-    if (isOpen) {
-      await startPermissionWatching();
-
-      // Apply existing permission states to toggles
-      if (audioPermissionDenied.value) {
-        audioEnabled.value = false;
-      }
-      if (videoPermissionDenied.value) {
-        videoEnabled.value = false;
-      }
-
-      await enumerateDevices();
-      if (videoEnabled.value && !videoPermissionDenied.value) {
-        startPreview();
-      }
-    } else {
-      stopPreview();
-      stopPermissionWatching();
-    }
-  },
-);
-
-onMounted(async () => {
-  if (props.open) {
-    await startPermissionWatching();
-
-    // Apply existing permission states to toggles
-    if (audioPermissionDenied.value) {
-      audioEnabled.value = false;
-    }
-    if (videoPermissionDenied.value) {
-      videoEnabled.value = false;
-    }
-
-    await enumerateDevices();
-    if (videoEnabled.value && !videoPermissionDenied.value) {
-      startPreview();
-    }
-  }
-});
-
-onUnmounted(() => {
-  stopPreview();
-  // stopPermissionWatching is called automatically by composable's onUnmounted
-});
-
 const handleJoin = () => {
-  const trimmedName = participantName.value.trim();
+  const name = participantName.value.trim();
 
-  if (!trimmedName) {
-    error.value = 'Please enter your name';
+  if (!name || name.length < 2) {
+    error.value = name ? 'Name must be at least 2 characters' : 'Please enter your name';
     return;
   }
-
-  if (trimmedName.length < 2) {
-    error.value = 'Name must be at least 2 characters';
-    return;
-  }
-
-  if (trimmedName.length > 50) {
+  if (name.length > 50) {
     error.value = 'Name must be less than 50 characters';
     return;
   }
-
-  if (!hasRequiredPermissions.value) {
+  if (!hasAllPermissions.value) {
     error.value = 'Camera and microphone permissions are required to join';
     return;
   }
 
-  // Store name in sessionStorage
-  sessionStorage.setItem('participantName', trimmedName);
-
-  // Stop preview before joining
+  sessionStorage.setItem('participantName', name);
   stopPreview();
 
   emit('join', {
-    name: trimmedName,
+    name,
     audioEnabled: audioEnabled.value,
     videoEnabled: videoEnabled.value,
     audioDeviceId: selectedAudioDeviceId.value || null,
@@ -325,35 +193,33 @@ const handleCancel = () => {
   emit('cancel');
 };
 
-const handleInput = () => {
-  error.value = '';
-};
-
 const toggleAudio = () => {
-  if (audioPermissionDenied.value) {
-    // Don't toggle if permission is denied - user needs to click "Allow" button
-    return;
-  }
-  audioEnabled.value = !audioEnabled.value;
+  if (!isAudioDenied.value) audioEnabled.value = !audioEnabled.value;
 };
 
 const toggleVideo = () => {
-  if (videoPermissionDenied.value) {
-    // Don't toggle if permission is denied - user needs to click "Allow" button
-    return;
-  }
-  videoEnabled.value = !videoEnabled.value;
+  if (!isVideoDenied.value) videoEnabled.value = !videoEnabled.value;
 };
 
-// Get initials for avatar
 const initials = computed(() => {
   const name = participantName.value || 'U';
   return name
     .split(' ')
-    .map((word) => word[0])
+    .map((w) => w[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
+});
+
+onMounted(async () => {
+  await requestPermissions();
+  if (videoEnabled.value) {
+    startPreview();
+  }
+});
+
+onUnmounted(() => {
+  stopPreview();
 });
 </script>
 
@@ -375,7 +241,7 @@ const initials = computed(() => {
         <!-- Camera Preview -->
         <div class="relative aspect-video bg-muted rounded-lg overflow-hidden">
           <video
-            v-show="videoEnabled && previewStream && !videoPermissionDenied"
+            v-show="videoEnabled && previewStream && !isVideoDenied"
             ref="videoPreviewRef"
             autoplay
             playsinline
@@ -385,7 +251,7 @@ const initials = computed(() => {
 
           <!-- Avatar when video is off -->
           <div
-            v-if="!videoEnabled || !previewStream || videoPermissionDenied"
+            v-if="!videoEnabled || !previewStream || isVideoDenied"
             class="absolute inset-0 flex items-center justify-center bg-muted"
           >
             <div class="w-20 h-20 rounded-full bg-primary flex items-center justify-center">
@@ -395,22 +261,20 @@ const initials = computed(() => {
 
           <!-- Loading indicator -->
           <div
-            v-if="isLoadingPreview && videoEnabled && !videoPermissionDenied"
+            v-if="isLoadingPreview && videoEnabled && !isVideoDenied"
             class="absolute inset-0 flex items-center justify-center bg-muted/80"
           >
             <div class="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           </div>
 
-          <!-- Video permission denied overlay -->
+          <!-- Video status overlays -->
           <div
-            v-if="videoPermissionDenied"
+            v-if="isVideoDenied"
             class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-destructive/90 px-3 py-1.5 rounded text-sm text-white flex items-center gap-2"
           >
             <VideoOff class="h-4 w-4" />
             Camera blocked
           </div>
-
-          <!-- Video off overlay text -->
           <div
             v-else-if="!videoEnabled"
             class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded text-sm text-white"
@@ -423,7 +287,7 @@ const initials = computed(() => {
         <div class="flex gap-3">
           <!-- Audio Button -->
           <Button
-            v-if="!audioPermissionDenied"
+            v-if="!isAudioDenied"
             variant="outline"
             size="lg"
             :class="[
@@ -439,12 +303,12 @@ const initials = computed(() => {
             <span class="text-sm">{{ audioEnabled ? 'Mic On' : 'Mic Off' }}</span>
           </Button>
 
-          <!-- Audio Permission Denied Button -->
+          <!-- Audio Permission Denied -->
           <div v-else class="flex-1 relative group">
             <Button
               variant="outline"
               size="lg"
-              class="w-full h-14 flex items-center justify-center gap-2 transition-colors border-destructive bg-destructive/10 text-destructive cursor-not-allowed"
+              class="w-full h-14 flex items-center justify-center gap-2 border-destructive bg-destructive/10 text-destructive cursor-not-allowed"
               disabled
             >
               <MicOff class="h-5 w-5" />
@@ -459,7 +323,7 @@ const initials = computed(() => {
 
           <!-- Video Button -->
           <Button
-            v-if="!videoPermissionDenied"
+            v-if="!isVideoDenied"
             variant="outline"
             size="lg"
             :class="[
@@ -475,12 +339,12 @@ const initials = computed(() => {
             <span class="text-sm">{{ videoEnabled ? 'Camera On' : 'Camera Off' }}</span>
           </Button>
 
-          <!-- Video Permission Denied Button -->
+          <!-- Video Permission Denied -->
           <div v-else class="flex-1 relative group">
             <Button
               variant="outline"
               size="lg"
-              class="w-full h-14 flex items-center justify-center gap-2 transition-colors border-destructive bg-destructive/10 text-destructive cursor-not-allowed"
+              class="w-full h-14 flex items-center justify-center gap-2 border-destructive bg-destructive/10 text-destructive cursor-not-allowed"
               disabled
             >
               <VideoOff class="h-5 w-5" />
@@ -494,8 +358,8 @@ const initials = computed(() => {
           </div>
         </div>
 
-        <!-- Device Selection (only show when permissions are granted) -->
-        <div v-if="hasRequiredPermissions" class="grid grid-cols-2 gap-3">
+        <!-- Device Selection -->
+        <div v-if="hasAllPermissions" class="grid grid-cols-2 gap-3">
           <!-- Microphone Select -->
           <div class="space-y-1.5">
             <Label class="text-xs text-muted-foreground">Microphone</Label>
@@ -547,14 +411,14 @@ const initials = computed(() => {
             placeholder="Enter your name"
             maxlength="50"
             @keyup.enter="handleJoin"
-            @input="handleInput"
+            @input="error = ''"
           />
           <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
         </div>
       </div>
 
       <DialogFooter class="flex-col sm:flex-row sm:justify-between gap-2">
-        <p v-if="!hasRequiredPermissions" class="text-sm text-amber-600 text-center sm:text-left">
+        <p v-if="!hasAllPermissions" class="text-sm text-amber-600 text-center sm:text-left">
           Camera and microphone permissions required
         </p>
         <div class="flex gap-2 justify-end">

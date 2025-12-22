@@ -44,7 +44,7 @@ const participantCount = computed(() => participantsArray.value.length);
 
 const isMuted = ref(false);
 const isVideoOff = ref(false);
-const showStats = ref(false);
+const showConnectionStatus = ref(false);
 const shouldJoinRoom = ref(false);
 const pendingRoomId = ref<string | null>(null);
 const pendingMediaSettings = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
@@ -248,7 +248,7 @@ const handleToggleVideo = () => {
 };
 
 const handleToggleStats = () => {
-  showStats.value = !showStats.value;
+  showConnectionStatus.value = !showConnectionStatus.value;
 };
 
 const handleToggleChat = () => {
@@ -296,7 +296,7 @@ const handleEndCall = () => {
 
     <!-- Debug Info Panel -->
     <div
-      v-if="showStats"
+      v-if="showConnectionStatus"
       class="fixed top-20 right-4 z-50 bg-card border border-border rounded-lg p-3 text-xs space-y-1"
     >
       <div class="flex items-center gap-2">
@@ -353,7 +353,7 @@ const handleEndCall = () => {
         :is-muted="isMuted"
         :is-video-off="isVideoOff"
         :meeting-id="meetingId"
-        :show-stats="showStats"
+        :show-connection-status="showConnectionStatus"
         :is-chat-open="isChatOpen"
         :unread-count="unreadCount"
         @toggle-mute="handleToggleMute"

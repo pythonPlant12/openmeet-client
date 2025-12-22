@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface Props {
-  showStats: boolean;
+  showConnectionStatus: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
   meetingId: string;
@@ -80,9 +80,9 @@ const shareOnTelegram = () => {
   <div class="fixed bottom-0 left-0 right-0 bg-card border-t border-border">
     <div class="py-4 flex items-center justify-center">
       <div class="flex items-center justify-center gap-3">
-        <!-- Stats Button -->
+        <!-- Connection status Button -->
         <Button
-          :variant="showStats ? 'ghost' : 'secondary'"
+          :variant="showConnectionStatus ? 'default' : 'secondary'"
           size="icon"
           @click="emit('toggle-stats')"
           class="h-12 w-12 rounded-full"
