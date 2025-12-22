@@ -66,7 +66,7 @@ const {
   isVideoDenied,
   hasAllPermissions,
   requestPermissions,
-  checkPermissions,
+  // checkPermissions,
 } = useMediaDevices();
 
 const canJoin = computed(() => {
