@@ -58,8 +58,6 @@ const isLoadingPreview = ref(false);
 
 // Media devices composable
 const {
-  audioPermission,
-  videoPermission,
   audioDevices,
   videoDevices,
   isAudioDenied,
@@ -72,41 +70,6 @@ const {
 const canJoin = computed(() => {
   return participantName.value.trim().length >= 2 && hasAllPermissions.value;
 });
-
-// Set default devices when they become available
-watch(audioDevices, (devices) => {
-  if (!selectedAudioDeviceId.value && devices.length > 0) {
-    selectedAudioDeviceId.value = devices[0].deviceId;
-  }
-});
-
-watch(videoDevices, (devices) => {
-  if (!selectedVideoDeviceId.value && devices.length > 0) {
-    selectedVideoDeviceId.value = devices[0].deviceId;
-  }
-});
-
-// Handle permission changes
-watch(audioPermission, (state) => {
-  if (state === 'denied') audioEnabled.value = false;
-});
-
-watch(videoPermission, (state) => {
-  if (state === 'denied') {
-    videoEnabled.value = false;
-    stopPreview();
-  } else if (state === 'granted' && videoEnabled.value) {
-    startPreview();
-  }
-});
-
-// Update name when prop changes
-watch(
-  () => props.initialName,
-  (name) => {
-    if (name) participantName.value = name;
-  },
-);
 
 // Start/stop preview based on video toggle
 watch(videoEnabled, (enabled) => {
@@ -123,11 +86,6 @@ watch(selectedVideoDeviceId, () => {
 });
 
 const startPreview = async () => {
-  if (!videoEnabled.value) {
-    stopPreview();
-    return;
-  }
-
   isLoadingPreview.value = true;
   stopPreview();
 
@@ -213,6 +171,15 @@ const initials = computed(() => {
 
 onMounted(async () => {
   await requestPermissions();
+
+  // Set default devices
+  if (audioDevices.value.length > 0) {
+    selectedAudioDeviceId.value = audioDevices.value[0].deviceId;
+  }
+  if (videoDevices.value.length > 0) {
+    selectedVideoDeviceId.value = videoDevices.value[0].deviceId;
+  }
+
   if (videoEnabled.value) {
     startPreview();
   }

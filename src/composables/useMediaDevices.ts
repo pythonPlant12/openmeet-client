@@ -48,11 +48,9 @@ export function useMediaDevices() {
       await enumerateDevices(); // Must be before stopping tracks (Firefox requirement)
       stream.getTracks().forEach((track) => track.stop());
       return true;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'NotAllowedError') {
-        audioPermission.value = 'denied';
-        videoPermission.value = 'denied';
-      }
+    } catch {
+      audioPermission.value = 'denied';
+      videoPermission.value = 'denied';
       return false;
     }
   };
