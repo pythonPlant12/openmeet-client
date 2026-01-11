@@ -276,8 +276,8 @@ const handleEndCall = () => {
   </div>
 
   <JoinMeetingDialog
-    v-else
-    :open="showJoinDialog"
+    v-if="showJoinDialog"
+    open
     :meeting-id="meetingId"
     :initial-name="initialDialogName"
     :show-name-input="showNameInput"
