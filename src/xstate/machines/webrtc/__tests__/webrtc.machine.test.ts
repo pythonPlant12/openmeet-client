@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import { createActor, fromCallback, fromPromise, waitFor } from 'xstate';
+
+import { webrtcMachine } from '../index';
+
+describe('WebRTC Machine', () => {
+  const createTestActor = () => {
+    const machine = webrtcMachine.provide({
+      actors: {
+        initMedia: fromPromise(async () => ({ getTracks: () => [] }) as unknown as MediaStream),
+        joinRoom: fromCallback(({ sendBack }) => {
+          sendBack({ type: 'JOINED', participantId: 'participant-1', participantName: 'Alice' });
+          sendBack({ type: 'CONNECTION_STATE_CHANGED', state: 'connected' });
+        }),
+      },
+    });
+
+    return createActor(machine);
+  };
+
+  it('keeps an active call alive through a transient disconnected connection state', async () => {
+    const actor = createTestActor();
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+
+    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
+
+    actor.send({ type: 'CONNECTION_STATE_CHANGED', state: 'disconnected' });
+
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.matches({ connected: 'inCall' })).toBe(true);
+    expect(snapshot.context.connectionState).toBe('disconnected');
+    expect(snapshot.context.error).toBeNull();
+
+    actor.stop();
+  });
+
+  it('moves to error when a peer connection fails', async () => {
+    const actor = createTestActor();
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+
+    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
+
+    actor.send({ type: 'CONNECTION_STATE_CHANGED', state: 'failed' });
+
+    await waitFor(actor, (state) => state.matches('error'));
+    expect(actor.getSnapshot().context.error).toBe('Connection failed');
+
+    actor.stop();
+  });
+
+  it('removes a participant when the server reports they left', async () => {
+    const actor = createTestActor();
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+
+    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
+
+    actor.send({ type: 'PARTICIPANT_JOINED', participantId: 'participant-2', participantName: 'Bob' });
+    expect(actor.getSnapshot().context.participants.has('participant-2')).toBe(true);
+
+    actor.send({ type: 'PARTICIPANT_LEFT', participantId: 'participant-2' });
+    expect(actor.getSnapshot().context.participants.has('participant-2')).toBe(false);
+
+    actor.stop();
+  });
+});

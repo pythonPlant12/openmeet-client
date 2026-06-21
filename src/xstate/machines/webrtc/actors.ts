@@ -1,12 +1,13 @@
 import { fromCallback, fromPromise } from 'xstate';
 
+import { resolveReachableWebSocketUrl } from '@/services/dev-networking';
 import { SignalingService } from '@/services/signaling';
 import { WebRTCServiceSFU } from '@/services/webrtc-sfu';
 
 import type { InitMediaInput, JoinRoomInput, SFUEvents } from './types';
 
 // SFU server URL
-const SFU_SERVER_URL = import.meta.env.VITE_SFU_WSS_URL || 'wss://sfu.openmeets.eu/ws';
+const SFU_SERVER_URL = resolveReachableWebSocketUrl(import.meta.env.VITE_SFU_WSS_URL || 'wss://sfu.openmeets.eu/ws');
 
 // Module-level service instances (not in XState context because they're not serializable)
 let signalingService: SignalingService | null = null;

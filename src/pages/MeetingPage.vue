@@ -139,9 +139,9 @@ watch(
   },
 );
 
-// Show connection error dialog when connection fails or disconnects
+// Show connection error dialog when the peer connection reaches a terminal failure.
 watch(connectionState, (newState) => {
-  if (newState === 'failed' || newState === 'disconnected') {
+  if (newState === 'failed') {
     showConnectionError.value = true;
   }
 });

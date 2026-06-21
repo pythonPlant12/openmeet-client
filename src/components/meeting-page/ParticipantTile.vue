@@ -23,6 +23,20 @@ const emit = defineEmits<{
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 
+const playAttachedVideo = async () => {
+  const video = videoRef.value;
+  if (!video || !props.participant.stream) {
+    return;
+  }
+
+  try {
+    await video.play();
+  } catch {
+    // Ignore autoplay errors. Browser policy can require a user gesture for audio.
+    console.log(`[ParticipantTile] Autoplay may be blocked for ${props.participant.name}`);
+  }
+};
+
 const initials = computed(() => {
   const name = props.participant.name || 'U';
   return name
@@ -58,15 +72,15 @@ const attachStream = async () => {
     if (videoRef.value.srcObject !== props.participant.stream) {
       console.log(`[ParticipantTile] Attaching stream for ${props.participant.name}`);
       videoRef.value.srcObject = props.participant.stream;
-
-      // Explicitly call play() to ensure video starts
-      try {
-        await videoRef.value.play();
-      } catch {
-        // Ignore autoplay errors
-        console.log(`[ParticipantTile] Autoplay may be blocked for ${props.participant.name}`);
-      }
     }
+
+    props.participant.stream.getTracks().forEach((track) => {
+      track.onunmute = () => {
+        void playAttachedVideo();
+      };
+    });
+
+    await playAttachedVideo();
   }
 };
 
@@ -97,15 +111,23 @@ onMounted(async () => {
 <template>
   <div
     :class="['relative cursor-pointer group rounded-lg overflow-hidden bg-[hsl(0,0%,12%)]', sizeClasses]"
+    data-testid="participant-tile"
+    :data-participant-id="participant.id"
+    :data-participant-local="participant.isLocal"
     @click="emit('click')"
   >
     <!-- Video element (always present for audio playback, hidden when video disabled) -->
     <video
       v-if="participant.stream"
       ref="videoRef"
+      data-testid="participant-video"
+      :data-participant-id="participant.id"
+      :data-participant-local="participant.isLocal"
       autoplay
       playsinline
       :muted="participant.isLocal"
+      @loadedmetadata="playAttachedVideo"
+      @canplay="playAttachedVideo"
       :class="[
         'w-full h-full rounded-lg bg-[hsl(0,0%,12%)]',
         objectFitClass,

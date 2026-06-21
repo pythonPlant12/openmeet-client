@@ -1,3 +1,4 @@
+import { resolveReachableTurnUrl } from './dev-networking';
 import { SignalingService } from './signaling';
 
 export interface DeviceConstraints {
@@ -5,16 +6,18 @@ export interface DeviceConstraints {
   videoDeviceId?: string | null;
 }
 
-const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
-  {
-    urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
-  },
-  {
-    urls: [import.meta.env.VITE_TURN_URL || 'turn:turn.openmeets.eu:3478'],
-    username: import.meta.env.VITE_TURN_USER || 'openmeet',
-    credential: import.meta.env.VITE_TURN_PASSWORD || 'openmeet123',
-  },
-];
+function createDefaultIceServers(): RTCIceServer[] {
+  return [
+    {
+      urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
+    },
+    {
+      urls: [resolveReachableTurnUrl(import.meta.env.VITE_TURN_URL || 'turn:turn.openmeets.eu:3478')],
+      username: import.meta.env.VITE_TURN_USER || 'openmeet',
+      credential: import.meta.env.VITE_TURN_PASSWORD || 'openmeet123',
+    },
+  ];
+}
 
 export class WebRTCServiceSFU {
   private peerConnection: RTCPeerConnection | null = null;
@@ -23,7 +26,7 @@ export class WebRTCServiceSFU {
 
   constructor(
     private signalingService: SignalingService,
-    private iceServers: RTCIceServer[] = DEFAULT_ICE_SERVERS,
+    private iceServers: RTCIceServer[] = createDefaultIceServers(),
   ) {
     this.setupSignalingHandlers();
   }

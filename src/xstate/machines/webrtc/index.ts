@@ -234,8 +234,7 @@ export const webrtcMachine = setup({
   },
   guards: {
     isConnectionConnected: ({ context }) => context.connectionState === 'connected',
-    isConnectionFailed: ({ context }) =>
-      context.connectionState === 'failed' || context.connectionState === 'disconnected',
+    isConnectionFailed: ({ context }) => context.connectionState === 'failed',
   },
 }).createMachine({
   id: 'webrtcMachine',
@@ -401,6 +400,7 @@ export const webrtcMachine = setup({
                 actions: [
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
                   { type: 'setError', params: () => ({ error: 'Peer connection failed' }) },
+                  'cleanup',
                 ],
               },
               {
@@ -413,11 +413,12 @@ export const webrtcMachine = setup({
           on: {
             CONNECTION_STATE_CHANGED: [
               {
-                guard: ({ event }) => event.state === 'failed' || event.state === 'disconnected',
+                guard: ({ event }) => event.state === 'failed',
                 target: '#webrtcMachine.error',
                 actions: [
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
                   { type: 'setError', params: ({ event }) => ({ error: `Connection ${event.state}` }) },
+                  'cleanup',
                 ],
               },
               {
