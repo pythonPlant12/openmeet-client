@@ -56,6 +56,59 @@ describe('WebRTC Machine', () => {
     actor.stop();
   });
 
+  it('enters the call when ICE connects before the peer connection reports connected', async () => {
+    const machine = webrtcMachine.provide({
+      actors: {
+        initMedia: fromPromise(async () => ({ getTracks: () => [] }) as unknown as MediaStream),
+        joinRoom: fromCallback(({ sendBack }) => {
+          sendBack({ type: 'JOINED', participantId: 'participant-1', participantName: 'Alice' });
+          sendBack({ type: 'CONNECTION_STATE_CHANGED', state: 'connecting' });
+          sendBack({ type: 'ICE_CONNECTION_STATE_CHANGED', state: 'connected' });
+        }),
+      },
+    });
+    const actor = createActor(machine);
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+
+    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
+
+    expect(actor.getSnapshot().context.connectionState).toBe('connecting');
+    expect(actor.getSnapshot().context.iceConnectionState).toBe('connected');
+
+    actor.stop();
+  });
+
+  it('moves to error when ICE fails while joining', async () => {
+    const machine = webrtcMachine.provide({
+      actors: {
+        initMedia: fromPromise(async () => ({ getTracks: () => [] }) as unknown as MediaStream),
+        joinRoom: fromCallback(({ sendBack }) => {
+          sendBack({ type: 'JOINED', participantId: 'participant-1', participantName: 'Alice' });
+          sendBack({ type: 'CONNECTION_STATE_CHANGED', state: 'connecting' });
+        }),
+      },
+    });
+    const actor = createActor(machine);
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+
+    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches({ connected: 'joiningRoom' }));
+    actor.send({ type: 'ICE_CONNECTION_STATE_CHANGED', state: 'failed' });
+
+    await waitFor(actor, (state) => state.matches('error'));
+    expect(actor.getSnapshot().context.iceConnectionState).toBe('failed');
+    expect(actor.getSnapshot().context.error).toBe('ICE connection failed');
+
+    actor.stop();
+  });
+
   it('removes a participant when the server reports they left', async () => {
     const actor = createTestActor();
     actor.start();

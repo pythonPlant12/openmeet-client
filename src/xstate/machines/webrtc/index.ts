@@ -353,9 +353,25 @@ export const webrtcMachine = setup({
             },
           ],
         },
-        ICE_CONNECTION_STATE_CHANGED: {
-          actions: [{ type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) }],
-        },
+        ICE_CONNECTION_STATE_CHANGED: [
+          {
+            guard: ({ event }) => event.state === 'connected' || event.state === 'completed',
+            target: '.inCall',
+            actions: [{ type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) }],
+          },
+          {
+            guard: ({ event }) => event.state === 'failed',
+            target: '#webrtcMachine.error',
+            actions: [
+              { type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) },
+              { type: 'setError', params: () => ({ error: 'ICE connection failed' }) },
+              'cleanup',
+            ],
+          },
+          {
+            actions: [{ type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) }],
+          },
+        ],
         SERVER_ERROR: {
           target: 'error',
           actions: [{ type: 'setError', params: ({ event }) => ({ error: event.message }) }],
