@@ -1,4 +1,5 @@
 import { type Browser, type BrowserContext, type Page, expect, test } from '@playwright/test';
+import process from 'node:process';
 
 declare global {
   interface Window {
@@ -32,17 +33,28 @@ interface VideoSnapshot {
   currentTime: number;
   totalVideoFrames: number | null;
   hasStream: boolean;
+  liveAudioTracks: number;
   liveVideoTracks: number;
+}
+
+interface BrowserDiagnostic {
+  participant: number;
+  type: string;
+  text: string;
 }
 
 interface ParticipantSession {
   contexts: BrowserContext[];
   pages: Page[];
   roomUrl: string;
+  diagnostics: BrowserDiagnostic[];
 }
 
 const participantCount = 4;
+const twoParticipantCount = 2;
 const haveCurrentData = 2;
+const diagnosticTags = ['[SignalingService]', '[WebRTCServiceSFU]', '[webrtcMachine]'];
+const unsafeDiagnosticPattern = /sdp|candidate|token|cookie|credential|password|turn:|turns:|bearer|vite_/i;
 
 test.use({
   launchOptions: {
@@ -56,6 +68,33 @@ test.use({
 
 test.describe('multi-participant media', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'fake media and WebRTC stats are asserted in Chromium');
+
+  test('two participants exchange remote audio and video', async ({ browser, baseURL }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'two-participant-media-e2e');
+
+    try {
+      await waitForParticipantCount(session.pages, twoParticipantCount);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+      await session.pages[0].waitForTimeout(8_000);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+      await expectNoConnectionErrorDialog(session.pages);
+
+      test.info().annotations.push({
+        type: 'room-url',
+        description: session.roomUrl,
+      });
+      test.info().annotations.push({
+        type: 'diagnostics',
+        description: summarizeDiagnostics(session.diagnostics),
+      });
+    } finally {
+      await closeContexts(session.contexts);
+    }
+  });
 
   test('transmits and renders audio/video for every participant', async ({ browser, baseURL }) => {
     test.setTimeout(180_000);
@@ -158,9 +197,10 @@ async function joinParticipants(
   count: number,
   roomPrefix: string,
 ): Promise<ParticipantSession> {
-  const roomUrl = `${baseURL}/room/${roomPrefix}-${Date.now()}`;
+  const roomUrl = process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
   const contexts: BrowserContext[] = [];
   const pages: Page[] = [];
+  const diagnostics: BrowserDiagnostic[] = [];
 
   for (let index = 0; index < count; index += 1) {
     const context = await browser.newContext({ permissions: ['camera', 'microphone'] });
@@ -178,7 +218,9 @@ async function joinParticipants(
       };
     });
 
-    pages.push(await context.newPage());
+    const page = await context.newPage();
+    page.on('console', (message) => recordBrowserDiagnostic(diagnostics, index + 1, message.type(), message.text()));
+    pages.push(page);
   }
 
   for (const [index, page] of pages.entries()) {
@@ -189,7 +231,7 @@ async function joinParticipants(
     await expect(page.getByTestId('participant-video').first()).toBeAttached({ timeout: 30_000 });
   }
 
-  return { contexts, pages, roomUrl };
+  return { contexts, pages, roomUrl, diagnostics };
 }
 
 async function waitForParticipantCount(pages: Page[], expectedParticipants: number) {
@@ -235,6 +277,7 @@ async function waitForHtmlVideoPlayback(pages: Page[], expectedParticipants: num
               const stream = video.srcObject instanceof MediaStream ? video.srcObject : null;
               return (
                 stream !== null &&
+                stream.getAudioTracks().some((track) => track.readyState === 'live') &&
                 stream.getVideoTracks().some((track) => track.readyState === 'live') &&
                 video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
                 video.videoWidth > 0 &&
@@ -300,6 +343,10 @@ async function expectMediaStillFlowing(pages: Page[], expectedRemoteCount: numbe
         video.totalVideoFrames > previousVideo.totalVideoFrames;
 
       expect(video.hasStream, `participant ${index + 1} remote video ${videoIndex + 1} has stream`).toBe(true);
+      expect(
+        video.liveAudioTracks,
+        `participant ${index + 1} remote video ${videoIndex + 1} live audio tracks`,
+      ).toBeGreaterThan(0);
       expect(
         video.liveVideoTracks,
         `participant ${index + 1} remote video ${videoIndex + 1} live tracks`,
@@ -395,11 +442,42 @@ async function collectMediaSnapshot(): Promise<MediaSnapshot> {
           currentTime: video.currentTime,
           totalVideoFrames: playbackQuality?.totalVideoFrames ?? null,
           hasStream: stream !== null,
+          liveAudioTracks: stream?.getAudioTracks().filter((track) => track.readyState === 'live').length ?? 0,
           liveVideoTracks: stream?.getVideoTracks().filter((track) => track.readyState === 'live').length ?? 0,
         };
       },
     ),
   };
+}
+
+async function expectNoConnectionErrorDialog(pages: Page[]) {
+  await Promise.all(
+    pages.map(async (page, index) => {
+      await expect(page.getByTestId('connection-error-dialog'), `participant ${index + 1} error dialog`).toHaveCount(0);
+    }),
+  );
+}
+
+function recordBrowserDiagnostic(diagnostics: BrowserDiagnostic[], participant: number, type: string, text: string) {
+  if (!diagnosticTags.some((tag) => text.includes(tag)) || unsafeDiagnosticPattern.test(text)) {
+    return;
+  }
+
+  diagnostics.push({
+    participant,
+    type,
+    text: text.replace(/\s+/g, ' ').slice(0, 240),
+  });
+}
+
+function summarizeDiagnostics(diagnostics: BrowserDiagnostic[]) {
+  const recentDiagnostics = diagnostics.slice(-30);
+
+  if (recentDiagnostics.length === 0) {
+    return 'No tagged client diagnostics captured.';
+  }
+
+  return recentDiagnostics.map((entry) => `p${entry.participant}:${entry.type}:${entry.text}`).join(' | ');
 }
 
 async function closeContexts(contexts: BrowserContext[]) {
