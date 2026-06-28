@@ -8,6 +8,7 @@ import type { InitMediaInput, JoinRoomInput, SFUEvents } from './types';
 
 // SFU server URL
 const SFU_SERVER_URL = resolveReachableWebSocketUrl(import.meta.env.VITE_SFU_WSS_URL || 'wss://sfu.openmeets.eu/ws');
+const DISCONNECT_GRACE_MS = 15000;
 
 // Module-level service instances (not in XState context because they're not serializable)
 let signalingService: SignalingService | null = null;
@@ -163,7 +164,7 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
       if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
         sendBack({ type: 'CONNECTION_TIMEOUT' });
       }
-    }, 5000);
+    }, DISCONNECT_GRACE_MS);
   };
 
   pc.onconnectionstatechange = () => {
