@@ -12,11 +12,15 @@ export interface ConnectionQualityStats {
   roundTripTime: number | null;
   jitter: number | null;
   reason: string | null;
+  hasRecentMediaActivity: boolean;
+  remoteVideoFrozen: boolean;
 }
 
 interface InboundPacketSnapshot {
   packetsReceived: number;
   packetsLost: number;
+  bytesReceived: number;
+  framesDecoded: number;
 }
 
 interface MediaStatsSummary {
@@ -56,6 +60,16 @@ function createDefaultIceServers(): RTCIceServer[] {
       credential: import.meta.env.VITE_TURN_PASSWORD || 'openmeet123',
     },
   ];
+}
+
+function configuredIceTransportPolicy(): RTCIceTransportPolicy {
+  const policy = import.meta.env.VITE_ICE_TRANSPORT_POLICY;
+
+  if (policy === 'relay') {
+    return 'relay';
+  }
+
+  return 'all';
 }
 
 export class WebRTCServiceSFU {
@@ -153,9 +167,13 @@ export class WebRTCServiceSFU {
     }
 
     console.log('[WebRTCServiceSFU] Creating new peer connection');
+    const iceTransportPolicy = configuredIceTransportPolicy();
+    console.log('[WebRTCServiceSFU] ICE transport policy:', iceTransportPolicy);
+
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
       iceCandidatePoolSize: 10,
+      iceTransportPolicy,
     });
 
     // Add local tracks to peer connection
@@ -308,6 +326,8 @@ export class WebRTCServiceSFU {
         roundTripTime: null,
         jitter: null,
         reason: null,
+        hasRecentMediaActivity: false,
+        remoteVideoFrozen: false,
       };
     }
 
@@ -315,25 +335,39 @@ export class WebRTCServiceSFU {
     let maxPacketLossRatio = 0;
     let maxJitter: number | null = null;
     let maxRoundTripTime: number | null = null;
+    let hasRecentMediaActivity = false;
+    let remoteVideoFrozen = false;
     const diagnostics = this.summarizeMediaStats(stats);
 
     stats.forEach((report) => {
       if (report.type === 'inbound-rtp' && !report.isRemote) {
         const packetsReceived = report.packetsReceived ?? 0;
         const packetsLost = Math.max(report.packetsLost ?? 0, 0);
+        const bytesReceived = report.bytesReceived ?? 0;
+        const framesDecoded = report.framesDecoded ?? 0;
         const previous = this.previousInboundPackets.get(report.id);
 
         if (previous) {
           const receivedDelta = Math.max(packetsReceived - previous.packetsReceived, 0);
           const lostDelta = Math.max(packetsLost - previous.packetsLost, 0);
           const totalDelta = receivedDelta + lostDelta;
+          const bytesDelta = Math.max(bytesReceived - previous.bytesReceived, 0);
+          const framesDelta = Math.max(framesDecoded - previous.framesDecoded, 0);
+
+          if (receivedDelta > 0 || bytesDelta > 0 || framesDelta > 0) {
+            hasRecentMediaActivity = true;
+          }
+
+          if ((report.kind || report.mediaType) === 'video' && bytesDelta > 0 && framesDelta === 0) {
+            remoteVideoFrozen = true;
+          }
 
           if (totalDelta > 0) {
             maxPacketLossRatio = Math.max(maxPacketLossRatio, lostDelta / totalDelta);
           }
         }
 
-        this.previousInboundPackets.set(report.id, { packetsReceived, packetsLost });
+        this.previousInboundPackets.set(report.id, { packetsReceived, packetsLost, bytesReceived, framesDecoded });
 
         if (typeof report.jitter === 'number') {
           maxJitter = Math.max(maxJitter ?? 0, report.jitter);
@@ -361,6 +395,8 @@ export class WebRTCServiceSFU {
       reason = `High latency: ${Math.round(maxRoundTripTime * 1000)}ms`;
     } else if (maxJitter !== null && maxJitter >= 0.15) {
       reason = `Unstable media timing: ${Math.round(maxJitter * 1000)}ms jitter`;
+    } else if (remoteVideoFrozen) {
+      reason = 'Remote video is recovering';
     }
 
     return {
@@ -369,6 +405,8 @@ export class WebRTCServiceSFU {
       roundTripTime: maxRoundTripTime,
       jitter: maxJitter,
       reason,
+      hasRecentMediaActivity,
+      remoteVideoFrozen,
     };
   }
 

@@ -9,6 +9,7 @@ import type { InitMediaInput, JoinRoomInput, SFUEvents } from './types';
 // SFU server URL
 const SFU_SERVER_URL = resolveReachableWebSocketUrl(import.meta.env.VITE_SFU_WSS_URL || 'wss://sfu.openmeets.eu/ws');
 const DISCONNECT_GRACE_MS = 15000;
+const MAX_DISCONNECT_GRACE_MS = 45000;
 
 // Module-level service instances (not in XState context because they're not serializable)
 let signalingService: SignalingService | null = null;
@@ -150,6 +151,9 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
   // Create peer connection and setup connection state monitoring
   const pc = webrtcService.createPeerConnection();
   let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let hasRecentMediaActivity = false;
+  let remoteVideoFrozen = false;
+  let disconnectedSince: number | null = null;
 
   const clearDisconnectTimer = () => {
     if (disconnectTimer) {
@@ -162,6 +166,14 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     clearDisconnectTimer();
     disconnectTimer = setTimeout(() => {
       if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
+        const disconnectedFor = disconnectedSince ? Date.now() - disconnectedSince : DISCONNECT_GRACE_MS;
+
+        if (hasRecentMediaActivity && !remoteVideoFrozen && disconnectedFor < MAX_DISCONNECT_GRACE_MS) {
+          console.log('[webrtcMachine] Connection still disconnected, but media stats are progressing; keeping call alive');
+          scheduleDisconnectTimeout();
+          return;
+        }
+
         sendBack({ type: 'CONNECTION_TIMEOUT' });
       }
     }, DISCONNECT_GRACE_MS);
@@ -172,10 +184,12 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     sendBack({ type: 'CONNECTION_STATE_CHANGED', state: pc.connectionState });
 
     if (pc.connectionState === 'disconnected') {
+      disconnectedSince ??= Date.now();
       scheduleDisconnectTimeout();
     }
 
     if (pc.connectionState === 'connected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      disconnectedSince = null;
       clearDisconnectTimer();
     }
   };
@@ -185,6 +199,7 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     sendBack({ type: 'ICE_CONNECTION_STATE_CHANGED', state: pc.iceConnectionState });
 
     if (pc.iceConnectionState === 'disconnected') {
+      disconnectedSince ??= Date.now();
       scheduleDisconnectTimeout();
     }
 
@@ -194,6 +209,7 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
       pc.iceConnectionState === 'failed' ||
       pc.iceConnectionState === 'closed'
     ) {
+      disconnectedSince = null;
       clearDisconnectTimer();
     }
   };
@@ -212,6 +228,8 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     webrtcService
       .getConnectionQualityStats()
       .then((stats) => {
+        hasRecentMediaActivity = stats.hasRecentMediaActivity;
+        remoteVideoFrozen = stats.remoteVideoFrozen;
         sendBack({ type: 'CONNECTION_QUALITY_CHANGED', stats });
       })
       .catch((error) => {

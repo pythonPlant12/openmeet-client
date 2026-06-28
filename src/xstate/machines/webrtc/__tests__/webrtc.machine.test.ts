@@ -128,6 +128,8 @@ describe('WebRTC Machine', () => {
         roundTripTime: 0.2,
         jitter: 0.01,
         reason: 'Packet loss is 12%',
+        hasRecentMediaActivity: true,
+        remoteVideoFrozen: false,
       },
     });
 
@@ -161,6 +163,8 @@ describe('WebRTC Machine', () => {
         roundTripTime: 0.1,
         jitter: 0.01,
         reason: null,
+        hasRecentMediaActivity: true,
+        remoteVideoFrozen: false,
       },
     });
     expect(actor.getSnapshot().context.connectionQuality).toBe('poor');
