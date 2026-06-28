@@ -17,6 +17,9 @@ const initialContext: SFUContext = {
   roomId: null,
   connectionState: null,
   iceConnectionState: null,
+  connectionQuality: 'good',
+  connectionQualityReason: null,
+  packetLossRatio: 0,
   streamOwnerMap: new Map(),
   chatMessages: [],
   error: null,
@@ -146,6 +149,17 @@ export const webrtcMachine = setup({
       iceConnectionState: (_, params: { state: RTCIceConnectionState }) => params.state,
     }),
 
+    setConnectionQuality: assign({
+      connectionQuality: (_, params: { quality: 'good' | 'poor'; reason: string | null; packetLossRatio: number }) =>
+        params.quality,
+      connectionQualityReason: (
+        _,
+        params: { quality: 'good' | 'poor'; reason: string | null; packetLossRatio: number },
+      ) => params.reason,
+      packetLossRatio: (_, params: { quality: 'good' | 'poor'; reason: string | null; packetLossRatio: number }) =>
+        params.packetLossRatio,
+    }),
+
     setError: assign({
       error: (_, params: { error: string }) => params.error,
     }),
@@ -227,6 +241,9 @@ export const webrtcMachine = setup({
       roomId: null,
       connectionState: null,
       iceConnectionState: null,
+      connectionQuality: 'good',
+      connectionQualityReason: null,
+      packetLossRatio: 0,
       streamOwnerMap: () => new Map<string, string>(),
       chatMessages: () => [] as ChatMessage[],
       error: null,
@@ -357,7 +374,13 @@ export const webrtcMachine = setup({
           {
             guard: ({ event }) => event.state === 'connected' || event.state === 'completed',
             target: '.inCall',
-            actions: [{ type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) }],
+            actions: [
+              { type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) },
+              {
+                type: 'setConnectionQuality',
+                params: () => ({ quality: 'good', reason: null, packetLossRatio: 0 }),
+              },
+            ],
           },
           {
             guard: ({ event }) => event.state === 'failed',
@@ -369,9 +392,62 @@ export const webrtcMachine = setup({
             ],
           },
           {
+            guard: ({ event }) => event.state === 'disconnected',
+            actions: [
+              { type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) },
+              {
+                type: 'setConnectionQuality',
+                params: () => ({
+                  quality: 'poor',
+                  reason: 'Connection interrupted. Trying to reconnect...',
+                  packetLossRatio: 0,
+                }),
+              },
+            ],
+          },
+          {
             actions: [{ type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) }],
           },
         ],
+        CONNECTION_QUALITY_CHANGED: [
+          {
+            guard: ({ context, event }) => event.stats.quality === 'good' && context.iceConnectionState !== 'disconnected',
+            actions: [
+              {
+                type: 'setConnectionQuality',
+                params: ({ event }) => ({
+                  quality: event.stats.quality,
+                  reason: event.stats.reason,
+                  packetLossRatio: event.stats.packetLossRatio,
+                }),
+              },
+            ],
+          },
+          {
+            guard: ({ event }) => event.stats.quality === 'poor',
+            actions: [
+              {
+                type: 'setConnectionQuality',
+                params: ({ event }) => ({
+                  quality: event.stats.quality,
+                  reason: event.stats.reason,
+                  packetLossRatio: event.stats.packetLossRatio,
+                }),
+              },
+            ],
+          },
+        ],
+        CONNECTION_TIMEOUT: {
+          target: '#webrtcMachine.error',
+          actions: [
+            { type: 'setError', params: () => ({ error: 'Connection lost' }) },
+            {
+              type: 'setConnectionQuality',
+              params: () => ({ quality: 'poor', reason: 'Connection lost', packetLossRatio: 0 }),
+            },
+            'cleanup',
+          ],
+        },
         SERVER_ERROR: {
           target: 'error',
           actions: [{ type: 'setError', params: ({ event }) => ({ error: event.message }) }],
@@ -408,7 +484,13 @@ export const webrtcMachine = setup({
               {
                 guard: ({ event }) => event.state === 'connected',
                 target: 'inCall',
-                actions: [{ type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) }],
+                actions: [
+                  { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  {
+                    type: 'setConnectionQuality',
+                    params: () => ({ quality: 'good', reason: null, packetLossRatio: 0 }),
+                  },
+                ],
               },
               {
                 guard: ({ event }) => event.state === 'failed',
@@ -417,6 +499,20 @@ export const webrtcMachine = setup({
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
                   { type: 'setError', params: () => ({ error: 'Peer connection failed' }) },
                   'cleanup',
+                ],
+              },
+              {
+                guard: ({ event }) => event.state === 'disconnected',
+                actions: [
+                  { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  {
+                    type: 'setConnectionQuality',
+                    params: () => ({
+                      quality: 'poor',
+                      reason: 'Connection interrupted. Trying to reconnect...',
+                      packetLossRatio: 0,
+                    }),
+                  },
                 ],
               },
               {
@@ -435,6 +531,30 @@ export const webrtcMachine = setup({
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
                   { type: 'setError', params: ({ event }) => ({ error: `Connection ${event.state}` }) },
                   'cleanup',
+                ],
+              },
+              {
+                guard: ({ event }) => event.state === 'connected',
+                actions: [
+                  { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  {
+                    type: 'setConnectionQuality',
+                    params: () => ({ quality: 'good', reason: null, packetLossRatio: 0 }),
+                  },
+                ],
+              },
+              {
+                guard: ({ event }) => event.state === 'disconnected',
+                actions: [
+                  { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  {
+                    type: 'setConnectionQuality',
+                    params: () => ({
+                      quality: 'poor',
+                      reason: 'Connection interrupted. Trying to reconnect...',
+                      packetLossRatio: 0,
+                    }),
+                  },
                 ],
               },
               {

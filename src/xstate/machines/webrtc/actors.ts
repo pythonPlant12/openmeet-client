@@ -148,14 +148,75 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
 
   // Create peer connection and setup connection state monitoring
   const pc = webrtcService.createPeerConnection();
+  let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearDisconnectTimer = () => {
+    if (disconnectTimer) {
+      clearTimeout(disconnectTimer);
+      disconnectTimer = null;
+    }
+  };
+
+  const scheduleDisconnectTimeout = () => {
+    clearDisconnectTimer();
+    disconnectTimer = setTimeout(() => {
+      if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
+        sendBack({ type: 'CONNECTION_TIMEOUT' });
+      }
+    }, 5000);
+  };
 
   pc.onconnectionstatechange = () => {
+    console.log('[webrtcMachine] Peer connection state:', pc.connectionState);
     sendBack({ type: 'CONNECTION_STATE_CHANGED', state: pc.connectionState });
+
+    if (pc.connectionState === 'disconnected') {
+      scheduleDisconnectTimeout();
+    }
+
+    if (pc.connectionState === 'connected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      clearDisconnectTimer();
+    }
   };
 
   pc.oniceconnectionstatechange = () => {
+    console.log('[webrtcMachine] ICE connection state:', pc.iceConnectionState);
     sendBack({ type: 'ICE_CONNECTION_STATE_CHANGED', state: pc.iceConnectionState });
+
+    if (pc.iceConnectionState === 'disconnected') {
+      scheduleDisconnectTimeout();
+    }
+
+    if (
+      pc.iceConnectionState === 'connected' ||
+      pc.iceConnectionState === 'completed' ||
+      pc.iceConnectionState === 'failed' ||
+      pc.iceConnectionState === 'closed'
+    ) {
+      clearDisconnectTimer();
+    }
   };
+
+  pc.onicegatheringstatechange = () => {
+    console.log('[webrtcMachine] ICE gathering state:', pc.iceGatheringState);
+  };
+
+  pc.onsignalingstatechange = () => {
+    console.log('[webrtcMachine] Signaling state:', pc.signalingState);
+  };
+
+  const qualityInterval = setInterval(() => {
+    if (pc.connectionState === 'closed') return;
+
+    webrtcService
+      .getConnectionQualityStats()
+      .then((stats) => {
+        sendBack({ type: 'CONNECTION_QUALITY_CHANGED', stats });
+      })
+      .catch((error) => {
+        console.error('[webrtcMachine] Failed to collect connection quality stats:', error);
+      });
+  }, 3000);
 
   // Send offer to SFU
   webrtcService
@@ -170,6 +231,8 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
   // Return cleanup function (optional)
   return () => {
     // Cleanup is handled by the machine's cleanup action
+    clearDisconnectTimer();
+    clearInterval(qualityInterval);
     console.log('[webrtcMachine] joinRoomActor cleanup');
   };
 });

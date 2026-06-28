@@ -59,8 +59,14 @@ export class SignalingService {
         }
       };
 
-      this.ws.onclose = () => {
-        console.log('[SignalingService] WebSocket closed');
+      this.ws.onclose = (event) => {
+        console.log('[SignalingService] WebSocket closed:', {
+          code: event.code,
+          reason: event.reason || null,
+          wasClean: event.wasClean,
+          intentionalDisconnect: this.intentionalDisconnect,
+          reconnectAttempts: this.reconnectAttempts,
+        });
         this.handleDisconnect();
       };
     });

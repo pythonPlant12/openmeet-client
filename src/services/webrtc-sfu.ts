@@ -6,6 +6,45 @@ export interface DeviceConstraints {
   videoDeviceId?: string | null;
 }
 
+export interface ConnectionQualityStats {
+  quality: 'good' | 'poor';
+  packetLossRatio: number;
+  roundTripTime: number | null;
+  jitter: number | null;
+  reason: string | null;
+}
+
+interface InboundPacketSnapshot {
+  packetsReceived: number;
+  packetsLost: number;
+}
+
+interface MediaStatsSummary {
+  inbound: Array<{
+    kind: string;
+    packetsReceived: number;
+    packetsLost: number;
+    bytesReceived: number;
+    framesDecoded?: number;
+    audioLevel?: number;
+    jitter?: number;
+  }>;
+  outbound: Array<{
+    kind: string;
+    packetsSent: number;
+    bytesSent: number;
+    framesEncoded?: number;
+  }>;
+  selectedCandidatePair: {
+    currentRoundTripTime?: number;
+    availableOutgoingBitrate?: number;
+    localCandidateType?: string;
+    localProtocol?: string;
+    remoteCandidateType?: string;
+    remoteProtocol?: string;
+  } | null;
+}
+
 function createDefaultIceServers(): RTCIceServer[] {
   return [
     {
@@ -23,6 +62,7 @@ export class WebRTCServiceSFU {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private onRemoteTrackCallback: ((participantId: string, stream: MediaStream) => void) | null = null;
+  private previousInboundPackets = new Map<string, InboundPacketSnapshot>();
 
   constructor(
     private signalingService: SignalingService,
@@ -129,7 +169,10 @@ export class WebRTCServiceSFU {
     // Handle ICE candidates
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log('[WebRTCServiceSFU] Local ICE candidate:', this.describeCandidate(event.candidate.candidate));
         this.signalingService.sendIceCandidate('server', event.candidate.toJSON());
+      } else {
+        console.log('[WebRTCServiceSFU] Local ICE gathering complete');
       }
     };
 
@@ -140,14 +183,31 @@ export class WebRTCServiceSFU {
 
     // Handle remote tracks (from SFU forwarding other participants' media)
     this.peerConnection.ontrack = (event) => {
-      const stream = event.streams[0];
+      const stream = event.streams[0] || new MediaStream([event.track]);
       const track = event.track;
 
-      console.log(`[WebRTCServiceSFU] ✓ Received ${track.kind} track from stream ${stream.id} (muted: ${track.muted})`);
+      console.log('[WebRTCServiceSFU] Remote track event:', {
+        kind: track.kind,
+        trackId: track.id,
+        streamId: stream.id,
+        muted: track.muted,
+        readyState: track.readyState,
+        streams: event.streams.map((eventStream) => eventStream.id),
+      });
+
+      track.onmute = () => {
+        console.log('[WebRTCServiceSFU] Remote track muted:', { kind: track.kind, trackId: track.id, streamId: stream.id });
+      };
+      track.onunmute = () => {
+        console.log('[WebRTCServiceSFU] Remote track unmuted:', { kind: track.kind, trackId: track.id, streamId: stream.id });
+      };
+      track.onended = () => {
+        console.log('[WebRTCServiceSFU] Remote track ended:', { kind: track.kind, trackId: track.id, streamId: stream.id });
+      };
 
       // Ignore local stream (Sometimes Chrome sends its own localstream)
       if (this.localStream && stream.id === this.localStream.id) {
-        console.log(`[WebRTCServiceSFU] ❌ Ignoring own stream reflected from SFU`);
+        console.log('[WebRTCServiceSFU] Ignoring own stream reflected from SFU');
         return;
       }
 
@@ -240,6 +300,78 @@ export class WebRTCServiceSFU {
     return this.peerConnection;
   }
 
+  async getConnectionQualityStats(): Promise<ConnectionQualityStats> {
+    if (!this.peerConnection) {
+      return {
+        quality: 'good',
+        packetLossRatio: 0,
+        roundTripTime: null,
+        jitter: null,
+        reason: null,
+      };
+    }
+
+    const stats = await this.peerConnection.getStats();
+    let maxPacketLossRatio = 0;
+    let maxJitter: number | null = null;
+    let maxRoundTripTime: number | null = null;
+    const diagnostics = this.summarizeMediaStats(stats);
+
+    stats.forEach((report) => {
+      if (report.type === 'inbound-rtp' && !report.isRemote) {
+        const packetsReceived = report.packetsReceived ?? 0;
+        const packetsLost = Math.max(report.packetsLost ?? 0, 0);
+        const previous = this.previousInboundPackets.get(report.id);
+
+        if (previous) {
+          const receivedDelta = Math.max(packetsReceived - previous.packetsReceived, 0);
+          const lostDelta = Math.max(packetsLost - previous.packetsLost, 0);
+          const totalDelta = receivedDelta + lostDelta;
+
+          if (totalDelta > 0) {
+            maxPacketLossRatio = Math.max(maxPacketLossRatio, lostDelta / totalDelta);
+          }
+        }
+
+        this.previousInboundPackets.set(report.id, { packetsReceived, packetsLost });
+
+        if (typeof report.jitter === 'number') {
+          maxJitter = Math.max(maxJitter ?? 0, report.jitter);
+        }
+      }
+
+      if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated === true) {
+        if (typeof report.currentRoundTripTime === 'number') {
+          maxRoundTripTime = Math.max(maxRoundTripTime ?? 0, report.currentRoundTripTime);
+        }
+      }
+
+      if (report.type === 'remote-inbound-rtp' && typeof report.roundTripTime === 'number') {
+        maxRoundTripTime = Math.max(maxRoundTripTime ?? 0, report.roundTripTime);
+      }
+    });
+
+    console.log('[WebRTCServiceSFU] Connection diagnostics:', diagnostics);
+
+    let reason: string | null = null;
+
+    if (maxPacketLossRatio >= 0.05) {
+      reason = `Packet loss is ${Math.round(maxPacketLossRatio * 100)}%`;
+    } else if (maxRoundTripTime !== null && maxRoundTripTime >= 0.8) {
+      reason = `High latency: ${Math.round(maxRoundTripTime * 1000)}ms`;
+    } else if (maxJitter !== null && maxJitter >= 0.15) {
+      reason = `Unstable media timing: ${Math.round(maxJitter * 1000)}ms jitter`;
+    }
+
+    return {
+      quality: reason ? 'poor' : 'good',
+      packetLossRatio: maxPacketLossRatio,
+      roundTripTime: maxRoundTripTime,
+      jitter: maxJitter,
+      reason,
+    };
+  }
+
   cleanup(): void {
     console.log('[WebRTCServiceSFU] Cleaning up resources');
 
@@ -252,5 +384,65 @@ export class WebRTCServiceSFU {
     // Clear references
     this.localStream = null;
     this.peerConnection = null;
+    this.previousInboundPackets.clear();
+  }
+
+  private describeCandidate(candidate: string): Record<string, string | null> {
+    const parts = candidate.split(' ');
+    const typIndex = parts.indexOf('typ');
+
+    return {
+      protocol: parts[2]?.toLowerCase() || null,
+      port: parts[5] || null,
+      type: typIndex >= 0 ? parts[typIndex + 1] || null : null,
+      transport: candidate.includes('relay') ? 'relay' : candidate.includes('srflx') ? 'srflx' : 'direct',
+    };
+  }
+
+  private summarizeMediaStats(stats: RTCStatsReport): MediaStatsSummary {
+    const summary: MediaStatsSummary = {
+      inbound: [],
+      outbound: [],
+      selectedCandidatePair: null,
+    };
+
+    stats.forEach((report) => {
+      if (report.type === 'inbound-rtp' && !report.isRemote) {
+        summary.inbound.push({
+          kind: report.kind || report.mediaType || 'unknown',
+          packetsReceived: report.packetsReceived ?? 0,
+          packetsLost: report.packetsLost ?? 0,
+          bytesReceived: report.bytesReceived ?? 0,
+          framesDecoded: report.framesDecoded,
+          audioLevel: report.audioLevel,
+          jitter: report.jitter,
+        });
+      }
+
+      if (report.type === 'outbound-rtp' && !report.isRemote) {
+        summary.outbound.push({
+          kind: report.kind || report.mediaType || 'unknown',
+          packetsSent: report.packetsSent ?? 0,
+          bytesSent: report.bytesSent ?? 0,
+          framesEncoded: report.framesEncoded,
+        });
+      }
+
+      if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated === true) {
+        const localCandidate = stats.get(report.localCandidateId);
+        const remoteCandidate = stats.get(report.remoteCandidateId);
+
+        summary.selectedCandidatePair = {
+          currentRoundTripTime: report.currentRoundTripTime,
+          availableOutgoingBitrate: report.availableOutgoingBitrate,
+          localCandidateType: localCandidate?.candidateType,
+          localProtocol: localCandidate?.protocol,
+          remoteCandidateType: remoteCandidate?.candidateType,
+          remoteProtocol: remoteCandidate?.protocol,
+        };
+      }
+    });
+
+    return summary;
   }
 }

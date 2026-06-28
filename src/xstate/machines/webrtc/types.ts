@@ -1,4 +1,6 @@
-import type { DeviceConstraints } from '@/services/webrtc-sfu';
+import type { ConnectionQualityStats, DeviceConstraints } from '@/services/webrtc-sfu';
+
+export type ConnectionQuality = 'good' | 'poor';
 
 export interface Participant {
   id: string;
@@ -31,6 +33,9 @@ export interface SFUContext {
   // Connection state
   connectionState: RTCPeerConnectionState | null;
   iceConnectionState: RTCIceConnectionState | null;
+  connectionQuality: ConnectionQuality;
+  connectionQualityReason: string | null;
+  packetLossRatio: number;
 
   // Internal tracking
   streamOwnerMap: Map<string, string>;
@@ -72,7 +77,9 @@ export type SFUSignalingEvents =
 export type SFUWebRTCEvents =
   | { type: 'REMOTE_TRACK_RECEIVED'; streamId: string; stream: MediaStream }
   | { type: 'CONNECTION_STATE_CHANGED'; state: RTCPeerConnectionState }
-  | { type: 'ICE_CONNECTION_STATE_CHANGED'; state: RTCIceConnectionState };
+  | { type: 'ICE_CONNECTION_STATE_CHANGED'; state: RTCIceConnectionState }
+  | { type: 'CONNECTION_QUALITY_CHANGED'; stats: ConnectionQualityStats }
+  | { type: 'CONNECTION_TIMEOUT' };
 
 // Internal machine events
 export type SFUInternalEvents =

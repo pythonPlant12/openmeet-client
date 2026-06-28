@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Users } from 'lucide-vue-next';
+import { AlertTriangle, ChevronDown, Users } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -29,6 +29,9 @@ const {
   localParticipantId,
   connectionState,
   iceConnectionState,
+  connectionQuality,
+  connectionQualityReason,
+  packetLossRatio,
   state,
   error: webrtcError,
   chatMessages,
@@ -41,10 +44,13 @@ const {
 } = useWebrtc();
 
 const participantCount = computed(() => participantsArray.value.length);
+const hasPoorConnection = computed(() => connectionQuality.value === 'poor' && state.value === 'inCall');
+const packetLossPercent = computed(() => Math.round((packetLossRatio.value || 0) * 100));
 
 const isMuted = ref(false);
 const isVideoOff = ref(false);
 const showConnectionStatus = ref(false);
+const showConnectionQualityDetails = ref(false);
 const shouldJoinRoom = ref(false);
 const pendingRoomId = ref<string | null>(null);
 const pendingMediaSettings = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
@@ -89,8 +95,13 @@ watch(
   (newState) => {
     if (newState === 'error' && webrtcError.value) {
       console.error('[MeetingRoom] WebRTC error:', webrtcError.value.message);
-      showJoinDialog.value = true;
-      participantName.value = '';
+
+      if (localParticipantId.value || connectionState.value || iceConnectionState.value) {
+        showConnectionError.value = true;
+      } else {
+        showJoinDialog.value = true;
+        participantName.value = '';
+      }
     }
   },
 );
@@ -143,6 +154,12 @@ watch(
 watch(connectionState, (newState) => {
   if (newState === 'failed') {
     showConnectionError.value = true;
+  }
+});
+
+watch(connectionQuality, (newQuality) => {
+  if (newQuality === 'good') {
+    showConnectionQualityDetails.value = false;
   }
 });
 
@@ -263,6 +280,10 @@ const handleEndCall = () => {
   endCall();
   router.push('/dashboard');
 };
+
+const handleReconnect = () => {
+  window.location.reload();
+};
 </script>
 
 <template>
@@ -293,6 +314,34 @@ const handleEndCall = () => {
       <Users class="h-5 w-5" />
       <span class="font-semibold">{{ participantCount }}</span>
     </div>
+
+    <button
+      v-if="hasPoorConnection"
+      type="button"
+      class="fixed top-20 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-lg border border-yellow-500/40 bg-yellow-500/15 px-4 py-3 text-left text-sm text-yellow-50 shadow-lg backdrop-blur"
+      data-testid="connection-quality-warning"
+      @click="showConnectionQualityDetails = !showConnectionQualityDetails"
+    >
+      <div class="flex items-center gap-3">
+        <span class="rounded-full bg-yellow-400/20 p-1.5 text-yellow-300">
+          <AlertTriangle class="h-4 w-4" />
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-yellow-100">Poor connection</span>
+            <span class="rounded-full bg-yellow-400/20 px-2 py-0.5 text-xs font-medium text-yellow-100">Warning</span>
+          </div>
+          <p v-if="showConnectionQualityDetails" class="mt-1 text-xs text-yellow-100/80">
+            {{ connectionQualityReason || 'Media may freeze or become choppy.' }}
+            <span v-if="packetLossPercent > 0"> Packet loss: {{ packetLossPercent }}%. </span>
+          </p>
+        </div>
+        <ChevronDown
+          class="h-4 w-4 shrink-0 text-yellow-100/80 transition-transform"
+          :class="{ 'rotate-180': showConnectionQualityDetails }"
+        />
+      </div>
+    </button>
 
     <!-- Debug Info Panel -->
     <div
@@ -377,7 +426,9 @@ const handleEndCall = () => {
   <ConnectionErrorDialog
     :open="showConnectionError"
     :connection-state="connectionState"
+    :error-message="webrtcError?.message"
     @leave="handleEndCall"
+    @reload="handleReconnect"
     @close="showConnectionError = false"
   />
 </template>

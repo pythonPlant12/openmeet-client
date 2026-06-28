@@ -14,6 +14,7 @@ import {
 interface Props {
   open: boolean;
   connectionState?: string | null;
+  errorMessage?: string | null;
 }
 
 defineProps<Props>();
@@ -26,7 +27,6 @@ const emit = defineEmits<{
 
 const handleReload = () => {
   emit('reload');
-  window.location.reload();
 };
 
 const handleLeave = () => {
@@ -53,13 +53,14 @@ const handleClose = () => {
             <span v-if="connectionState === 'failed'">
               Failed to establish a connection to the meeting. This could be due to network issues or server problems.
             </span>
+            <span v-else-if="errorMessage"> {{ errorMessage }}. You can reconnect to this room or go home. </span>
             <span v-else> Your connection to the meeting was lost. This could be due to network issues. </span>
           </DialogDescription>
         </DialogHeader>
 
         <DialogFooter class="flex-col sm:flex-row gap-2">
-          <Button variant="outline" data-testid="connection-error-leave" @click="handleLeave"> Leave Meeting </Button>
-          <Button data-testid="connection-error-reload" @click="handleReload"> Reload Page </Button>
+          <Button variant="outline" data-testid="connection-error-leave" @click="handleLeave"> Go Home </Button>
+          <Button data-testid="connection-error-reload" @click="handleReload"> Reconnect </Button>
         </DialogFooter>
       </div>
     </DialogContent>

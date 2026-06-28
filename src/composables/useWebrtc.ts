@@ -52,6 +52,9 @@ export function useWebrtc() {
   const roomId = computed(() => webrtcActor.snapshot.value.context.roomId);
   const connectionState = computed(() => webrtcActor.snapshot.value.context.connectionState);
   const iceConnectionState = computed(() => webrtcActor.snapshot.value.context.iceConnectionState);
+  const connectionQuality = computed(() => webrtcActor.snapshot.value.context.connectionQuality);
+  const connectionQualityReason = computed(() => webrtcActor.snapshot.value.context.connectionQualityReason);
+  const packetLossRatio = computed(() => webrtcActor.snapshot.value.context.packetLossRatio);
   const error = computed(() =>
     webrtcActor.snapshot.value.context.error ? new Error(webrtcActor.snapshot.value.context.error) : null,
   );
@@ -115,6 +118,9 @@ export function useWebrtc() {
     error,
     connectionState,
     iceConnectionState,
+    connectionQuality,
+    connectionQualityReason,
+    packetLossRatio,
     chatMessages,
 
     // Actions
