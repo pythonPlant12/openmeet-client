@@ -50,16 +50,26 @@ interface MediaStatsSummary {
 }
 
 function createDefaultIceServers(): RTCIceServer[] {
+  const turnUrl = resolveReachableTurnUrl(import.meta.env.VITE_TURN_URL || 'turn:turn.openmeets.eu:3478');
+
   return [
     {
       urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
     },
     {
-      urls: [resolveReachableTurnUrl(import.meta.env.VITE_TURN_URL || 'turn:turn.openmeets.eu:3478')],
+      urls: turnUrlsWithTcpFallback(turnUrl),
       username: import.meta.env.VITE_TURN_USER || 'openmeet',
       credential: import.meta.env.VITE_TURN_PASSWORD || 'openmeet123',
     },
   ];
+}
+
+function turnUrlsWithTcpFallback(turnUrl: string): string[] {
+  if (!turnUrl.startsWith('turn:') || turnUrl.includes('?')) {
+    return [turnUrl];
+  }
+
+  return [turnUrl, `${turnUrl}?transport=tcp`];
 }
 
 function configuredIceTransportPolicy(): RTCIceTransportPolicy {
@@ -77,6 +87,7 @@ export class WebRTCServiceSFU {
   private localStream: MediaStream | null = null;
   private onRemoteTrackCallback: ((participantId: string, stream: MediaStream) => void) | null = null;
   private previousInboundPackets = new Map<string, InboundPacketSnapshot>();
+  private pendingRemoteIceCandidates: RTCIceCandidateInit[] = [];
 
   constructor(
     private signalingService: SignalingService,
@@ -165,6 +176,7 @@ export class WebRTCServiceSFU {
       console.log('[WebRTCServiceSFU] Closing existing peer connection');
       this.peerConnection.close();
     }
+    this.pendingRemoteIceCandidates = [];
 
     console.log('[WebRTCServiceSFU] Creating new peer connection');
     const iceTransportPolicy = configuredIceTransportPolicy();
@@ -214,13 +226,25 @@ export class WebRTCServiceSFU {
       });
 
       track.onmute = () => {
-        console.log('[WebRTCServiceSFU] Remote track muted:', { kind: track.kind, trackId: track.id, streamId: stream.id });
+        console.log('[WebRTCServiceSFU] Remote track muted:', {
+          kind: track.kind,
+          trackId: track.id,
+          streamId: stream.id,
+        });
       };
       track.onunmute = () => {
-        console.log('[WebRTCServiceSFU] Remote track unmuted:', { kind: track.kind, trackId: track.id, streamId: stream.id });
+        console.log('[WebRTCServiceSFU] Remote track unmuted:', {
+          kind: track.kind,
+          trackId: track.id,
+          streamId: stream.id,
+        });
       };
       track.onended = () => {
-        console.log('[WebRTCServiceSFU] Remote track ended:', { kind: track.kind, trackId: track.id, streamId: stream.id });
+        console.log('[WebRTCServiceSFU] Remote track ended:', {
+          kind: track.kind,
+          trackId: track.id,
+          streamId: stream.id,
+        });
       };
 
       // Ignore local stream (Sometimes Chrome sends its own localstream)
@@ -272,6 +296,7 @@ export class WebRTCServiceSFU {
 
     await this.peerConnection.setRemoteDescription(answerDescription);
     console.log('[WebRTCServiceSFU] Remote description set');
+    await this.flushPendingRemoteIceCandidates();
   }
 
   private async handleServerOffer(sdp: string): Promise<void> {
@@ -289,6 +314,7 @@ export class WebRTCServiceSFU {
     });
     await this.peerConnection.setRemoteDescription(offerDescription);
     console.log('[WebRTCServiceSFU] Set remote description from server offer');
+    await this.flushPendingRemoteIceCandidates();
 
     // Create answer
     const answer = await this.peerConnection.createAnswer();
@@ -306,8 +332,37 @@ export class WebRTCServiceSFU {
       return;
     }
 
-    console.log('[WebRTCServiceSFU] Adding ICE candidate from server');
+    if (!this.peerConnection.remoteDescription) {
+      console.log(
+        '[WebRTCServiceSFU] Queueing remote ICE candidate until remote description is set:',
+        this.describeCandidate(candidate.candidate || ''),
+      );
+      this.pendingRemoteIceCandidates.push(candidate);
+      return;
+    }
+
+    console.log(
+      '[WebRTCServiceSFU] Adding ICE candidate from server:',
+      this.describeCandidate(candidate.candidate || ''),
+    );
     await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  }
+
+  private async flushPendingRemoteIceCandidates(): Promise<void> {
+    if (!this.peerConnection || this.pendingRemoteIceCandidates.length === 0) {
+      return;
+    }
+
+    const candidates = this.pendingRemoteIceCandidates.splice(0);
+    console.log(`[WebRTCServiceSFU] Flushing ${candidates.length} queued remote ICE candidates`);
+
+    for (const candidate of candidates) {
+      console.log(
+        '[WebRTCServiceSFU] Adding queued ICE candidate from server:',
+        this.describeCandidate(candidate.candidate || ''),
+      );
+      await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    }
   }
 
   getLocalStream(): MediaStream | null {
@@ -423,6 +478,7 @@ export class WebRTCServiceSFU {
     this.localStream = null;
     this.peerConnection = null;
     this.previousInboundPackets.clear();
+    this.pendingRemoteIceCandidates = [];
   }
 
   private describeCandidate(candidate: string): Record<string, string | null> {
