@@ -1,0 +1,8 @@
+autoInstallPeers: false
+engineStrict: true
+
+allowBuilds:
+  edgedriver: false
+  esbuild: true
+  geckodriver: false
+  vue-demi: true

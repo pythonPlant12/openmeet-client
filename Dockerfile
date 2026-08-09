@@ -1,29 +1,30 @@
-# Stage 1: deps    - Install dependencies
-# Stage 2: builder - Build the app
-# Stage 3: prod    - Minimal nginx image serving static files
+# Stage 1: node-base - Pin Node.js and pnpm
+# Stage 2: deps      - Install dependencies
+# Stage 3: builder   - Build the app
+# Stage 4: prod      - Minimal nginx image serving static files
 
-# --- Stage 1: Dependencies ---
-FROM node:22-alpine AS deps
+# --- Stage 1: Node.js and pnpm ---
+FROM node:26.7.0-alpine AS node-base
+RUN npm install --global pnpm@11.20.0
+
+# --- Stage 2: Dependencies ---
+FROM node-base AS deps
 WORKDIR /app
-COPY package.json yarn.lock ./
-RUN yarn install
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
-# --- Stage 2: Builder ---
-FROM node:22-alpine AS builder
+# --- Stage 3: Builder ---
+FROM node-base AS builder
 WORKDIR /app
 
 # Copy deps from previous stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build args passed at build time
-ARG VITE_SFU_WSS_URL
-ENV VITE_SFU_WSS_URL=${VITE_SFU_WSS_URL}
-
 # Build
-RUN yarn build
+RUN pnpm build
 
-# --- Stage 3: Production ---
+# --- Stage 4: Production ---
 FROM nginx:alpine AS prod
 
 # Copy built files

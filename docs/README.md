@@ -181,15 +181,16 @@ Main interface for video calls:
 
 ### Prerequisites
 
-- Node.js 22+
-- Yarn or npm
+- Node.js 26.7.0
+- pnpm 11.20.0
 
 ### Setup
 
-1. Install dependencies:
+1. Install pnpm and dependencies:
 ```bash
 cd openmeet-client
-yarn install
+npm install --global pnpm@11.20.0
+pnpm install --frozen-lockfile
 ```
 
 2. Configure environment:
@@ -209,7 +210,7 @@ VITE_LANDING_PAGE=true
 
 3. Start development server:
 ```bash
-yarn dev
+pnpm dev
 ```
 
 Application will be available at http://localhost:5173
@@ -218,21 +219,20 @@ Application will be available at http://localhost:5173
 
 ```bash
 # Development
-yarn dev              # Start dev server with hot reload
+pnpm dev              # Start dev server with hot reload
 
 # Building
-yarn build            # Type-check and build for production
-yarn preview          # Preview production build
+pnpm build            # Type-check and build for production
+pnpm preview          # Preview production build
 
 # Testing
-yarn test:unit        # Run unit tests with Vitest
-yarn test:e2e         # Run E2E tests with Playwright
-yarn test:e2e:dev     # Run E2E tests in dev mode
+pnpm test:unit        # Run unit tests with Vitest
+pnpm test:e2e         # Run E2E tests with Playwright
 
 # Code Quality
-yarn lint             # Lint and fix files with ESLint
-yarn format           # Format code with Prettier
-yarn type-check       # Type-check without building
+pnpm lint             # Lint and fix files with ESLint
+pnpm format           # Format code with Prettier
+pnpm type-check       # Type-check without building
 ```
 
 ## WebRTC Flow
@@ -370,17 +370,17 @@ export const brandingConfig = {
 Located in `src/**/__tests__/`:
 
 ```bash
-yarn test:unit
+pnpm test:unit
 ```
 
 Uses Vitest with Vue Test Utils for component testing.
 
 ### E2E Tests
 
-Located in `tests/`:
+Located in `e2e/`:
 
 ```bash
-yarn test:e2e
+pnpm test:e2e
 ```
 
 Uses Playwright for browser automation testing.
@@ -389,10 +389,10 @@ Uses Playwright for browser automation testing.
 
 ```bash
 # Build optimized production bundle
-yarn build
+pnpm build
 
 # Preview production build locally
-yarn preview
+pnpm preview
 ```
 
 Output will be in `dist/` directory.
