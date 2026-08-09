@@ -86,6 +86,15 @@ export const webrtcMachine = setup({
         newParticipants.delete(params.participantId);
         return newParticipants;
       },
+      streamOwnerMap: ({ context }, params: { participantId: string }) => {
+        const newMap = new Map(context.streamOwnerMap);
+        for (const [streamId, participantId] of newMap.entries()) {
+          if (participantId === params.participantId) {
+            newMap.delete(streamId);
+          }
+        }
+        return newMap;
+      },
     }),
 
     setStreamOwner: assign({
@@ -105,9 +114,19 @@ export const webrtcMachine = setup({
           const participant = newParticipants.get(ownerParticipantId);
           if (participant) {
             console.log('[webrtcMachine] Assigning stream to:', participant.name);
+            const stream = participant.stream ?? params.stream;
+
+            if (participant.stream) {
+              for (const track of params.stream.getTracks()) {
+                if (!participant.stream.getTracks().some((existingTrack) => existingTrack.id === track.id)) {
+                  participant.stream.addTrack(track);
+                }
+              }
+            }
+
             newParticipants.set(ownerParticipantId, {
               ...participant,
-              stream: params.stream,
+              stream,
             });
           }
         } else {

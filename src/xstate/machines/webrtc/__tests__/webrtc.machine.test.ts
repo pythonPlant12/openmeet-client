@@ -207,10 +207,18 @@ describe('WebRTC Machine', () => {
     await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
 
     actor.send({ type: 'PARTICIPANT_JOINED', participantId: 'participant-2', participantName: 'Bob' });
+    actor.send({
+      type: 'STREAM_OWNER',
+      streamId: 'stream-2',
+      participantId: 'participant-2',
+      participantName: 'Bob',
+    });
     expect(actor.getSnapshot().context.participants.has('participant-2')).toBe(true);
+    expect(actor.getSnapshot().context.streamOwnerMap.get('stream-2')).toBe('participant-2');
 
     actor.send({ type: 'PARTICIPANT_LEFT', participantId: 'participant-2' });
     expect(actor.getSnapshot().context.participants.has('participant-2')).toBe(false);
+    expect(actor.getSnapshot().context.streamOwnerMap.has('stream-2')).toBe(false);
 
     actor.stop();
   });

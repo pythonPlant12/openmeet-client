@@ -25,7 +25,11 @@ interface InboundPacketSnapshot {
 
 interface MediaStatsSummary {
   inbound: Array<{
+    id: string;
     kind: string;
+    mid?: string;
+    ssrc?: number;
+    trackIdentifier?: string;
     packetsReceived: number;
     packetsLost: number;
     bytesReceived: number;
@@ -215,11 +219,15 @@ export class WebRTCServiceSFU {
     this.peerConnection.ontrack = (event) => {
       const stream = event.streams[0] || new MediaStream([event.track]);
       const track = event.track;
+      const transceiver = this.peerConnection
+        ?.getTransceivers()
+        .find((candidate) => candidate.receiver.track === track);
 
       console.log('[WebRTCServiceSFU] Remote track event:', {
         kind: track.kind,
         trackId: track.id,
         streamId: stream.id,
+        mid: transceiver?.mid ?? null,
         muted: track.muted,
         readyState: track.readyState,
         streams: event.streams.map((eventStream) => eventStream.id),
@@ -503,7 +511,11 @@ export class WebRTCServiceSFU {
     stats.forEach((report) => {
       if (report.type === 'inbound-rtp' && !report.isRemote) {
         summary.inbound.push({
+          id: report.id,
           kind: report.kind || report.mediaType || 'unknown',
+          mid: report.mid,
+          ssrc: report.ssrc,
+          trackIdentifier: report.trackIdentifier,
           packetsReceived: report.packetsReceived ?? 0,
           packetsLost: report.packetsLost ?? 0,
           bytesReceived: report.bytesReceived ?? 0,
