@@ -33,7 +33,7 @@ const handleMouseMove = (e: MouseEvent) => {
   let xRotation = (yDistance * maxRotation) / centerY;
   xRotation = y < centerY ? xRotation : -xRotation;
 
-  cardTransform.value = `perspective(1000px) rotateX(${xRotation}deg) rotateY(${yRotation}deg) translateY(-4px) scale(1.02)`;
+  cardTransform.value = `perspective(1000px) rotateX(${xRotation}deg) rotateY(${yRotation}deg) scale(1.02)`;
 };
 
 const handleMouseLeave = () => {

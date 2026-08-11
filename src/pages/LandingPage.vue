@@ -1,472 +1,330 @@
 <script setup lang="ts">
-import {
-  ArrowRight,
-  Check,
-  Clock,
-  Copy,
-  Database,
-  Download,
-  Github,
-  Palette,
-  RotateCcw,
-  Server,
-  Shield,
-  Users,
-  Video,
-  Zap,
-} from 'lucide-vue-next';
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ArrowRight, Check, Code2, HeartHandshake, Lightbulb, LockKeyhole, Sparkles } from 'lucide-vue-next';
+import { motion } from 'motion-v';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { RouterLink } from 'vue-router';
 
-import FeatureCard from '@/components/landing-page/FeatureCard.vue';
+import CallPreviewSvg from '@/components/landing-page/CallPreviewSvg.vue';
 import TheFooter from '@/components/layout/TheFooter.vue';
+import SplitText from '@/components/marketing/SplitText.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { type ThemeColors, useTheme } from '@/composables/useTheme';
+import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 
-const router = useRouter();
-const { theme, setColor, setBranding, setBackgroundImageUrl, resetTheme, exportTheme } = useTheme();
+const { t } = useI18n();
+const { createMeeting, joinMeeting: navigateToMeeting } = useMeetingNavigation();
+const meetingCode = ref('');
+const meetingCodeError = ref('');
+const titleWordIndex = ref(0);
+const titleWordKeys = ['landing.titleWords.freely', 'landing.titleWords.privately', 'landing.titleWords.openly'];
+const titleWord = computed(() => t(titleWordKeys[titleWordIndex.value]!));
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const entranceInitial = prefersReducedMotion ? false : { opacity: 0 };
+let titleWordTimer: ReturnType<typeof setInterval> | undefined;
 
-const copied = ref(false);
-const activeTab = ref<'colors' | 'branding'>('colors');
-
-const colorInputs = computed(() => [
-  { key: 'primary' as keyof ThemeColors, label: 'Primary', description: 'Main brand color' },
-  { key: 'background' as keyof ThemeColors, label: 'Background', description: 'Page background' },
-  { key: 'foreground' as keyof ThemeColors, label: 'Main Text', description: 'Default text color' },
-  { key: 'mutedForeground' as keyof ThemeColors, label: 'Muted Text', description: 'Secondary text color' },
-  { key: 'card' as keyof ThemeColors, label: 'Card', description: 'Card backgrounds' },
-  { key: 'cardForeground' as keyof ThemeColors, label: 'Card Text', description: 'Text inside cards' },
-]);
-
-const backgroundUrlError = ref('');
-
-function isValidUrl(url: string): boolean {
-  if (!url) return true; // Empty is valid (optional field)
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function handleBackgroundUrlChange(value: string) {
-  if (isValidUrl(value)) {
-    backgroundUrlError.value = '';
-    setBackgroundImageUrl(value);
-  } else {
-    backgroundUrlError.value = 'Please enter a valid URL';
-  }
-}
-
-function hslToHex(hsl: string): string {
-  const parts = hsl.split(' ');
-  if (parts.length < 3) return '#10b981';
-
-  const h = parseFloat(parts[0]) / 360;
-  const s = parseFloat(parts[1]) / 100;
-  const l = parseFloat(parts[2]) / 100;
-
-  const hue2rgb = (p: number, q: number, t: number) => {
-    if (t < 0) t += 1;
-    if (t > 1) t -= 1;
-    if (t < 1 / 6) return p + (q - p) * 6 * t;
-    if (t < 1 / 2) return q;
-    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-    return p;
-  };
-
-  let r, g, b;
-  if (s === 0) {
-    r = g = b = l;
-  } else {
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    r = hue2rgb(p, q, h + 1 / 3);
-    g = hue2rgb(p, q, h);
-    b = hue2rgb(p, q, h - 1 / 3);
-  }
-
-  const toHex = (x: number) => {
-    const hex = Math.round(x * 255).toString(16);
-    return hex.length === 1 ? '0' + hex : hex;
-  };
-
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-function hexToHsl(hex: string): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return '154 94% 40%';
-
-  const r = parseInt(result[1], 16) / 255;
-  const g = parseInt(result[2], 16) / 255;
-  const b = parseInt(result[3], 16) / 255;
-
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r:
-        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-        break;
-      case g:
-        h = ((b - r) / d + 2) / 6;
-        break;
-      case b:
-        h = ((r - g) / d + 4) / 6;
-        break;
-    }
-  }
-
-  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
-}
-
-function handleColorChange(key: keyof ThemeColors, event: Event) {
-  const hex = (event.target as HTMLInputElement).value;
-  setColor(key, hexToHsl(hex));
-}
-
-function handleBrandingChange(key: 'appName' | 'appTagline' | 'companyName' | 'logoText', value: string | number) {
-  setBranding(key, String(value));
-}
-
-async function copyConfig() {
-  await navigator.clipboard.writeText(exportTheme());
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 2000);
-}
-
-function downloadConfig() {
-  const blob = new Blob([exportTheme()], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'theme.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-const features = [
+const marketingPages = [
   {
-    icon: Video,
-    title: 'HD Video Calls',
-    description: 'Clear video with adaptive bitrate that adjusts to your connection.',
+    path: '/technologies',
+    titleKey: 'nav.technologies.title',
+    descriptionKey: 'nav.technologies.description',
+    icon: Code2,
+    accent: 'bg-[#E6F4F1] text-[#0B7A75]',
   },
   {
-    icon: Users,
-    title: 'Group Meetings',
-    description: 'Host meetings with multiple participants using our SFU architecture.',
+    path: '/idea',
+    titleKey: 'nav.idea.title',
+    descriptionKey: 'nav.idea.description',
+    icon: Lightbulb,
+    accent: 'bg-[#FFF0EA] text-[#C65A45]',
   },
   {
-    icon: Clock,
-    title: 'No Time Limits',
-    description: 'Your meetings can run as long as you need. No artificial restrictions.',
-  },
-  {
-    icon: Shield,
-    title: 'Privacy First',
-    description: 'Self-hosted means your data never leaves your infrastructure.',
-  },
-  {
-    icon: Server,
-    title: 'Easy Deployment',
-    description: 'Single VPS with Docker. Get running in under 10 minutes.',
-  },
-  {
-    icon: Palette,
-    title: 'White-label Ready',
-    description: 'Change colors, branding, and make it completely yours.',
+    path: '/freedom',
+    titleKey: 'nav.freedom.title',
+    descriptionKey: 'nav.freedom.description',
+    icon: HeartHandshake,
+    accent: 'bg-[#EDF3F2] text-[#27595D]',
   },
 ];
 
-const techStack = [
-  { icon: Zap, name: 'Vue 3', description: 'Modern reactive frontend' },
-  { icon: Server, name: 'Rust SFU', description: 'High performance media server' },
-  { icon: Shield, name: 'TURN Server', description: 'Reliable NAT traversal' },
-  { icon: Database, name: 'PostgreSQL', description: 'Robust data storage' },
-];
+function joinMeeting() {
+  meetingCodeError.value = navigateToMeeting(meetingCode.value) ? '' : t('landing.invalidRoom');
+}
+
+onMounted(() => {
+  if (prefersReducedMotion) return;
+  titleWordTimer = setInterval(() => {
+    titleWordIndex.value = (titleWordIndex.value + 1) % titleWordKeys.length;
+  }, 2400);
+});
+
+onUnmounted(() => {
+  if (titleWordTimer) clearInterval(titleWordTimer);
+});
 </script>
 
 <template>
-  <div class="min-h-[calc(100vh-80px)]">
-    <!-- Hero Section -->
-    <section
-      class="py-24 px-6 text-center bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.1)_0%,transparent_50%)]"
-    >
-      <div class="max-w-3xl mx-auto">
+  <div class="marketing-font overflow-hidden bg-[#F4F9F7] text-[#102F35]">
+    <main>
+      <section class="relative bg-[#F4F9F7] px-5 pb-20 pt-16 sm:px-8 sm:pb-28 sm:pt-20 lg:px-12 lg:pb-32">
         <div
-          class="inline-block px-4 py-2 mb-6 text-sm rounded-full bg-primary/10 border border-primary/30 text-primary opacity-0 animate-fade-in"
-        >
-          Open Source Video Conferencing
-        </div>
+          class="pointer-events-none absolute left-[-12rem] top-20 h-96 w-96 rounded-full bg-[#CDE9E4]/70 blur-3xl"
+        />
+        <div
+          class="pointer-events-none absolute right-[-8rem] top-[-5rem] h-80 w-80 rounded-full bg-[#F8D8CC]/60 blur-3xl"
+        />
 
-        <h1
-          class="text-5xl md:text-7xl font-extrabold leading-tight mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent opacity-0 animate-fade-in [animation-delay:100ms]"
-        >
-          {{ theme.branding.appName }}
-        </h1>
+        <div class="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[0.88fr_1.12fr] lg:gap-12">
+          <div class="max-w-2xl lg:pb-8">
+            <motion.div
+              :initial="entranceInitial"
+              :animate="{ opacity: 1 }"
+              :transition="{ duration: 0.5, delay: 0.05 }"
+              class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#0B7A75] shadow-[0_8px_28px_rgba(11,122,117,0.09)]"
+            >
+              <Sparkles class="size-4" />
+              {{ t('landing.eyebrow') }}
+            </motion.div>
 
-        <p class="text-xl text-primary mb-6 opacity-0 animate-fade-in [animation-delay:200ms]">
-          {{ theme.branding.appTagline }}
-        </p>
+            <motion.h1
+              :initial="entranceInitial"
+              :animate="{ opacity: 1 }"
+              :transition="{ duration: 0.55, delay: 0.14 }"
+              class="mt-7 max-w-xl text-balance text-5xl font-semibold leading-[0.98] tracking-[-0.055em] sm:text-6xl lg:text-7xl"
+            >
+              <span class="sr-only">{{ t('landing.title') }}</span>
+              <span aria-hidden="true">
+                {{ t('landing.titleLead') }}
+                <span class="inline-flex min-w-[3.7em] text-[#0B7A75]">
+                  <Transition name="word-swap" mode="out-in">
+                    <span :key="titleWord">{{ titleWord }}.</span>
+                  </Transition>
+                </span>
+                <br />
+                {{ t('landing.titleTail') }}
+              </span>
+            </motion.h1>
+            <SplitText
+              as="p"
+              :text="t('landing.description')"
+              :delay="230"
+              class="mt-6 max-w-lg text-pretty text-lg leading-8 text-[#61777B] sm:text-xl"
+            />
 
-        <p class="text-lg text-muted-foreground leading-relaxed mb-8 opacity-0 animate-fade-in [animation-delay:300ms]">
-          A free, open-source alternative to Google Meet and Microsoft Teams. Self-host on any VPS, customize the
-          branding, and own your video conferencing infrastructure. No time limits, no tracking, no compromises.
-        </p>
+            <motion.div
+              :initial="entranceInitial"
+              :animate="{ opacity: 1 }"
+              :transition="{ duration: 0.5, delay: 0.32 }"
+              class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
+            >
+              <Button
+                size="lg"
+                class="h-12 rounded-full bg-[#0B7A75] px-6 text-base text-white shadow-[0_12px_28px_rgba(11,122,117,0.25)] hover:bg-[#08635F]"
+                @click="createMeeting"
+              >
+                {{ t('common.startMeeting') }}
+                <ArrowRight class="size-4" />
+              </Button>
+              <a
+                href="#join"
+                class="inline-flex h-12 items-center justify-center rounded-full px-5 text-sm font-semibold text-[#27595D] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+              >
+                {{ t('landing.joinWithCode') }}
+              </a>
+            </motion.div>
 
-        <div class="flex gap-4 justify-center flex-wrap opacity-0 animate-fade-in [animation-delay:400ms]">
-          <Button size="lg" @click="router.push('/login')">
-            Start a Meeting
-            <ArrowRight class="w-4 h-4 ml-2" />
-          </Button>
-          <Button size="lg" variant="outline" as="a" href="https://github.com/pythonPlant12/openmeet" target="_blank">
-            <Github class="w-4 h-4 mr-2" />
-            View on GitHub
-          </Button>
-        </div>
-      </div>
-    </section>
+            <motion.div
+              :initial="entranceInitial"
+              :animate="{ opacity: 1 }"
+              :transition="{ duration: 0.5, delay: 0.41 }"
+              class="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-[#61777B]"
+            >
+              <span class="inline-flex items-center gap-1.5">
+                <Check class="size-4 text-[#0B7A75]" />
+                {{ t('landing.freeToUse') }}
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <Check class="size-4 text-[#0B7A75]" />
+                {{ t('landing.openSource') }}
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <Check class="size-4 text-[#0B7A75]" />
+                {{ t('landing.worksInBrowser') }}
+              </span>
+            </motion.div>
+          </div>
 
-    <!-- Tech Stack -->
-    <section class="py-12 border-y border-border bg-card/50">
-      <div class="max-w-5xl mx-auto px-6">
-        <p class="text-center text-sm text-muted-foreground mb-6">Built with modern technologies</p>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div
-            v-for="(tech, index) in techStack"
-            :key="tech.name"
-            class="flex items-center gap-3 opacity-0 animate-fade-in-up transition-transform hover:scale-105"
-            :style="{ animationDelay: `${500 + index * 100}ms` }"
+          <motion.div
+            :initial="entranceInitial"
+            :animate="{ opacity: 1 }"
+            :transition="{ duration: 0.65, delay: 0.2 }"
+            class="relative mx-auto w-full max-w-2xl"
           >
-            <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-              <component :is="tech.icon" class="w-5 h-5" />
+            <div
+              class="call-window relative overflow-hidden rounded-[2rem] bg-[#102F35] p-3 shadow-[0_30px_80px_rgba(16,47,53,0.25)] sm:p-4"
+            >
+              <CallPreviewSvg :label="t('landing.participantAlt', { name: t('meeting.fallbackUser') })" />
             </div>
-            <div>
-              <p class="font-medium text-sm">{{ tech.name }}</p>
-              <p class="text-xs text-muted-foreground">{{ tech.description }}</p>
+
+            <div
+              class="float-note absolute -bottom-7 -left-3 hidden items-center gap-3 rounded-2xl bg-white p-3 pr-5 shadow-[0_18px_50px_rgba(16,47,53,0.16)] sm:flex"
+            >
+              <span class="flex size-10 items-center justify-center rounded-xl bg-[#E6F4F1] text-[#0B7A75]">
+                <LockKeyhole class="size-5" />
+              </span>
+              <span>
+                <strong class="block text-sm">{{ t('landing.roomReady') }}</strong>
+                <span class="text-xs text-[#61777B]">{{ t('landing.shareSecureLink') }}</span>
+              </span>
             </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <motion.section
+        id="join"
+        :initial="entranceInitial"
+        :whileInView="{ opacity: 1 }"
+        :inViewOptions="{ once: true, amount: 0.25 }"
+        :transition="{ duration: 0.55 }"
+        class="scroll-mt-24 px-5 py-14 sm:px-8 sm:py-16 lg:px-12"
+      >
+        <div
+          class="mx-auto flex max-w-5xl flex-col items-center justify-between gap-6 rounded-[2rem] bg-[#102F35] px-6 py-7 text-white sm:px-9 md:flex-row"
+        >
+          <div>
+            <SplitText as="p" :text="t('landing.joinEyebrow')" class="text-sm font-semibold text-[#9BCFC7]" />
+            <SplitText
+              as="h2"
+              :text="t('landing.joinTitle')"
+              :delay="80"
+              class="mt-1 text-2xl font-semibold tracking-[-0.03em]"
+            />
+          </div>
+          <form class="relative flex w-full max-w-xl flex-col gap-2 sm:flex-row" @submit.prevent="joinMeeting">
+            <Input
+              v-model="meetingCode"
+              :aria-label="t('landing.roomInputLabel')"
+              :aria-invalid="!!meetingCodeError"
+              :aria-describedby="meetingCodeError ? 'meeting-code-error' : undefined"
+              :placeholder="t('landing.roomPlaceholder')"
+              class="h-12 rounded-full border-white/15 bg-white/10 px-5 text-white shadow-none placeholder:text-white/50 focus-visible:ring-[#9BCFC7]"
+              @input="meetingCodeError = ''"
+            />
+            <Button
+              type="submit"
+              size="lg"
+              :disabled="!meetingCode.trim()"
+              class="h-12 shrink-0 rounded-full bg-white px-6 text-[#102F35] hover:bg-[#E6F4F1]"
+            >
+              {{ t('landing.joinRoom') }}
+            </Button>
+            <p
+              v-if="meetingCodeError"
+              id="meeting-code-error"
+              role="alert"
+              class="px-3 text-sm text-[#FFC7BD] sm:absolute sm:mt-14"
+            >
+              {{ meetingCodeError }}
+            </p>
+          </form>
+        </div>
+      </motion.section>
+
+      <motion.section
+        :initial="entranceInitial"
+        :whileInView="{ opacity: 1 }"
+        :inViewOptions="{ once: true, amount: 0.12 }"
+        :transition="{ duration: 0.6 }"
+        class="px-5 py-20 sm:px-8 sm:py-28 lg:px-12"
+      >
+        <div class="mx-auto max-w-7xl">
+          <div class="max-w-3xl">
+            <SplitText
+              as="p"
+              :text="t('landing.exploreEyebrow')"
+              class="text-sm font-semibold uppercase tracking-[0.16em] text-[#0B7A75]"
+            />
+            <SplitText
+              as="h2"
+              :text="t('landing.exploreTitle')"
+              :delay="80"
+              class="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl"
+            />
+            <SplitText
+              as="p"
+              :text="t('landing.exploreDescription')"
+              :delay="140"
+              class="mt-5 text-lg leading-8 text-[#61777B]"
+            />
+          </div>
+
+          <div class="mt-10 grid gap-4 md:grid-cols-3">
+            <motion.div
+              v-for="(page, index) in marketingPages"
+              :key="page.path"
+              :initial="entranceInitial"
+              :whileInView="{ opacity: 1 }"
+              :inViewOptions="{ once: true, amount: 0.25 }"
+              :transition="{ duration: 0.45, delay: index * 0.1 }"
+              :whileHover="prefersReducedMotion ? undefined : { scale: 1.015 }"
+            >
+              <RouterLink
+                :to="page.path"
+                class="group flex min-h-64 flex-col justify-between rounded-[2rem] border border-[#D8E7E3] bg-white p-6 transition-[border-color,box-shadow] hover:border-[#9BCFC7] hover:shadow-[0_18px_45px_rgba(16,47,53,0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+              >
+                <span :class="['flex size-12 items-center justify-center rounded-2xl', page.accent]">
+                  <component :is="page.icon" class="size-6" />
+                </span>
+                <span class="mt-12">
+                  <SplitText as="strong" :text="t(page.titleKey)" class="text-2xl font-semibold tracking-[-0.035em]" />
+                  <SplitText
+                    as="span"
+                    :text="t(page.descriptionKey)"
+                    :delay="80"
+                    class="mt-3 block leading-7 text-[#61777B]"
+                  />
+                  <span class="mt-5 flex items-center gap-2 font-semibold text-[#0B7A75]">
+                    {{ t(page.titleKey) }}
+                    <ArrowRight class="size-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </span>
+              </RouterLink>
+            </motion.div>
           </div>
         </div>
-      </div>
-    </section>
+      </motion.section>
 
-    <!-- Features Section -->
-    <section class="py-20 px-6">
-      <div class="max-w-6xl mx-auto">
-        <h2 class="text-3xl font-bold text-center mb-2">Why {{ theme.branding.appName }}?</h2>
-        <p class="text-center text-muted-foreground mb-12">Built for teams who value privacy and flexibility</p>
-
-        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <FeatureCard
-            v-for="(feature, index) in features"
-            :key="feature.title"
-            :icon="feature.icon"
-            :title="feature.title"
-            :description="feature.description"
-            class="opacity-0 animate-fade-in-up"
-            :style="{ animationDelay: `${index * 100}ms` }"
+      <motion.section
+        :initial="entranceInitial"
+        :whileInView="{ opacity: 1 }"
+        :inViewOptions="{ once: true, amount: 0.3 }"
+        :transition="{ duration: 0.6 }"
+        class="px-5 py-20 text-center sm:px-8 sm:py-28"
+      >
+        <div class="mx-auto max-w-3xl">
+          <SplitText
+            as="p"
+            :text="t('landing.readyEyebrow')"
+            class="text-sm font-semibold uppercase tracking-[0.16em] text-[#0B7A75]"
           />
+          <SplitText
+            as="h2"
+            :text="t('landing.readyTitle')"
+            :delay="80"
+            class="mt-4 text-balance text-4xl font-semibold leading-tight tracking-[-0.045em] sm:text-6xl"
+          />
+          <Button
+            size="lg"
+            class="mt-8 h-12 rounded-full bg-[#0B7A75] px-7 text-base text-white shadow-[0_12px_28px_rgba(11,122,117,0.22)] hover:bg-[#08635F]"
+            @click="createMeeting"
+          >
+            {{ t('landing.startWithoutAccount') }}
+            <ArrowRight class="size-4" />
+          </Button>
         </div>
-      </div>
-    </section>
-
-    <!-- Customization Demo Section -->
-    <section class="py-20 px-6 bg-card/50">
-      <div class="max-w-6xl mx-auto">
-        <h2 class="text-3xl font-bold text-center mb-2">Make It Yours</h2>
-        <p class="text-center text-muted-foreground mb-12">
-          Customize everything to match your brand. Try it below — changes are live but temporary.
-        </p>
-
-        <div class="grid lg:grid-cols-[2fr_1fr] gap-6">
-          <Card>
-            <CardHeader>
-              <div class="flex gap-2">
-                <button
-                  :class="[
-                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors',
-                    activeTab === 'colors'
-                      ? 'bg-primary/10 border border-primary/30 text-primary'
-                      : 'text-muted-foreground hover:bg-muted/50',
-                  ]"
-                  @click="activeTab = 'colors'"
-                >
-                  <Palette class="w-4 h-4" />
-                  Colors
-                </button>
-                <button
-                  :class="[
-                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors',
-                    activeTab === 'branding'
-                      ? 'bg-primary/10 border border-primary/30 text-primary'
-                      : 'text-muted-foreground hover:bg-muted/50',
-                  ]"
-                  @click="activeTab = 'branding'"
-                >
-                  <span
-                    class="w-5 h-5 rounded bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center"
-                  >
-                    {{ theme.branding.logoText.slice(0, 2) }}
-                  </span>
-                  Branding
-                </button>
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              <!-- Colors Tab -->
-              <div v-if="activeTab === 'colors'" class="mb-6">
-                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div v-for="color in colorInputs" :key="color.key" class="flex flex-col gap-2">
-                    <Label :for="color.key" class="flex flex-col">
-                      {{ color.label }}
-                      <span class="text-xs text-muted-foreground font-normal">{{ color.description }}</span>
-                    </Label>
-                    <div class="flex items-center gap-3">
-                      <input
-                        :id="color.key"
-                        type="color"
-                        :value="hslToHex(theme.colors[color.key])"
-                        class="w-12 h-9 cursor-pointer bg-transparent"
-                        @input="handleColorChange(color.key, $event)"
-                      />
-                      <span class="text-xs font-mono text-muted-foreground">{{ theme.colors[color.key] }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Branding Tab -->
-              <div v-if="activeTab === 'branding'" class="mb-6">
-                <div class="grid sm:grid-cols-2 gap-4">
-                  <div class="flex flex-col gap-2">
-                    <Label for="appName">App Name</Label>
-                    <Input
-                      id="appName"
-                      :model-value="theme.branding.appName"
-                      @update:model-value="handleBrandingChange('appName', $event)"
-                      placeholder="Your App Name"
-                    />
-                  </div>
-                  <div class="flex flex-col gap-2">
-                    <Label for="appTagline">Tagline</Label>
-                    <Input
-                      id="appTagline"
-                      :model-value="theme.branding.appTagline"
-                      @update:model-value="handleBrandingChange('appTagline', $event)"
-                      placeholder="Your tagline"
-                    />
-                  </div>
-                  <div class="flex flex-col gap-2">
-                    <Label for="companyName">Company Name</Label>
-                    <Input
-                      id="companyName"
-                      :model-value="theme.branding.companyName"
-                      @update:model-value="handleBrandingChange('companyName', $event)"
-                      placeholder="Your Company"
-                    />
-                  </div>
-                  <div class="flex flex-col gap-2">
-                    <Label for="logoText">Logo Text (2 chars)</Label>
-                    <Input
-                      id="logoText"
-                      :model-value="theme.branding.logoText"
-                      @update:model-value="handleBrandingChange('logoText', $event)"
-                      placeholder="OM"
-                      maxlength="2"
-                    />
-                  </div>
-                  <div class="flex flex-col gap-2 sm:col-span-2">
-                    <Label for="backgroundImageUrl">
-                      Login Page Background URL
-                      <span class="text-xs text-muted-foreground font-normal ml-1">(optional)</span>
-                    </Label>
-                    <Input
-                      id="backgroundImageUrl"
-                      :model-value="theme.backgroundImageUrl || ''"
-                      @update:model-value="handleBackgroundUrlChange($event as string)"
-                      placeholder="https://example.com/background.jpg"
-                      :class="{ 'border-destructive': backgroundUrlError }"
-                    />
-                    <span v-if="backgroundUrlError" class="text-xs text-destructive">{{ backgroundUrlError }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Actions -->
-              <div class="flex gap-2 flex-wrap">
-                <Button variant="outline" size="sm" @click="resetTheme">
-                  <RotateCcw class="w-4 h-4 mr-2" />
-                  Reset
-                </Button>
-                <Button variant="outline" size="sm" @click="copyConfig">
-                  <Check v-if="copied" class="w-4 h-4 mr-2" />
-                  <Copy v-else class="w-4 h-4 mr-2" />
-                  {{ copied ? 'Copied!' : 'Copy JSON' }}
-                </Button>
-                <Button size="sm" @click="downloadConfig">
-                  <Download class="w-4 h-4 mr-2" />
-                  Download theme.json
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <!-- Instructions -->
-          <Card class="h-fit">
-            <CardHeader>
-              <CardTitle class="text-lg">How to Apply</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ol class="space-y-4">
-                <li class="pb-4 border-b border-border">
-                  <strong class="block mb-1">1. Customize</strong>
-                  <p class="text-sm text-muted-foreground">Use the controls to adjust colors and branding.</p>
-                </li>
-                <li class="pb-4 border-b border-border">
-                  <strong class="block mb-1">2. Export</strong>
-                  <p class="text-sm text-muted-foreground">Click "Download theme.json" to save your config.</p>
-                </li>
-                <li class="pb-4 border-b border-border">
-                  <strong class="block mb-1">3. Deploy</strong>
-                  <p class="text-sm text-muted-foreground">
-                    Replace <code class="px-1.5 py-0.5 rounded bg-muted text-xs">public/theme.json</code> with your
-                    file.
-                  </p>
-                </li>
-                <li>
-                  <strong class="block mb-1">4. Done</strong>
-                  <p class="text-sm text-muted-foreground">Restart and your branding is live. No rebuild needed.</p>
-                </li>
-              </ol>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </section>
-
-    <!-- CTA Section -->
-    <section class="py-20 px-6 text-center bg-gradient-to-b from-transparent to-primary/5">
-      <div class="max-w-2xl mx-auto">
-        <h2 class="text-3xl font-bold mb-2">Ready to get started?</h2>
-        <p class="text-muted-foreground mb-8">Deploy your own video conferencing platform in minutes.</p>
-        <Button size="lg" @click="router.push('/login')">
-          Start a Meeting
-          <ArrowRight class="w-4 h-4 ml-2" />
-        </Button>
-      </div>
-    </section>
+      </motion.section>
+    </main>
 
     <TheFooter />
   </div>
