@@ -1,5 +1,6 @@
 import { assign, fromPromise, setup } from 'xstate';
 
+import { i18n } from '@/i18n';
 import { type AuthResponse, authApi } from '@/services/auth-api';
 import { cookieUtils } from '@/utils';
 
@@ -75,7 +76,7 @@ export const authMachine = setup({
     setError: assign({
       error: ({ event }) => {
         const error = (event as any).error;
-        return error?.message || 'An error occurred';
+        return error?.message || i18n.global.t('errors.generic');
       },
     }),
 
@@ -183,6 +184,9 @@ export const authMachine = setup({
         },
         GO_TO_REGISTER: {
           actions: 'navigateToRegister',
+        },
+        GO_TO_LOGIN: {
+          actions: 'navigateToLogin',
         },
       },
     },
