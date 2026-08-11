@@ -1,5 +1,6 @@
 import { assign, setup } from 'xstate';
 
+import { i18n } from '@/i18n';
 import type { DeviceConstraints } from '@/services/webrtc-sfu';
 
 import { clearServices, getServices, getSignalingService, initMediaActor, joinRoomActor } from './actors';
@@ -22,6 +23,7 @@ const initialContext: SFUContext = {
   packetLossRatio: 0,
   streamOwnerMap: new Map(),
   chatMessages: [],
+  hasLoadedChatHistory: false,
   error: null,
 };
 
@@ -190,6 +192,11 @@ export const webrtcMachine = setup({
       ) => [...context.chatMessages, params],
     }),
 
+    setChatHistory: assign({
+      chatMessages: (_, params: { messages: ChatMessage[] }) => params.messages,
+      hasLoadedChatHistory: true,
+    }),
+
     sendChatMessage: (_, params: { message: string }) => {
       getSignalingService()?.sendChatMessage(params.message);
     },
@@ -257,6 +264,7 @@ export const webrtcMachine = setup({
       localStream: null,
       participants: () => new Map<string, Participant>(),
       localParticipantId: null,
+      localParticipantName: '',
       roomId: null,
       connectionState: null,
       iceConnectionState: null,
@@ -265,6 +273,7 @@ export const webrtcMachine = setup({
       packetLossRatio: 0,
       streamOwnerMap: () => new Map<string, string>(),
       chatMessages: () => [] as ChatMessage[],
+      hasLoadedChatHistory: false,
       error: null,
     }),
   },
@@ -287,6 +296,12 @@ export const webrtcMachine = setup({
     },
 
     initializingMedia: {
+      on: {
+        LEAVE_ROOM: {
+          target: 'idle',
+          actions: ['cleanup', 'resetContext'],
+        },
+      },
       invoke: {
         id: 'initMedia',
         src: 'initMedia',
@@ -309,7 +324,7 @@ export const webrtcMachine = setup({
             {
               type: 'setError',
               params: ({ event }) => ({
-                error: event.error instanceof Error ? event.error.message : 'Failed to initialize media',
+                error: event.error instanceof Error ? event.error.message : i18n.global.t('errors.mediaInitialization'),
               }),
             },
           ],
@@ -406,7 +421,7 @@ export const webrtcMachine = setup({
             target: '#webrtcMachine.error',
             actions: [
               { type: 'setIceConnectionState', params: ({ event }) => ({ state: event.state }) },
-              { type: 'setError', params: () => ({ error: 'ICE connection failed' }) },
+              { type: 'setError', params: () => ({ error: i18n.global.t('errors.iceFailed') }) },
               'cleanup',
             ],
           },
@@ -418,7 +433,7 @@ export const webrtcMachine = setup({
                 type: 'setConnectionQuality',
                 params: () => ({
                   quality: 'poor',
-                  reason: 'Connection interrupted. Trying to reconnect...',
+                  reason: i18n.global.t('errors.connectionInterrupted'),
                   packetLossRatio: 0,
                 }),
               },
@@ -430,7 +445,8 @@ export const webrtcMachine = setup({
         ],
         CONNECTION_QUALITY_CHANGED: [
           {
-            guard: ({ context, event }) => event.stats.quality === 'good' && context.iceConnectionState !== 'disconnected',
+            guard: ({ context, event }) =>
+              event.stats.quality === 'good' && context.iceConnectionState !== 'disconnected',
             actions: [
               {
                 type: 'setConnectionQuality',
@@ -459,10 +475,10 @@ export const webrtcMachine = setup({
         CONNECTION_TIMEOUT: {
           target: '#webrtcMachine.error',
           actions: [
-            { type: 'setError', params: () => ({ error: 'Connection lost' }) },
+            { type: 'setError', params: () => ({ error: i18n.global.t('errors.connectionLost') }) },
             {
               type: 'setConnectionQuality',
-              params: () => ({ quality: 'poor', reason: 'Connection lost', packetLossRatio: 0 }),
+              params: () => ({ quality: 'poor', reason: i18n.global.t('errors.connectionLost'), packetLossRatio: 0 }),
             },
             'cleanup',
           ],
@@ -484,6 +500,14 @@ export const webrtcMachine = setup({
                 message: event.message,
                 timestamp: event.timestamp,
               }),
+            },
+          ],
+        },
+        CHAT_HISTORY_RECEIVED: {
+          actions: [
+            {
+              type: 'setChatHistory',
+              params: ({ event }) => ({ messages: event.messages }),
             },
           ],
         },
@@ -516,7 +540,7 @@ export const webrtcMachine = setup({
                 target: '#webrtcMachine.error',
                 actions: [
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
-                  { type: 'setError', params: () => ({ error: 'Peer connection failed' }) },
+                  { type: 'setError', params: () => ({ error: i18n.global.t('errors.peerFailed') }) },
                   'cleanup',
                 ],
               },
@@ -528,7 +552,7 @@ export const webrtcMachine = setup({
                     type: 'setConnectionQuality',
                     params: () => ({
                       quality: 'poor',
-                      reason: 'Connection interrupted. Trying to reconnect...',
+                      reason: i18n.global.t('errors.connectionInterrupted'),
                       packetLossRatio: 0,
                     }),
                   },
@@ -548,7 +572,12 @@ export const webrtcMachine = setup({
                 target: '#webrtcMachine.error',
                 actions: [
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
-                  { type: 'setError', params: ({ event }) => ({ error: `Connection ${event.state}` }) },
+                  {
+                    type: 'setError',
+                    params: ({ event }) => ({
+                      error: i18n.global.t('errors.connectionState', { state: event.state }),
+                    }),
+                  },
                   'cleanup',
                 ],
               },
@@ -570,7 +599,7 @@ export const webrtcMachine = setup({
                     type: 'setConnectionQuality',
                     params: () => ({
                       quality: 'poor',
-                      reason: 'Connection interrupted. Trying to reconnect...',
+                      reason: i18n.global.t('errors.connectionInterrupted'),
                       packetLossRatio: 0,
                     }),
                   },

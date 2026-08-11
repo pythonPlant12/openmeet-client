@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n';
+
 import { resolveReachableTurnUrl } from './dev-networking';
 import { SignalingService } from './signaling';
 
@@ -74,6 +76,20 @@ function turnUrlsWithTcpFallback(turnUrl: string): string[] {
   }
 
   return [turnUrl, `${turnUrl}?transport=tcp`];
+}
+
+function mediaErrorMessage(error: unknown): string {
+  if (!(error instanceof DOMException)) return i18n.global.t('errors.mediaUnavailable');
+
+  const errorKeys: Record<string, string> = {
+    NotAllowedError: 'errors.mediaPermissionDenied',
+    NotFoundError: 'errors.mediaDevicesMissing',
+    NotReadableError: 'errors.mediaDevicesBusy',
+    OverconstrainedError: 'errors.mediaConstraints',
+    SecurityError: 'errors.mediaUnavailable',
+  };
+
+  return i18n.global.t(errorKeys[error.name] ?? 'errors.mediaUnavailable');
 }
 
 function configuredIceTransportPolicy(): RTCIceTransportPolicy {
@@ -171,7 +187,8 @@ export class WebRTCServiceSFU {
 
       return this.localStream;
     } catch (error) {
-      throw new Error(`Failed to access media devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('[WebRTCServiceSFU] Failed to initialize media:', error);
+      throw new Error(i18n.global.t('errors.mediaAccess', { message: mediaErrorMessage(error) }));
     }
   }
 
@@ -279,7 +296,7 @@ export class WebRTCServiceSFU {
 
   async sendOffer(): Promise<void> {
     if (!this.peerConnection) {
-      throw new Error('Peer connection not initialized');
+      throw new Error(i18n.global.t('errors.peerFailed'));
     }
 
     console.log('[WebRTCServiceSFU] Creating offer');
@@ -381,6 +398,25 @@ export class WebRTCServiceSFU {
     return this.peerConnection;
   }
 
+  async getInboundAudioLevels(): Promise<Map<string, number>> {
+    const levels = new Map<string, number>();
+    if (!this.peerConnection) return levels;
+
+    const stats = await this.peerConnection.getStats();
+    stats.forEach((report) => {
+      if (
+        report.type === 'inbound-rtp' &&
+        !report.isRemote &&
+        (report.kind || report.mediaType) === 'audio' &&
+        typeof report.trackIdentifier === 'string' &&
+        typeof report.audioLevel === 'number'
+      ) {
+        levels.set(report.trackIdentifier, report.audioLevel);
+      }
+    });
+    return levels;
+  }
+
   async getConnectionQualityStats(): Promise<ConnectionQualityStats> {
     if (!this.peerConnection) {
       return {
@@ -453,13 +489,13 @@ export class WebRTCServiceSFU {
     let reason: string | null = null;
 
     if (maxPacketLossRatio >= 0.05) {
-      reason = `Packet loss is ${Math.round(maxPacketLossRatio * 100)}%`;
+      reason = i18n.global.t('errors.packetLoss', { percent: Math.round(maxPacketLossRatio * 100) });
     } else if (maxRoundTripTime !== null && maxRoundTripTime >= 0.8) {
-      reason = `High latency: ${Math.round(maxRoundTripTime * 1000)}ms`;
+      reason = i18n.global.t('errors.latency', { milliseconds: Math.round(maxRoundTripTime * 1000) });
     } else if (maxJitter !== null && maxJitter >= 0.15) {
-      reason = `Unstable media timing: ${Math.round(maxJitter * 1000)}ms jitter`;
+      reason = i18n.global.t('errors.jitter', { milliseconds: Math.round(maxJitter * 1000) });
     } else if (remoteVideoFrozen) {
-      reason = 'Remote video is recovering';
+      reason = i18n.global.t('errors.videoRecovering');
     }
 
     return {

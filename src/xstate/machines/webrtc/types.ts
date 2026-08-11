@@ -42,6 +42,7 @@ export interface SFUContext {
 
   // Chat
   chatMessages: ChatMessage[];
+  hasLoadedChatHistory: boolean;
 
   // Error
   error: string | null;
@@ -71,6 +72,7 @@ export type SFUSignalingEvents =
       message: string;
       timestamp: number;
     }
+  | { type: 'CHAT_HISTORY_RECEIVED'; messages: ChatMessage[] }
   | { type: 'SERVER_ERROR'; message: string };
 
 // WebRTC events (from RTCPeerConnection)

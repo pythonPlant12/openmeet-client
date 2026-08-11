@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Maximize2, MicOff, VideoOff } from 'lucide-vue-next';
+import { MicOff, Pin, PinOff, VideoOff } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
@@ -9,13 +10,16 @@ interface Props {
   size?: 'full' | 'sidebar' | 'mobile' | 'grid';
   isExpanded?: boolean;
   showExpandIcon?: boolean;
+  interactive?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   size: 'grid',
   isExpanded: false,
   showExpandIcon: true,
+  interactive: true,
 });
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: 'click'): void;
@@ -38,7 +42,7 @@ const playAttachedVideo = async () => {
 };
 
 const initials = computed(() => {
-  const name = props.participant.name || 'U';
+  const name = props.participant.name || t('meeting.fallbackUser');
   return name
     .split(' ')
     .map((word) => word[0])
@@ -109,12 +113,24 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div
-    :class="['relative cursor-pointer group rounded-lg overflow-hidden bg-[hsl(0,0%,12%)]', sizeClasses]"
+  <component
+    :is="interactive ? 'button' : 'div'"
+    :type="interactive ? 'button' : undefined"
+    :class="[
+      'relative group rounded-[1.6rem] overflow-hidden border-[6px] border-[#CBD5E1] bg-[#E2E8F0] text-left shadow-[0_16px_40px_rgba(16,47,53,0.12)]',
+      interactive ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BCFC7]' : '',
+      sizeClasses,
+    ]"
     data-testid="participant-tile"
+    :aria-label="
+      interactive
+        ? t(isExpanded ? 'meeting.participant.unpin' : 'meeting.participant.pin', { name: participant.name })
+        : undefined
+    "
+    :aria-pressed="interactive ? isExpanded : undefined"
     :data-participant-id="participant.id"
     :data-participant-local="participant.isLocal"
-    @click="emit('click')"
+    @click="interactive && emit('click')"
   >
     <!-- Video element (always present for audio playback, hidden when video disabled) -->
     <video
@@ -129,7 +145,7 @@ onMounted(async () => {
       @loadedmetadata="playAttachedVideo"
       @canplay="playAttachedVideo"
       :class="[
-        'w-full h-full rounded-lg bg-[hsl(0,0%,12%)]',
+        'w-full h-full rounded-[1.2rem] bg-[#E2E8F0]',
         objectFitClass,
         { hidden: !participant.videoEnabled, '-scale-x-100': participant.isLocal },
       ]"
@@ -138,11 +154,11 @@ onMounted(async () => {
     <!-- Avatar (shown when no stream or video disabled) -->
     <div
       v-if="!participant.stream || !participant.videoEnabled"
-      class="absolute inset-0 flex items-center justify-center bg-[hsl(0,0%,12%)]"
+      class="absolute inset-0 flex items-center justify-center bg-[#E2E8F0]"
     >
       <div
         :class="[
-          'rounded-full bg-primary flex items-center justify-center font-bold text-white',
+          'rounded-full bg-[#0B7A75] flex items-center justify-center font-bold text-white',
           size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-24 h-24 text-4xl',
         ]"
       >
@@ -151,32 +167,44 @@ onMounted(async () => {
     </div>
 
     <!-- Name Badge -->
-    <div :class="['absolute left-2 px-2 py-1 bg-black/60 rounded text-white flex items-center gap-1 bottom-0']">
+    <div
+      :class="[
+        'absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-[#102F35]/80 px-3 py-1 text-white backdrop-blur',
+      ]"
+    >
       <span>{{ participant.name }}</span>
-      <span v-if="participant.isLocal" class="text-primary">(You)</span>
+      <span v-if="participant.isLocal" class="text-[#66D0C8]">{{ t('meeting.you') }}</span>
     </div>
 
     <!-- Audio/Video Status Indicators -->
     <div :class="['absolute right-2 flex gap-1', size === 'sidebar' || size === 'mobile' ? 'top-1' : 'top-4']">
-      <div v-if="!participant.audioEnabled" class="p-1.5 bg-red-500 rounded-full">
+      <div v-if="!participant.audioEnabled" class="p-1.5 bg-[#F2765F] rounded-full">
         <MicOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
       </div>
-      <div v-if="!participant.videoEnabled" class="p-1.5 bg-red-500 rounded-full">
+      <div v-if="!participant.videoEnabled" class="p-1.5 bg-[#F2765F] rounded-full">
         <VideoOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
       </div>
     </div>
 
-    <!-- Hover Overlay with Expand Icon -->
+    <!-- Hover Overlay with Pin Icon -->
     <div
       v-if="showExpandIcon"
-      class="absolute inset-0 bg-black/0 transition-colors rounded-lg items-center justify-center hidden md:flex md:group-hover:bg-black/20"
+      class="absolute inset-0 hidden items-center justify-center rounded-[1.2rem] bg-black/0 transition-colors md:flex md:group-hover:bg-black/20"
     >
-      <Maximize2
+      <PinOff
+        v-if="isExpanded"
+        :class="[
+          'text-white opacity-0 group-hover:opacity-100 transition-opacity',
+          size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
+        ]"
+      />
+      <Pin
+        v-else
         :class="[
           'text-white opacity-0 group-hover:opacity-100 transition-opacity',
           size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
         ]"
       />
     </div>
-  </div>
+  </component>
 </template>

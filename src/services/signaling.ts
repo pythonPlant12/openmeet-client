@@ -1,6 +1,20 @@
 // WebSocket signaling service for connecting to Rust SFU backend
+import { i18n } from '@/i18n';
+import { cookieUtils } from '@/utils';
+
+const SIGNALING_PROTOCOL_VERSION = 2;
+const AUTHENTICATION_TIMEOUT_MS = 5_000;
+
+export interface SignalingChatMessage {
+  participantId: string;
+  participantName: string;
+  message: string;
+  timestamp: number;
+}
 
 export type SignalingMessage =
+  | { type: 'authenticate'; protocolVersion: number; accessToken: string | null }
+  | { type: 'authenticated'; protocolVersion: number; authenticated: boolean }
   | { type: 'join'; roomId: string; participantName: string }
   | { type: 'joined'; participantId: string; participantName: string }
   | { type: 'offer'; targetId: string; sdp: string }
@@ -16,7 +30,8 @@ export type SignalingMessage =
   | { type: 'participantLeft'; participantId: string }
   | { type: 'streamOwner'; streamId: string; participantId: string; participantName: string }
   | { type: 'mediaStateChanged'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
-  | { type: 'chatMessage'; participantId: string; participantName: string; message: string; timestamp: number }
+  | ({ type: 'chatMessage' } & SignalingChatMessage)
+  | { type: 'chatHistory'; messages: SignalingChatMessage[] }
   | { type: 'error'; message: string };
 
 type MessageHandler = (message: SignalingMessage) => void;
@@ -33,6 +48,13 @@ export class SignalingService {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      let identityDecided = false;
+      const authenticationTimer = window.setTimeout(() => {
+        if (identityDecided) return;
+        this.intentionalDisconnect = true;
+        this.ws?.close();
+        reject(new Error(i18n.global.t('errors.websocketFailed')));
+      }, AUTHENTICATION_TIMEOUT_MS);
       console.log('[SignalingService] Connecting to:', this.serverUrl);
 
       this.ws = new WebSocket(this.serverUrl);
@@ -41,25 +63,51 @@ export class SignalingService {
         console.log('[SignalingService] WebSocket connected');
         this.reconnectAttempts = 0;
         this.intentionalDisconnect = false;
-        resolve();
+        this.send({
+          type: 'authenticate',
+          protocolVersion: SIGNALING_PROTOCOL_VERSION,
+          accessToken: cookieUtils.get('accessToken'),
+        });
       };
 
       this.ws.onerror = (error) => {
         console.error('[SignalingService] WebSocket error:', error);
-        reject(new Error('WebSocket connection failed'));
+        reject(new Error(i18n.global.t('errors.websocketFailed')));
       };
 
       this.ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as SignalingMessage;
           console.log('[SignalingService] Received message:', message.type);
+          if (message.type === 'authenticated') {
+            if (message.protocolVersion !== SIGNALING_PROTOCOL_VERSION) {
+              throw new Error('Unsupported signaling protocol');
+            }
+            identityDecided = true;
+            window.clearTimeout(authenticationTimer);
+            resolve();
+          } else if (!identityDecided && message.type === 'error') {
+            this.intentionalDisconnect = true;
+            window.clearTimeout(authenticationTimer);
+            this.ws?.close();
+            reject(new Error(i18n.global.t('errors.websocketFailed')));
+            return;
+          }
           this.handleMessage(message);
         } catch (error) {
           console.error('[SignalingService] Failed to parse message:', error);
+          if (!identityDecided) {
+            this.intentionalDisconnect = true;
+            window.clearTimeout(authenticationTimer);
+            this.ws?.close();
+            reject(new Error(i18n.global.t('errors.websocketFailed')));
+          }
         }
       };
 
       this.ws.onclose = (event) => {
+        window.clearTimeout(authenticationTimer);
+        if (!identityDecided) reject(new Error(i18n.global.t('errors.websocketFailed')));
         console.log('[SignalingService] WebSocket closed:', {
           code: event.code,
           reason: event.reason || null,
@@ -85,7 +133,7 @@ export class SignalingService {
   send(message: SignalingMessage): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('[SignalingService] WebSocket not connected');
-      throw new Error('WebSocket not connected');
+      throw new Error(i18n.global.t('errors.websocketDisconnected'));
     }
 
     console.log('[SignalingService] Sending message');

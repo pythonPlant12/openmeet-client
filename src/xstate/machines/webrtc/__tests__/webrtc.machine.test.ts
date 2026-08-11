@@ -18,6 +18,26 @@ describe('WebRTC Machine', () => {
     return createActor(machine);
   };
 
+  it('returns to idle when leaving during media initialization', () => {
+    const machine = webrtcMachine.provide({
+      actors: {
+        initMedia: fromPromise(() => new Promise<MediaStream>(() => {})),
+      },
+    });
+    const actor = createActor(machine);
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    expect(actor.getSnapshot().matches('initializingMedia')).toBe(true);
+
+    actor.send({ type: 'LEAVE_ROOM' });
+
+    expect(actor.getSnapshot().matches('idle')).toBe(true);
+    expect(actor.getSnapshot().context.localParticipantName).toBe('');
+
+    actor.stop();
+  });
+
   it('keeps an active call alive through a transient disconnected connection state', async () => {
     const actor = createTestActor();
     actor.start();
@@ -220,6 +240,41 @@ describe('WebRTC Machine', () => {
     expect(actor.getSnapshot().context.participants.has('participant-2')).toBe(false);
     expect(actor.getSnapshot().context.streamOwnerMap.has('stream-2')).toBe(false);
 
+    actor.stop();
+  });
+
+  it('loads room chat history before appending live messages', async () => {
+    const actor = createTestActor();
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
+
+    actor.send({
+      type: 'CHAT_HISTORY_RECEIVED',
+      messages: [
+        {
+          participantId: 'participant-2',
+          participantName: 'Bob',
+          message: 'Earlier message',
+          timestamp: 1,
+        },
+      ],
+    });
+    actor.send({
+      type: 'CHAT_MESSAGE_RECEIVED',
+      participantId: 'participant-2',
+      participantName: 'Bob',
+      message: 'Live message',
+      timestamp: 2,
+    });
+
+    expect(actor.getSnapshot().context.chatMessages.map((message) => message.message)).toEqual([
+      'Earlier message',
+      'Live message',
+    ]);
     actor.stop();
   });
 });

@@ -1,130 +1,149 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 import ParticipantTile from './ParticipantTile.vue';
 
-interface Props {
+type MeetingViewMode = 'grid' | 'speaker';
+
+const props = defineProps<{
+  activeSpeakerId: string | null;
   participants: Participant[];
-}
+  pinnedParticipantId: string | null;
+  viewMode: MeetingViewMode;
+}>();
 
-const props = defineProps<Props>();
-
-const focusedParticipantId = ref<string | null>(null);
+const emit = defineEmits<{
+  togglePin: [participantId: string];
+}>();
+const { t } = useI18n();
 
 const hasParticipants = computed(() => props.participants.length > 0);
-const isSingleParticipant = computed(() => props.participants.length === 1);
 const shouldUseTwoColumnsOnMobile = computed(() => props.participants.length > 3);
-
-const focusedParticipant = computed(() => {
-  if (!focusedParticipantId.value) return null;
-  return props.participants.find((p) => p.id === focusedParticipantId.value);
+const speakerParticipant = computed(() => {
+  const requestedId = props.pinnedParticipantId || props.activeSpeakerId;
+  return props.participants.find((participant) => participant.id === requestedId) ?? props.participants[0] ?? null;
 });
-
-const minimizedParticipants = computed(() => {
-  if (!focusedParticipantId.value) return [];
-  return props.participants.filter((p) => p.id !== focusedParticipantId.value);
-});
-
-const toggleFocus = (participantId: string) => {
-  console.log('[VideoGrid] toggleFocus called with:', participantId);
-  console.log('[VideoGrid] Current focusedParticipantId:', focusedParticipantId.value);
-
-  if (focusedParticipantId.value === participantId) {
-    focusedParticipantId.value = null;
-  } else {
-    focusedParticipantId.value = participantId;
-  }
-
-  console.log('[VideoGrid] New focusedParticipantId:', focusedParticipantId.value);
-};
+const secondaryParticipants = computed(() =>
+  props.participants.filter((participant) => participant.id !== speakerParticipant.value?.id),
+);
 </script>
 
 <template>
-  <div class="flex-1 relative bg-[hsl(0,0%,8%)] w-full h-full">
-    <!-- Single participant -->
-    <div v-if="isSingleParticipant" class="absolute h-[78vh] inset-0 flex items-center justify-center p-8">
-      <div class="relative w-full h-full max-w-6xl">
-        <ParticipantTile :participant="participants[0]" size="full" :show-expand-icon="false" />
-      </div>
-    </div>
-
-    <!-- Multiple participants -->
-    <div v-else-if="hasParticipants" class="h-[68vh] mt-3 md:h-[84vh] w-full relative">
-      <!-- Equal grid layout (no one focused) -->
-      <div v-if="!focusedParticipantId" class="h-[82vh] sm:h-[84vh] w-full flex items-center justify-center p-4">
+  <div
+    class="relative h-full w-full flex-1 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B7A75]"
+    data-testid="meeting-video-canvas"
+    :data-view-mode="viewMode"
+    tabindex="0"
+    :aria-label="t('meeting.actions.videoCanvas')"
+  >
+    <div v-if="hasParticipants" class="relative mt-3 h-[68vh] w-full bg-white md:h-[84vh]">
+      <Transition name="meeting-layout" mode="out-in">
         <div
-          :class="[
-            'grid gap-4 w-full h-full max-w-7xl auto-rows-fr',
-            shouldUseTwoColumnsOnMobile ? 'grid-cols-2' : 'grid-cols-1 md:grid-cols-2',
-          ]"
+          v-if="viewMode === 'grid'"
+          key="grid"
+          class="absolute inset-0 flex h-[82vh] w-full items-center justify-center p-4 sm:h-[84vh]"
         >
-          <ParticipantTile
-            v-for="participant in participants"
-            :key="participant.id"
-            :participant="participant"
-            size="grid"
-            @click="toggleFocus(participant.id)"
-          />
-        </div>
-      </div>
-
-      <!-- Desktop: Expanded layout with sidebar -->
-      <div v-else class="hidden md:flex h-full w-full gap-4 p-4">
-        <!-- Main expanded video -->
-        <div class="flex-1 relative min-w-0">
-          <div class="h-full flex items-center justify-center">
-            <div v-if="focusedParticipant" class="relative w-full h-full max-h-full">
-              <ParticipantTile
-                :participant="focusedParticipant"
-                size="full"
-                :is-expanded="true"
-                @click="toggleFocus(focusedParticipant.id)"
-              />
-            </div>
-          </div>
-        </div>
-
-        <!-- Desktop sidebar with minimized videos -->
-        <div class="w-80 flex flex-col gap-4 overflow-y-auto justify-center">
-          <ParticipantTile
-            v-for="participant in minimizedParticipants"
-            :key="participant.id"
-            :participant="participant"
-            size="sidebar"
-            @click="toggleFocus(participant.id)"
-          />
-        </div>
-      </div>
-
-      <!-- Mobile: Expanded layout with bottom strip -->
-      <div v-if="focusedParticipantId" class="md:hidden h-full w-full">
-        <!-- Expanded video -->
-        <div class="absolute inset-0 flex items-center justify-center">
-          <div v-if="focusedParticipant" class="relative w-full h-full">
+          <div
+            :class="[
+              'grid h-full w-full auto-rows-fr gap-3 sm:gap-4',
+              participants.length === 1
+                ? 'max-w-6xl grid-cols-1'
+                : `max-w-7xl ${shouldUseTwoColumnsOnMobile ? 'grid-cols-2' : 'grid-cols-1 md:grid-cols-2'}`,
+            ]"
+          >
             <ParticipantTile
-              :participant="focusedParticipant"
-              size="full"
-              :is-expanded="true"
-              @click="toggleFocus(focusedParticipant.id)"
+              v-for="participant in participants"
+              :key="participant.id"
+              :participant="participant"
+              size="grid"
+              :interactive="false"
+              :show-expand-icon="false"
             />
           </div>
         </div>
 
-        <!-- Mobile: Horizontal strip with minimized participants -->
-        <div
-          class="fixed bottom-24 left-0 right-0 h-20 flex gap-2 overflow-x-auto px-4 pb-2 bg-[hsl(0,0%,8%)] z-10 justify-center"
-        >
-          <ParticipantTile
-            v-for="participant in minimizedParticipants"
-            :key="participant.id"
-            :participant="participant"
-            size="mobile"
-            @click="toggleFocus(participant.id)"
-          />
+        <div v-else key="speaker" class="absolute inset-0 h-full w-full">
+          <div class="hidden h-full w-full gap-4 p-4 md:flex">
+            <div class="relative min-w-0 flex-1">
+              <ParticipantTile
+                v-if="speakerParticipant"
+                :participant="speakerParticipant"
+                size="full"
+                :is-expanded="pinnedParticipantId === speakerParticipant.id"
+                @click="emit('togglePin', speakerParticipant.id)"
+              />
+            </div>
+            <div v-if="secondaryParticipants.length" class="flex w-80 flex-col justify-center gap-4 overflow-y-auto">
+              <ParticipantTile
+                v-for="participant in secondaryParticipants"
+                :key="participant.id"
+                :participant="participant"
+                size="sidebar"
+                :is-expanded="pinnedParticipantId === participant.id"
+                @click="emit('togglePin', participant.id)"
+              />
+            </div>
+          </div>
+
+          <div class="h-full w-full md:hidden">
+            <div class="absolute inset-0 flex items-center justify-center p-3">
+              <ParticipantTile
+                v-if="speakerParticipant"
+                :participant="speakerParticipant"
+                size="full"
+                :is-expanded="pinnedParticipantId === speakerParticipant.id"
+                @click="emit('togglePin', speakerParticipant.id)"
+              />
+            </div>
+            <div
+              v-if="secondaryParticipants.length"
+              class="fixed bottom-24 left-0 right-0 z-10 flex h-20 justify-center gap-2 overflow-x-auto border-t border-[#D8E7E3] bg-white/90 px-4 pb-2 pt-2 backdrop-blur"
+            >
+              <ParticipantTile
+                v-for="participant in secondaryParticipants"
+                :key="participant.id"
+                :participant="participant"
+                size="mobile"
+                :is-expanded="pinnedParticipantId === participant.id"
+                @click="emit('togglePin', participant.id)"
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      </Transition>
     </div>
   </div>
 </template>
+
+<style scoped>
+.meeting-layout-enter-active,
+.meeting-layout-leave-active {
+  transition:
+    opacity 0.32s ease,
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.meeting-layout-leave-active {
+  pointer-events: none;
+}
+
+.meeting-layout-enter-from {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+.meeting-layout-leave-to {
+  opacity: 0;
+  transform: scale(1.025);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meeting-layout-enter-active,
+  .meeting-layout-leave-active {
+    transition: none;
+  }
+}
+</style>
