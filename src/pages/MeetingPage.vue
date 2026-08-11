@@ -50,6 +50,7 @@ const {
   toggleParticipantAudio,
   toggleParticipantVideo,
   sendChatMessage,
+  retry,
 } = useWebrtc();
 
 const { activeSpeakerId, resumeAudioAnalysis } = useActiveSpeaker(participantsArray);
@@ -359,13 +360,15 @@ const handleJoinMeeting = async (settings: JoinSettings) => {
     pendingRoomId.value = meetingId.value;
   }
 
-  if (isIdle.value) {
-    // Pass device constraints to initMedia
-    initMedia(participantName.value, {
-      audioDeviceId: settings.audioDeviceId,
-      videoDeviceId: settings.videoDeviceId,
-    });
+  if (!isIdle.value) {
+    retry();
   }
+
+  // Pass device constraints to initMedia
+  initMedia(participantName.value, {
+    audioDeviceId: settings.audioDeviceId,
+    videoDeviceId: settings.videoDeviceId,
+  });
 };
 
 const handleCancelJoin = () => {
