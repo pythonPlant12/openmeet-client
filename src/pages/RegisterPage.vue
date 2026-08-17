@@ -42,6 +42,14 @@ const handleRegister = () => {
   });
 };
 
+const handleRegisterKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Enter' || isRegistering.value) return;
+  const form = event.currentTarget as HTMLFormElement;
+  if (!form.reportValidity()) return;
+  event.preventDefault();
+  handleRegister();
+};
+
 const handleRetry = () => {
   send({ type: AuthEventType.RETRY });
 };
@@ -100,7 +108,7 @@ const goToLogin = () => {
           class="mt-3 text-base leading-7 text-[#61777B]"
         />
 
-        <form class="mt-7 space-y-4" @submit.prevent="handleRegister">
+        <form class="mt-7 space-y-4" @submit.prevent="handleRegister" @keydown="handleRegisterKeydown">
           <div class="space-y-2">
             <Label for="name" class="text-[#27595D]">{{ t('auth.register.name') }}</Label>
             <Input
