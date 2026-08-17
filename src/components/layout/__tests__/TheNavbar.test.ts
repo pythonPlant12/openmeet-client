@@ -214,6 +214,7 @@ describe('TheNavbar', () => {
     await wrapper.get('button[aria-expanded="true"]').trigger('click');
     expect(shell.classes()).toContain('h-[60px]');
     expect(shell.classes()).toContain('w-[calc(100vw-1.5rem)]');
+    expect(wrapper.get('.harbor-nav-capsule > div').classes()).toContain('flex-col');
 
     await wrapper.get('button[aria-expanded="true"]').trigger('click');
     expect(shell.classes()).toContain('h-[calc(100svh-1.5rem)]');

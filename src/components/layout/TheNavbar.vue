@@ -296,7 +296,7 @@ watch(isDesktop, () => requestAnimationFrame(updateDesktopNavWidth));
         <div
           ref="navContentRef"
           class="flex size-full xl:h-full xl:w-max xl:flex-row xl:items-center xl:gap-12"
-          :class="mobileMenuExpanded ? 'flex-col items-stretch' : 'flex-row items-center'"
+          :class="mobileMenuExpanded || isClosingMobileMenu ? 'flex-col items-stretch' : 'flex-row items-center'"
         >
           <div class="flex w-full shrink-0 items-center justify-between xl:w-auto">
             <RouterLink
