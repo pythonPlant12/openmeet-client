@@ -25,6 +25,11 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const meetingId = computed(() => route.params.id as string);
+const conversationId = computed(() => {
+  const conversation = route.query.conversation;
+  return typeof conversation === 'string' && conversation.trim() ? conversation : null;
+});
+const isConversationCall = computed(() => conversationId.value !== null);
 
 const { isAuthenticated, isCheckingSession, currentUser, accessToken } = useAuth();
 const meetingExitRoute = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
@@ -90,6 +95,7 @@ const showConnectionStatus = ref(false);
 const showConnectionQualityDetails = ref(false);
 const shouldJoinRoom = ref(false);
 const pendingRoomId = ref<string | null>(null);
+const sfuRoomId = ref<string | null>(null);
 const pendingMediaSettings = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
 
 const showJoinDialog = ref(false);
@@ -203,7 +209,7 @@ const isRecordingMeeting = ref(false);
 async function recordMeetingHistory() {
   const token = accessToken.value;
   const roomId = meetingId.value;
-  if (!token || !roomId || hasRecordedMeeting.value || isRecordingMeeting.value) return;
+  if (isConversationCall.value || !token || !roomId || hasRecordedMeeting.value || isRecordingMeeting.value) return;
 
   isRecordingMeeting.value = true;
   try {
@@ -300,7 +306,37 @@ watch(connectionQuality, (newQuality) => {
   }
 });
 
-const initializeMeeting = () => {
+let hasInitializedMeeting = false;
+
+const initializeMeeting = async () => {
+  if (hasInitializedMeeting) return;
+  hasInitializedMeeting = true;
+
+  if (isConversationCall.value) {
+    const token = accessToken.value;
+    if (!isAuthenticated.value || !token) {
+      await router.replace('/login');
+      return;
+    }
+
+    try {
+      // Callers already accepted when they start the session; invitees accept here.
+      try {
+        sfuRoomId.value = (await socialApi.getCallSession(token, meetingId.value)).roomId;
+      } catch {
+        const response = await socialApi.respondToCallSession(token, meetingId.value, true);
+        if (!response.accepted || !response.roomId) {
+          throw new Error('Call session was not accepted');
+        }
+        sfuRoomId.value = response.roomId;
+      }
+    } catch (error) {
+      console.error('[MeetingRoom] Failed to join conversation call:', error);
+      await router.replace('/dashboard');
+      return;
+    }
+  }
+
   const storedName = sessionStorage.getItem('participantName');
 
   // Always show the join dialog for media settings
@@ -321,13 +357,13 @@ const initializeMeeting = () => {
 
 watch(isCheckingSession, (checking) => {
   if (!checking) {
-    initializeMeeting();
+    void initializeMeeting();
   }
 });
 
 onMounted(() => {
   if (!isCheckingSession.value) {
-    initializeMeeting();
+    void initializeMeeting();
   }
 });
 
@@ -357,7 +393,7 @@ const handleJoinMeeting = async (settings: JoinSettings) => {
   if (meetingId.value) {
     // In SFU architecture, everyone just "joins" the room
     shouldJoinRoom.value = true;
-    pendingRoomId.value = meetingId.value;
+    pendingRoomId.value = sfuRoomId.value ?? meetingId.value;
   }
 
   if (!isIdle.value) {

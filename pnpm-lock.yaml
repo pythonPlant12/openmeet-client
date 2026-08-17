@@ -20,6 +20,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      emoji-picker-element:
+        specifier: ^1.29.1
+        version: 1.29.1
       lucide-vue-next:
         specifier: ^0.553.0
         version: 0.553.0(vue@3.5.25(typescript@6.0.3))
@@ -1794,6 +1797,9 @@ packages:
 
   electron-to-chromium@1.5.260:
     resolution: {integrity: sha512-ov8rBoOBhVawpzdre+Cmz4FB+y66Eqrk6Gwqd8NGxuhv99GQ8XqMAr351KEkOt7gukXWDg6gJWEMKgL2RLMPtA==}
+
+  emoji-picker-element@1.29.1:
+    resolution: {integrity: sha512-TOiHzu9Dqib3x4MwcAi3wi3RdyT4SoeB4b15AvH1ks4SBwTl7DeebhZ0d3x6dNi4XfNU7IGRZ7NBQllj0RqwrQ==}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -5360,6 +5366,8 @@ snapshots:
   ee-first@1.1.1: {}
 
   electron-to-chromium@1.5.260: {}
+
+  emoji-picker-element@1.29.1: {}
 
   emoji-regex@8.0.0: {}
 

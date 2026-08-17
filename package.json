@@ -26,6 +26,7 @@
     "@xstate/vue": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "emoji-picker-element": "^1.29.1",
     "lucide-vue-next": "^0.553.0",
     "motion-v": "^2.3.0",
     "reka-ui": "^2.6.1",

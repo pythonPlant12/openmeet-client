@@ -44,11 +44,18 @@ describe('socialApi', () => {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ accepted: true, roomId: 'opaque-room' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       );
     vi.stubGlobal('fetch', fetchMock);
 
     await socialApi.createCall('token', 'friend-id');
     await socialApi.recordMeeting('token', 'room-id');
+    await socialApi.respondToCallSession('token', 'session-id', true);
 
     expect(fetchMock.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ friendId: 'friend-id' }) }),
@@ -56,12 +63,60 @@ describe('socialApi', () => {
     expect(fetchMock.mock.calls[1]?.[1]).toEqual(
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ roomId: 'room-id' }) }),
     );
+    expect(fetchMock.mock.calls[2]).toEqual([
+      'http://localhost:8081/social/call-sessions/session-id/respond',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ accept: true }) }),
+    ]);
   });
 
   it('handles no-content responses', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
 
     await expect(socialApi.updatePresence('token')).resolves.toBeUndefined();
+  });
+
+  it('uses conversation GET, POST, and DELETE contracts', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await socialApi.listConversations('token');
+    await socialApi.createGroup('token', {
+      title: 'Team chat',
+      accessPolicy: 'friendsOnly',
+      password: 'password1',
+    });
+    await socialApi.getGroupInfo('token', 'group-id');
+    await socialApi.listGroupMembers('token', 'group-id');
+    await socialApi.removeGroupMember('token', 'group-id', 'user-id');
+
+    expect(fetchMock.mock.calls[0]).toEqual([
+      'http://localhost:8081/social/conversations',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    ]);
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ title: 'Team chat', accessPolicy: 'friendsOnly', password: 'password1' }),
+      }),
+    );
+    expect(fetchMock.mock.calls[2]).toEqual([
+      'http://localhost:8081/social/conversations/groups/group-id/info',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    ]);
+    expect(fetchMock.mock.calls[3]).toEqual([
+      'http://localhost:8081/social/conversations/groups/group-id/members',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    ]);
+    expect(fetchMock.mock.calls[4]).toEqual([
+      'http://localhost:8081/social/conversations/groups/group-id/members/user-id',
+      expect.objectContaining({ method: 'DELETE' }),
+    ]);
   });
 
   it.each([

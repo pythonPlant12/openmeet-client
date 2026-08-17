@@ -96,6 +96,9 @@ router.beforeEach((to, from, next) => {
   const accessToken = cookieUtils.get('accessToken');
   const refreshToken = cookieUtils.get('refreshToken');
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
+  const conversation = to.query.conversation;
+  const isConversationCall =
+    to.name === 'meeting' && typeof conversation === 'string' && conversation.trim().length > 0;
   const isAuthPage = to.matched.some((record) => record.meta.isAuthPage);
 
   const hasValidAccessToken = accessToken && jwtUtils.isValid(accessToken);
@@ -110,7 +113,7 @@ router.beforeEach((to, from, next) => {
   }
 
   // Redirect to login if trying to access protected route without valid tokens
-  if (requiresAuth && !canAuthenticate) {
+  if ((requiresAuth || isConversationCall) && !canAuthenticate) {
     cookieUtils.remove('accessToken');
     cookieUtils.remove('refreshToken');
     return next('/login');

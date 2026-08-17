@@ -17,6 +17,23 @@ export interface Friend {
   isOnline: boolean;
 }
 
+export interface UserSearchResult {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface ContactProfile {
+  id: string;
+  name: string;
+  email: string;
+  status: 'available' | 'away' | 'doNotDisturb' | 'offline';
+  statusMessage: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+  isOnline: boolean;
+}
+
 export interface FriendRequest {
   id: string;
   user: Friend;
@@ -36,10 +53,102 @@ export interface CallInvitation {
   caller: Friend | null;
 }
 
+export interface CallSession {
+  id: string;
+  roomId: string;
+  expiresAt: string;
+}
+
+export interface CallSessionJoinResponse {
+  roomId: string;
+}
+
+export interface CallSessionResponse {
+  accepted: boolean;
+  roomId?: string;
+}
+
+export interface CallSessionNotification {
+  id: string;
+  conversationId: string;
+  initiatorId: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export interface RecentMeeting {
   id: string;
   roomId: string;
   lastJoinedAt: string;
+}
+
+export type ConversationKind = 'group' | 'direct';
+export type GroupAccessPolicy = 'open' | 'password' | 'friendsOnly';
+export type GroupMemberRole = 'admin' | 'member';
+
+export interface Conversation {
+  id: string;
+  kind: ConversationKind;
+  title: string | null;
+  accessPolicy: GroupAccessPolicy | null;
+  role: string | null;
+  otherUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateGroupRequest {
+  title: string;
+  accessPolicy: GroupAccessPolicy;
+  password?: string;
+}
+
+export interface UpdateGroupPolicyRequest {
+  accessPolicy: GroupAccessPolicy;
+  password?: string;
+}
+
+export interface GroupInfo {
+  id: string;
+  title: string;
+  accessPolicy: GroupAccessPolicy;
+  memberCount: number;
+  isMember: boolean;
+  role: string | null;
+  canJoin: boolean;
+}
+
+export interface GroupMember {
+  id: string;
+  name: string;
+  role: string;
+  joinedAt: string;
+}
+
+export interface OpenDirectConversationResponse {
+  state: 'available' | 'pending' | 'declined';
+  conversation: Conversation | null;
+  requestId: string | null;
+}
+
+export interface DirectMessageRequest {
+  id: string;
+  requesterId: string;
+  createdAt: string;
+}
+
+export interface ConversationMessage {
+  sequence: number;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface ConversationMessagesResponse {
+  messages: ConversationMessage[];
+  nextBefore: number | null;
 }
 
 export class SocialApiError extends Error {
@@ -106,6 +215,14 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
 }
 
 export const socialApi = {
+  searchUsers(accessToken: string, query: string) {
+    return request<UserSearchResult[]>(`/users?query=${encodeURIComponent(query)}`, accessToken);
+  },
+
+  getUserProfile(accessToken: string, userId: string) {
+    return request<ContactProfile>(`/users/${userId}/profile`, accessToken);
+  },
+
   listFriends(accessToken: string) {
     return request<FriendsResponse>('/friends', accessToken);
   },
@@ -136,6 +253,27 @@ export const socialApi = {
     });
   },
 
+  startConversationCall(accessToken: string, conversationId: string) {
+    return request<CallSession>(`/conversations/${conversationId}/call-sessions`, accessToken, {
+      method: 'POST',
+    });
+  },
+
+  getCallSession(accessToken: string, callSessionId: string) {
+    return request<CallSessionJoinResponse>(`/call-sessions/${callSessionId}`, accessToken);
+  },
+
+  respondToCallSession(accessToken: string, callSessionId: string, accept: boolean) {
+    return request<CallSessionResponse>(`/call-sessions/${callSessionId}/respond`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ accept }),
+    });
+  },
+
+  listIncomingCallSessions(accessToken: string) {
+    return request<CallSessionNotification[]>('/call-sessions/incoming', accessToken);
+  },
+
   listIncomingCalls(accessToken: string) {
     return request<CallInvitation[]>('/calls/incoming', accessToken);
   },
@@ -160,5 +298,95 @@ export const socialApi = {
 
   deleteMeeting(accessToken: string, meetingId: string) {
     return request<void>(`/meetings/${meetingId}`, accessToken, { method: 'DELETE' });
+  },
+
+  listConversations(accessToken: string) {
+    return request<Conversation[]>('/conversations', accessToken);
+  },
+
+  listGroups(accessToken: string) {
+    return request<Conversation[]>('/conversations/groups', accessToken);
+  },
+
+  createGroup(accessToken: string, group: CreateGroupRequest) {
+    return request<Conversation>('/conversations/groups', accessToken, {
+      method: 'POST',
+      body: JSON.stringify(group),
+    });
+  },
+
+  getGroupInfo(accessToken: string, groupId: string) {
+    return request<GroupInfo>(`/conversations/groups/${groupId}/info`, accessToken);
+  },
+
+  listGroupMembers(accessToken: string, groupId: string) {
+    return request<GroupMember[]>(`/conversations/groups/${groupId}/members`, accessToken);
+  },
+
+  joinGroup(accessToken: string, groupId: string, password?: string) {
+    return request<Conversation>(`/conversations/groups/${groupId}/join`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  updateGroupPolicy(accessToken: string, groupId: string, policy: UpdateGroupPolicyRequest) {
+    return request<Conversation>(`/conversations/groups/${groupId}/policy`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify(policy),
+    });
+  },
+
+  addGroupMember(accessToken: string, groupId: string, userId: string) {
+    return request<Conversation>(`/conversations/groups/${groupId}/members`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+  },
+
+  removeGroupMember(accessToken: string, groupId: string, userId: string) {
+    return request<void>(`/conversations/groups/${groupId}/members/${userId}`, accessToken, {
+      method: 'DELETE',
+    });
+  },
+
+  updateGroupMemberRole(accessToken: string, groupId: string, userId: string, role: GroupMemberRole) {
+    return request<void>(`/conversations/groups/${groupId}/members/${userId}/role`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+  },
+
+  openDirectConversation(accessToken: string, userId: string) {
+    return request<OpenDirectConversationResponse>(`/conversations/direct/${userId}`, accessToken, {
+      method: 'POST',
+    });
+  },
+
+  listDirectRequests(accessToken: string) {
+    return request<DirectMessageRequest[]>('/conversations/direct/requests', accessToken);
+  },
+
+  respondToDirectRequest(accessToken: string, requestId: string, accept: boolean) {
+    return request<OpenDirectConversationResponse>(
+      `/conversations/direct/requests/${requestId}/respond`,
+      accessToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({ accept }),
+      },
+    );
+  },
+
+  listConversationMessages(accessToken: string, conversationId: string, before?: number) {
+    const query = before === undefined ? '' : `?before=${encodeURIComponent(before)}`;
+    return request<ConversationMessagesResponse>(`/conversations/${conversationId}/messages${query}`, accessToken);
+  },
+
+  createConversationMessage(accessToken: string, conversationId: string, content: string) {
+    return request<ConversationMessage>(`/conversations/${conversationId}/messages`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
   },
 };
