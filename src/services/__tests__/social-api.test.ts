@@ -138,6 +138,36 @@ describe('socialApi', () => {
     );
   });
 
+  it('lists and marks generic notifications with bearer authentication', async () => {
+    const notifications = [
+      {
+        id: 'notification-id',
+        kind: 'friendRequest',
+        actorId: 'friend-id',
+        actorName: 'Alice',
+        data: { friendshipId: 'friendship-id' },
+        createdAt: '2026-08-27T00:00:00Z',
+      },
+    ];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(notifications), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(socialApi.listNotifications('token')).resolves.toEqual(notifications);
+    await expect(socialApi.markNotificationRead('token', 'notification-id')).resolves.toBeUndefined();
+
+    expect(fetchMock.mock.calls[0]).toEqual([
+      'http://localhost:8081/social/notifications/',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    ]);
+    expect(fetchMock.mock.calls[1]).toEqual([
+      'http://localhost:8081/social/notifications/notification-id/read',
+      expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    ]);
+  });
+
   it('refreshes an expired access token and retries once', async () => {
     cookieUtils.set('accessToken', 'expired-token', 1);
     cookieUtils.set('refreshToken', 'refresh-token', 1);

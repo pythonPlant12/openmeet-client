@@ -15,6 +15,7 @@ export interface Friend {
   name: string;
   email: string;
   isOnline: boolean;
+  friendshipId?: string;
 }
 
 export interface UserSearchResult {
@@ -43,6 +44,15 @@ export interface FriendRequest {
 export interface FriendsResponse {
   friends: Friend[];
   incomingRequests: FriendRequest[];
+}
+
+export interface UserNotification {
+  id: string;
+  kind: string;
+  actorId: string;
+  actorName: string;
+  data: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface CallInvitation {
@@ -242,6 +252,18 @@ export const socialApi = {
     return request<void>(`/friends/${requestId}`, accessToken, { method: 'DELETE' });
   },
 
+  removeFriend(accessToken: string, friendshipId: string) {
+    return request<void>(`/friends/${friendshipId}`, accessToken, { method: 'DELETE' });
+  },
+
+  listNotifications(accessToken: string) {
+    return request<UserNotification[]>('/notifications/', accessToken);
+  },
+
+  markNotificationRead(accessToken: string, notificationId: string) {
+    return request<void>(`/notifications/${notificationId}/read`, accessToken, { method: 'POST' });
+  },
+
   updatePresence(accessToken: string) {
     return request<void>('/presence', accessToken, { method: 'POST' });
   },
@@ -368,14 +390,10 @@ export const socialApi = {
   },
 
   respondToDirectRequest(accessToken: string, requestId: string, accept: boolean) {
-    return request<OpenDirectConversationResponse>(
-      `/conversations/direct/requests/${requestId}/respond`,
-      accessToken,
-      {
-        method: 'POST',
-        body: JSON.stringify({ accept }),
-      },
-    );
+    return request<OpenDirectConversationResponse>(`/conversations/direct/requests/${requestId}/respond`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ accept }),
+    });
   },
 
   listConversationMessages(accessToken: string, conversationId: string, before?: number) {

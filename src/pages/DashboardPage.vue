@@ -20,6 +20,7 @@ import {
   Search,
   ShieldCheck,
   Smile,
+  UserMinus,
   UserPlus,
   UsersRound,
   X,
@@ -29,6 +30,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router';
 
 import { Button } from '@/components/ui/button';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import {
   Dialog,
   DialogDescription,
@@ -53,6 +62,7 @@ import {
   type ConversationMessage,
   type DirectMessageRequest,
   type Friend,
+  type FriendRequest,
   type GroupAccessPolicy,
   type GroupInfo,
   type GroupMember,
@@ -65,6 +75,7 @@ const { accessToken, currentUser, isAuthenticated, isCheckingSession } = useAuth
 
 const conversations = ref<Conversation[]>([]);
 const friends = ref<Friend[]>([]);
+const incomingFriendRequests = ref<FriendRequest[]>([]);
 const directRequests = ref<DirectMessageRequest[]>([]);
 const searchQuery = ref('');
 const isConversationSearchOpen = ref(false);
@@ -83,6 +94,8 @@ const pendingDirectFriend = ref<Friend | null>(null);
 const isLoading = ref(true);
 const isOpeningDirect = ref<string | null>(null);
 const isAddingFriend = ref(false);
+const isRemovingFriend = ref<string | null>(null);
+const isRespondingToFriendRequest = ref<string | null>(null);
 const isCreatingGroup = ref(false);
 const isGroupDialogOpen = ref(false);
 const isGroupProfileDialogOpen = ref(false);
@@ -116,6 +129,7 @@ const feedbackMessage = ref('');
 const notificationPermission = ref(getSystemNotificationPermission());
 let hasStartedDashboard = false;
 let friendSearchRequest = 0;
+let friendRefreshRequest = 0;
 let contactProfileRequest = 0;
 let groupProfileRequest = 0;
 let messageRequest = 0;
@@ -441,6 +455,7 @@ async function loadWorkspace() {
       socialApi.listDirectRequests(token),
     ]);
     friends.value = friendData.friends;
+    incomingFriendRequests.value = friendData.incomingRequests;
     conversations.value = sortConversationsByActivity(
       await excludeUnsentDirectDrafts(token, conversationData),
       conversationActivity.value,
@@ -452,6 +467,21 @@ async function loadWorkspace() {
     feedbackError.value = 'Could not load conversations. Try refreshing this page.';
   } finally {
     isLoading.value = false;
+  }
+}
+
+async function refreshFriends() {
+  const token = accessToken.value;
+  if (!token) return;
+
+  const request = ++friendRefreshRequest;
+  try {
+    const friendData = await socialApi.listFriends(token);
+    if (request !== friendRefreshRequest) return;
+    friends.value = friendData.friends;
+    incomingFriendRequests.value = friendData.incomingRequests;
+  } catch (error) {
+    console.error('[Dashboard] Failed to refresh friends:', error);
   }
 }
 
@@ -692,15 +722,26 @@ function closeEmojiPickerOnEscape(event: KeyboardEvent) {
   emojiPickerControl.value?.querySelector<HTMLButtonElement>('button')?.focus();
 }
 
+function handleSocialNotifications(event: Event) {
+  const notifications = (event as CustomEvent<{ kind: string }[]>).detail;
+  if (
+    notifications.some((notification) => notification.kind === 'friendRequest' || notification.kind === 'friendRemoved')
+  ) {
+    void refreshFriends();
+  }
+}
+
 onMounted(() => {
   document.addEventListener('pointerdown', closeEmojiPickerOnOutsideClick);
   document.addEventListener('keydown', closeEmojiPickerOnEscape);
+  window.addEventListener('openmeet:notifications-received', handleSocialNotifications);
   void requestNotificationPermission();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', closeEmojiPickerOnOutsideClick);
   document.removeEventListener('keydown', closeEmojiPickerOnEscape);
+  window.removeEventListener('openmeet:notifications-received', handleSocialNotifications);
   emojiPicker?.removeEventListener('emoji-click', handleEmojiClick);
   emojiPicker?.remove();
 });
@@ -750,6 +791,47 @@ async function addFriend(result: UserSearchResult) {
     feedbackError.value = 'Could not send friend request.';
   } finally {
     isAddingFriend.value = false;
+  }
+}
+
+async function respondToFriendRequest(request: FriendRequest, accept: boolean) {
+  const token = accessToken.value;
+  if (!token || isRespondingToFriendRequest.value) return;
+
+  clearFeedback();
+  isRespondingToFriendRequest.value = request.id;
+  try {
+    if (accept) {
+      await socialApi.acceptFriend(token, request.id);
+      feedbackMessage.value = `${request.user.name} is now a friend.`;
+    } else {
+      await socialApi.declineFriend(token, request.id);
+      feedbackMessage.value = 'Friend request declined.';
+    }
+    await refreshFriends();
+  } catch (error) {
+    console.error('[Dashboard] Failed to respond to friend request:', error);
+    feedbackError.value = 'Could not update friend request.';
+  } finally {
+    isRespondingToFriendRequest.value = null;
+  }
+}
+
+async function removeFriend(friend: Friend) {
+  const token = accessToken.value;
+  if (!token || !friend.friendshipId || isRemovingFriend.value) return;
+
+  clearFeedback();
+  isRemovingFriend.value = friend.id;
+  try {
+    await socialApi.removeFriend(token, friend.friendshipId);
+    friends.value = friends.value.filter((item) => item.id !== friend.id);
+    feedbackMessage.value = `${friend.name} was removed from your friends.`;
+  } catch (error) {
+    console.error('[Dashboard] Failed to remove friend:', error);
+    feedbackError.value = 'Could not remove friend.';
+  } finally {
+    isRemovingFriend.value = null;
   }
 }
 
@@ -821,14 +903,14 @@ async function startSelectedConversationCall() {
 </script>
 
 <template>
-  <div v-if="isCheckingSession" class="flex h-[100dvh] items-center justify-center bg-[#F6FAF7] pt-20">
+  <div v-if="isCheckingSession" class="flex h-[calc(100dvh-84px)] items-center justify-center bg-[#F6FAF7]">
     <LoadingRipple class="size-8 text-[#0B7A75]" />
     <span class="sr-only">Loading workspace</span>
   </div>
 
   <main
     v-else-if="isAuthenticated"
-    class="marketing-font h-[100dvh] overflow-hidden bg-[#F6FAF7] px-3 pb-3 pt-24 text-[#102F35] sm:px-5 sm:pb-5 sm:pt-28"
+    class="marketing-font h-[calc(100dvh-84px)] overflow-hidden bg-[#F6FAF7] p-3 text-[#102F35] sm:p-5"
   >
     <motion.div
       :initial="{ opacity: 0, y: 10 }"
@@ -1089,29 +1171,82 @@ async function startSelectedConversationCall() {
             </div>
           </div>
           <div class="min-h-0 flex-1 overflow-y-auto">
-            <div v-if="visibleFriends.length" id="friend-list" class="mt-2 space-y-1 px-2">
-              <button
-                v-for="friend in visibleFriends"
-                :key="friend.id"
-                type="button"
-                class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                :aria-label="`Open direct conversation with ${friend.name}`"
-                @click="openFriendConversation(friend)"
+            <div v-if="incomingFriendRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
+              <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
+              <div
+                v-for="request in incomingFriendRequests"
+                :key="request.id"
+                class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-[#102F35]"
               >
                 <span
-                  class="relative flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                  class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
                 >
-                  {{ userInitials(friend.name) }}
-                  <span
-                    v-if="friend.isOnline"
-                    class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]"
-                    aria-label="Online"
-                  />
+                  {{ userInitials(request.user.name) }}
                 </span>
-                <span class="min-w-0 flex-1 truncate text-sm">{{
-                  isOpeningDirect === friend.id ? 'Opening...' : friend.name
-                }}</span>
-              </button>
+                <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
+                  :disabled="isRespondingToFriendRequest !== null"
+                  :aria-label="`Accept friend request from ${request.user.name}`"
+                  @click="respondToFriendRequest(request, true)"
+                >
+                  <Check class="size-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
+                  :disabled="isRespondingToFriendRequest !== null"
+                  :aria-label="`Decline friend request from ${request.user.name}`"
+                  @click="respondToFriendRequest(request, false)"
+                >
+                  <X class="size-4" />
+                </Button>
+              </div>
+            </div>
+            <div v-if="visibleFriends.length" id="friend-list" class="mt-2 space-y-1 px-2">
+              <ContextMenu v-for="friend in visibleFriends" :key="friend.id">
+                <ContextMenuTrigger as-child>
+                  <button
+                    type="button"
+                    class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    :aria-label="`Open direct conversation with ${friend.name}`"
+                    @click="openFriendConversation(friend)"
+                  >
+                    <span
+                      class="relative flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                    >
+                      {{ userInitials(friend.name) }}
+                      <span
+                        v-if="friend.isOnline"
+                        class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]"
+                        aria-label="Online"
+                      />
+                    </span>
+                    <span class="min-w-0 flex-1 truncate text-sm">{{
+                      isOpeningDirect === friend.id ? 'Opening...' : friend.name
+                    }}</span>
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent
+                  class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+                >
+                  <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
+                    {{ friend.name }}
+                  </ContextMenuLabel>
+                  <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
+                  <ContextMenuItem
+                    :disabled="isRemovingFriend !== null"
+                    class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
+                    @select="removeFriend(friend)"
+                  >
+                    <UserMinus class="size-4" aria-hidden="true" />
+                    {{ isRemovingFriend === friend.id ? 'Removing...' : 'Remove friend' }}
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             </div>
             <p v-else-if="!isLoading && friends.length" class="px-2 py-2 text-xs text-[#61777B]">
               No friends match your search.

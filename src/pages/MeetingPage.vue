@@ -487,10 +487,10 @@ const handleReconnect = () => {
 </script>
 
 <template>
-  <div class="relative min-h-[calc(100svh-4.5rem)]">
+  <div class="relative h-[calc(100dvh-84px)] overflow-hidden bg-white p-3 sm:p-5">
     <div
       v-if="isCheckingSession"
-      class="marketing-font min-h-screen bg-[#102F35] flex items-center justify-center text-[#E6F4F1]"
+      class="marketing-font h-full bg-[#102F35] flex items-center justify-center text-[#E6F4F1]"
     >
       <div class="text-center">
         <LoadingRipple size="lg" class="mb-4 text-[#9BCFC7]" />
@@ -514,19 +514,19 @@ const handleReconnect = () => {
       @cancel="handleCancelJoin"
     />
 
-    <div
-      v-if="hasJoined && !isCheckingSession"
-      class="marketing-font min-h-screen bg-white text-[#102F35] flex flex-col"
-    >
+    <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full bg-white text-[#102F35] flex flex-col">
       <!-- Participant Count Badge -->
       <div
-        class="fixed top-20 left-4 z-50 bg-[#0B7A75] text-white rounded-full px-4 py-2 flex items-center gap-2 shadow-lg"
+        class="fixed left-7 top-[calc(84px+0.75rem)] z-50 flex items-center gap-2 rounded-full bg-[#0B7A75] px-4 py-2 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
       >
         <Users class="h-5 w-5" />
         <span class="font-semibold">{{ participantCount }}</span>
       </div>
 
-      <div class="fixed top-20 z-[60] transition-[right]" :class="isChatOpen ? 'right-16' : 'right-4'">
+      <div
+        class="fixed top-[calc(84px+0.75rem)] z-[60] transition-[right] sm:top-[calc(84px+1.25rem)]"
+        :class="isChatOpen ? 'right-16' : 'right-7 sm:right-9'"
+      >
         <MeetingActionMenu
           :audio-available="audioAvailable"
           :is-chat-open="isChatOpen"
@@ -548,7 +548,7 @@ const handleReconnect = () => {
       <button
         v-if="hasPoorConnection"
         type="button"
-        class="fixed left-1/2 top-20 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg"
+        class="fixed left-1/2 top-[calc(84px+0.75rem)] z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg sm:top-[calc(84px+1.25rem)]"
         data-testid="connection-quality-warning"
         @click="showConnectionQualityDetails = !showConnectionQualityDetails"
       >
@@ -580,7 +580,7 @@ const handleReconnect = () => {
       <!-- Debug Info Panel -->
       <div
         v-if="showConnectionStatus"
-        class="fixed right-4 top-36 z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg"
+        class="fixed right-7 top-[calc(84px+5rem)] z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg sm:right-9 sm:top-[calc(84px+5.5rem)]"
       >
         <div class="flex items-center gap-2">
           <span class="text-[#4E6B70]">{{ t('meeting.state') }}</span>
