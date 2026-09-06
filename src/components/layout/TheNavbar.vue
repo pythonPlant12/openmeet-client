@@ -3,6 +3,7 @@ import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
   ArrowRight,
   ChevronDown,
+  CircleUserRound,
   Code2,
   Container,
   Github,
@@ -26,12 +27,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useAuth } from '@/composables/useAuth';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useBranding } from '@/config/branding.config';
+import { socialApi } from '@/services/social-api';
 import { AuthEventType } from '@/xstate/machines/auth/types';
 
 const route = useRoute();
@@ -39,8 +42,16 @@ const router = useRouter();
 const { t } = useI18n();
 const branding = useBranding();
 const { createMeeting } = useMeetingNavigation();
-const { state, isAuthenticating, isRegistering, isCheckingSession, isAuthenticated, hasRegisterError, send } =
-  useAuth();
+const {
+  state,
+  accessToken,
+  isAuthenticating,
+  isRegistering,
+  isCheckingSession,
+  isAuthenticated,
+  hasRegisterError,
+  send,
+} = useAuth();
 
 const mobileMenuOpen = ref(false);
 const mobileMenuExpanded = ref(false);
@@ -52,6 +63,9 @@ const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const navCapsuleRef = ref<HTMLElement | null>(null);
 const navContentRef = ref<HTMLElement | null>(null);
 const desktopNavWidth = ref<number>();
+const avatarUrl = ref<string | null>(null);
+let avatarObjectUrl: string | null = null;
+let avatarRequest = 0;
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
 const isAuthBusy = computed(
@@ -235,6 +249,41 @@ const handleLogout = () => {
   send({ type: AuthEventType.LOGOUT });
 };
 
+const handleGoToFriends = () => {
+  resetMobileMenu();
+  router.push({ path: '/dashboard', query: { panel: 'friends' } });
+};
+
+async function loadAvatar() {
+  const token = accessToken.value;
+  const request = ++avatarRequest;
+  if (!token || !isAuthenticated.value) {
+    if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
+    avatarObjectUrl = null;
+    avatarUrl.value = null;
+    return;
+  }
+
+  try {
+    const profile = await socialApi.getCurrentUserProfile(token);
+    if (request !== avatarRequest || !profile.avatarUrl) return;
+    const objectUrl = URL.createObjectURL(await socialApi.loadAvatar(token, profile.avatarUrl));
+    if (request !== avatarRequest) {
+      URL.revokeObjectURL(objectUrl);
+      return;
+    }
+    if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
+    avatarObjectUrl = objectUrl;
+    avatarUrl.value = objectUrl;
+  } catch (error) {
+    console.error('[Navbar] Failed to load avatar:', error);
+  }
+}
+
+function handleProfileUpdated() {
+  void loadAvatar();
+}
+
 let navResizeObserver: ResizeObserver | undefined;
 
 const updateDesktopNavWidth = () => {
@@ -254,6 +303,8 @@ const updateDesktopNavWidth = () => {
 };
 
 onMounted(() => {
+  window.addEventListener('openmeet:profile-updated', handleProfileUpdated);
+  void loadAvatar();
   if (!navContentRef.value) return;
   if (!('ResizeObserver' in window)) {
     updateDesktopNavWidth();
@@ -264,9 +315,14 @@ onMounted(() => {
   updateDesktopNavWidth();
 });
 
-onUnmounted(() => navResizeObserver?.disconnect());
+onUnmounted(() => {
+  navResizeObserver?.disconnect();
+  window.removeEventListener('openmeet:profile-updated', handleProfileUpdated);
+  if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
+});
 
 watch(isDesktop, () => requestAnimationFrame(updateDesktopNavWidth));
+watch(accessToken, () => void loadAvatar());
 </script>
 
 <template>
@@ -289,7 +345,7 @@ watch(isDesktop, () => requestAnimationFrame(updateDesktopNavWidth));
     >
       <div
         ref="navCapsuleRef"
-        class="harbor-nav-capsule size-full overflow-hidden rounded-[1.875rem] border border-white/80 bg-white/95 p-3 shadow-[0_16px_42px_rgba(16,47,53,0.14),0_2px_8px_rgba(16,47,53,0.07)] backdrop-blur-xl xl:h-full xl:w-max xl:rounded-full xl:px-5 xl:py-0 xl:transition-[width] xl:duration-[360ms] xl:ease-[cubic-bezier(0.22,1,0.36,1)]"
+        class="harbor-nav-capsule size-full overflow-hidden rounded-[1.875rem] border border-[#D8E7E3] bg-[#FBFCF8] p-3 shadow-[0_16px_42px_rgba(16,47,53,0.1),0_2px_8px_rgba(16,47,53,0.05)] xl:h-full xl:w-max xl:rounded-full xl:px-5 xl:py-0 xl:transition-[width] xl:duration-[360ms] xl:ease-[cubic-bezier(0.22,1,0.36,1)]"
         :class="{ 'harbor-nav-capsule-active': activeDesktopMenu }"
         :style="isDesktop && desktopNavWidth ? { width: `${desktopNavWidth}px` } : undefined"
       >
@@ -431,36 +487,62 @@ watch(isDesktop, () => requestAnimationFrame(updateDesktopNavWidth));
             <template v-if="!isAuthenticated">
               <button
                 type="button"
-                class="inline-flex size-10 items-center justify-center rounded-full text-[#27595D] transition-[color,background-color] duration-300 hover:bg-[#E6F4F1] hover:text-[#08635F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"
+                class="harbor-ghost-action inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-[#27595D] transition-[color,background-color] duration-300 hover:bg-[#E6F4F1] hover:text-[#08635F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="isAuthBusy"
-                :aria-label="t('common.logIn')"
-                :title="t('common.logIn')"
                 @click="handleGoToLogin"
               >
                 <LoadingRipple v-if="isAuthenticating" size="sm" />
-                <LogIn v-else class="size-[1.1rem]" />
+                <template v-else>{{ t('common.logIn') }}</template>
               </button>
             </template>
-            <template v-else>
-              <Button
-                variant="ghost"
-                class="harbor-ghost-action max-w-40 rounded-full text-[#27595D]"
-                :title="t('common.dashboard')"
-                @click="router.push('/dashboard')"
-              >
-                {{ t('common.dashboard') }}
-              </Button>
-              <button
-                type="button"
-                class="inline-flex size-10 items-center justify-center rounded-full text-[#61777B] transition-[color,background-color] duration-300 hover:bg-[#FDE9E4] hover:text-[#D95E49] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2765F] disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isAuthBusy"
-                :aria-label="t('common.logOut')"
-                :title="t('common.logOut')"
-                @click="handleLogout"
-              >
-                <LoadingRipple v-if="isLoggingOut" size="sm" />
-                <LogOut v-else class="size-[1.1rem]" />
-              </button>
+            <template v-else-if="isAuthenticated && !isCheckingSession">
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <button
+                    type="button"
+                    class="harbor-ghost-action inline-flex size-10 items-center justify-center rounded-full text-[#0B7A75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    :aria-label="t('nav.accountInformation')"
+                    :title="t('nav.accountInformation')"
+                  >
+                    <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
+                    <CircleUserRound v-else class="size-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  :side-offset="12"
+                  class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+                >
+                  <DropdownMenuItem
+                    class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+                    @select="handleGoToPage('/account')"
+                  >
+                    {{ t('nav.accountInformation') }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+                    @select="handleGoToPage('/dashboard')"
+                  >
+                    {{ t('common.dashboard') }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+                    @select="handleGoToFriends"
+                  >
+                    {{ t('nav.friends') }}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator class="my-1 bg-[#E5EFEC]" />
+                  <DropdownMenuItem
+                    class="cursor-pointer rounded-xl px-3 py-2.5 text-[#9D4636] focus:bg-[#FFF0EA] focus:text-[#9D4636]"
+                    :disabled="isAuthBusy"
+                    @select="handleLogout"
+                  >
+                    <LoadingRipple v-if="isLoggingOut" size="sm" />
+                    <LogOut v-else class="size-4" />
+                    {{ t('common.logOut') }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </template>
             <a
               href="https://github.com/pythonPlant12/openmeet"
@@ -550,7 +632,7 @@ watch(isDesktop, () => requestAnimationFrame(updateDesktopNavWidth));
               <div class="mt-5 shrink-0 space-y-3 border-t border-[#D8E7E3] pt-5">
                 <div class="flex items-center justify-end gap-3">
                   <Button
-                    v-if="isAuthenticated"
+                    v-if="isAuthenticated && !isCheckingSession"
                     variant="outline"
                     class="harbor-soft-action mr-auto min-h-11 rounded-full border-transparent bg-[#E6F4F1] px-5 text-[#27595D]"
                     @click="handleGoToPage('/dashboard')"

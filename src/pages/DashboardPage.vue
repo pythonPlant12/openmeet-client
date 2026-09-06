@@ -5,15 +5,15 @@ import {
   ArrowLeft,
   Ban,
   Check,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
   CircleAlert,
   CircleCheck,
   CircleUserRound,
   Clock3,
   LockKeyhole,
+  Maximize2,
   MessageCircleMore,
+  Minimize2,
   MinusCircle,
   Phone,
   Plus,
@@ -66,6 +66,7 @@ import {
   type GroupAccessPolicy,
   type GroupInfo,
   type GroupMember,
+  SocialApiError,
   type UserSearchResult,
   socialApi,
 } from '@/services/social-api';
@@ -81,7 +82,6 @@ const searchQuery = ref('');
 const isConversationSearchOpen = ref(false);
 const friendSearchQuery = ref('');
 const isFriendSearchOpen = ref(false);
-const showAllFriends = ref(false);
 const isFriendFinderOpen = ref(false);
 const friendFinderQuery = ref('');
 const friendSearchResults = ref<UserSearchResult[]>([]);
@@ -97,6 +97,7 @@ const isAddingFriend = ref(false);
 const isRemovingFriend = ref<string | null>(null);
 const isRespondingToFriendRequest = ref<string | null>(null);
 const isCreatingGroup = ref(false);
+const expandedSidebarPanel = ref<'messages' | 'friends' | null>(null);
 const isGroupDialogOpen = ref(false);
 const isGroupProfileDialogOpen = ref(false);
 const isContactProfileDialogOpen = ref(false);
@@ -144,6 +145,7 @@ const chatStateTransition = computed(() =>
 const showNotificationPermissionWarning = computed(
   () => notificationPermission.value === 'default' || notificationPermission.value === 'denied',
 );
+const canRequestNotificationPermission = computed(() => notificationPermission.value === 'default');
 
 const friendById = computed(() => new Map(friends.value.map((friend) => [friend.id, friend])));
 const filteredConversations = computed(() => {
@@ -165,9 +167,8 @@ const filteredFriends = computed(() => {
     );
 });
 const visibleFriends = computed(() =>
-  showAllFriends.value ? filteredFriends.value : filteredFriends.value.slice(0, 5),
+  expandedSidebarPanel.value === 'friends' ? filteredFriends.value : filteredFriends.value.slice(0, 5),
 );
-const canToggleFriends = computed(() => filteredFriends.value.length > 5);
 const selectedFriend = computed(() => {
   if (pendingDirectFriend.value) return pendingDirectFriend.value;
   if (selectedConversation.value?.kind !== 'direct') return null;
@@ -295,6 +296,9 @@ function updateConversationActivity(message: ConversationMessage) {
 }
 
 function markConversationRead(conversationId: string) {
+  conversations.value = conversations.value.map((conversation) =>
+    conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation,
+  );
   const activity = conversationActivity.value[conversationId];
   if (!activity?.unreadCount) return;
 
@@ -305,7 +309,7 @@ function markConversationRead(conversationId: string) {
 }
 
 function unreadCount(conversation: Conversation) {
-  return conversationActivity.value[conversation.id]?.unreadCount ?? 0;
+  return conversation.unreadCount + (conversationActivity.value[conversation.id]?.unreadCount ?? 0);
 }
 
 function appendMessage(message: ConversationMessage) {
@@ -422,26 +426,8 @@ function addConversation(conversation: Conversation) {
   conversations.value = upsertConversationByActivity(conversations.value, conversation, conversationActivity.value);
 }
 
-async function excludeUnsentDirectDrafts(accessToken: string, conversationData: Conversation[]) {
-  const directConversations = conversationData.filter((conversation) => conversation.kind === 'direct');
-  const directConversationIdsWithMessages = new Set(
-    await Promise.all(
-      directConversations.map(async (conversation) => {
-        try {
-          const response = await socialApi.listConversationMessages(accessToken, conversation.id);
-          return response.messages.length ? conversation.id : null;
-        } catch (error) {
-          // Keep a conversation visible when its history cannot be checked.
-          console.error('[Dashboard] Failed to check direct conversation history:', error);
-          return conversation.id;
-        }
-      }),
-    ),
-  );
-
-  return conversationData.filter(
-    (conversation) => conversation.kind !== 'direct' || directConversationIdsWithMessages.has(conversation.id),
-  );
+function excludeUnsentDirectDrafts(conversationData: Conversation[]) {
+  return conversationData.filter((conversation) => conversation.kind !== 'direct' || conversation.messageCount > 0);
 }
 
 async function loadWorkspace() {
@@ -457,7 +443,7 @@ async function loadWorkspace() {
     friends.value = friendData.friends;
     incomingFriendRequests.value = friendData.incomingRequests;
     conversations.value = sortConversationsByActivity(
-      await excludeUnsentDirectDrafts(token, conversationData),
+      excludeUnsentDirectDrafts(conversationData),
       conversationActivity.value,
     );
     directRequests.value = requestData;
@@ -573,7 +559,9 @@ function profileFallback(userId: string, name: string): ContactProfile {
   return {
     id: userId,
     name,
+    nickname: '',
     email: 'Profile details unavailable',
+    avatarUrl: null,
     status: 'offline',
     statusMessage: 'Live profile details are only available to accepted friends.',
     createdAt: '',
@@ -659,6 +647,31 @@ function toggleFriendFinder() {
   if (isFriendFinderOpen.value) nextTick(() => friendFinderInput.value?.focus());
 }
 
+function toggleSidebarPanel(panel: 'messages' | 'friends') {
+  expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
+}
+
+function handlePanelHeaderDragEnd(
+  panel: 'messages' | 'friends',
+  _event: PointerEvent,
+  info: { offset: { y: number }; velocity: { y: number } },
+) {
+  const movedUp = info.offset.y < -48 || info.velocity.y < -400;
+  const movedDown = info.offset.y > 48 || info.velocity.y > 400;
+  const shouldExpand = panel === 'messages' ? movedDown : movedUp;
+  const shouldCollapse = panel === 'messages' ? movedUp : movedDown;
+
+  if (shouldExpand && expandedSidebarPanel.value !== panel) {
+    expandedSidebarPanel.value = panel;
+  } else if (shouldCollapse && expandedSidebarPanel.value === panel) {
+    expandedSidebarPanel.value = null;
+  }
+}
+
+function isExistingFriend(result: UserSearchResult) {
+  return friendById.value.has(result.id);
+}
+
 function preventProfileTriggerFocus(event: Event) {
   event.preventDefault();
 }
@@ -735,7 +748,6 @@ onMounted(() => {
   document.addEventListener('pointerdown', closeEmojiPickerOnOutsideClick);
   document.addEventListener('keydown', closeEmojiPickerOnEscape);
   window.addEventListener('openmeet:notifications-received', handleSocialNotifications);
-  void requestNotificationPermission();
 });
 
 onBeforeUnmount(() => {
@@ -788,7 +800,7 @@ async function addFriend(result: UserSearchResult) {
     feedbackMessage.value = 'Friend request sent.';
   } catch (error) {
     console.error('[Dashboard] Failed to send friend request:', error);
-    feedbackError.value = 'Could not send friend request.';
+    feedbackError.value = error instanceof SocialApiError ? error.message : 'Could not send friend request.';
   } finally {
     isAddingFriend.value = false;
   }
@@ -903,14 +915,14 @@ async function startSelectedConversationCall() {
 </script>
 
 <template>
-  <div v-if="isCheckingSession" class="flex h-[calc(100dvh-84px)] items-center justify-center bg-[#F6FAF7]">
+  <div v-if="isCheckingSession" class="flex h-[calc(100dvh-84px)] items-center justify-center bg-[#FBFCF8]">
     <LoadingRipple class="size-8 text-[#0B7A75]" />
     <span class="sr-only">Loading workspace</span>
   </div>
 
   <main
     v-else-if="isAuthenticated"
-    class="marketing-font h-[calc(100dvh-84px)] overflow-hidden bg-[#F6FAF7] p-3 text-[#102F35] sm:p-5"
+    class="marketing-font h-[calc(100dvh-84px)] overflow-hidden bg-[#FBFCF8] px-3 pb-3 pt-0 text-[#102F35] sm:px-5 sm:pb-3 sm:pt-0"
   >
     <motion.div
       :initial="{ opacity: 0, y: 10 }"
@@ -925,7 +937,16 @@ async function startSelectedConversationCall() {
       >
         <div class="border-b border-[#E5EFEC] px-4 py-4 sm:px-5">
           <div class="flex items-center justify-between gap-3">
-            <h1 class="min-w-0 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]">Messages</h1>
+            <motion.h1
+              drag="y"
+              :drag-constraints="{ top: 0, bottom: 0 }"
+              :drag-elastic="0.08"
+              :drag-momentum="false"
+              class="-my-4 flex-1 touch-none cursor-ns-resize py-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+              @drag-end="(event, info) => handlePanelHeaderDragEnd('messages', event, info)"
+            >
+              Messages
+            </motion.h1>
             <div class="flex shrink-0 items-center gap-2">
               <Button
                 size="icon"
@@ -949,6 +970,19 @@ async function startSelectedConversationCall() {
               >
                 <Plus class="size-4" />
               </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
+                :aria-expanded="expandedSidebarPanel === 'messages'"
+                aria-controls="messages-panel"
+                :aria-label="expandedSidebarPanel === 'messages' ? 'Collapse messages' : 'Expand messages'"
+                :title="expandedSidebarPanel === 'messages' ? 'Collapse messages' : 'Expand messages'"
+                @click="toggleSidebarPanel('messages')"
+              >
+                <Minimize2 v-if="expandedSidebarPanel === 'messages'" class="size-4" />
+                <Maximize2 v-else class="size-4" />
+              </Button>
             </div>
           </div>
           <div
@@ -970,103 +1004,137 @@ async function startSelectedConversationCall() {
           </div>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-2" aria-live="polite">
-          <div v-if="directRequests.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
-            <div
-              v-for="request in directRequests"
-              :key="request.id"
-              class="flex items-center gap-2 rounded-xl px-2 py-2"
+        <motion.div
+          :layout="!prefersReducedMotion"
+          class="min-h-0 overflow-hidden"
+          :class="expandedSidebarPanel === 'friends' ? 'h-0 shrink-0' : 'flex-1'"
+        >
+          <AnimatePresence mode="sync">
+            <motion.div
+              v-if="expandedSidebarPanel !== 'friends'"
+              id="messages-panel"
+              key="messages-panel"
+              :initial="prefersReducedMotion ? false : { opacity: 0, y: -8 }"
+              :animate="{ opacity: 1, y: 0 }"
+              :exit="prefersReducedMotion ? undefined : { opacity: 0, y: -8 }"
+              :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }"
+              class="h-full min-h-0 overflow-y-auto p-2"
+              aria-live="polite"
             >
-              <span
-                class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
-              >
-                <CircleUserRound class="size-4" />
-              </span>
-              <p class="min-w-0 flex-1 truncate text-xs text-[#4E6B70]">
-                Request from account {{ request.requesterId.slice(0, 8) }}
+              <div v-if="directRequests.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
+                <div
+                  v-for="request in directRequests"
+                  :key="request.id"
+                  class="flex items-center gap-2 rounded-xl px-2 py-2"
+                >
+                  <span
+                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
+                  >
+                    <CircleUserRound class="size-4" />
+                  </span>
+                  <p class="min-w-0 flex-1 truncate text-xs text-[#4E6B70]">
+                    Request from account {{ request.requesterId.slice(0, 8) }}
+                  </p>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
+                    :aria-label="`Accept request from account ${request.requesterId.slice(0, 8)}`"
+                    @click="respondToDirectRequest(request, true)"
+                  >
+                    <Check class="size-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
+                    :aria-label="`Decline request from account ${request.requesterId.slice(0, 8)}`"
+                    @click="respondToDirectRequest(request, false)"
+                  >
+                    <X class="size-4" />
+                  </Button>
+                </div>
+              </div>
+              <div v-if="isLoading" class="flex min-h-44 items-center justify-center">
+                <LoadingRipple class="size-6 text-[#0B7A75]" />
+                <span class="sr-only">Loading conversations</span>
+              </div>
+              <p v-else-if="!filteredConversations.length" class="px-3 py-8 text-center text-sm text-[#61777B]">
+                {{ searchQuery ? 'No conversations match your search.' : 'No conversations yet.' }}
               </p>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                :aria-label="`Accept request from account ${request.requesterId.slice(0, 8)}`"
-                @click="respondToDirectRequest(request, true)"
-              >
-                <Check class="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
-                :aria-label="`Decline request from account ${request.requesterId.slice(0, 8)}`"
-                @click="respondToDirectRequest(request, false)"
-              >
-                <X class="size-4" />
-              </Button>
-            </div>
-          </div>
-          <div v-if="isLoading" class="flex min-h-44 items-center justify-center">
-            <LoadingRipple class="size-6 text-[#0B7A75]" />
-            <span class="sr-only">Loading conversations</span>
-          </div>
-          <p v-else-if="!filteredConversations.length" class="px-3 py-8 text-center text-sm text-[#61777B]">
-            {{ searchQuery ? 'No conversations match your search.' : 'No conversations yet.' }}
-          </p>
-          <nav v-else aria-label="Persistent conversations" class="space-y-1">
-            <button
-              v-for="conversation in filteredConversations"
-              :key="conversation.id"
-              type="button"
-              class="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-              :class="[
-                'harbor-ghost-action',
-                selectedConversation?.id === conversation.id ? 'bg-[#E6F4F1] !text-[#102F35]' : '',
-              ]"
-              :aria-current="selectedConversation?.id === conversation.id ? 'page' : undefined"
-              @click="selectConversation(conversation)"
-            >
-              <span
-                class="flex size-10 shrink-0 items-center justify-center rounded-full"
-                :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
-              >
-                <UsersRound v-if="conversation.kind === 'group'" class="size-4" />
-                <span v-else class="text-xs font-semibold">{{
-                  userInitials(friendById.get(conversation.otherUserId ?? '')?.name)
-                }}</span>
-              </span>
-              <span class="min-w-0 flex-1">
-                <span class="flex items-center gap-2">
-                  <strong class="truncate text-sm">{{ conversationName(conversation) }}</strong>
-                  <LockKeyhole
-                    v-if="conversation.accessPolicy === 'password'"
-                    class="size-3 shrink-0 text-[#61777B]"
-                    aria-label="Password protected"
-                  />
-                </span>
-                <span class="mt-0.5 block truncate text-xs text-[#61777B]">{{
-                  conversation.kind === 'group' ? 'Group conversation' : 'Direct conversation'
-                }}</span>
-              </span>
-              <span
-                v-if="unreadCount(conversation)"
-                class="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-[#0B7A75] px-1.5 py-0.5 text-[11px] font-semibold text-white"
-                :aria-label="`${unreadCount(conversation)} unread messages`"
-              >
-                {{ unreadCount(conversation) > 99 ? '99+' : unreadCount(conversation) }}
-              </span>
-              <ChevronRight v-else class="size-4 shrink-0 text-[#809697]" />
-            </button>
-          </nav>
-        </div>
+              <nav v-else aria-label="Persistent conversations" class="space-y-1">
+                <button
+                  v-for="conversation in filteredConversations"
+                  :key="conversation.id"
+                  type="button"
+                  class="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                  :class="[
+                    'harbor-ghost-action',
+                    selectedConversation?.id === conversation.id ? 'bg-[#E6F4F1] !text-[#102F35]' : '',
+                  ]"
+                  :aria-current="selectedConversation?.id === conversation.id ? 'page' : undefined"
+                  @click="selectConversation(conversation)"
+                >
+                  <span
+                    class="flex size-10 shrink-0 items-center justify-center rounded-full"
+                    :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
+                  >
+                    <UsersRound v-if="conversation.kind === 'group'" class="size-4" />
+                    <span v-else class="text-xs font-semibold">{{
+                      userInitials(friendById.get(conversation.otherUserId ?? '')?.name)
+                    }}</span>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="flex items-center gap-2">
+                      <strong class="truncate text-sm">{{ conversationName(conversation) }}</strong>
+                      <LockKeyhole
+                        v-if="conversation.accessPolicy === 'password'"
+                        class="size-3 shrink-0 text-[#61777B]"
+                        aria-label="Password protected"
+                      />
+                    </span>
+                    <span class="mt-0.5 block truncate text-xs text-[#61777B]">{{
+                      conversation.kind === 'group' ? 'Group conversation' : 'Direct conversation'
+                    }}</span>
+                  </span>
+                  <span
+                    v-if="unreadCount(conversation)"
+                    class="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-[#0B7A75] px-1.5 py-0.5 text-[11px] font-semibold text-white"
+                    :aria-label="`${unreadCount(conversation)} unread messages`"
+                  >
+                    {{ unreadCount(conversation) > 99 ? '99+' : unreadCount(conversation) }}
+                  </span>
+                  <ChevronRight v-else class="size-4 shrink-0 text-[#809697]" />
+                </button>
+              </nav>
+            </motion.div>
+          </AnimatePresence>
+        </motion.div>
 
-        <section
-          class="flex max-h-[min(38dvh,23rem)] min-h-0 shrink-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3"
+        <motion.section
+          :layout="!prefersReducedMotion"
+          class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3"
+          :class="
+            expandedSidebarPanel === 'messages'
+              ? 'shrink-0'
+              : expandedSidebarPanel === 'friends'
+                ? 'flex-1'
+                : 'max-h-[min(38dvh,23rem)] shrink-0'
+          "
           aria-labelledby="friends-heading"
         >
           <div class="flex items-center justify-between gap-2 px-2">
-            <h2 id="friends-heading" class="text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]">
+            <motion.h2
+              id="friends-heading"
+              drag="y"
+              :drag-constraints="{ top: 0, bottom: 0 }"
+              :drag-elastic="0.08"
+              :drag-momentum="false"
+              class="-my-2 flex-1 touch-none cursor-ns-resize py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+              @drag-end="(event, info) => handlePanelHeaderDragEnd('friends', event, info)"
+            >
               Friends
-            </h2>
+            </motion.h2>
             <div class="flex items-center gap-1">
               <Button
                 size="icon"
@@ -1094,180 +1162,194 @@ async function startSelectedConversationCall() {
               >
                 <UserPlus class="size-4" />
               </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
+                :aria-expanded="expandedSidebarPanel === 'friends'"
+                aria-controls="friends-panel"
+                :aria-label="expandedSidebarPanel === 'friends' ? 'Collapse friends' : 'Expand friends'"
+                :title="expandedSidebarPanel === 'friends' ? 'Collapse friends' : 'Expand friends'"
+                @click="toggleSidebarPanel('friends')"
+              >
+                <Minimize2 v-if="expandedSidebarPanel === 'friends'" class="size-4" />
+                <Maximize2 v-else class="size-4" />
+              </Button>
             </div>
           </div>
-          <div
-            id="friend-search"
-            class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
-            :class="isFriendSearchOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
-          >
-            <label class="relative min-h-0 overflow-hidden">
-              <span class="sr-only">Search friends</span>
-              <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" />
-              <Input
-                ref="friendSearchInput"
-                v-model="friendSearchQuery"
-                type="search"
-                placeholder="Search friends"
-                class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-            </label>
-          </div>
-          <div
-            id="friend-finder"
-            class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
-            :class="isFriendFinderOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
-          >
-            <div class="min-h-0 overflow-hidden">
-              <label class="relative block">
-                <span class="sr-only">Find registered users</span>
-                <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" />
-                <Input
-                  ref="friendFinderInput"
-                  v-model="friendFinderQuery"
-                  type="search"
-                  placeholder="Find registered users"
-                  class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </label>
-              <p
-                v-if="friendFinderQuery.trim() && friendFinderQuery.replace(/\s/g, '').length < 2"
-                class="mt-2 text-xs text-[#61777B]"
+          <AnimatePresence mode="sync">
+            <motion.div
+              v-if="expandedSidebarPanel !== 'messages'"
+              id="friends-panel"
+              key="friends-panel"
+              :initial="prefersReducedMotion ? false : { opacity: 0, y: 8 }"
+              :animate="{ opacity: 1, y: 0 }"
+              :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 8 }"
+              :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }"
+              class="flex min-h-0 flex-1 flex-col"
+            >
+              <div
+                id="friend-search"
+                class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
+                :class="isFriendSearchOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
               >
-                Enter at least two characters.
-              </p>
-              <div v-else-if="isSearchingUsers" class="flex h-16 items-center justify-center">
-                <LoadingRipple class="size-4 text-[#0B7A75]" />
-                <span class="sr-only">Searching registered users</span>
+                <label class="relative min-h-0 overflow-hidden">
+                  <span class="sr-only">Search friends</span>
+                  <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" />
+                  <Input
+                    ref="friendSearchInput"
+                    v-model="friendSearchQuery"
+                    type="search"
+                    placeholder="Search friends"
+                    class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                </label>
               </div>
-              <div v-else-if="friendSearchResults.length" class="mt-2 space-y-1">
-                <div
-                  v-for="result in friendSearchResults"
-                  :key="result.id"
-                  class="flex items-center gap-2 rounded-xl bg-[#F0F7F5] px-2 py-2"
-                >
-                  <span
-                    class="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
+              <div
+                id="friend-finder"
+                class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
+                :class="isFriendFinderOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
+              >
+                <div class="min-h-0 overflow-hidden">
+                  <label class="relative block">
+                    <span class="sr-only">Find registered users</span>
+                    <Search
+                      class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]"
+                    />
+                    <Input
+                      ref="friendFinderInput"
+                      v-model="friendFinderQuery"
+                      type="search"
+                      placeholder="Find registered users"
+                      class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
+                    />
+                  </label>
+                  <p
+                    v-if="friendFinderQuery.trim() && friendFinderQuery.replace(/\s/g, '').length < 2"
+                    class="mt-2 text-xs text-[#61777B]"
                   >
-                    {{ userInitials(result.name) }}
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="block truncate text-xs font-semibold">{{ result.name }}</span>
-                    <span class="block truncate text-[11px] text-[#61777B]">{{ result.email }}</span>
-                  </span>
-                  <Button
-                    size="sm"
-                    :disabled="isAddingFriend"
-                    class="harbor-primary-action h-7 rounded-full bg-[#0B7A75] px-2 text-xs text-white"
-                    @click="addFriend(result)"
-                  >
-                    {{ isAddingFriend ? 'Adding...' : 'Add' }}
-                  </Button>
+                    Enter at least two characters.
+                  </p>
+                  <div v-else-if="isSearchingUsers" class="flex h-16 items-center justify-center">
+                    <LoadingRipple class="size-4 text-[#0B7A75]" />
+                    <span class="sr-only">Searching registered users</span>
+                  </div>
+                  <div v-else-if="friendSearchResults.length" class="mt-2 space-y-1">
+                    <div
+                      v-for="result in friendSearchResults"
+                      :key="result.id"
+                      class="flex items-center gap-2 rounded-xl bg-[#F0F7F5] px-2 py-2"
+                    >
+                      <span
+                        class="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
+                      >
+                        {{ userInitials(result.name) }}
+                      </span>
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate text-xs font-semibold">{{ result.name }}</span>
+                        <span class="block truncate text-[11px] text-[#61777B]">{{ result.email }}</span>
+                      </span>
+                      <Button
+                        size="sm"
+                        :disabled="isAddingFriend || isExistingFriend(result)"
+                        class="harbor-primary-action h-7 rounded-full bg-[#0B7A75] px-2 text-xs text-white"
+                        @click="addFriend(result)"
+                      >
+                        {{ isExistingFriend(result) ? 'Friends' : isAddingFriend ? 'Adding...' : 'Add' }}
+                      </Button>
+                    </div>
+                  </div>
+                  <p v-else-if="friendFinderQuery.replace(/\s/g, '').length >= 2" class="mt-2 text-xs text-[#61777B]">
+                    No registered accounts found.
+                  </p>
                 </div>
               </div>
-              <p v-else-if="friendFinderQuery.replace(/\s/g, '').length >= 2" class="mt-2 text-xs text-[#61777B]">
-                No registered accounts found.
-              </p>
-            </div>
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto">
-            <div v-if="incomingFriendRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
-              <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
-              <div
-                v-for="request in incomingFriendRequests"
-                :key="request.id"
-                class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-[#102F35]"
-              >
-                <span
-                  class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                >
-                  {{ userInitials(request.user.name) }}
-                </span>
-                <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                  :disabled="isRespondingToFriendRequest !== null"
-                  :aria-label="`Accept friend request from ${request.user.name}`"
-                  @click="respondToFriendRequest(request, true)"
-                >
-                  <Check class="size-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
-                  :disabled="isRespondingToFriendRequest !== null"
-                  :aria-label="`Decline friend request from ${request.user.name}`"
-                  @click="respondToFriendRequest(request, false)"
-                >
-                  <X class="size-4" />
-                </Button>
-              </div>
-            </div>
-            <div v-if="visibleFriends.length" id="friend-list" class="mt-2 space-y-1 px-2">
-              <ContextMenu v-for="friend in visibleFriends" :key="friend.id">
-                <ContextMenuTrigger as-child>
-                  <button
-                    type="button"
-                    class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    :aria-label="`Open direct conversation with ${friend.name}`"
-                    @click="openFriendConversation(friend)"
+              <div class="min-h-0 flex-1 overflow-y-auto">
+                <div v-if="incomingFriendRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
+                  <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
+                  <div
+                    v-for="request in incomingFriendRequests"
+                    :key="request.id"
+                    class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-[#102F35]"
                   >
                     <span
-                      class="relative flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                      class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
                     >
-                      {{ userInitials(friend.name) }}
-                      <span
-                        v-if="friend.isOnline"
-                        class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]"
-                        aria-label="Online"
-                      />
+                      {{ userInitials(request.user.name) }}
                     </span>
-                    <span class="min-w-0 flex-1 truncate text-sm">{{
-                      isOpeningDirect === friend.id ? 'Opening...' : friend.name
-                    }}</span>
-                  </button>
-                </ContextMenuTrigger>
-                <ContextMenuContent
-                  class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
-                >
-                  <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
-                    {{ friend.name }}
-                  </ContextMenuLabel>
-                  <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
-                  <ContextMenuItem
-                    :disabled="isRemovingFriend !== null"
-                    class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
-                    @select="removeFriend(friend)"
-                  >
-                    <UserMinus class="size-4" aria-hidden="true" />
-                    {{ isRemovingFriend === friend.id ? 'Removing...' : 'Remove friend' }}
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            </div>
-            <p v-else-if="!isLoading && friends.length" class="px-2 py-2 text-xs text-[#61777B]">
-              No friends match your search.
-            </p>
-            <p v-else-if="!isLoading" class="px-2 py-2 text-xs text-[#61777B]">No accepted friends.</p>
-            <Button
-              v-if="canToggleFriends"
-              size="icon"
-              variant="ghost"
-              class="harbor-ghost-action ml-2 mt-1 size-8 rounded-full text-[#0B7A75]"
-              aria-controls="friend-list"
-              :aria-expanded="showAllFriends"
-              :aria-label="showAllFriends ? 'Show fewer friends' : 'Show all friends'"
-              :title="showAllFriends ? 'Show fewer friends' : 'Show all friends'"
-              @click="showAllFriends = !showAllFriends"
-            >
-              <ChevronUp v-if="showAllFriends" class="size-4" />
-              <ChevronDown v-else class="size-4" />
-            </Button>
-          </div>
-        </section>
+                    <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
+                      :disabled="isRespondingToFriendRequest !== null"
+                      :aria-label="`Accept friend request from ${request.user.name}`"
+                      @click="respondToFriendRequest(request, true)"
+                    >
+                      <Check class="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
+                      :disabled="isRespondingToFriendRequest !== null"
+                      :aria-label="`Decline friend request from ${request.user.name}`"
+                      @click="respondToFriendRequest(request, false)"
+                    >
+                      <X class="size-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div v-if="visibleFriends.length" id="friend-list" class="mt-2 space-y-1 px-2">
+                  <ContextMenu v-for="friend in visibleFriends" :key="friend.id">
+                    <ContextMenuTrigger as-child>
+                      <button
+                        type="button"
+                        class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                        :aria-label="`Open direct conversation with ${friend.name}`"
+                        @click="openFriendConversation(friend)"
+                      >
+                        <span
+                          class="relative flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        >
+                          {{ userInitials(friend.name) }}
+                          <span
+                            v-if="friend.isOnline"
+                            class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]"
+                            aria-label="Online"
+                          />
+                        </span>
+                        <span class="min-w-0 flex-1 truncate text-sm">{{
+                          isOpeningDirect === friend.id ? 'Opening...' : friend.name
+                        }}</span>
+                      </button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent
+                      class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+                    >
+                      <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
+                        {{ friend.name }}
+                      </ContextMenuLabel>
+                      <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
+                      <ContextMenuItem
+                        :disabled="isRemovingFriend !== null"
+                        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
+                        @select="removeFriend(friend)"
+                      >
+                        <UserMinus class="size-4" aria-hidden="true" />
+                        {{ isRemovingFriend === friend.id ? 'Removing...' : 'Remove friend' }}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                </div>
+                <p v-else-if="!isLoading && friends.length" class="px-2 py-2 text-xs text-[#61777B]">
+                  No friends match your search.
+                </p>
+                <p v-else-if="!isLoading" class="px-2 py-2 text-xs text-[#61777B]">No accepted friends.</p>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </motion.section>
       </aside>
 
       <section
@@ -1374,8 +1456,15 @@ async function startSelectedConversationCall() {
                   v-if="showNotificationPermissionWarning"
                   class="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] px-3 py-2.5 text-sm text-[#102F35] shadow-sm"
                 >
-                  <p>Enable notifications for messages and calls.</p>
+                  <p>
+                    {{
+                      canRequestNotificationPermission
+                        ? 'Enable notifications for messages and calls.'
+                        : 'Notifications are blocked. Enable them in your browser settings.'
+                    }}
+                  </p>
                   <Button
+                    v-if="canRequestNotificationPermission"
                     type="button"
                     variant="ghost"
                     size="sm"

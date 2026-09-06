@@ -10,7 +10,7 @@ const loginActor = fromPromise<AuthResponse, { email: string; password: string }
   return authApi.login(input);
 });
 
-const registerActor = fromPromise<AuthResponse, { email: string; name: string; password: string }>(
+const registerActor = fromPromise<AuthResponse, { email: string; name: string; nickname: string; password: string }>(
   async ({ input }) => {
     return authApi.register(input);
   },
@@ -239,6 +239,7 @@ export const authMachine = setup({
           return {
             email: registerEvent.email,
             name: registerEvent.name,
+            nickname: registerEvent.nickname,
             password: registerEvent.password,
           };
         },

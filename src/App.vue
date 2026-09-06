@@ -146,7 +146,7 @@ async function pollNotifications() {
       );
       for (const notification of received) {
         const { title, description } = notificationCopy(notification);
-        toast({ title, description, duration: 3_000 });
+        toast({ title, description, duration: 8_000 });
         showSystemNotification(
           title,
           { body: description, icon: '/favicon.svg', tag: `openmeet-${notification.id}` },

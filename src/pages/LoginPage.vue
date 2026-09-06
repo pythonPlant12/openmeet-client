@@ -64,14 +64,22 @@ const goToRegister = () => {
         <div class="mb-10 flex items-center justify-between gap-4">
           <RouterLink
             to="/"
-            class="inline-flex items-center gap-2 rounded-full py-2 text-sm font-semibold text-[#27595D] underline-offset-4 hover:text-[#0B7A75] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+            class="
+              inline-flex items-center gap-2 rounded-full py-2 text-sm font-semibold text-[#27595D] underline-offset-4
+              hover:text-[#0B7A75] hover:underline focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-[#0B7A75]
+            "
           >
             <ArrowLeft class="size-4" />
             {{ t('common.backToHome') }}
           </RouterLink>
           <button
             type="button"
-            class="inline-flex items-center gap-2 rounded-full bg-[#E6F4F1] px-3 py-2 text-sm font-semibold text-[#0B7A75] transition-colors hover:bg-[#D8ECE8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] lg:hidden"
+            class="
+              inline-flex items-center gap-2 rounded-full bg-[#E6F4F1] px-3 py-2 text-sm font-semibold text-[#0B7A75]
+              transition-colors hover:bg-[#D8ECE8] focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-[#0B7A75] lg:hidden
+            "
             :disabled="isAuthenticating"
             @click="createMeeting"
           >
@@ -105,7 +113,10 @@ const goToRegister = () => {
               :placeholder="t('auth.emailPlaceholder')"
               required
               :disabled="isAuthenticating"
-              class="h-12 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
+              class="
+                h-12 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2]
+                focus-visible:ring-[#0B7A75]
+              "
             />
           </div>
 
@@ -121,7 +132,10 @@ const goToRegister = () => {
               :placeholder="t('auth.login.passwordPlaceholder')"
               required
               :disabled="isAuthenticating"
-              class="h-12 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
+              class="
+                h-12 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2]
+                focus-visible:ring-[#0B7A75]
+              "
             />
           </div>
 
@@ -136,7 +150,10 @@ const goToRegister = () => {
 
           <Button
             type="submit"
-            class="harbor-primary-action h-12 w-full rounded-full bg-[#0B7A75] text-base text-white shadow-[0_12px_28px_rgba(11,122,117,0.18)]"
+            class="
+              harbor-primary-action h-12 w-full rounded-full bg-[#0B7A75] text-base text-white
+              shadow-[0_12px_28px_rgba(11,122,117,0.18)]
+            "
             :disabled="isAuthenticating"
           >
             <LoadingRipple v-if="isAuthenticating" size="sm" />
@@ -156,10 +173,13 @@ const goToRegister = () => {
         </form>
 
         <p class="mt-8 text-sm text-[#61777B]">
-          <SplitText as="span" :text="t('auth.login.newUser', { appName: branding.appName })" />
+          <SplitText class="mr-2" as="span" :text="t('auth.login.newUser', { appName: branding.appName }) " />
           <button
             type="button"
-            class="font-semibold text-[#0B7A75] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"
+            class="
+              font-semibold text-[#0B7A75] underline-offset-4 hover:underline focus-visible:outline-none
+              focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50
+            "
             :disabled="isAuthenticating"
             @click="goToRegister"
           >
@@ -171,7 +191,11 @@ const goToRegister = () => {
           <button
             type="button"
             :disabled="isAuthenticating"
-            class="inline-flex items-center gap-2 text-sm font-semibold text-[#27595D] underline-offset-4 hover:text-[#0B7A75] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"
+            class="
+              inline-flex items-center gap-2 text-sm font-semibold text-[#27595D] underline-offset-4
+              hover:text-[#0B7A75] hover:underline focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50
+            "
             @click="createMeeting"
           >
             {{ t('auth.login.guestMeeting') }}

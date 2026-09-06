@@ -75,6 +75,55 @@ describe('socialApi', () => {
     await expect(socialApi.updatePresence('token')).resolves.toBeUndefined();
   });
 
+  it('loads the current profile through the authenticated self-profile route', async () => {
+    const profile = {
+      id: 'user-id',
+      name: 'Ada Lovelace',
+      nickname: 'ada_lovelace',
+      email: 'ada@example.com',
+      avatarUrl: null,
+      status: 'available',
+      statusMessage: 'Working',
+      createdAt: '2026-01-01T00:00:00Z',
+      lastSeenAt: null,
+      isOnline: true,
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(profile), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(socialApi.getCurrentUserProfile('token')).resolves.toEqual(profile);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8081/social/me/profile',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    );
+  });
+
+  it('updates the current profile through the authenticated self-profile route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await socialApi.updateCurrentUserProfile('token', {
+      name: 'Ada Lovelace',
+      nickname: 'ada_lovelace',
+      statusMessage: 'Working',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8081/social/me/profile',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+  });
+
+  it('loads private avatars with the authenticated API client', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('avatar', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(socialApi.loadAvatar('token', '/social/users/user-id/avatar')).resolves.toBeInstanceOf(Blob);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8081/social/users/user-id/avatar',
+      expect.objectContaining({ headers: { Authorization: 'Bearer token' } }),
+    );
+  });
+
   it('uses conversation GET, POST, and DELETE contracts', async () => {
     const fetchMock = vi
       .fn()
@@ -159,7 +208,7 @@ describe('socialApi', () => {
     await expect(socialApi.markNotificationRead('token', 'notification-id')).resolves.toBeUndefined();
 
     expect(fetchMock.mock.calls[0]).toEqual([
-      'http://localhost:8081/social/notifications/',
+      'http://localhost:8081/social/notifications',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     ]);
     expect(fetchMock.mock.calls[1]).toEqual([

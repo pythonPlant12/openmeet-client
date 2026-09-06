@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
+import AccountPage from '@/pages/AccountPage.vue';
 import DashboardPage from '@/pages/DashboardPage.vue';
 import FreedomPage from '@/pages/FreedomPage.vue';
 import IdeaPage from '@/pages/IdeaPage.vue';
@@ -68,6 +69,12 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: DashboardPage,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/account',
+      name: 'account',
+      component: AccountPage,
       meta: { requiresAuth: true },
     },
     {

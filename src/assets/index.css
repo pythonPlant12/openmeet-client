@@ -38,7 +38,8 @@
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: #fbfcf8;
+    color: #102f35;
   }
 
   @media (max-width: 639px) {

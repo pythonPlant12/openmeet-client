@@ -14,6 +14,8 @@ const first: Conversation = {
   accessPolicy: null,
   role: null,
   otherUserId: 'friend-1',
+  messageCount: 0,
+  unreadCount: 0,
   createdAt: '2026-08-01T12:00:00Z',
   updatedAt: '2026-08-01T12:00:00Z',
 };

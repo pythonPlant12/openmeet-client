@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Router } from 'vue-router';
 import { createActor, waitFor } from 'xstate';
 
+import { authApi } from '@/services/auth-api';
+
 import { authMachine } from '../index';
 import { AuthEventType, AuthState } from '../types';
 
@@ -25,7 +27,7 @@ vi.mock('@/services/auth-api', () => ({
     login: vi.fn().mockImplementation(async ({ email, password }) => {
       if (email === 'test@test.com' && password === 'password') {
         return {
-          user: { id: '1', email, name: 'Test User', role: 'user' },
+          user: { id: '1', email, name: 'Test User', nickname: 'test_user', role: 'user' },
           access_token: 'mock-access-token',
           refresh_token: 'mock-refresh-token',
         };
@@ -33,13 +35,13 @@ vi.mock('@/services/auth-api', () => ({
       throw new Error('Invalid credentials');
     }),
     register: vi.fn().mockImplementation(async ({ email, name }) => ({
-      user: { id: '1', email, name, role: 'user' },
+      user: { id: '1', email, name, nickname: 'test_user', role: 'user' },
       access_token: 'mock-access-token',
       refresh_token: 'mock-refresh-token',
     })),
     me: vi.fn().mockImplementation(async (accessToken: string, _refreshToken?: string) => {
       if (accessToken === 'mock-access-token') {
-        return { id: '1', email: 'test@test.com', name: 'Test User', role: 'user' };
+        return { id: '1', email: 'test@test.com', name: 'Test User', nickname: 'test_user', role: 'user' };
       }
       throw new Error('Invalid token');
     }),
@@ -110,6 +112,7 @@ describe('Auth Machine', () => {
         id: '1',
         email: 'test@test.com',
         name: 'Test User',
+        nickname: 'test_user',
         role: 'user',
       });
       expect(snapshot.context.accessToken).toBe('mock-access-token');
@@ -159,6 +162,7 @@ describe('Auth Machine', () => {
         id: '1',
         email: 'test@test.com',
         name: 'Test User',
+        nickname: 'test_user',
         role: 'user',
       });
       expect(snapshot.context.accessToken).toBe('mock-access-token');
@@ -235,6 +239,36 @@ describe('Auth Machine', () => {
 
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
       expect(actor.getSnapshot().value).toBe(AuthState.AUTHENTICATED);
+    });
+  });
+
+  describe('Registration Flow', () => {
+    beforeEach(() => {
+      actor = createActor(authMachine, {
+        input: { initialAccessToken: null, initialRefreshToken: null, router: mockRouter },
+      });
+      actor.start();
+    });
+
+    it('forwards nickname and stores it in the authenticated user', async () => {
+      await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED));
+
+      actor.send({
+        type: AuthEventType.REGISTER,
+        email: 'ada@example.com',
+        name: 'Ada Lovelace',
+        nickname: 'ada_lovelace',
+        password: 'password',
+      });
+
+      await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
+      expect(authApi.register).toHaveBeenCalledWith({
+        email: 'ada@example.com',
+        name: 'Ada Lovelace',
+        nickname: 'ada_lovelace',
+        password: 'password',
+      });
+      expect(actor.getSnapshot().context.user?.nickname).toBe('test_user');
     });
   });
 

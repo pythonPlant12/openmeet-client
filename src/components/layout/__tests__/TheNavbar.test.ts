@@ -7,6 +7,10 @@ import TheNavbar from '@/components/layout/TheNavbar.vue';
 
 const media = vi.hoisted(() => ({ desktop: true, hover: true, reduced: false }));
 const auth = vi.hoisted(() => ({ authenticated: false }));
+const social = vi.hoisted(() => ({
+  getCurrentUserProfile: vi.fn(),
+  loadAvatar: vi.fn(),
+}));
 let resizeObserverCallback: ResizeObserverCallback;
 
 vi.mock('@vueuse/core', async () => {
@@ -87,12 +91,15 @@ vi.mock('@/composables/useAuth', async () => {
       isRegistering: ref(false),
       isCheckingSession: ref(false),
       isAuthenticated: ref(auth.authenticated),
+      accessToken: ref(auth.authenticated ? 'token' : null),
       currentUser: ref(auth.authenticated ? { name: 'A deliberately long participant name' } : null),
       hasRegisterError: ref(false),
       send: vi.fn(),
     }),
   };
 });
+
+vi.mock('@/services/social-api', () => ({ socialApi: social }));
 
 vi.mock('@/composables/useMeetingNavigation', () => ({
   useMeetingNavigation: () => ({ createMeeting: vi.fn() }),
@@ -108,6 +115,7 @@ function createTestRouter() {
     routes: [
       { path: '/', component: { template: '<div />' }, meta: { showMarketingNav: true } },
       { path: '/dashboard', component: { template: '<div />' } },
+      { path: '/account', component: { template: '<div />' } },
       { path: '/login', component: { template: '<div />' } },
       { path: '/room/:id', name: 'meeting', component: { template: '<div />' } },
     ],
@@ -127,6 +135,7 @@ async function mountNavbar(path = '/') {
         DropdownMenu: { template: '<div><slot /></div>' },
         DropdownMenuContent: { template: '<div><slot /></div>' },
         DropdownMenuItem: { template: '<div><slot /></div>' },
+        DropdownMenuSeparator: { template: '<div />' },
         DropdownMenuTrigger: { template: '<div><slot /></div>' },
         LoadingRipple: { template: '<span />' },
       },
@@ -141,6 +150,8 @@ beforeEach(() => {
   media.hover = true;
   media.reduced = false;
   auth.authenticated = false;
+  social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null });
+  social.loadAvatar.mockResolvedValue(new Blob(['avatar']));
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -226,12 +237,15 @@ describe('TheNavbar', () => {
     expect(shell.classes()).toContain('w-[min(340px,calc(100vw-1.5rem))]');
   });
 
-  it('uses Dashboard instead of the account name and keeps meeting menus content-sized', async () => {
+  it('uses an account dropdown instead of the account name and keeps meeting menus content-sized', async () => {
     vi.useFakeTimers();
     auth.authenticated = true;
     const { wrapper } = await mountNavbar('/room/meeting-id');
 
+    expect(wrapper.get('button[aria-label="nav.accountInformation"]')).toBeDefined();
+    expect(wrapper.text()).toContain('nav.accountInformation');
     expect(wrapper.text()).toContain('common.dashboard');
+    expect(wrapper.text()).toContain('nav.friends');
     expect(wrapper.text()).not.toContain('A deliberately long participant name');
 
     media.desktop = false;
@@ -240,5 +254,24 @@ describe('TheNavbar', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     expect(mobile.wrapper.get('.harbor-nav-layout').classes()).toContain('h-auto');
+  });
+
+  it('shows the selected profile image in the account menu trigger', async () => {
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: '/social/users/user-id/avatar' });
+    vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:avatar'), revokeObjectURL: vi.fn() });
+
+    const { wrapper } = await mountNavbar();
+    await flushPromises();
+
+    expect(wrapper.get('button[aria-label="nav.accountInformation"] img').attributes('src')).toBe('blob:avatar');
+    expect(social.loadAvatar).toHaveBeenCalledWith('token', '/social/users/user-id/avatar');
+  });
+
+  it('shows Login text for logged-out desktop users', async () => {
+    const { wrapper } = await mountNavbar();
+
+    expect(wrapper.text()).toContain('common.logIn');
+    expect(wrapper.find('button[aria-label="common.logIn"]').exists()).toBe(false);
   });
 });

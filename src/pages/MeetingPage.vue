@@ -487,7 +487,7 @@ const handleReconnect = () => {
 </script>
 
 <template>
-  <div class="relative h-[calc(100dvh-84px)] overflow-hidden bg-white p-3 sm:p-5">
+  <div class="relative h-[calc(100dvh-84px)] overflow-hidden bg-[#FBFCF8] px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0">
     <div
       v-if="isCheckingSession"
       class="marketing-font h-full bg-[#102F35] flex items-center justify-center text-[#E6F4F1]"
@@ -498,7 +498,7 @@ const handleReconnect = () => {
       </div>
     </div>
 
-    <div v-if="!hasJoined && !isCheckingSession" class="fixed inset-0 overflow-hidden bg-white" aria-hidden="true">
+    <div v-if="!hasJoined && !isCheckingSession" class="fixed inset-0 overflow-hidden bg-[#FBFCF8]" aria-hidden="true">
       <div class="absolute -left-28 top-16 size-96 rounded-full bg-[#9BCFC7]/45 blur-3xl" />
       <div class="absolute -right-24 bottom-0 size-80 rounded-full bg-[#F8D8CC]/65 blur-3xl" />
       <div class="absolute inset-x-8 top-10 h-px bg-[#9BCFC7]/50" />

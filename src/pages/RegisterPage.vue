@@ -22,6 +22,7 @@ const { createMeeting } = useMeetingNavigation();
 const { isRegistering, isCheckingSession, hasRegisterError, errorMessage, send } = useAuth();
 
 const name = ref('');
+const nickname = ref('');
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
@@ -38,6 +39,7 @@ const handleRegister = () => {
     type: AuthEventType.REGISTER,
     email: email.value,
     name: name.value,
+    nickname: nickname.value,
     password: password.value,
   });
 };
@@ -124,6 +126,23 @@ const goToLogin = () => {
           </div>
 
           <div class="space-y-2">
+            <Label for="nickname" class="text-[#27595D]">{{ t('auth.register.nickname') }}</Label>
+            <Input
+              id="nickname"
+              v-model="nickname"
+              type="text"
+              autocomplete="nickname"
+              :placeholder="t('auth.register.nicknamePlaceholder')"
+              required
+              minlength="3"
+              maxlength="50"
+              pattern="[A-Za-z0-9_]+"
+              :disabled="isRegistering"
+              class="h-11 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
+            />
+          </div>
+
+          <div class="space-y-2">
             <Label for="email" class="text-[#27595D]">{{ t('auth.email') }}</Label>
             <Input
               id="email"
@@ -201,7 +220,7 @@ const goToLogin = () => {
           class="mt-6 flex flex-col gap-3 border-t border-[#D8E7E3] pt-6 text-sm sm:flex-row sm:items-center sm:justify-between"
         >
           <p class="text-[#61777B]">
-            <SplitText as="span" :text="t('auth.register.alreadyRegistered')" />
+            <SplitText class="mr-2" as="span" :text="t('auth.register.alreadyRegistered')" />
             <button
               type="button"
               class="font-semibold text-[#0B7A75] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"

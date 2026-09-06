@@ -29,6 +29,8 @@
     "openNavigation": "Open navigation",
     "closeNavigation": "Close navigation",
     "navigationTitle": "OpenMeet navigation",
+    "accountInformation": "Account Information",
+    "friends": "Friends",
     "technologies": {
       "title": "Technologies",
       "description": "See how each open technology carries a conversation."
@@ -177,6 +179,8 @@
       "description": "For your dashboard and saved access. Meetings remain open without one.",
       "name": "Your name",
       "namePlaceholder": "How people will see you",
+      "nickname": "Nickname",
+      "nicknamePlaceholder": "Your unique nickname",
       "passwordPlaceholder": "6+ characters",
       "confirmPassword": "Confirm password",
       "confirmPasswordPlaceholder": "Repeat password",
@@ -185,6 +189,20 @@
       "alreadyRegistered": "Already registered?",
       "skip": "Skip registration"
     }
+  },
+  "account": {
+    "eyebrow": "Account information",
+    "title": "Your profile",
+    "description": "Review details used across your OpenMeet workspace.",
+    "name": "Display name",
+    "nickname": "Nickname",
+    "email": "Email address",
+    "statusMessage": "Status message",
+    "statusMessagePlaceholder": "Share a short availability note",
+    "updatesUnavailable": "Profile editing will be available once the server supports profile updates.",
+    "save": "Save changes",
+    "profileUnavailable": "Live profile details could not be loaded. Showing account details instead.",
+    "backToDashboard": "Back to dashboard"
   },
   "dashboard": {
     "workspace": "Your OpenMeet space",

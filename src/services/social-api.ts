@@ -27,12 +27,20 @@ export interface UserSearchResult {
 export interface ContactProfile {
   id: string;
   name: string;
+  nickname: string;
   email: string;
+  avatarUrl: string | null;
   status: 'available' | 'away' | 'doNotDisturb' | 'offline';
   statusMessage: string;
   createdAt: string;
   lastSeenAt: string | null;
   isOnline: boolean;
+}
+
+export interface UpdateCurrentUserProfileRequest {
+  name: string;
+  nickname: string;
+  statusMessage: string;
 }
 
 export interface FriendRequest {
@@ -103,6 +111,8 @@ export interface Conversation {
   accessPolicy: GroupAccessPolicy | null;
   role: string | null;
   otherUserId: string | null;
+  messageCount: number;
+  unreadCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -176,7 +186,7 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
     fetch(`${API_BASE_URL}/social${path}`, {
       ...init,
       headers: {
-        'Content-Type': 'application/json',
+        ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         Authorization: `Bearer ${token}`,
         ...init?.headers,
       },
@@ -225,12 +235,44 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
 }
 
 export const socialApi = {
+  resolveMediaUrl(path: string | null) {
+    if (!path || /^https?:\/\//.test(path)) return path;
+    return `${API_BASE_URL}${path}`;
+  },
+
+  async loadAvatar(accessToken: string, path: string) {
+    const response = await fetch(this.resolveMediaUrl(path)!, {
+      headers: { Authorization: `Bearer ${cookieUtils.get('accessToken') || accessToken}` },
+    });
+    if (!response.ok) {
+      throw new SocialApiError((await response.text()) || 'Could not load avatar', response.status);
+    }
+    return response.blob();
+  },
+
   searchUsers(accessToken: string, query: string) {
     return request<UserSearchResult[]>(`/users?query=${encodeURIComponent(query)}`, accessToken);
   },
 
   getUserProfile(accessToken: string, userId: string) {
     return request<ContactProfile>(`/users/${userId}/profile`, accessToken);
+  },
+
+  updateCurrentUserProfile(accessToken: string, profile: UpdateCurrentUserProfileRequest) {
+    return request<ContactProfile>('/me/profile', accessToken, {
+      method: 'PATCH',
+      body: JSON.stringify(profile),
+    });
+  },
+
+  getCurrentUserProfile(accessToken: string) {
+    return request<ContactProfile>('/me/profile', accessToken);
+  },
+
+  uploadCurrentUserAvatar(accessToken: string, avatar: File) {
+    const body = new FormData();
+    body.append('avatar', avatar);
+    return request<ContactProfile>('/me/profile/avatar', accessToken, { method: 'POST', body });
   },
 
   listFriends(accessToken: string) {
@@ -257,7 +299,7 @@ export const socialApi = {
   },
 
   listNotifications(accessToken: string) {
-    return request<UserNotification[]>('/notifications/', accessToken);
+    return request<UserNotification[]>('/notifications', accessToken);
   },
 
   markNotificationRead(accessToken: string, notificationId: string) {

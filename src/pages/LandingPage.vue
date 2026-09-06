@@ -64,9 +64,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="marketing-font overflow-hidden bg-[#F4F9F7] text-[#102F35]">
+  <div class="marketing-font -mt-[84px] overflow-hidden bg-[#FBFCF8] text-[#102F35]">
     <main>
-      <section class="relative bg-[#F4F9F7] px-5 pb-20 pt-16 sm:px-8 sm:pb-28 sm:pt-20 lg:px-12 lg:pb-32">
+      <section class="relative bg-[#FBFCF8] px-5 pb-20 pt-24 sm:px-8 sm:pb-28 sm:pt-28 lg:px-12 lg:pb-32">
         <div
           class="pointer-events-none absolute left-[-12rem] top-20 h-96 w-96 rounded-full bg-[#CDE9E4]/70 blur-3xl"
         />
