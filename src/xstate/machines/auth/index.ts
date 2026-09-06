@@ -1,5 +1,6 @@
 import { assign, fromPromise, setup } from 'xstate';
 
+import { i18n } from '@/i18n';
 import { type AuthResponse, authApi } from '@/services/auth-api';
 import { cookieUtils } from '@/utils';
 
@@ -9,7 +10,7 @@ const loginActor = fromPromise<AuthResponse, { email: string; password: string }
   return authApi.login(input);
 });
 
-const registerActor = fromPromise<AuthResponse, { email: string; name: string; password: string }>(
+const registerActor = fromPromise<AuthResponse, { email: string; name: string; nickname: string; password: string }>(
   async ({ input }) => {
     return authApi.register(input);
   },
@@ -75,7 +76,7 @@ export const authMachine = setup({
     setError: assign({
       error: ({ event }) => {
         const error = (event as any).error;
-        return error?.message || 'An error occurred';
+        return error?.message || i18n.global.t('errors.generic');
       },
     }),
 
@@ -184,6 +185,9 @@ export const authMachine = setup({
         GO_TO_REGISTER: {
           actions: 'navigateToRegister',
         },
+        GO_TO_LOGIN: {
+          actions: 'navigateToLogin',
+        },
       },
     },
 
@@ -235,6 +239,7 @@ export const authMachine = setup({
           return {
             email: registerEvent.email,
             name: registerEvent.name,
+            nickname: registerEvent.nickname,
             password: registerEvent.password,
           };
         },

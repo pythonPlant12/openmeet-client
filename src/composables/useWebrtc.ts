@@ -59,6 +59,7 @@ export function useWebrtc() {
     webrtcActor.snapshot.value.context.error ? new Error(webrtcActor.snapshot.value.context.error) : null,
   );
   const chatMessages = computed(() => webrtcActor.snapshot.value.context.chatMessages as ChatMessage[]);
+  const hasLoadedChatHistory = computed(() => webrtcActor.snapshot.value.context.hasLoadedChatHistory as boolean);
 
   const localParticipant = computed(() =>
     localParticipantId.value ? participants.value.get(localParticipantId.value) : null,
@@ -122,6 +123,7 @@ export function useWebrtc() {
     connectionQualityReason,
     packetLossRatio,
     chatMessages,
+    hasLoadedChatHistory,
 
     // Actions
     initMedia,

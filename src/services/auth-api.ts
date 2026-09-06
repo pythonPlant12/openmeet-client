@@ -1,9 +1,12 @@
+import { i18n } from '@/i18n';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081';
 
 export interface User {
   id: string;
   email: string;
   name: string;
+  nickname: string;
   role: 'user' | 'admin';
 }
 
@@ -25,6 +28,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   name: string;
+  nickname: string;
   password: string;
 }
 
@@ -40,8 +44,16 @@ class AuthApiError extends Error {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const text = await response.text();
-    throw new AuthApiError(text || `Request failed with status ${response.status}`, response.status);
+    const errorKeys: Record<number, string> = {
+      400: 'errors.invalidRequest',
+      401: 'errors.unauthorized',
+      403: 'errors.forbidden',
+      409: 'errors.accountExists',
+      429: 'errors.tooManyRequests',
+    };
+    const key = response.status >= 500 ? 'errors.serviceUnavailable' : errorKeys[response.status];
+    const message = key ? i18n.global.t(key) : i18n.global.t('errors.requestFailed', { status: response.status });
+    throw new AuthApiError(message, response.status);
   }
   return response.json();
 }

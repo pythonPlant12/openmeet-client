@@ -69,6 +69,32 @@ test.use({
 test.describe('multi-participant media', () => {
   test.skip(({ browserName }) => browserName !== 'chromium', 'fake media and WebRTC stats are asserted in Chromium');
 
+  test('navigates away from prejoin without transition warnings or stale viewport locks', async ({ page, baseURL }) => {
+    const transitionWarnings: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'warning' && message.text().includes('Component inside <Transition>')) {
+        transitionWarnings.push(message.text());
+      }
+    });
+
+    await page.goto(`${baseURL}/room/navigation-cleanup-${Date.now()}`);
+    await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
+    await page.getByRole('link', { name: 'OpenMeet' }).click();
+
+    await expect(page).toHaveURL(new URL('/', baseURL!).toString());
+    await expect(page.getByRole('heading', { name: 'Meet freely. Stay connected.' })).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          bodyOverflow: document.body.style.overflow,
+          bodyPointerEvents: document.body.style.pointerEvents,
+          htmlOverflow: document.documentElement.style.overflow,
+        })),
+      )
+      .toEqual({ bodyOverflow: '', bodyPointerEvents: '', htmlOverflow: '' });
+    expect(transitionWarnings).toEqual([]);
+  });
+
   test('two participants exchange remote audio and video', async ({ browser, baseURL }) => {
     test.setTimeout(180_000);
 
@@ -185,6 +211,9 @@ test.describe('multi-participant media', () => {
 
       await waitForParticipantCount([session.pages[1]], 1);
       await expect(session.pages[1].getByTestId('connection-error-dialog')).toHaveCount(0);
+
+      await session.pages[0].getByTestId('connection-error-leave').click();
+      await expect(session.pages[0]).toHaveURL(new URL('/', baseURL!).toString());
     } finally {
       await closeContexts(session.contexts);
     }
@@ -197,7 +226,8 @@ async function joinParticipants(
   count: number,
   roomPrefix: string,
 ): Promise<ParticipantSession> {
-  const roomUrl = process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
+  const roomUrl =
+    process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
   const contexts: BrowserContext[] = [];
   const pages: Page[] = [];
   const diagnostics: BrowserDiagnostic[] = [];

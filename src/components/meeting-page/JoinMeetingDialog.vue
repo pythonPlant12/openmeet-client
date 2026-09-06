@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ChevronDown, Mic, MicOff, User, Video, VideoOff } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LoadingRipple } from '@/components/ui/loading';
 import { useMediaDevices } from '@/composables/useMediaDevices';
 
 interface Props {
@@ -40,6 +42,7 @@ const props = withDefaults(defineProps<Props>(), {
   showNameInput: true,
 });
 const emit = defineEmits<Emits>();
+const { t } = useI18n();
 
 // Form state
 const participantName = ref(props.initialName);
@@ -55,6 +58,8 @@ const selectedVideoDeviceId = ref('');
 const previewStream = ref<MediaStream | null>(null);
 const videoPreviewRef = ref<HTMLVideoElement | null>(null);
 const isLoadingPreview = ref(false);
+let previewRequestId = 0;
+let isUnmounted = false;
 
 // Media devices composable
 const {
@@ -88,6 +93,7 @@ watch(selectedVideoDeviceId, () => {
 const startPreview = async () => {
   isLoadingPreview.value = true;
   stopPreview();
+  const requestId = ++previewRequestId;
 
   try {
     const constraints: MediaStreamConstraints = {
@@ -95,24 +101,31 @@ const startPreview = async () => {
       audio: false,
     };
 
-    previewStream.value = await navigator.mediaDevices.getUserMedia(constraints);
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (isUnmounted || requestId !== previewRequestId) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    previewStream.value = stream;
 
     if (videoPreviewRef.value && previewStream.value) {
       videoPreviewRef.value.srcObject = previewStream.value;
       await videoPreviewRef.value.play().catch(() => {});
     }
   } catch (err) {
+    if (isUnmounted || requestId !== previewRequestId) return;
     if (err instanceof Error && err.name === 'NotAllowedError') {
       videoEnabled.value = false;
     } else {
       console.error('[JoinMeetingDialog] Failed to start preview:', err);
     }
   } finally {
-    isLoadingPreview.value = false;
+    if (requestId === previewRequestId) isLoadingPreview.value = false;
   }
 };
 
 const stopPreview = () => {
+  previewRequestId += 1;
   previewStream.value?.getTracks().forEach((track) => track.stop());
   previewStream.value = null;
   if (videoPreviewRef.value) videoPreviewRef.value.srcObject = null;
@@ -122,15 +135,15 @@ const handleJoin = () => {
   const name = participantName.value.trim();
 
   if (!name || name.length < 2) {
-    error.value = name ? 'Name must be at least 2 characters' : 'Please enter your name';
+    error.value = name ? t('meeting.join.nameTooShort') : t('meeting.join.nameRequired');
     return;
   }
   if (name.length > 50) {
-    error.value = 'Name must be less than 50 characters';
+    error.value = t('meeting.join.nameTooLong');
     return;
   }
   if (!hasAllPermissions.value) {
-    error.value = 'Camera and microphone permissions are required to join';
+    error.value = t('meeting.join.permissionsValidation');
     return;
   }
 
@@ -160,7 +173,7 @@ const toggleVideo = () => {
 };
 
 const initials = computed(() => {
-  const name = participantName.value || 'U';
+  const name = participantName.value || t('meeting.fallbackUser');
   return name
     .split(' ')
     .map((w) => w[0])
@@ -171,6 +184,7 @@ const initials = computed(() => {
 
 onMounted(async () => {
   await requestPermissions();
+  if (isUnmounted) return;
 
   // Set default devices
   if (audioDevices.value.length > 0) {
@@ -186,27 +200,31 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  isUnmounted = true;
   stopPreview();
 });
 </script>
 
 <template>
-  <Dialog :open="open">
-    <DialogContent class="sm:max-w-lg fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+  <Dialog :open="open" :modal="false">
+    <DialogContent
+      overlay-class="pointer-events-none bg-white/55 backdrop-blur-[2px]"
+      class="marketing-font fixed left-1/2 top-1/2 max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border-transparent bg-white text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.14)] sm:max-w-lg"
+    >
       <DialogHeader>
         <DialogTitle class="flex items-center justify-center sm:justify-start gap-2">
           <User class="h-5 w-5" />
-          Join Meeting
+          {{ t('meeting.join.title') }}
         </DialogTitle>
-        <DialogDescription>
-          Configure your settings before joining
-          <span class="font-mono text-xs block mt-1 text-muted-foreground">{{ meetingId }}</span>
+        <DialogDescription class="text-[#4E6B70]">
+          {{ t('meeting.join.description') }}
+          <span class="font-mono text-xs block mt-1 text-[#4E6B70]">{{ meetingId }}</span>
         </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-4 py-4">
         <!-- Camera Preview -->
-        <div class="relative aspect-video bg-muted rounded-lg overflow-hidden">
+        <div class="relative aspect-video overflow-hidden rounded-2xl bg-[#E2E8F0]">
           <video
             v-show="videoEnabled && previewStream && !isVideoDenied"
             ref="videoPreviewRef"
@@ -219,34 +237,34 @@ onUnmounted(() => {
           <!-- Avatar when video is off -->
           <div
             v-if="!videoEnabled || !previewStream || isVideoDenied"
-            class="absolute inset-0 flex items-center justify-center bg-muted"
+            class="absolute inset-0 flex items-center justify-center bg-[#E2E8F0]"
           >
-            <div class="w-20 h-20 rounded-full bg-primary flex items-center justify-center">
-              <span class="text-2xl font-bold text-primary-foreground">{{ initials }}</span>
+            <div class="w-20 h-20 rounded-full bg-[#0B7A75] flex items-center justify-center">
+              <span class="text-2xl font-bold text-white">{{ initials }}</span>
             </div>
           </div>
 
           <!-- Loading indicator -->
           <div
             v-if="isLoadingPreview && videoEnabled && !isVideoDenied"
-            class="absolute inset-0 flex items-center justify-center bg-muted/80"
+            class="absolute inset-0 flex items-center justify-center bg-[#CBD5E1]/80"
           >
-            <div class="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <LoadingRipple class="size-8 text-[#0B7A75]" />
           </div>
 
           <!-- Video status overlays -->
           <div
             v-if="isVideoDenied"
-            class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-destructive/90 px-3 py-1.5 rounded text-sm text-white flex items-center gap-2"
+            class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#F2765F]/90 px-3 py-1.5 rounded text-sm text-white flex items-center gap-2"
           >
             <VideoOff class="h-4 w-4" />
-            Camera blocked
+            {{ t('meeting.join.cameraBlocked') }}
           </div>
           <div
             v-else-if="!videoEnabled"
             class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded text-sm text-white"
           >
-            Camera is off
+            {{ t('meeting.join.cameraOff') }}
           </div>
         </div>
 
@@ -258,16 +276,16 @@ onUnmounted(() => {
             variant="outline"
             size="lg"
             :class="[
-              'flex-1 h-14 flex items-center justify-center gap-2 transition-colors',
+              'meeting-setting-action min-w-0 flex-1 h-14 px-3 flex items-center justify-center gap-2 !border-transparent transition-colors focus-visible:ring-0 focus-visible:ring-offset-0',
               audioEnabled
-                ? 'border-border hover:bg-muted hover:text-muted-foreground'
-                : 'border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20',
+                ? 'meeting-setting-on border-transparent bg-[#E6F4F1] text-[#102F35]'
+                : 'meeting-setting-off border-transparent bg-[#F2765F]/10 text-[#F2765F]',
             ]"
             @click="toggleAudio"
           >
             <Mic v-if="audioEnabled" class="h-5 w-5" />
             <MicOff v-else class="h-5 w-5" />
-            <span class="text-sm">{{ audioEnabled ? 'Mic On' : 'Mic Off' }}</span>
+            <span class="text-sm">{{ audioEnabled ? t('meeting.join.micOn') : t('meeting.join.micOff') }}</span>
           </Button>
 
           <!-- Audio Permission Denied -->
@@ -275,16 +293,16 @@ onUnmounted(() => {
             <Button
               variant="outline"
               size="lg"
-              class="w-full h-14 flex items-center justify-center gap-2 border-destructive bg-destructive/10 text-destructive cursor-not-allowed"
+              class="h-14 w-full min-w-0 px-3 flex items-center justify-center gap-2 border-[#F2765F] bg-[#F2765F]/10 text-[#F2765F] cursor-not-allowed"
               disabled
             >
               <MicOff class="h-5 w-5" />
-              <span class="text-sm">Mic Blocked</span>
+              <span class="text-sm">{{ t('meeting.join.micBlocked') }}</span>
             </Button>
             <div
-              class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover border border-border rounded-lg shadow-lg text-xs text-popover-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50"
+              class="marketing-font absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[#E6F4F1] border border-[#D8E7E3] rounded-lg shadow-lg text-xs text-[#102F35] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50"
             >
-              Click the lock icon in your browser's address bar to allow
+              {{ t('meeting.join.browserPermission') }}
             </div>
           </div>
 
@@ -294,16 +312,18 @@ onUnmounted(() => {
             variant="outline"
             size="lg"
             :class="[
-              'flex-1 h-14 flex items-center justify-center gap-2 transition-colors',
+              'meeting-setting-action min-w-0 flex-1 h-14 px-3 flex items-center justify-center gap-2 !border-transparent transition-colors focus-visible:ring-0 focus-visible:ring-offset-0',
               videoEnabled
-                ? 'border-border hover:bg-muted hover:text-muted-foreground'
-                : 'border-destructive bg-destructive/10 text-destructive hover:bg-destructive/20',
+                ? 'meeting-setting-on bg-[#E6F4F1] text-[#102F35]'
+                : 'meeting-setting-off bg-[#F2765F]/10 text-[#F2765F]',
             ]"
             @click="toggleVideo"
           >
             <Video v-if="videoEnabled" class="h-5 w-5" />
             <VideoOff v-else class="h-5 w-5" />
-            <span class="text-sm">{{ videoEnabled ? 'Camera On' : 'Camera Off' }}</span>
+            <span class="text-sm">
+              {{ videoEnabled ? t('meeting.join.cameraOn') : t('meeting.join.cameraToggleOff') }}
+            </span>
           </Button>
 
           <!-- Video Permission Denied -->
@@ -311,16 +331,16 @@ onUnmounted(() => {
             <Button
               variant="outline"
               size="lg"
-              class="w-full h-14 flex items-center justify-center gap-2 border-destructive bg-destructive/10 text-destructive cursor-not-allowed"
+              class="h-14 w-full min-w-0 px-3 flex items-center justify-center gap-2 border-[#F2765F] bg-[#F2765F]/10 text-[#F2765F] cursor-not-allowed"
               disabled
             >
               <VideoOff class="h-5 w-5" />
-              <span class="text-sm">Camera Blocked</span>
+              <span class="text-sm">{{ t('meeting.join.cameraBlocked') }}</span>
             </Button>
             <div
-              class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover border border-border rounded-lg shadow-lg text-xs text-popover-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50"
+              class="marketing-font absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[#E6F4F1] border border-[#D8E7E3] rounded-lg shadow-lg text-xs text-[#102F35] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50"
             >
-              Click the lock icon in your browser's address bar to allow
+              {{ t('meeting.join.browserPermission') }}
             </div>
           </div>
         </div>
@@ -329,40 +349,42 @@ onUnmounted(() => {
         <div v-if="hasAllPermissions" class="grid grid-cols-2 gap-3">
           <!-- Microphone Select -->
           <div class="space-y-1.5">
-            <Label class="text-xs text-muted-foreground">Microphone</Label>
+            <Label class="text-xs text-[#4E6B70]">{{ t('meeting.join.microphone') }}</Label>
             <div class="relative">
               <select
                 v-model="selectedAudioDeviceId"
                 :disabled="audioDevices.length === 0"
-                class="w-full h-9 px-3 pr-8 text-sm bg-background border border-input rounded-md appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full h-9 px-3 pr-8 text-sm bg-white border border-[#D8E7E3] rounded-md appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0B7A75] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option v-if="audioDevices.length === 0" value="">No microphones found</option>
+                <option v-if="audioDevices.length === 0" value="">{{ t('meeting.join.noMicrophones') }}</option>
                 <option v-for="device in audioDevices" :key="device.deviceId" :value="device.deviceId">
-                  {{ device.label || `Microphone ${audioDevices.indexOf(device) + 1}` }}
+                  {{
+                    device.label || t('meeting.join.microphoneFallback', { number: audioDevices.indexOf(device) + 1 })
+                  }}
                 </option>
               </select>
               <ChevronDown
-                class="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
+                class="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-[#4E6B70] pointer-events-none"
               />
             </div>
           </div>
 
           <!-- Camera Select -->
           <div class="space-y-1.5">
-            <Label class="text-xs text-muted-foreground">Camera</Label>
+            <Label class="text-xs text-[#4E6B70]">{{ t('meeting.join.camera') }}</Label>
             <div class="relative">
               <select
                 v-model="selectedVideoDeviceId"
                 :disabled="videoDevices.length === 0"
-                class="w-full h-9 px-3 pr-8 text-sm bg-background border border-input rounded-md appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full h-9 px-3 pr-8 text-sm bg-white border border-[#D8E7E3] rounded-md appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0B7A75] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <option v-if="videoDevices.length === 0" value="">No cameras found</option>
+                <option v-if="videoDevices.length === 0" value="">{{ t('meeting.join.noCameras') }}</option>
                 <option v-for="device in videoDevices" :key="device.deviceId" :value="device.deviceId">
-                  {{ device.label || `Camera ${videoDevices.indexOf(device) + 1}` }}
+                  {{ device.label || t('meeting.join.cameraFallback', { number: videoDevices.indexOf(device) + 1 }) }}
                 </option>
               </select>
               <ChevronDown
-                class="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
+                class="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-[#4E6B70] pointer-events-none"
               />
             </div>
           </div>
@@ -370,27 +392,40 @@ onUnmounted(() => {
 
         <!-- Name input -->
         <div v-if="showNameInput" class="space-y-2">
-          <Label for="participant-name">Your Name</Label>
+          <Label for="participant-name">{{ t('meeting.join.yourName') }}</Label>
           <Input
             id="participant-name"
             v-model="participantName"
             type="text"
-            placeholder="Enter your name"
+            :placeholder="t('meeting.join.namePlaceholder')"
+            class="border-[#D8E7E3] bg-white text-[#102F35] placeholder:text-[#4E6B70]"
             maxlength="50"
             @keyup.enter="handleJoin"
             @input="error = ''"
           />
-          <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+          <p v-if="error" class="text-sm text-[#F2765F]">{{ error }}</p>
         </div>
       </div>
 
-      <DialogFooter class="flex-col sm:flex-row sm:justify-between gap-2">
-        <p v-if="!hasAllPermissions" class="text-sm text-amber-600 text-center sm:text-left">
-          Camera and microphone permissions required
+      <DialogFooter class="flex-col gap-3 sm:flex-row sm:justify-between">
+        <p v-if="!hasAllPermissions" class="w-full text-center text-sm text-[#F2765F] sm:text-left">
+          {{ t('meeting.join.permissionsRequired') }}
         </p>
-        <div class="flex gap-2 justify-end">
-          <Button variant="outline" @click="handleCancel">Cancel</Button>
-          <Button @click="handleJoin" :disabled="!canJoin">Join Meeting</Button>
+        <div class="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:justify-end">
+          <Button
+            variant="outline"
+            class="meeting-setting-action meeting-setting-on w-full border-transparent bg-[#E6F4F1] text-[#102F35] sm:w-auto"
+            @click="handleCancel"
+          >
+            {{ t('common.cancel') }}
+          </Button>
+          <Button
+            class="meeting-primary-action w-full bg-[#0B7A75] text-white sm:w-auto"
+            @click="handleJoin"
+            :disabled="!canJoin"
+          >
+            {{ t('meeting.join.title') }}
+          </Button>
         </div>
       </DialogFooter>
     </DialogContent>

@@ -28,6 +28,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  nickname: string;
   role: 'user' | 'admin';
 }
 
@@ -41,7 +42,7 @@ export interface AuthContext {
 
 export type AuthEvents =
   | { type: AuthEventType.LOGIN; email: string; password: string }
-  | { type: AuthEventType.REGISTER; email: string; name: string; password: string }
+  | { type: AuthEventType.REGISTER; email: string; name: string; nickname: string; password: string }
   | { type: AuthEventType.LOGOUT }
   | { type: AuthEventType.REFRESH_TOKEN }
   | { type: AuthEventType.RETRY }

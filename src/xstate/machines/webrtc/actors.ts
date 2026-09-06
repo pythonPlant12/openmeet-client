@@ -1,5 +1,6 @@
 import { fromCallback, fromPromise } from 'xstate';
 
+import { i18n } from '@/i18n';
 import { resolveReachableWebSocketUrl } from '@/services/dev-networking';
 import { SignalingService } from '@/services/signaling';
 import { WebRTCServiceSFU } from '@/services/webrtc-sfu';
@@ -59,7 +60,7 @@ export const initMediaActor = fromPromise<MediaStream, InitMediaInput>(async ({ 
  */
 export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack, input }) => {
   if (!signalingService || !webrtcService) {
-    sendBack({ type: 'SERVER_ERROR', message: 'Services not initialized. Call initMedia first' });
+    sendBack({ type: 'SERVER_ERROR', message: i18n.global.t('errors.servicesNotInitialized') });
     return;
   }
 
@@ -99,7 +100,8 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
 
   signalingService.on('error', (message) => {
     if (message.type === 'error') {
-      sendBack({ type: 'SERVER_ERROR', message: message.message });
+      console.error('[webrtcMachine] Meeting server error:', message.message);
+      sendBack({ type: 'SERVER_ERROR', message: i18n.global.t('errors.meetingServer') });
     }
   });
 
@@ -123,6 +125,12 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
         message: message.message,
         timestamp: message.timestamp,
       });
+    }
+  });
+
+  signalingService.on('chatHistory', (message) => {
+    if (message.type === 'chatHistory') {
+      sendBack({ type: 'CHAT_HISTORY_RECEIVED', messages: message.messages });
     }
   });
 
@@ -169,7 +177,9 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
         const disconnectedFor = disconnectedSince ? Date.now() - disconnectedSince : DISCONNECT_GRACE_MS;
 
         if (hasRecentMediaActivity && !remoteVideoFrozen && disconnectedFor < MAX_DISCONNECT_GRACE_MS) {
-          console.log('[webrtcMachine] Connection still disconnected, but media stats are progressing; keeping call alive');
+          console.log(
+            '[webrtcMachine] Connection still disconnected, but media stats are progressing; keeping call alive',
+          );
           scheduleDisconnectTimeout();
           return;
         }
@@ -244,7 +254,10 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
       console.log('[webrtcMachine] Offer sent, waiting for answer...');
     })
     .catch((error) => {
-      sendBack({ type: 'SERVER_ERROR', message: error instanceof Error ? error.message : 'Failed to send offer' });
+      sendBack({
+        type: 'SERVER_ERROR',
+        message: error instanceof Error ? error.message : i18n.global.t('errors.offerFailed'),
+      });
     });
 
   // Return cleanup function (optional)
