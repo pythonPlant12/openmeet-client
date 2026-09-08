@@ -97,9 +97,6 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
-  const marketingRoute = to.path === '/' ? marketingHashRoutes[to.hash] : undefined;
-  if (marketingRoute) return next(marketingRoute);
-
   const accessToken = cookieUtils.get('accessToken');
   const refreshToken = cookieUtils.get('refreshToken');
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
@@ -113,6 +110,13 @@ router.beforeEach((to, from, next) => {
   const hasRefreshToken = !!refreshToken;
   // Allow if valid access token OR has refresh token (API client will refresh)
   const canAuthenticate = hasValidAccessToken || hasRefreshToken;
+
+  if (to.name === 'landing' && canAuthenticate) {
+    return next('/dashboard');
+  }
+
+  const marketingRoute = to.path === '/' ? marketingHashRoutes[to.hash] : undefined;
+  if (marketingRoute) return next(marketingRoute);
 
   // Redirect to dashboard if can authenticate and trying to access auth pages
   if (isAuthPage && canAuthenticate) {

@@ -188,6 +188,7 @@ watch(isChatOpen, (isOpen) => {
   if (isOpen) {
     unreadCount.value = 0;
   }
+  window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: isOpen }));
 });
 
 watch(
@@ -362,14 +363,21 @@ watch(isCheckingSession, (checking) => {
 });
 
 onMounted(() => {
+  window.addEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   if (!isCheckingSession.value) {
     void initializeMeeting();
   }
 });
 
 onUnmounted(() => {
+  window.removeEventListener('openmeet:close-meeting-chat', closeMeetingChat);
+  window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: false }));
   endCall();
 });
+
+function closeMeetingChat() {
+  isChatOpen.value = false;
+}
 
 interface JoinSettings {
   name: string;

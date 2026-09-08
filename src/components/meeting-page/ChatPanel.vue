@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core';
 import { BellRing, Send } from 'lucide-vue-next';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,8 @@ const { locale, t } = useI18n();
 const messageInput = ref('');
 const messagesContainerRef = ref<HTMLDivElement | null>(null);
 const notificationPermission = ref<SystemNotificationPermission>(getSystemNotificationPermission());
+const isDesktop = useMediaQuery('(min-width: 640px)');
+const sheetSide = computed<'bottom' | 'right'>(() => (isDesktop.value ? 'right' : 'bottom'));
 
 const enableNotifications = async () => {
   notificationPermission.value = await requestSystemNotificationPermission();
@@ -95,8 +98,9 @@ watch(
 <template>
   <Sheet :open="open" :modal="false" @update:open="emit('update:open', $event)">
     <SheetContent
+      :side="sheetSide"
       :show-overlay="false"
-      class="marketing-font w-full h-[75vh] top-auto sm:bottom-20 sm:right-4 border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] rounded-xl flex flex-col p-0 sm:mb-4"
+      class="harbor-chat-panel marketing-font w-full h-[75vh] top-auto sm:bottom-20 sm:right-4 border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] rounded-xl flex flex-col p-0 sm:mb-4 data-[state=closed]:fade-out-0"
       @interact-outside="preventOutsideDismiss"
       @close-auto-focus="restoreChatTriggerFocus"
     >

@@ -3,6 +3,7 @@ import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
   ArrowRight,
   ChevronDown,
+  ChevronRight,
   CircleUserRound,
   Code2,
   Container,
@@ -58,16 +59,19 @@ const mobileMenuExpanded = ref(false);
 const isClosingMobileMenu = ref(false);
 const activeDesktopMenu = ref<DesktopMenu | null>(null);
 const isDesktop = useMediaQuery('(min-width: 1280px)');
+const isMobile = useMediaQuery('(max-width: 639px)');
 const supportsHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const navCapsuleRef = ref<HTMLElement | null>(null);
 const navContentRef = ref<HTMLElement | null>(null);
 const desktopNavWidth = ref<number>();
 const avatarUrl = ref<string | null>(null);
+const isMeetingChatOpen = ref(false);
 let avatarObjectUrl: string | null = null;
 let avatarRequest = 0;
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
+const homePath = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
 const isAuthBusy = computed(
   () => isAuthenticating.value || isRegistering.value || isCheckingSession.value || state.value.value === 'loggingOut',
 );
@@ -150,10 +154,14 @@ const { start: collapseMobileMenuWidth, stop: cancelMobileMenuCollapse } = useTi
   () => {
     mobileMenuOpen.value = false;
     isClosingMobileMenu.value = false;
+    const action = mobileMenuClosedAction;
+    mobileMenuClosedAction = undefined;
+    action?.();
   },
-  500,
+  400,
   { immediate: false },
 );
+let mobileMenuClosedAction: (() => void) | undefined;
 
 const resetMobileMenu = () => {
   cancelMobileMenuExpansion();
@@ -161,6 +169,22 @@ const resetMobileMenu = () => {
   mobileMenuExpanded.value = false;
   mobileMenuOpen.value = false;
   isClosingMobileMenu.value = false;
+  mobileMenuClosedAction = undefined;
+};
+
+const closeMobileMenu = (afterClose?: () => void) => {
+  if (!mobileMenuOpen.value || prefersReducedMotion.value) {
+    resetMobileMenu();
+    afterClose?.();
+    return;
+  }
+
+  cancelMobileMenuExpansion();
+  cancelMobileMenuCollapse();
+  mobileMenuClosedAction = afterClose;
+  isClosingMobileMenu.value = true;
+  mobileMenuExpanded.value = false;
+  collapseMobileMenuWidth();
 };
 
 const handleMenuEnter = (menu: DesktopMenu) => {
@@ -203,16 +227,14 @@ const handleToggleMobileMenu = () => {
 
   if (isClosingMobileMenu.value) {
     cancelMobileMenuCollapse();
+    mobileMenuClosedAction = undefined;
     isClosingMobileMenu.value = false;
     mobileMenuExpanded.value = true;
     return;
   }
 
   if (mobileMenuOpen.value) {
-    cancelMobileMenuExpansion();
-    isClosingMobileMenu.value = true;
-    mobileMenuExpanded.value = false;
-    collapseMobileMenuWidth();
+    closeMobileMenu();
     return;
   }
 
@@ -223,35 +245,47 @@ const handleToggleMobileMenu = () => {
 };
 
 const handleGoToPage = (path: string) => {
-  resetMobileMenu();
-  router.push(path);
+  closeMobileMenu(() => router.push(path));
 };
+
+const handleBrandNavigation = (event: MouseEvent) => {
+  if (isMeetingPage.value && isMobile.value && isMeetingChatOpen.value) {
+    event.preventDefault();
+    window.dispatchEvent(new Event('openmeet:close-meeting-chat'));
+    closeMobileMenu(() => window.setTimeout(() => router.push('/dashboard'), 300));
+    return;
+  }
+
+  if (mobileMenuOpen.value) {
+    event.preventDefault();
+    closeMobileMenu(() => router.push(homePath.value));
+  }
+};
+
+function handleMeetingChatState(event: Event) {
+  isMeetingChatOpen.value = (event as CustomEvent<boolean>).detail;
+}
 
 const handleGoToLogin = () => {
   if (isAuthBusy.value) return;
-  resetMobileMenu();
-
   if (hasRegisterError.value) {
-    send({ type: AuthEventType.GO_TO_LOGIN });
+    closeMobileMenu(() => send({ type: AuthEventType.GO_TO_LOGIN }));
   } else {
-    router.push('/login');
+    closeMobileMenu(() => router.push('/login'));
   }
 };
 
 const handleStartMeeting = () => {
   if (isAuthBusy.value || isMeetingPage.value) return;
-  resetMobileMenu();
-  createMeeting();
+  closeMobileMenu(createMeeting);
 };
 
 const handleLogout = () => {
-  resetMobileMenu();
-  send({ type: AuthEventType.LOGOUT });
+  closeMobileMenu(() => send({ type: AuthEventType.LOGOUT }));
 };
 
 const handleGoToFriends = () => {
-  resetMobileMenu();
-  router.push({ path: '/dashboard', query: { panel: 'friends' } });
+  closeMobileMenu(() => router.push({ path: '/dashboard', query: { panel: 'friends' } }));
 };
 
 async function loadAvatar() {
@@ -304,6 +338,7 @@ const updateDesktopNavWidth = () => {
 
 onMounted(() => {
   window.addEventListener('openmeet:profile-updated', handleProfileUpdated);
+  window.addEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   void loadAvatar();
   if (!navContentRef.value) return;
   if (!('ResizeObserver' in window)) {
@@ -318,11 +353,12 @@ onMounted(() => {
 onUnmounted(() => {
   navResizeObserver?.disconnect();
   window.removeEventListener('openmeet:profile-updated', handleProfileUpdated);
+  window.removeEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
 });
 
 watch(isDesktop, () => requestAnimationFrame(updateDesktopNavWidth));
-watch(accessToken, () => void loadAvatar());
+watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar());
 </script>
 
 <template>
@@ -332,14 +368,14 @@ watch(accessToken, () => void loadAvatar());
     :aria-label="t('nav.navigationTitle')"
   >
     <div
-      class="harbor-nav-layout pointer-events-auto mx-auto min-w-[min(340px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] transition-[height,width] ease-[cubic-bezier(0.22,1,0.36,1)] xl:h-[60px] xl:w-fit xl:transition-none"
+      class="harbor-nav-layout pointer-events-auto mx-auto min-w-[min(340px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] transition-[height,width] ease-[cubic-bezier(0.22,1,0.36,1)] xl:relative xl:left-1/2 xl:mx-0 xl:-translate-x-1/2 xl:h-[60px] xl:w-fit xl:transition-none"
       :class="[
         mobileMenuExpanded
           ? isMeetingPage
             ? 'h-auto w-[calc(100vw-1.5rem)] duration-500'
             : 'h-[calc(100svh-1.5rem)] w-[calc(100vw-1.5rem)] duration-500'
           : mobileMenuOpen
-            ? `h-[60px] w-[calc(100vw-1.5rem)] ${isClosingMobileMenu ? 'duration-500' : 'duration-300'}`
+            ? `h-[60px] w-[calc(100vw-1.5rem)] ${isClosingMobileMenu ? 'duration-400' : 'duration-300'}`
             : 'h-[60px] w-[min(340px,calc(100vw-1.5rem))] duration-300',
       ]"
     >
@@ -356,8 +392,9 @@ watch(accessToken, () => void loadAvatar());
         >
           <div class="flex w-full shrink-0 items-center justify-between xl:w-auto">
             <RouterLink
-              to="/"
+              :to="homePath"
               class="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+              @click="handleBrandNavigation"
             >
               <span
                 class="relative flex size-9 items-center justify-center rounded-xl bg-[#0B7A75] text-white shadow-sm"
@@ -392,7 +429,7 @@ watch(accessToken, () => void loadAvatar());
             </button>
           </div>
 
-          <div v-if="isLandingPage" class="hidden items-center gap-1 xl:flex">
+          <div v-if="isLandingPage && !isAuthenticated" class="hidden items-center gap-1 xl:flex">
             <DropdownMenu v-model:open="whyMenuOpen" :modal="false">
               <DropdownMenuTrigger as-child>
                 <button
@@ -496,22 +533,31 @@ watch(accessToken, () => void loadAvatar());
               </button>
             </template>
             <template v-else-if="isAuthenticated && !isCheckingSession">
+              <Button
+                v-if="!isMeetingPage"
+                class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
+                :disabled="isAuthBusy"
+                @click="handleStartMeeting"
+              >
+                <Video class="size-4" />
+                {{ t('common.startMeeting') }}
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>
                   <button
                     type="button"
-                    class="harbor-ghost-action inline-flex size-10 items-center justify-center rounded-full text-[#0B7A75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    class="harbor-ghost-action inline-flex size-10 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75] transition-[background-color,border-color,border-width,color] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] data-[state=open]:border-2 data-[state=open]:border-[#0B7A75]"
                     :aria-label="t('nav.accountInformation')"
                     :title="t('nav.accountInformation')"
                   >
-                    <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
+                    <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
                     <CircleUserRound v-else class="size-5" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
                   :side-offset="12"
-                  class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+                  class="harbor-action-menu !z-[1040] min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
                 >
                   <DropdownMenuItem
                     class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
@@ -545,6 +591,7 @@ watch(accessToken, () => void loadAvatar());
               </DropdownMenu>
             </template>
             <a
+              v-if="!isAuthenticated"
               href="https://github.com/pythonPlant12/openmeet"
               target="_blank"
               rel="noreferrer"
@@ -555,7 +602,7 @@ watch(accessToken, () => void loadAvatar());
               <Github class="size-[1.15rem]" />
             </a>
             <Button
-              v-if="!isMeetingPage"
+              v-if="!isAuthenticated && !isMeetingPage"
               class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
               :disabled="isAuthBusy"
               @click="handleStartMeeting"
@@ -576,7 +623,37 @@ watch(accessToken, () => void loadAvatar());
               class="flex min-h-0 flex-1 flex-col pt-7 xl:hidden"
             >
               <div class="min-h-0 flex-1 overflow-y-auto px-1 pb-5">
-                <template v-if="isLandingPage">
+                <div v-if="isAuthenticated && !isCheckingSession" data-mobile-account-actions class="space-y-2">
+                  <button
+                    type="button"
+                    class="harbor-ghost-action flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    @click="handleGoToPage('/account')"
+                  >
+                    <span
+                      class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75]"
+                    >
+                      <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
+                      <CircleUserRound v-else class="size-5" />
+                    </span>
+                    <span class="min-w-0 flex-1 font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
+                    <ChevronRight class="size-4 text-[#61777B]" />
+                  </button>
+                  <button
+                    type="button"
+                    class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    @click="handleGoToPage('/dashboard')"
+                  >
+                    {{ t('common.dashboard') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    @click="handleGoToFriends"
+                  >
+                    {{ t('nav.friends') }}
+                  </button>
+                </div>
+                <template v-if="isLandingPage && !isAuthenticated">
                   <p class="px-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">
                     {{ t('nav.why', { appName: branding.appName }) }}
                   </p>
@@ -630,15 +707,19 @@ watch(accessToken, () => void loadAvatar());
               </div>
 
               <div class="mt-5 shrink-0 space-y-3 border-t border-[#D8E7E3] pt-5">
-                <div class="flex items-center justify-end gap-3">
-                  <Button
-                    v-if="isAuthenticated && !isCheckingSession"
-                    variant="outline"
-                    class="harbor-soft-action mr-auto min-h-11 rounded-full border-transparent bg-[#E6F4F1] px-5 text-[#27595D]"
-                    @click="handleGoToPage('/dashboard')"
+                <div v-if="isAuthenticated && !isCheckingSession" class="space-y-2">
+                  <button
+                    type="button"
+                    class="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left font-semibold text-[#9D4636] transition-colors hover:bg-[#FFF0EA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    :disabled="isAuthBusy"
+                    @click="handleLogout"
                   >
-                    {{ t('common.dashboard') }}
-                  </Button>
+                    <LoadingRipple v-if="isLoggingOut" size="sm" />
+                    <LogOut v-else class="size-4" />
+                    {{ t('common.logOut') }}
+                  </button>
+                </div>
+                <div class="flex items-center justify-end gap-3">
                   <button
                     v-if="!isAuthenticated"
                     type="button"
@@ -650,18 +731,8 @@ watch(accessToken, () => void loadAvatar());
                     <LoadingRipple v-if="isAuthenticating" size="sm" />
                     <LogIn v-else class="size-5" />
                   </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="inline-flex size-11 items-center justify-center rounded-full bg-[#FDE9E4] text-[#D95E49] transition-colors hover:bg-[#F8D8CC] hover:text-[#B94C39] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F2765F] disabled:opacity-50"
-                    :disabled="isAuthBusy"
-                    :aria-label="t('common.logOut')"
-                    @click="handleLogout"
-                  >
-                    <LoadingRipple v-if="isLoggingOut" size="sm" />
-                    <LogOut v-else class="size-5" />
-                  </button>
                   <a
+                    v-if="!isAuthenticated"
                     href="https://github.com/pythonPlant12/openmeet"
                     target="_blank"
                     rel="noreferrer"

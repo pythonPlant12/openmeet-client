@@ -181,6 +181,8 @@ describe('TheNavbar', () => {
     expect(wrapper.get('nav').attributes('data-layout-root')).toBe('true');
     expect(wrapper.get('.harbor-nav-layout').attributes('data-layout')).toBeUndefined();
     expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:w-fit');
+    expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:left-1/2');
+    expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:-translate-x-1/2');
     expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:transition-none');
     expect(wrapper.get('.harbor-nav-capsule').classes()).toContain('xl:transition-[width]');
     expect(wrapper.get('.harbor-nav-capsule').attributes('style')).toContain('width: 783px');
@@ -254,6 +256,11 @@ describe('TheNavbar', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     expect(mobile.wrapper.get('.harbor-nav-layout').classes()).toContain('h-auto');
+    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.accountInformation');
+    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('common.dashboard');
+    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.friends');
+    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).not.toContain('common.logOut');
+    expect(mobile.wrapper.text()).toContain('common.logOut');
   });
 
   it('shows the selected profile image in the account menu trigger', async () => {
@@ -273,5 +280,24 @@ describe('TheNavbar', () => {
 
     expect(wrapper.text()).toContain('common.logIn');
     expect(wrapper.find('button[aria-label="common.logIn"]').exists()).toBe(false);
+  });
+
+  it('sends authenticated users to the dashboard and hides marketing navigation', async () => {
+    vi.useFakeTimers();
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar();
+
+    expect(wrapper.get('a[href="/dashboard"]').text()).toContain('OpenMeet');
+    expect(wrapper.text()).not.toContain('nav.why');
+    expect(wrapper.text()).not.toContain('nav.howToDeploy');
+
+    media.desktop = false;
+    media.hover = false;
+    const mobile = await mountNavbar();
+    await mobile.wrapper.get('button[aria-expanded="false"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(mobile.wrapper.text()).not.toContain('nav.why');
+    expect(mobile.wrapper.text()).not.toContain('nav.howToDeploy');
   });
 });

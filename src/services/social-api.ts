@@ -14,6 +14,7 @@ export interface Friend {
   id: string;
   name: string;
   email: string;
+  avatarUrl?: string | null;
   isOnline: boolean;
   friendshipId?: string;
 }
@@ -394,6 +395,10 @@ export const socialApi = {
     });
   },
 
+  leaveGroup(accessToken: string, groupId: string) {
+    return request<void>(`/conversations/groups/${groupId}/leave`, accessToken, { method: 'POST' });
+  },
+
   updateGroupPolicy(accessToken: string, groupId: string, policy: UpdateGroupPolicyRequest) {
     return request<Conversation>(`/conversations/groups/${groupId}/policy`, accessToken, {
       method: 'POST',
@@ -425,6 +430,10 @@ export const socialApi = {
     return request<OpenDirectConversationResponse>(`/conversations/direct/${userId}`, accessToken, {
       method: 'POST',
     });
+  },
+
+  hideDirectConversation(accessToken: string, conversationId: string) {
+    return request<void>(`/conversations/${conversationId}`, accessToken, { method: 'DELETE' });
   },
 
   listDirectRequests(accessToken: string) {

@@ -172,6 +172,13 @@ describe('socialApi', () => {
     ['accepts a friend', () => socialApi.acceptFriend('token', 'request-id'), '/friends/request-id/accept', 'POST'],
     ['declines a friend', () => socialApi.declineFriend('token', 'request-id'), '/friends/request-id', 'DELETE'],
     ['deletes a meeting', () => socialApi.deleteMeeting('token', 'meeting-id'), '/meetings/meeting-id', 'DELETE'],
+    ['leaves a group', () => socialApi.leaveGroup('token', 'group-id'), '/conversations/groups/group-id/leave', 'POST'],
+    [
+      'hides a direct conversation',
+      () => socialApi.hideDirectConversation('token', 'conversation-id'),
+      '/conversations/conversation-id',
+      'DELETE',
+    ],
   ])('%s with the expected contract', async (_, invoke, path, method) => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);

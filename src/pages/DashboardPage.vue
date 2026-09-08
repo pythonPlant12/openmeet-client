@@ -6,11 +6,11 @@ import {
   Ban,
   Check,
   ChevronRight,
-  CircleAlert,
   CircleCheck,
   CircleUserRound,
   Clock3,
   LockKeyhole,
+  LogOut,
   Maximize2,
   MessageCircleMore,
   Minimize2,
@@ -20,8 +20,8 @@ import {
   Search,
   ShieldCheck,
   Smile,
+  Trash2,
   UserMinus,
-  UserPlus,
   UsersRound,
   X,
 } from 'lucide-vue-next';
@@ -49,6 +49,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingRipple } from '@/components/ui/loading';
+import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/composables/useAuth';
 import {
   type ConversationActivity,
@@ -76,28 +77,32 @@ const { accessToken, currentUser, isAuthenticated, isCheckingSession } = useAuth
 
 const conversations = ref<Conversation[]>([]);
 const friends = ref<Friend[]>([]);
+const friendAvatarUrls = ref<Record<string, string>>({});
 const incomingFriendRequests = ref<FriendRequest[]>([]);
 const directRequests = ref<DirectMessageRequest[]>([]);
 const searchQuery = ref('');
 const isConversationSearchOpen = ref(false);
-const friendSearchQuery = ref('');
-const isFriendSearchOpen = ref(false);
-const isFriendFinderOpen = ref(false);
-const friendFinderQuery = ref('');
-const friendSearchResults = ref<UserSearchResult[]>([]);
+const peopleSearchQuery = ref('');
+const isPeopleSearchOpen = ref(false);
+const peopleSearchResults = ref<UserSearchResult[]>([]);
 const conversationSearchInput = ref<HTMLInputElement | null>(null);
-const friendSearchInput = ref<HTMLInputElement | null>(null);
-const friendFinderInput = ref<HTMLInputElement | null>(null);
+const peopleSearchInput = ref<HTMLInputElement | null>(null);
 const isSearchingUsers = ref(false);
 const selectedConversation = ref<Conversation | null>(null);
 const pendingDirectFriend = ref<Friend | null>(null);
 const isLoading = ref(true);
+const isRefreshingConversations = ref(false);
+const isRefreshingFriends = ref(false);
 const isOpeningDirect = ref<string | null>(null);
 const isAddingFriend = ref(false);
 const isRemovingFriend = ref<string | null>(null);
+const isDeletingConversation = ref<string | null>(null);
+const isLeavingGroup = ref<string | null>(null);
 const isRespondingToFriendRequest = ref<string | null>(null);
 const isCreatingGroup = ref(false);
 const expandedSidebarPanel = ref<'messages' | 'friends' | null>(null);
+const activeContextMenuId = ref<string | null>(null);
+const contextMenuResets = ref<Record<string, number>>({});
 const isGroupDialogOpen = ref(false);
 const isGroupProfileDialogOpen = ref(false);
 const isContactProfileDialogOpen = ref(false);
@@ -130,11 +135,19 @@ const feedbackMessage = ref('');
 const notificationPermission = ref(getSystemNotificationPermission());
 let hasStartedDashboard = false;
 let friendSearchRequest = 0;
+let peopleSearchTimer: number | undefined;
 let friendRefreshRequest = 0;
+let friendRefreshPending = false;
+let conversationRefreshPending = false;
+let friendAvatarRequest = 0;
 let contactProfileRequest = 0;
 let groupProfileRequest = 0;
 let messageRequest = 0;
 let emojiPicker: Picker | null = null;
+let friendLongPressTimer: number | undefined;
+let suppressFriendClick = false;
+let conversationLongPressTimer: number | undefined;
+let suppressConversationClick = false;
 
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const chatStateInitial = computed(() => (prefersReducedMotion.value ? false : { opacity: 0, y: 8, scale: 0.99 }));
@@ -157,7 +170,7 @@ const filteredConversations = computed(() => {
   );
 });
 const filteredFriends = computed(() => {
-  const query = friendSearchQuery.value.trim().toLocaleLowerCase();
+  const query = peopleSearchQuery.value.trim().toLocaleLowerCase();
 
   return [...friends.value]
     .sort((first, second) => first.name.localeCompare(second.name))
@@ -166,6 +179,8 @@ const filteredFriends = computed(() => {
         !query || friend.name.toLocaleLowerCase().includes(query) || friend.email.toLocaleLowerCase().includes(query),
     );
 });
+const isPeopleSearchActive = computed(() => isPeopleSearchOpen.value && !!peopleSearchQuery.value.trim());
+const newPeopleSearchResults = computed(() => peopleSearchResults.value.filter((result) => !isExistingFriend(result)));
 const visibleFriends = computed(() =>
   expandedSidebarPanel.value === 'friends' ? filteredFriends.value : filteredFriends.value.slice(0, 5),
 );
@@ -430,6 +445,31 @@ function excludeUnsentDirectDrafts(conversationData: Conversation[]) {
   return conversationData.filter((conversation) => conversation.kind !== 'direct' || conversation.messageCount > 0);
 }
 
+async function syncFriendAvatars(nextFriends: Friend[], token: string) {
+  const request = ++friendAvatarRequest;
+  const entries = await Promise.all(
+    nextFriends.map(async (friend) => {
+      if (!friend.avatarUrl) return null;
+      try {
+        const objectUrl = URL.createObjectURL(await socialApi.loadAvatar(token, friend.avatarUrl));
+        return [friend.id, objectUrl] as const;
+      } catch (error) {
+        console.error(`[Dashboard] Failed to load avatar for ${friend.id}:`, error);
+        return null;
+      }
+    }),
+  );
+  const loadedEntries = entries.filter((entry): entry is readonly [string, string] => entry !== null);
+  if (request !== friendAvatarRequest) {
+    loadedEntries.forEach(([, objectUrl]) => URL.revokeObjectURL(objectUrl));
+    return;
+  }
+
+  const nextAvatarUrls = Object.fromEntries(loadedEntries);
+  Object.values(friendAvatarUrls.value).forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  friendAvatarUrls.value = nextAvatarUrls;
+}
+
 async function loadWorkspace() {
   const token = accessToken.value;
   if (!token) return;
@@ -441,6 +481,7 @@ async function loadWorkspace() {
       socialApi.listDirectRequests(token),
     ]);
     friends.value = friendData.friends;
+    void syncFriendAvatars(friendData.friends, token);
     incomingFriendRequests.value = friendData.incomingRequests;
     conversations.value = sortConversationsByActivity(
       excludeUnsentDirectDrafts(conversationData),
@@ -459,15 +500,68 @@ async function loadWorkspace() {
 async function refreshFriends() {
   const token = accessToken.value;
   if (!token) return;
+  if (isRefreshingFriends.value) {
+    friendRefreshPending = true;
+    return;
+  }
 
   const request = ++friendRefreshRequest;
+  isRefreshingFriends.value = true;
   try {
     const friendData = await socialApi.listFriends(token);
     if (request !== friendRefreshRequest) return;
     friends.value = friendData.friends;
+    void syncFriendAvatars(friendData.friends, token);
     incomingFriendRequests.value = friendData.incomingRequests;
   } catch (error) {
     console.error('[Dashboard] Failed to refresh friends:', error);
+  } finally {
+    if (request === friendRefreshRequest) {
+      isRefreshingFriends.value = false;
+      if (friendRefreshPending) {
+        friendRefreshPending = false;
+        void refreshFriends();
+      }
+    }
+  }
+}
+
+async function refreshConversationWorkspace() {
+  const token = accessToken.value;
+  if (!token) return;
+  if (isRefreshingConversations.value) {
+    conversationRefreshPending = true;
+    return;
+  }
+
+  isRefreshingConversations.value = true;
+  try {
+    const [conversationData, requestData] = await Promise.all([
+      socialApi.listConversations(token),
+      socialApi.listDirectRequests(token),
+    ]);
+    const nextConversations = excludeUnsentDirectDrafts(conversationData);
+    conversations.value = sortConversationsByActivity(nextConversations, conversationActivity.value);
+    directRequests.value = requestData;
+
+    if (selectedConversation.value) {
+      const selectedId = selectedConversation.value.id;
+      const refreshedConversation = conversationData.find((conversation) => conversation.id === selectedId);
+      if (refreshedConversation) {
+        Object.assign(selectedConversation.value, refreshedConversation);
+        await loadLatestMessages(selectedId);
+      } else {
+        selectedConversation.value = null;
+      }
+    }
+  } catch (error) {
+    console.error('[Dashboard] Failed to refresh conversations:', error);
+  } finally {
+    isRefreshingConversations.value = false;
+    if (conversationRefreshPending) {
+      conversationRefreshPending = false;
+      void refreshConversationWorkspace();
+    }
   }
 }
 
@@ -489,12 +583,12 @@ watch(
   { immediate: true },
 );
 
-watch(friendFinderQuery, async (query) => {
+watch(peopleSearchQuery, (query, _, onCleanup) => {
   const normalizedQuery = query.trim();
   const request = ++friendSearchRequest;
 
   if (normalizedQuery.replace(/\s/g, '').length < 2) {
-    friendSearchResults.value = [];
+    peopleSearchResults.value = [];
     isSearchingUsers.value = false;
     return;
   }
@@ -503,28 +597,35 @@ watch(friendFinderQuery, async (query) => {
   if (!token) return;
 
   isSearchingUsers.value = true;
-  try {
-    const results = await socialApi.searchUsers(token, normalizedQuery);
-    if (request === friendSearchRequest) friendSearchResults.value = results;
-  } catch (error) {
-    console.error('[Dashboard] Failed to find users:', error);
-    if (request === friendSearchRequest) {
-      friendSearchResults.value = [];
-      feedbackError.value = 'Could not search registered accounts.';
+  peopleSearchTimer = window.setTimeout(async () => {
+    try {
+      const results = await socialApi.searchUsers(token, normalizedQuery);
+      if (request === friendSearchRequest) peopleSearchResults.value = results;
+    } catch (error) {
+      console.error('[Dashboard] Failed to find users:', error);
+      if (request === friendSearchRequest) {
+        peopleSearchResults.value = [];
+        feedbackError.value = 'Could not search registered accounts.';
+      }
+    } finally {
+      if (request === friendSearchRequest) isSearchingUsers.value = false;
     }
-  } finally {
-    if (request === friendSearchRequest) isSearchingUsers.value = false;
-  }
+  }, 500);
+  onCleanup(() => {
+    if (peopleSearchTimer) window.clearTimeout(peopleSearchTimer);
+  });
 });
 
-watch([feedbackError, feedbackMessage], ([error, message], _, onCleanup) => {
+watch([feedbackError, feedbackMessage], ([error, message]) => {
   if (!error && !message) return;
 
-  const timer = window.setTimeout(clearFeedback, 3_000);
-  onCleanup(() => window.clearTimeout(timer));
+  if (error) toast({ title: error, variant: 'destructive' });
+  else toast({ title: message, variant: 'success' });
+  clearFeedback();
 });
 
-watch(selectedConversation, (conversation) => {
+watch(selectedConversation, (conversation, previousConversation) => {
+  if (conversation?.id === previousConversation?.id) return;
   messageRequest += 1;
   messages.value = [];
   messageContent.value = '';
@@ -603,9 +704,9 @@ function openSelectedContactProfile() {
   openContactProfile();
 }
 
-function openGroupProfile() {
+function openGroupProfile(conversation?: Conversation) {
   const token = accessToken.value;
-  const group = selectedConversation.value;
+  const group = conversation ?? selectedConversation.value;
   if (!token || !group || group.kind !== 'group') return;
 
   const request = ++groupProfileRequest;
@@ -635,20 +736,36 @@ function toggleConversationSearch() {
   if (isConversationSearchOpen.value) nextTick(() => conversationSearchInput.value?.focus());
 }
 
-function toggleFriendSearch() {
-  isFriendSearchOpen.value = !isFriendSearchOpen.value;
-  if (isFriendSearchOpen.value) isFriendFinderOpen.value = false;
-  if (isFriendSearchOpen.value) nextTick(() => friendSearchInput.value?.focus());
-}
-
-function toggleFriendFinder() {
-  isFriendFinderOpen.value = !isFriendFinderOpen.value;
-  if (isFriendFinderOpen.value) isFriendSearchOpen.value = false;
-  if (isFriendFinderOpen.value) nextTick(() => friendFinderInput.value?.focus());
+function togglePeopleSearch() {
+  isPeopleSearchOpen.value = !isPeopleSearchOpen.value;
+  if (isPeopleSearchOpen.value) nextTick(() => peopleSearchInput.value?.focus());
 }
 
 function toggleSidebarPanel(panel: 'messages' | 'friends') {
   expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
+}
+
+function contextMenuKey(id: string) {
+  return `${id}-${contextMenuResets.value[id] ?? 0}`;
+}
+
+function activateContextMenu(id: string) {
+  const previousId = activeContextMenuId.value;
+  activeContextMenuId.value = id;
+  if (previousId && previousId !== id) {
+    contextMenuResets.value = {
+      ...contextMenuResets.value,
+      [previousId]: (contextMenuResets.value[previousId] ?? 0) + 1,
+    };
+  }
+}
+
+function handleContextMenuOpen(id: string, open: boolean) {
+  if (open) {
+    activateContextMenu(id);
+  } else if (activeContextMenuId.value === id) {
+    activeContextMenuId.value = null;
+  }
 }
 
 function handlePanelHeaderDragEnd(
@@ -660,6 +777,11 @@ function handlePanelHeaderDragEnd(
   const movedDown = info.offset.y > 48 || info.velocity.y > 400;
   const shouldExpand = panel === 'messages' ? movedDown : movedUp;
   const shouldCollapse = panel === 'messages' ? movedUp : movedDown;
+
+  if (expandedSidebarPanel.value && expandedSidebarPanel.value !== panel) {
+    expandedSidebarPanel.value = null;
+    return;
+  }
 
   if (shouldExpand && expandedSidebarPanel.value !== panel) {
     expandedSidebarPanel.value = panel;
@@ -677,6 +799,10 @@ function preventProfileTriggerFocus(event: Event) {
 }
 
 function preventDialogAutoFocus(event: Event) {
+  event.preventDefault();
+}
+
+function preventMenuAutoFocus(event: Event) {
   event.preventDefault();
 }
 
@@ -744,19 +870,159 @@ function handleSocialNotifications(event: Event) {
   }
 }
 
+function handleFriendsUpdated() {
+  void refreshFriends();
+}
+
+function handleConversationsUpdated() {
+  void refreshConversationWorkspace();
+}
+
 onMounted(() => {
-  document.addEventListener('pointerdown', closeEmojiPickerOnOutsideClick);
+  document.addEventListener('pointerdown', closeEmojiPickerOnOutsideClick, true);
   document.addEventListener('keydown', closeEmojiPickerOnEscape);
   window.addEventListener('openmeet:notifications-received', handleSocialNotifications);
+  window.addEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
+  window.addEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', closeEmojiPickerOnOutsideClick);
+  friendAvatarRequest += 1;
+  Object.values(friendAvatarUrls.value).forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  document.removeEventListener('pointerdown', closeEmojiPickerOnOutsideClick, true);
   document.removeEventListener('keydown', closeEmojiPickerOnEscape);
   window.removeEventListener('openmeet:notifications-received', handleSocialNotifications);
+  window.removeEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
+  window.removeEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
   emojiPicker?.removeEventListener('emoji-click', handleEmojiClick);
   emojiPicker?.remove();
+  window.clearTimeout(friendLongPressTimer);
+  window.clearTimeout(conversationLongPressTimer);
 });
+
+function clearFriendLongPress() {
+  window.clearTimeout(friendLongPressTimer);
+  friendLongPressTimer = undefined;
+}
+
+function startFriendLongPress(event: PointerEvent, contextMenuId: string) {
+  if (event.pointerType === 'mouse') return;
+
+  friendLongPressTimer = window.setTimeout(() => {
+    suppressFriendClick = true;
+    activateContextMenu(contextMenuId);
+    friendLongPressTimer = undefined;
+  }, 500);
+}
+
+function cancelFriendLongPress() {
+  clearFriendLongPress();
+}
+
+function finishFriendLongPress() {
+  clearFriendLongPress();
+  if (suppressFriendClick) window.setTimeout(() => (suppressFriendClick = false));
+}
+
+function handleFriendClick(friend: Friend) {
+  if (suppressFriendClick) {
+    suppressFriendClick = false;
+    return;
+  }
+
+  void openFriendConversation(friend);
+}
+
+function clearConversationLongPress() {
+  window.clearTimeout(conversationLongPressTimer);
+  conversationLongPressTimer = undefined;
+}
+
+function startConversationLongPress(event: PointerEvent, contextMenuId: string) {
+  if (event.pointerType === 'mouse') return;
+
+  conversationLongPressTimer = window.setTimeout(() => {
+    suppressConversationClick = true;
+    activateContextMenu(contextMenuId);
+    conversationLongPressTimer = undefined;
+  }, 500);
+}
+
+function finishConversationLongPress() {
+  clearConversationLongPress();
+  if (suppressConversationClick) window.setTimeout(() => (suppressConversationClick = false));
+}
+
+function handleConversationClick(conversation: Conversation) {
+  if (suppressConversationClick) {
+    suppressConversationClick = false;
+    return;
+  }
+
+  selectConversation(conversation);
+}
+
+function openConversationDetails(conversation: Conversation) {
+  if (conversation.kind === 'group') {
+    openGroupProfile(conversation);
+    return;
+  }
+
+  const friend = friendById.value.get(conversation.otherUserId ?? '');
+  if (!friend) {
+    feedbackError.value = 'Profile details are unavailable for this conversation.';
+    return;
+  }
+  openContactProfile(friend.id, friend.name);
+}
+
+function removeConversationFromWorkspace(conversationId: string) {
+  conversations.value = conversations.value.filter((conversation) => conversation.id !== conversationId);
+  const activity = { ...conversationActivity.value };
+  delete activity[conversationId];
+  conversationActivity.value = activity;
+  if (selectedConversation.value?.id === conversationId) selectedConversation.value = null;
+}
+
+async function hideDirectConversation(conversation: Conversation) {
+  const token = accessToken.value;
+  if (!token || conversation.kind !== 'direct' || isDeletingConversation.value) return;
+
+  clearFeedback();
+  isDeletingConversation.value = conversation.id;
+  try {
+    await socialApi.hideDirectConversation(token, conversation.id);
+    removeConversationFromWorkspace(conversation.id);
+    feedbackMessage.value = 'Conversation removed from your messages.';
+  } catch (error) {
+    console.error('[Dashboard] Failed to hide direct conversation:', error);
+    feedbackError.value = 'Could not remove this conversation.';
+  } finally {
+    isDeletingConversation.value = null;
+  }
+}
+
+async function leaveGroup(conversation: Conversation) {
+  const token = accessToken.value;
+  if (!token || conversation.kind !== 'group' || isLeavingGroup.value) return;
+  if (conversation.role === 'creator') {
+    feedbackError.value = 'Transfer group ownership before leaving.';
+    return;
+  }
+
+  clearFeedback();
+  isLeavingGroup.value = conversation.id;
+  try {
+    await socialApi.leaveGroup(token, conversation.id);
+    removeConversationFromWorkspace(conversation.id);
+    feedbackMessage.value = `You left ${conversationName(conversation)}.`;
+  } catch (error) {
+    console.error('[Dashboard] Failed to leave group:', error);
+    feedbackError.value = error instanceof SocialApiError ? error.message : 'Could not leave this group.';
+  } finally {
+    isLeavingGroup.value = null;
+  }
+}
 
 async function openFriendConversation(friend: Friend) {
   const token = accessToken.value;
@@ -794,9 +1060,9 @@ async function addFriend(result: UserSearchResult) {
   isAddingFriend.value = true;
   try {
     await socialApi.addFriend(token, result.email);
-    isFriendFinderOpen.value = false;
-    friendFinderQuery.value = '';
-    friendSearchResults.value = [];
+    isPeopleSearchOpen.value = false;
+    peopleSearchQuery.value = '';
+    peopleSearchResults.value = [];
     feedbackMessage.value = 'Friend request sent.';
   } catch (error) {
     console.error('[Dashboard] Failed to send friend request:', error);
@@ -928,11 +1194,15 @@ async function startSelectedConversationCall() {
       :initial="{ opacity: 0, y: 10 }"
       :animate="{ opacity: 1, y: 0 }"
       :transition="{ duration: 0.35 }"
-      class="mx-auto h-full max-w-[1600px] overflow-hidden rounded-[1.75rem] border border-[#D8E7E3] bg-white shadow-[0_20px_70px_rgba(16,47,53,0.1)] lg:grid lg:grid-cols-[20rem_minmax(0,1fr)_18rem]"
+      class="relative mx-auto h-full max-w-[1600px] overflow-hidden rounded-[1.75rem] border border-[#D8E7E3] bg-white shadow-[0_20px_70px_rgba(16,47,53,0.1)] lg:grid lg:grid-cols-[20rem_minmax(0,1fr)_18rem]"
     >
       <aside
-        class="flex h-full min-h-0 flex-col border-b border-[#D8E7E3] bg-[#FBFCF8] lg:border-b-0 lg:border-r"
-        :class="{ 'hidden lg:flex': hasSelectedConversation }"
+        class="flex h-full min-h-0 flex-col border-b border-[#D8E7E3] bg-[#FBFCF8] transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-b-0 lg:border-r"
+        :class="
+          hasSelectedConversation
+            ? 'pointer-events-none absolute inset-0 -translate-x-3 opacity-0 lg:static lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto'
+            : 'relative translate-x-0 opacity-100'
+        "
         aria-label="Conversations"
       >
         <div class="border-b border-[#E5EFEC] px-4 py-4 sm:px-5">
@@ -1004,122 +1274,166 @@ async function startSelectedConversationCall() {
           </div>
         </div>
 
-        <motion.div
-          :layout="!prefersReducedMotion"
-          class="min-h-0 overflow-hidden"
-          :class="expandedSidebarPanel === 'friends' ? 'h-0 shrink-0' : 'flex-1'"
+        <div
+          class="min-h-0 overflow-hidden transition-[flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          :class="
+            expandedSidebarPanel === 'friends'
+              ? 'pointer-events-none flex-none basis-0 opacity-0'
+              : 'flex-1 opacity-100'
+          "
+          :aria-hidden="expandedSidebarPanel === 'friends'"
         >
-          <AnimatePresence mode="sync">
-            <motion.div
-              v-if="expandedSidebarPanel !== 'friends'"
-              id="messages-panel"
-              key="messages-panel"
-              :initial="prefersReducedMotion ? false : { opacity: 0, y: -8 }"
-              :animate="{ opacity: 1, y: 0 }"
-              :exit="prefersReducedMotion ? undefined : { opacity: 0, y: -8 }"
-              :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }"
-              class="h-full min-h-0 overflow-y-auto p-2"
-              aria-live="polite"
-            >
-              <div v-if="directRequests.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
-                <div
-                  v-for="request in directRequests"
-                  :key="request.id"
-                  class="flex items-center gap-2 rounded-xl px-2 py-2"
+          <div id="messages-panel" class="h-full min-h-0 overflow-y-auto p-2" aria-live="polite">
+            <div v-if="directRequests.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
+              <div
+                v-for="request in directRequests"
+                :key="request.id"
+                class="flex items-center gap-2 rounded-xl px-2 py-2"
+              >
+                <span
+                  class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
                 >
-                  <span
-                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
-                  >
-                    <CircleUserRound class="size-4" />
-                  </span>
-                  <p class="min-w-0 flex-1 truncate text-xs text-[#4E6B70]">
-                    Request from account {{ request.requesterId.slice(0, 8) }}
-                  </p>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                    :aria-label="`Accept request from account ${request.requesterId.slice(0, 8)}`"
-                    @click="respondToDirectRequest(request, true)"
-                  >
-                    <Check class="size-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
-                    :aria-label="`Decline request from account ${request.requesterId.slice(0, 8)}`"
-                    @click="respondToDirectRequest(request, false)"
-                  >
-                    <X class="size-4" />
-                  </Button>
-                </div>
-              </div>
-              <div v-if="isLoading" class="flex min-h-44 items-center justify-center">
-                <LoadingRipple class="size-6 text-[#0B7A75]" />
-                <span class="sr-only">Loading conversations</span>
-              </div>
-              <p v-else-if="!filteredConversations.length" class="px-3 py-8 text-center text-sm text-[#61777B]">
-                {{ searchQuery ? 'No conversations match your search.' : 'No conversations yet.' }}
-              </p>
-              <nav v-else aria-label="Persistent conversations" class="space-y-1">
-                <button
-                  v-for="conversation in filteredConversations"
-                  :key="conversation.id"
-                  type="button"
-                  class="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                  :class="[
-                    'harbor-ghost-action',
-                    selectedConversation?.id === conversation.id ? 'bg-[#E6F4F1] !text-[#102F35]' : '',
-                  ]"
-                  :aria-current="selectedConversation?.id === conversation.id ? 'page' : undefined"
-                  @click="selectConversation(conversation)"
+                  <CircleUserRound class="size-4" />
+                </span>
+                <p class="min-w-0 flex-1 truncate text-xs text-[#4E6B70]">
+                  Request from account {{ request.requesterId.slice(0, 8) }}
+                </p>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
+                  :aria-label="`Accept request from account ${request.requesterId.slice(0, 8)}`"
+                  @click="respondToDirectRequest(request, true)"
                 >
-                  <span
-                    class="flex size-10 shrink-0 items-center justify-center rounded-full"
-                    :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
+                  <Check class="size-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
+                  :aria-label="`Decline request from account ${request.requesterId.slice(0, 8)}`"
+                  @click="respondToDirectRequest(request, false)"
+                >
+                  <X class="size-4" />
+                </Button>
+              </div>
+            </div>
+            <div v-if="isLoading || isRefreshingConversations" class="flex min-h-44 items-center justify-center">
+              <LoadingRipple class="size-6 text-[#0B7A75]" />
+              <span class="sr-only">Loading conversations</span>
+            </div>
+            <p v-else-if="!filteredConversations.length" class="px-3 py-8 text-center text-sm text-[#61777B]">
+              {{ searchQuery ? 'No conversations match your search.' : 'No conversations yet.' }}
+            </p>
+            <nav v-else aria-label="Persistent conversations" class="space-y-1">
+              <ContextMenu
+                v-for="conversation in filteredConversations"
+                :key="contextMenuKey(`conversation-${conversation.id}`)"
+                :press-open-delay="500"
+                @update:open="handleContextMenuOpen(`conversation-${conversation.id}`, $event)"
+              >
+                <ContextMenuTrigger as-child>
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition-[background-color,border-color,border-width] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    :class="[
+                      'harbor-ghost-action',
+                      selectedConversation?.id === conversation.id ? 'bg-[#E6F4F1] !text-[#102F35]' : '',
+                      activeContextMenuId === `conversation-${conversation.id}` ? 'border-2 border-[#0B7A75]' : '',
+                    ]"
+                    :aria-current="selectedConversation?.id === conversation.id ? 'page' : undefined"
+                    @click="handleConversationClick(conversation)"
+                    @contextmenu="activateContextMenu(`conversation-${conversation.id}`)"
+                    @pointerdown="startConversationLongPress($event, `conversation-${conversation.id}`)"
+                    @pointermove="clearConversationLongPress"
+                    @pointerup="finishConversationLongPress"
+                    @pointercancel="clearConversationLongPress"
                   >
-                    <UsersRound v-if="conversation.kind === 'group'" class="size-4" />
-                    <span v-else class="text-xs font-semibold">{{
-                      userInitials(friendById.get(conversation.otherUserId ?? '')?.name)
-                    }}</span>
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="flex items-center gap-2">
-                      <strong class="truncate text-sm">{{ conversationName(conversation) }}</strong>
-                      <LockKeyhole
-                        v-if="conversation.accessPolicy === 'password'"
-                        class="size-3 shrink-0 text-[#61777B]"
-                        aria-label="Password protected"
+                    <span
+                      class="flex size-10 shrink-0 items-center justify-center rounded-full"
+                      :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
+                    >
+                      <UsersRound v-if="conversation.kind === 'group'" class="size-4" />
+                      <img
+                        v-else-if="friendAvatarUrls[conversation.otherUserId ?? '']"
+                        :src="friendAvatarUrls[conversation.otherUserId ?? '']"
+                        alt=""
+                        class="size-full rounded-full object-cover"
                       />
+                      <span v-else class="text-xs font-semibold">{{
+                        userInitials(friendById.get(conversation.otherUserId ?? '')?.name)
+                      }}</span>
                     </span>
-                    <span class="mt-0.5 block truncate text-xs text-[#61777B]">{{
-                      conversation.kind === 'group' ? 'Group conversation' : 'Direct conversation'
-                    }}</span>
-                  </span>
-                  <span
-                    v-if="unreadCount(conversation)"
-                    class="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-[#0B7A75] px-1.5 py-0.5 text-[11px] font-semibold text-white"
-                    :aria-label="`${unreadCount(conversation)} unread messages`"
+                    <span class="min-w-0 flex-1">
+                      <span class="flex items-center gap-2">
+                        <strong class="truncate text-sm">{{ conversationName(conversation) }}</strong>
+                        <LockKeyhole
+                          v-if="conversation.accessPolicy === 'password'"
+                          class="size-3 shrink-0 text-[#61777B]"
+                          aria-label="Password protected"
+                        />
+                      </span>
+                      <span class="mt-0.5 block truncate text-xs text-[#61777B]">{{
+                        conversation.kind === 'group' ? 'Group conversation' : 'Direct conversation'
+                      }}</span>
+                    </span>
+                    <span
+                      v-if="unreadCount(conversation)"
+                      class="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-[#0B7A75] px-1.5 py-0.5 text-[11px] font-semibold text-white"
+                      :aria-label="`${unreadCount(conversation)} unread messages`"
+                    >
+                      {{ unreadCount(conversation) > 99 ? '99+' : unreadCount(conversation) }}
+                    </span>
+                    <ChevronRight v-else class="size-4 shrink-0 text-[#809697]" />
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent
+                  class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)] data-[state=open]:duration-200 data-[state=closed]:duration-150 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
+                  @open-auto-focus="preventMenuAutoFocus"
+                  @entry-focus="preventMenuAutoFocus"
+                >
+                  <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
+                    {{ conversationName(conversation) }}
+                  </ContextMenuLabel>
+                  <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
+                  <ContextMenuItem
+                    class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                    @select="openConversationDetails(conversation)"
                   >
-                    {{ unreadCount(conversation) > 99 ? '99+' : unreadCount(conversation) }}
-                  </span>
-                  <ChevronRight v-else class="size-4 shrink-0 text-[#809697]" />
-                </button>
-              </nav>
-            </motion.div>
-          </AnimatePresence>
-        </motion.div>
+                    <CircleUserRound v-if="conversation.kind === 'direct'" class="size-4" aria-hidden="true" />
+                    <UsersRound v-else class="size-4" aria-hidden="true" />
+                    {{ conversation.kind === 'direct' ? 'See profile' : 'Group info' }}
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                    :disabled="isDeletingConversation !== null || isLeavingGroup !== null"
+                    @select="
+                      conversation.kind === 'direct' ? hideDirectConversation(conversation) : leaveGroup(conversation)
+                    "
+                  >
+                    <Trash2 v-if="conversation.kind === 'direct'" class="size-4" aria-hidden="true" />
+                    <LogOut v-else class="size-4" aria-hidden="true" />
+                    <template v-if="conversation.kind === 'direct'">
+                      {{ isDeletingConversation === conversation.id ? 'Deleting...' : 'Delete conversation' }}
+                    </template>
+                    <template v-else>
+                      {{ isLeavingGroup === conversation.id ? 'Leaving...' : 'Quit from group' }}
+                    </template>
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            </nav>
+          </div>
+        </div>
 
-        <motion.section
-          :layout="!prefersReducedMotion"
-          class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3"
+        <section
+          class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
           :class="
             expandedSidebarPanel === 'messages'
-              ? 'shrink-0'
+              ? 'basis-20 shrink-0 opacity-100'
               : expandedSidebarPanel === 'friends'
-                ? 'flex-1'
-                : 'max-h-[min(38dvh,23rem)] shrink-0'
+                ? 'flex-1 opacity-100'
+                : 'basis-[min(38dvh,23rem)] shrink-0'
           "
           aria-labelledby="friends-heading"
         >
@@ -1140,27 +1454,14 @@ async function startSelectedConversationCall() {
                 size="icon"
                 variant="ghost"
                 class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isFriendSearchOpen }"
-                :aria-expanded="isFriendSearchOpen"
-                aria-controls="friend-search"
-                aria-label="Search friends"
-                title="Search friends"
-                @click="toggleFriendSearch"
+                :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isPeopleSearchOpen }"
+                :aria-expanded="isPeopleSearchOpen"
+                aria-controls="people-search"
+                aria-label="Search friends and people"
+                title="Search friends and people"
+                @click="togglePeopleSearch"
               >
                 <Search class="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isFriendFinderOpen }"
-                :aria-expanded="isFriendFinderOpen"
-                aria-controls="friend-finder"
-                aria-label="Find registered users"
-                title="Find registered users"
-                @click="toggleFriendFinder"
-              >
-                <UserPlus class="size-4" />
               </Button>
               <Button
                 size="icon"
@@ -1177,184 +1478,239 @@ async function startSelectedConversationCall() {
               </Button>
             </div>
           </div>
-          <AnimatePresence mode="sync">
-            <motion.div
-              v-if="expandedSidebarPanel !== 'messages'"
-              id="friends-panel"
-              key="friends-panel"
-              :initial="prefersReducedMotion ? false : { opacity: 0, y: 8 }"
-              :animate="{ opacity: 1, y: 0 }"
-              :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 8 }"
-              :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }"
-              class="flex min-h-0 flex-1 flex-col"
+          <div
+            id="friends-panel"
+            class="flex min-h-0 flex-col overflow-hidden transition-[height,flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+            :class="
+              expandedSidebarPanel === 'messages' ? 'pointer-events-none h-0 flex-none opacity-0' : 'flex-1 opacity-100'
+            "
+            :aria-hidden="expandedSidebarPanel === 'messages'"
+          >
+            <div
+              id="people-search"
+              class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
+              :class="isPeopleSearchOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
             >
-              <div
-                id="friend-search"
-                class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
-                :class="isFriendSearchOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
-              >
-                <label class="relative min-h-0 overflow-hidden">
-                  <span class="sr-only">Search friends</span>
+              <div class="min-h-0 overflow-hidden">
+                <label class="relative block">
+                  <span class="sr-only">Search friends and people</span>
                   <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" />
                   <Input
-                    ref="friendSearchInput"
-                    v-model="friendSearchQuery"
+                    ref="peopleSearchInput"
+                    v-model="peopleSearchQuery"
                     type="search"
-                    placeholder="Search friends"
+                    placeholder="Search friends and people"
                     class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
                 </label>
-              </div>
-              <div
-                id="friend-finder"
-                class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
-                :class="isFriendFinderOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
-              >
-                <div class="min-h-0 overflow-hidden">
-                  <label class="relative block">
-                    <span class="sr-only">Find registered users</span>
-                    <Search
-                      class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]"
-                    />
-                    <Input
-                      ref="friendFinderInput"
-                      v-model="friendFinderQuery"
-                      type="search"
-                      placeholder="Find registered users"
-                      class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
-                  </label>
-                  <p
-                    v-if="friendFinderQuery.trim() && friendFinderQuery.replace(/\s/g, '').length < 2"
-                    class="mt-2 text-xs text-[#61777B]"
-                  >
-                    Enter at least two characters.
-                  </p>
-                  <div v-else-if="isSearchingUsers" class="flex h-16 items-center justify-center">
-                    <LoadingRipple class="size-4 text-[#0B7A75]" />
-                    <span class="sr-only">Searching registered users</span>
-                  </div>
-                  <div v-else-if="friendSearchResults.length" class="mt-2 space-y-1">
-                    <div
-                      v-for="result in friendSearchResults"
-                      :key="result.id"
-                      class="flex items-center gap-2 rounded-xl bg-[#F0F7F5] px-2 py-2"
-                    >
-                      <span
-                        class="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
-                      >
-                        {{ userInitials(result.name) }}
-                      </span>
-                      <span class="min-w-0 flex-1">
-                        <span class="block truncate text-xs font-semibold">{{ result.name }}</span>
-                        <span class="block truncate text-[11px] text-[#61777B]">{{ result.email }}</span>
-                      </span>
-                      <Button
-                        size="sm"
-                        :disabled="isAddingFriend || isExistingFriend(result)"
-                        class="harbor-primary-action h-7 rounded-full bg-[#0B7A75] px-2 text-xs text-white"
-                        @click="addFriend(result)"
-                      >
-                        {{ isExistingFriend(result) ? 'Friends' : isAddingFriend ? 'Adding...' : 'Add' }}
-                      </Button>
-                    </div>
-                  </div>
-                  <p v-else-if="friendFinderQuery.replace(/\s/g, '').length >= 2" class="mt-2 text-xs text-[#61777B]">
-                    No registered accounts found.
-                  </p>
+                <p
+                  v-if="peopleSearchQuery.trim() && peopleSearchQuery.replace(/\s/g, '').length < 2"
+                  class="mt-2 text-xs text-[#61777B]"
+                >
+                  Keep typing to search people outside your friend list.
+                </p>
+                <div v-else-if="isSearchingUsers" class="flex h-16 items-center justify-center">
+                  <LoadingRipple class="size-4 text-[#0B7A75]" />
+                  <span class="sr-only">Searching people</span>
                 </div>
-              </div>
-              <div class="min-h-0 flex-1 overflow-y-auto">
-                <div v-if="incomingFriendRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
-                  <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
-                  <div
-                    v-for="request in incomingFriendRequests"
-                    :key="request.id"
-                    class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-[#102F35]"
+                <div v-else-if="isPeopleSearchActive && filteredFriends.length" class="mt-2 space-y-1">
+                  <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#0B7A75]">Friends</p>
+                  <button
+                    v-for="friend in filteredFriends"
+                    :key="friend.id"
+                    type="button"
+                    class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                    @click="openFriendConversation(friend)"
                   >
                     <span
-                      class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                      class="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
                     >
-                      {{ userInitials(request.user.name) }}
+                      <img
+                        v-if="friendAvatarUrls[friend.id]"
+                        :src="friendAvatarUrls[friend.id]"
+                        alt=""
+                        class="size-full object-cover"
+                      />
+                      <template v-else>{{ userInitials(friend.name) }}</template>
                     </span>
-                    <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                      :disabled="isRespondingToFriendRequest !== null"
-                      :aria-label="`Accept friend request from ${request.user.name}`"
-                      @click="respondToFriendRequest(request, true)"
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-xs font-semibold">{{ friend.name }}</span>
+                      <span class="block truncate text-[11px] text-[#61777B]">{{ friend.email }}</span>
+                    </span>
+                    <span class="rounded-full bg-[#E6F4F1] px-2 py-0.5 text-[10px] font-semibold text-[#27595D]"
+                      >Friend</span
                     >
-                      <Check class="size-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
-                      :disabled="isRespondingToFriendRequest !== null"
-                      :aria-label="`Decline friend request from ${request.user.name}`"
-                      @click="respondToFriendRequest(request, false)"
+                  </button>
+                </div>
+                <div v-if="newPeopleSearchResults.length" class="mt-2 space-y-1">
+                  <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">People</p>
+                  <div
+                    v-for="result in newPeopleSearchResults"
+                    :key="result.id"
+                    class="flex items-center gap-2 rounded-xl bg-[#F0F7F5] px-2 py-2"
+                  >
+                    <span
+                      class="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
                     >
-                      <X class="size-4" />
+                      {{ userInitials(result.name) }}
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-xs font-semibold">{{ result.name }}</span>
+                      <span class="block truncate text-[11px] text-[#61777B]">{{ result.email }}</span>
+                    </span>
+                    <Button
+                      size="sm"
+                      :disabled="isAddingFriend"
+                      class="harbor-primary-action h-7 rounded-full bg-[#0B7A75] px-2 text-xs text-white"
+                      @click="addFriend(result)"
+                    >
+                      {{ isAddingFriend ? 'Adding...' : 'Add' }}
                     </Button>
                   </div>
                 </div>
-                <div v-if="visibleFriends.length" id="friend-list" class="mt-2 space-y-1 px-2">
-                  <ContextMenu v-for="friend in visibleFriends" :key="friend.id">
-                    <ContextMenuTrigger as-child>
-                      <button
-                        type="button"
-                        class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                        :aria-label="`Open direct conversation with ${friend.name}`"
-                        @click="openFriendConversation(friend)"
-                      >
-                        <span
-                          class="relative flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                        >
-                          {{ userInitials(friend.name) }}
-                          <span
-                            v-if="friend.isOnline"
-                            class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]"
-                            aria-label="Online"
-                          />
-                        </span>
-                        <span class="min-w-0 flex-1 truncate text-sm">{{
-                          isOpeningDirect === friend.id ? 'Opening...' : friend.name
-                        }}</span>
-                      </button>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent
-                      class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
-                    >
-                      <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
-                        {{ friend.name }}
-                      </ContextMenuLabel>
-                      <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
-                      <ContextMenuItem
-                        :disabled="isRemovingFriend !== null"
-                        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
-                        @select="removeFriend(friend)"
-                      >
-                        <UserMinus class="size-4" aria-hidden="true" />
-                        {{ isRemovingFriend === friend.id ? 'Removing...' : 'Remove friend' }}
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                </div>
-                <p v-else-if="!isLoading && friends.length" class="px-2 py-2 text-xs text-[#61777B]">
-                  No friends match your search.
+                <p
+                  v-else-if="
+                    isPeopleSearchActive && !filteredFriends.length && peopleSearchQuery.replace(/\s/g, '').length >= 2
+                  "
+                  class="mt-2 text-xs text-[#61777B]"
+                >
+                  No registered accounts found.
                 </p>
-                <p v-else-if="!isLoading" class="px-2 py-2 text-xs text-[#61777B]">No accepted friends.</p>
               </div>
-            </motion.div>
-          </AnimatePresence>
-        </motion.section>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto">
+              <div v-if="incomingFriendRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
+                <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
+                <div
+                  v-for="request in incomingFriendRequests"
+                  :key="request.id"
+                  class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-[#102F35]"
+                >
+                  <span
+                    class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                  >
+                    <img
+                      v-if="friendAvatarUrls[request.user.id]"
+                      :src="friendAvatarUrls[request.user.id]"
+                      alt=""
+                      class="size-full object-cover"
+                    />
+                    <template v-else>{{ userInitials(request.user.name) }}</template>
+                  </span>
+                  <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
+                    :disabled="isRespondingToFriendRequest !== null"
+                    :aria-label="`Accept friend request from ${request.user.name}`"
+                    @click="respondToFriendRequest(request, true)"
+                  >
+                    <Check class="size-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
+                    :disabled="isRespondingToFriendRequest !== null"
+                    :aria-label="`Decline friend request from ${request.user.name}`"
+                    @click="respondToFriendRequest(request, false)"
+                  >
+                    <X class="size-4" />
+                  </Button>
+                </div>
+              </div>
+              <div v-if="!isPeopleSearchActive && visibleFriends.length" id="friend-list" class="mt-2 space-y-1 px-2">
+                <ContextMenu
+                  v-for="friend in visibleFriends"
+                  :key="contextMenuKey(`friend-${friend.id}`)"
+                  :press-open-delay="500"
+                  @update:open="handleContextMenuOpen(`friend-${friend.id}`, $event)"
+                >
+                  <ContextMenuTrigger as-child>
+                    <button
+                      type="button"
+                      class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-2 text-left transition-[background-color,border-color,border-width] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      :aria-label="`Open direct conversation with ${friend.name}`"
+                      :class="{ 'border-2 border-[#0B7A75]': activeContextMenuId === `friend-${friend.id}` }"
+                      @click="handleFriendClick(friend)"
+                      @contextmenu="activateContextMenu(`friend-${friend.id}`)"
+                      @pointerdown="startFriendLongPress($event, `friend-${friend.id}`)"
+                      @pointermove="cancelFriendLongPress"
+                      @pointerup="finishFriendLongPress"
+                      @pointercancel="cancelFriendLongPress"
+                    >
+                      <span
+                        class="relative flex size-8 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                      >
+                        <img
+                          v-if="friendAvatarUrls[friend.id]"
+                          :src="friendAvatarUrls[friend.id]"
+                          alt=""
+                          class="size-full object-cover"
+                        />
+                        <template v-else>{{ userInitials(friend.name) }}</template>
+                        <span
+                          v-if="friend.isOnline"
+                          class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]"
+                          aria-label="Online"
+                        />
+                      </span>
+                      <span class="min-w-0 flex-1 truncate text-sm">{{
+                        isOpeningDirect === friend.id ? 'Opening...' : friend.name
+                      }}</span>
+                    </button>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent
+                    class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)] data-[state=open]:duration-200 data-[state=closed]:duration-150 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
+                    @open-auto-focus="preventMenuAutoFocus"
+                    @entry-focus="preventMenuAutoFocus"
+                  >
+                    <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
+                      {{ friend.name }}
+                    </ContextMenuLabel>
+                    <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
+                    <ContextMenuItem
+                      class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                      @select="openContactProfile(friend.id, friend.name)"
+                    >
+                      <CircleUserRound class="size-4" aria-hidden="true" />
+                      View profile
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      :disabled="isRemovingFriend !== null"
+                      class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                      @select="removeFriend(friend)"
+                    >
+                      <UserMinus class="size-4" aria-hidden="true" />
+                      {{ isRemovingFriend === friend.id ? 'Removing...' : 'Remove friend' }}
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              </div>
+              <p
+                v-else-if="!isPeopleSearchActive && !isLoading && !isRefreshingFriends && friends.length"
+                class="px-2 py-2 text-xs text-[#61777B]"
+              >
+                No friends match your search.
+              </p>
+              <div v-else-if="isLoading || isRefreshingFriends" class="flex h-16 items-center justify-center">
+                <LoadingRipple class="size-4 text-[#0B7A75]" />
+                <span class="sr-only">Loading friends</span>
+              </div>
+              <p v-else class="px-2 py-2 text-xs text-[#61777B]">No accepted friends.</p>
+            </div>
+          </div>
+        </section>
       </aside>
 
       <section
-        class="flex h-full min-h-0 min-w-0 flex-col bg-white"
-        :class="{ 'hidden lg:flex': !hasSelectedConversation }"
+        class="flex h-full min-h-0 min-w-0 flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+        :class="
+          hasSelectedConversation
+            ? 'relative translate-x-0 opacity-100'
+            : 'pointer-events-none absolute inset-0 translate-x-3 opacity-0 lg:static lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto'
+        "
         aria-labelledby="conversation-title"
       >
         <AnimatePresence mode="wait">
@@ -1387,8 +1743,16 @@ async function startSelectedConversationCall() {
                 :aria-label="`View profile for ${selectedFriend.name}`"
                 @click="openSelectedContactProfile"
               >
-                <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-[#0B7A75]">
-                  <span class="text-xs font-semibold">{{ userInitials(selectedFriend.name) }}</span>
+                <span
+                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[#0B7A75]"
+                >
+                  <img
+                    v-if="friendAvatarUrls[selectedFriend.id]"
+                    :src="friendAvatarUrls[selectedFriend.id]"
+                    alt=""
+                    class="size-full object-cover"
+                  />
+                  <span v-else class="text-xs font-semibold">{{ userInitials(selectedFriend.name) }}</span>
                 </span>
                 <span class="min-w-0">
                   <span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span>
@@ -1402,7 +1766,7 @@ async function startSelectedConversationCall() {
                 type="button"
                 class="harbor-ghost-action -mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
                 :aria-label="`View group info for ${selectedTitle}`"
-                @click="openGroupProfile"
+                @click="openGroupProfile()"
               >
                 <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#102F35] text-white">
                   <UsersRound class="size-4" />
@@ -1558,9 +1922,12 @@ async function startSelectedConversationCall() {
                         :animate="{ opacity: 1, y: 0, scale: 1 }"
                         :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 6, scale: 0.96 }"
                         :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }"
-                        class="absolute bottom-full right-0 z-20 mb-2 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_18px_48px_rgba(16,47,53,0.18)]"
+                        class="fixed inset-x-3 bottom-20 z-30 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_18px_48px_rgba(16,47,53,0.18)] md:absolute md:inset-x-auto md:bottom-full md:right-0 md:mb-2 md:w-[min(22rem,calc(100vw-2rem))]"
                       >
-                        <div ref="emojiPickerMount" class="max-h-[min(26rem,55dvh)] overflow-y-auto" />
+                        <div
+                          ref="emojiPickerMount"
+                          class="max-h-[min(26rem,55dvh)] overflow-y-auto [&>emoji-picker]:w-full"
+                        />
                       </motion.div>
                     </AnimatePresence>
                   </span>
@@ -1654,28 +2021,6 @@ async function startSelectedConversationCall() {
       </aside>
     </motion.div>
 
-    <motion.div
-      v-if="feedbackError || feedbackMessage"
-      :initial="{ opacity: 0, y: 12, scale: 0.98 }"
-      :animate="{ opacity: 1, y: 0, scale: 1 }"
-      :exit="{ opacity: 0, y: 8, scale: 0.98 }"
-      :transition="{ duration: 0.2, ease: 'easeOut' }"
-      class="fixed bottom-4 left-1/2 z-40 w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2"
-      aria-live="polite"
-    >
-      <p
-        v-if="feedbackError"
-        role="alert"
-        class="flex items-center gap-2 rounded-xl border border-[#F2C7BE] bg-[#FFF4F0] px-4 py-3 text-sm text-[#9D4636] shadow-lg"
-      >
-        <CircleAlert class="size-4 shrink-0" />
-        {{ feedbackError }}
-      </p>
-      <p v-else class="rounded-xl border border-[#BBDDD6] bg-[#EDF8F5] px-4 py-3 text-sm text-[#17645F] shadow-lg">
-        {{ feedbackMessage }}
-      </p>
-    </motion.div>
-
     <Dialog :open="isGroupDialogOpen" @update:open="isGroupDialogOpen = $event">
       <HarborDialogContent
         overlay-class="bg-[#102F35]/30 backdrop-blur-md"
@@ -1753,7 +2098,7 @@ async function startSelectedConversationCall() {
     <Dialog :open="isGroupProfileDialogOpen" @update:open="setGroupProfileDialogOpen">
       <HarborDialogContent
         overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-        class="marketing-font flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-4xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+        class="marketing-font flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-4xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
         @open-auto-focus="preventDialogAutoFocus"
         @close-auto-focus="preventProfileTriggerFocus"
       >
@@ -1863,7 +2208,7 @@ async function startSelectedConversationCall() {
     <Dialog :open="isContactProfileDialogOpen" @update:open="setContactProfileDialogOpen">
       <HarborDialogContent
         overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-        class="marketing-font w-[calc(100%-2rem)] max-w-3xl rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+        class="marketing-font flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-3xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
         @open-auto-focus="preventDialogAutoFocus"
         @close-auto-focus="preventProfileTriggerFocus"
       >
@@ -1877,7 +2222,7 @@ async function startSelectedConversationCall() {
           <span class="sr-only">Loading contact profile</span>
         </div>
 
-        <div v-else-if="contactProfile" class="space-y-6">
+        <div v-else-if="contactProfile" class="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
           <p
             v-if="contactProfileError"
             class="rounded-xl border border-[#F2C7BE] bg-[#FFF4F0] px-4 py-3 text-sm text-[#9D4636]"
@@ -1889,9 +2234,15 @@ async function startSelectedConversationCall() {
             class="flex flex-col gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 sm:flex-row sm:items-start sm:p-6"
           >
             <span
-              class="flex size-20 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
+              class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
             >
-              {{ userInitials(contactProfile.name) }}
+              <img
+                v-if="friendAvatarUrls[contactProfile.id]"
+                :src="friendAvatarUrls[contactProfile.id]"
+                alt=""
+                class="size-full object-cover"
+              />
+              <template v-else>{{ userInitials(contactProfile.name) }}</template>
             </span>
             <div class="min-w-0 flex-1">
               <h3 class="truncate text-xl font-semibold tracking-[-0.025em]">{{ contactProfile.name }}</h3>
