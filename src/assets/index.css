@@ -122,14 +122,6 @@
   color: #c4513d;
 }
 
-.harbor-toaster [data-sonner-toast] [data-close-button] {
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid #d8e7e3;
-  background: #ffffff;
-  color: #61777b;
-}
-
 .harbor-toaster [data-sonner-toast] [data-button] {
   min-height: 2.25rem;
   border-radius: 0.625rem;
@@ -152,19 +144,9 @@
   .harbor-toaster [data-sonner-toast][data-styled='true'] {
     width: 100%;
   }
-
-  .harbor-toaster [data-sonner-toast] [data-close-button] {
-    width: 2.75rem;
-    height: 2.75rem;
-  }
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .harbor-toaster [data-sonner-toast] [data-close-button]:hover {
-    background: #e6f4f1;
-    color: #102f35;
-  }
-
   .harbor-toaster [data-sonner-toast] [data-button]:hover {
     background: #08635f;
   }

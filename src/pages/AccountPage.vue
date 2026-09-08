@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingRipple } from '@/components/ui/loading';
+import { toast } from '@/components/ui/toast/store';
 import { useAuth } from '@/composables/useAuth';
 import { socialApi } from '@/services/social-api';
 
@@ -26,6 +27,7 @@ const isSaving = ref(false);
 const profileError = ref('');
 let profileRequest = 0;
 let avatarObjectUrl: string | null = null;
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
 const initials = computed(
   () =>
@@ -88,9 +90,11 @@ async function handleProfileSave() {
     nickname.value = profile.nickname;
     statusMessage.value = profile.statusMessage;
     window.dispatchEvent(new Event('openmeet:profile-updated'));
+    toast({ title: 'Profile updated', description: 'Your account details were saved.', variant: 'success' });
   } catch (error) {
     console.error('[Account] Failed to update profile:', error);
     profileError.value = error instanceof Error ? error.message : t('account.profileUnavailable');
+    toast({ title: 'Could not update profile', description: profileError.value, variant: 'destructive' });
   } finally {
     isSaving.value = false;
   }
@@ -100,28 +104,55 @@ async function loadAvatar(path: string | null) {
   if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
   avatarObjectUrl = null;
   avatarUrl.value = null;
-  if (!path || !accessToken.value) return;
+  if (!path || !accessToken.value) return false;
 
   try {
-    avatarObjectUrl = URL.createObjectURL(await socialApi.loadAvatar(accessToken.value, path));
+    const nextAvatarUrl = URL.createObjectURL(await socialApi.loadAvatar(accessToken.value, path));
+    const image = new Image();
+    image.src = nextAvatarUrl;
+    try {
+      await image.decode();
+    } catch (error) {
+      URL.revokeObjectURL(nextAvatarUrl);
+      throw error;
+    }
+    avatarObjectUrl = nextAvatarUrl;
     avatarUrl.value = avatarObjectUrl;
+    return true;
   } catch (error) {
     console.error('[Account] Failed to load avatar:', error);
+    return false;
   }
 }
 
 async function handleAvatarChange(event: Event) {
   const avatar = (event.target as HTMLInputElement).files?.[0];
   if (!avatar || !accessToken.value) return;
+  if (avatar.size > MAX_AVATAR_BYTES) {
+    profileError.value = 'Avatar must be 5 MiB or smaller.';
+    toast({ title: 'Avatar is too large', description: profileError.value, variant: 'destructive' });
+    (event.target as HTMLInputElement).value = '';
+    return;
+  }
   isSaving.value = true;
   profileError.value = '';
   try {
     const profile = await socialApi.uploadCurrentUserAvatar(accessToken.value, avatar);
-    await loadAvatar(profile.avatarUrl);
+    const previewLoaded = await loadAvatar(profile.avatarUrl);
     window.dispatchEvent(new Event('openmeet:profile-updated'));
+    if (previewLoaded) {
+      toast({ title: 'Avatar updated', description: 'Your new profile picture is ready.', variant: 'success' });
+    } else {
+      toast({
+        title: 'Avatar uploaded',
+        description: 'Your photo was saved, but its preview could not be loaded.',
+        variant: 'destructive',
+      });
+    }
   } catch (error) {
     console.error('[Account] Failed to upload avatar:', error);
     profileError.value = error instanceof Error ? error.message : t('account.profileUnavailable');
+    toast({ title: 'Could not update avatar', description: profileError.value, variant: 'destructive' });
   } finally {
     isSaving.value = false;
     (event.target as HTMLInputElement).value = '';

@@ -16,8 +16,6 @@ const position = computed(() => (isMobile.value ? 'top-center' : 'top-right'));
     :duration="6000"
     :visible-toasts="4"
     :gap="10"
-    close-button
-    close-button-position="top-right"
     :offset="{ top: 84, right: 20, left: 20 }"
     :mobile-offset="{ top: 84, right: 12, left: 12 }"
     :swipe-directions="['left', 'right']"
