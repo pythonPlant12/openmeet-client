@@ -1,7 +1,7 @@
 import { computed, inject } from 'vue';
 
 export function useAuth() {
-  const authActor = inject<any>('authActor');
+  const authActor = inject<any>('authActor', null);
 
   if (!authActor) {
     throw new Error('Auth actor not provided! Make sure authActor is provided in App.vue');

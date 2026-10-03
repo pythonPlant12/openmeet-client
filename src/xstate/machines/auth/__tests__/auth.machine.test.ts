@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Router } from 'vue-router';
 import { createActor, waitFor } from 'xstate';
 
-import { authApi } from '@/services/auth-api';
+import { type TokenResponse, authApi } from '@/services/auth-api';
+import { cookieUtils } from '@/utils';
 
 import { authMachine } from '../index';
 import { AuthEventType, AuthState } from '../types';
@@ -52,6 +53,14 @@ vi.mock('@/services/auth-api', () => ({
 
 describe('Auth Machine', () => {
   let actor: ReturnType<typeof createActor<typeof authMachine>>;
+
+  beforeEach(() => {
+    vi.mocked(cookieUtils.get).mockImplementation((name) => {
+      if (name === 'accessToken') return 'mock-access-token';
+      if (name === 'refreshToken') return 'mock-refresh-token';
+      return null;
+    });
+  });
 
   afterEach(() => {
     actor?.stop();
@@ -121,6 +130,158 @@ describe('Auth Machine', () => {
     it('should not navigate to dashboard when validating existing session', async () => {
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
       expect(mockRouter.push).not.toHaveBeenCalled();
+    });
+
+    it('restores a session when only a refresh token exists', async () => {
+      actor.stop();
+      vi.clearAllMocks();
+      vi.mocked(cookieUtils.get).mockReturnValue('mock-refresh-token');
+      vi.mocked(authApi.me).mockResolvedValueOnce({
+        id: '1',
+        email: 'test@test.com',
+        name: 'Test User',
+        nickname: 'test_user',
+        role: 'user',
+        newAccessToken: 'new-access-token',
+      });
+      actor = createActor(authMachine, {
+        input: { initialAccessToken: null, initialRefreshToken: 'mock-refresh-token', router: mockRouter },
+      });
+      actor.start();
+
+      await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
+
+      expect(authApi.me).toHaveBeenCalledWith(null, 'mock-refresh-token');
+      expect(actor.getSnapshot().context.accessToken).toBe('new-access-token');
+      expect(cookieUtils.set).toHaveBeenCalledWith('accessToken', 'new-access-token', 1);
+    });
+
+    it('clears a rejected refresh-only session', async () => {
+      actor.stop();
+      vi.clearAllMocks();
+      vi.mocked(cookieUtils.get).mockImplementation((name) => {
+        if (name === 'refreshToken') return 'invalid-refresh-token';
+        return null;
+      });
+      vi.mocked(authApi.me).mockRejectedValueOnce(new Error('Invalid refresh token'));
+      actor = createActor(authMachine, {
+        input: { initialAccessToken: null, initialRefreshToken: 'invalid-refresh-token', router: mockRouter },
+      });
+      actor.start();
+
+      await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
+
+      expect(actor.getSnapshot().context.accessToken).toBeNull();
+      expect(actor.getSnapshot().context.refreshToken).toBeNull();
+      expect(cookieUtils.remove).toHaveBeenCalledWith('accessToken');
+      expect(cookieUtils.remove).toHaveBeenCalledWith('refreshToken');
+    });
+
+    it('does not restore a session after its refresh token is deleted during validation', async () => {
+      actor.stop();
+      vi.clearAllMocks();
+      vi.mocked(cookieUtils.get).mockReturnValue('refresh-token');
+      let resolveSession!: (value: {
+        id: string;
+        email: string;
+        name: string;
+        nickname: string;
+        role: 'user';
+        newAccessToken: string;
+      }) => void;
+      vi.mocked(authApi.me).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSession = resolve;
+          }),
+      );
+      actor = createActor(authMachine, {
+        input: { initialAccessToken: null, initialRefreshToken: 'refresh-token', router: mockRouter },
+      });
+      actor.start();
+      vi.mocked(cookieUtils.get).mockReturnValue(null);
+      resolveSession({
+        id: '1',
+        email: 'test@test.com',
+        name: 'Test User',
+        nickname: 'test_user',
+        role: 'user',
+        newAccessToken: 'new-access-token',
+      });
+
+      await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
+
+      expect(cookieUtils.set).not.toHaveBeenCalled();
+    });
+
+    it('does not restore a session after its access token is deleted during validation', async () => {
+      actor.stop();
+      vi.clearAllMocks();
+      vi.mocked(cookieUtils.get).mockImplementation((name) => {
+        if (name === 'accessToken') return 'access-token';
+        if (name === 'refreshToken') return 'refresh-token';
+        return null;
+      });
+      let resolveSession!: (value: { id: string; email: string; name: string; nickname: string; role: 'user' }) => void;
+      vi.mocked(authApi.me).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSession = resolve;
+          }),
+      );
+      actor = createActor(authMachine, {
+        input: { initialAccessToken: 'access-token', initialRefreshToken: 'refresh-token', router: mockRouter },
+      });
+      actor.start();
+      vi.mocked(cookieUtils.get).mockReturnValue(null);
+      resolveSession({
+        id: '1',
+        email: 'test@test.com',
+        name: 'Test User',
+        nickname: 'test_user',
+        role: 'user',
+      });
+
+      await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
+
+      expect(cookieUtils.set).not.toHaveBeenCalled();
+    });
+
+    it('does not clear replacement tokens after stale session validation fails', async () => {
+      actor.stop();
+      vi.clearAllMocks();
+      let accessToken = 'access-token';
+      let refreshToken = 'refresh-token';
+      vi.mocked(cookieUtils.get).mockImplementation((name) => {
+        if (name === 'accessToken') return accessToken;
+        if (name === 'refreshToken') return refreshToken;
+        return null;
+      });
+      let rejectSession!: (reason: Error) => void;
+      vi.mocked(authApi.me).mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectSession = reject;
+          }),
+      );
+      actor = createActor(authMachine, {
+        input: { initialAccessToken: accessToken, initialRefreshToken: refreshToken, router: mockRouter },
+      });
+      actor.start();
+      accessToken = 'replacement-access-token';
+      refreshToken = 'replacement-refresh-token';
+      vi.mocked(authApi.me).mockResolvedValueOnce({
+        id: '1',
+        email: 'test@test.com',
+        name: 'Test User',
+        nickname: 'test_user',
+        role: 'user',
+      });
+      rejectSession(new Error('Invalid token'));
+
+      await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
+
+      expect(cookieUtils.remove).not.toHaveBeenCalled();
     });
   });
 
@@ -309,10 +470,49 @@ describe('Auth Machine', () => {
       await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
       expect(mockRouter.push).toHaveBeenCalledWith('/login');
     });
+
+    it('does not revoke replacement tokens after stale logout completes', async () => {
+      let accessToken = 'mock-access-token';
+      let refreshToken = 'mock-refresh-token';
+      vi.mocked(cookieUtils.get).mockImplementation((name) => {
+        if (name === 'accessToken') return accessToken;
+        if (name === 'refreshToken') return refreshToken;
+        return null;
+      });
+      let resolveLogout!: () => void;
+      vi.mocked(authApi.logout).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveLogout = resolve;
+          }),
+      );
+
+      actor.send({ type: AuthEventType.LOGOUT });
+      accessToken = 'replacement-access-token';
+      refreshToken = 'replacement-refresh-token';
+      vi.mocked(authApi.me).mockResolvedValueOnce({
+        id: '1',
+        email: 'test@test.com',
+        name: 'Test User',
+        nickname: 'test_user',
+        role: 'user',
+      });
+      resolveLogout();
+
+      await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
+
+      expect(authApi.logout).toHaveBeenCalledWith('mock-refresh-token');
+      expect(cookieUtils.remove).not.toHaveBeenCalled();
+    });
   });
 
   describe('Token Refresh', () => {
     beforeEach(async () => {
+      vi.mocked(cookieUtils.get).mockImplementation((name) => {
+        if (name === 'accessToken') return 'mock-access-token';
+        if (name === 'refreshToken') return 'mock-refresh-token';
+        return null;
+      });
       actor = createActor(authMachine, {
         input: {
           initialAccessToken: 'mock-access-token',
@@ -342,11 +542,74 @@ describe('Auth Machine', () => {
 
     it('should not navigate to dashboard after token refresh', async () => {
       vi.clearAllMocks();
+      vi.mocked(cookieUtils.get).mockReturnValue('mock-refresh-token');
 
       actor.send({ type: AuthEventType.REFRESH_TOKEN });
 
       await waitFor(actor, (state) => state.matches(AuthState.AUTHENTICATED), { timeout: 2000 });
       expect(mockRouter.push).not.toHaveBeenCalled();
+    });
+
+    it('updates the session token refreshed by an API retry', () => {
+      actor.send({ type: AuthEventType.ACCESS_TOKEN_REFRESHED, accessToken: 'fresh-token' });
+
+      expect(actor.getSnapshot().context.accessToken).toBe('fresh-token');
+      expect(cookieUtils.set).toHaveBeenCalledWith('accessToken', 'fresh-token', 1);
+    });
+
+    it('accepts an API retry token while its own refresh is pending', () => {
+      let resolveRefresh!: (response: TokenResponse) => void;
+      vi.mocked(authApi.refresh).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+
+      actor.send({ type: AuthEventType.REFRESH_TOKEN });
+      actor.send({ type: AuthEventType.ACCESS_TOKEN_REFRESHED, accessToken: 'fresh-token' });
+      resolveRefresh({ access_token: 'stale-token' });
+
+      expect(actor.getSnapshot().value).toBe(AuthState.AUTHENTICATED);
+      expect(actor.getSnapshot().context.accessToken).toBe('fresh-token');
+    });
+
+    it('does not refresh from a deleted cookie using stale session state', async () => {
+      vi.mocked(cookieUtils.get).mockReturnValue(null);
+      vi.clearAllMocks();
+      vi.mocked(cookieUtils.get).mockReturnValue(null);
+
+      actor.send({ type: AuthEventType.REFRESH_TOKEN });
+
+      await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
+      expect(authApi.refresh).not.toHaveBeenCalled();
+      expect(cookieUtils.remove).not.toHaveBeenCalled();
+    });
+
+    it('does not save an access token refreshed for a replaced session', async () => {
+      let accessToken = 'mock-access-token';
+      let refreshToken = 'mock-refresh-token';
+      vi.mocked(cookieUtils.get).mockImplementation((name) => {
+        if (name === 'accessToken') return accessToken;
+        if (name === 'refreshToken') return refreshToken;
+        return null;
+      });
+      let resolveRefresh!: (response: TokenResponse) => void;
+      vi.mocked(authApi.refresh).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+
+      actor.send({ type: AuthEventType.REFRESH_TOKEN });
+      accessToken = 'replacement-access-token';
+      refreshToken = 'replacement-refresh-token';
+      resolveRefresh({ access_token: 'stale-access-token' });
+
+      await waitFor(actor, (state) => state.matches(AuthState.UNAUTHENTICATED), { timeout: 2000 });
+
+      expect(cookieUtils.set).not.toHaveBeenCalledWith('accessToken', 'stale-access-token', 1);
     });
   });
 

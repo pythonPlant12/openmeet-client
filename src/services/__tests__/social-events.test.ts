@@ -46,8 +46,9 @@ describe('SocialEventsService', () => {
     const service = new SocialEventsService();
     const onResource = vi.fn();
     const onConnected = vi.fn();
+    cookieUtils.set('accessToken', 'signed-token', 1);
 
-    service.connect('signed-token', onResource, onConnected);
+    service.connect(onResource, onConnected);
     const socket = FakeWebSocket.instances[0]!;
     socket.open();
     socket.receive({ type: 'authenticated' });
@@ -64,7 +65,8 @@ describe('SocialEventsService', () => {
   it('reconnects after an unexpected close', async () => {
     vi.useFakeTimers();
     const service = new SocialEventsService();
-    service.connect('signed-token', vi.fn(), vi.fn());
+    cookieUtils.set('accessToken', 'signed-token', 1);
+    service.connect(vi.fn(), vi.fn());
 
     FakeWebSocket.instances[0]!.close();
     await vi.advanceTimersByTimeAsync(1_000);
@@ -76,7 +78,8 @@ describe('SocialEventsService', () => {
   it('uses the latest stored token when reconnecting', async () => {
     vi.useFakeTimers();
     const service = new SocialEventsService();
-    service.connect('old-token', vi.fn(), vi.fn());
+    cookieUtils.set('accessToken', 'old-token', 1);
+    service.connect(vi.fn(), vi.fn());
     FakeWebSocket.instances[0]!.close();
     cookieUtils.set('accessToken', 'fresh-token', 1);
 
@@ -91,12 +94,30 @@ describe('SocialEventsService', () => {
   it('requests token refresh after authentication fails', () => {
     const service = new SocialEventsService();
     const listener = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('openmeet:access-token-expired', listener);
-    service.connect('expired-token', vi.fn(), vi.fn());
+    cookieUtils.set('accessToken', 'expired-token', 1);
+    service.connect(vi.fn(), vi.fn());
 
     FakeWebSocket.instances[0]!.receive({ type: 'error', message: 'Invalid access token' });
 
     expect(listener).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith('[SocialEvents] Authentication failed:', 'Invalid access token');
     window.removeEventListener('openmeet:access-token-expired', listener);
+  });
+
+  it('does not authenticate or reconnect with a stale caller token after access cookie deletion', async () => {
+    vi.useFakeTimers();
+    const service = new SocialEventsService();
+
+    service.connect(vi.fn(), vi.fn());
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.close();
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(socket.sent).toEqual([]);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    service.disconnect();
   });
 });

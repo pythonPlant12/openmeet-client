@@ -17,10 +17,10 @@ export class SocialEventsService {
   private reconnectAttempts = 0;
   private generation = 0;
 
-  connect(accessToken: string, onResource: (resource: SocialEventResource) => void, onConnected: () => void) {
+  connect(onResource: (resource: SocialEventResource) => void, onConnected: () => void) {
     this.disconnect();
     const generation = this.generation;
-    this.open(accessToken, onResource, onConnected, generation);
+    this.open(onResource, onConnected, generation);
   }
 
   disconnect() {
@@ -32,18 +32,19 @@ export class SocialEventsService {
     this.socket = null;
   }
 
-  private open(
-    accessToken: string,
-    onResource: (resource: SocialEventResource) => void,
-    onConnected: () => void,
-    generation: number,
-  ) {
+  private open(onResource: (resource: SocialEventResource) => void, onConnected: () => void, generation: number) {
     const socket = new WebSocket(SOCIAL_EVENTS_URL);
     this.socket = socket;
 
     socket.addEventListener('open', () => {
       if (generation !== this.generation) return;
-      socket.send(JSON.stringify({ type: 'authenticate', accessToken: cookieUtils.get('accessToken') || accessToken }));
+      const accessToken = cookieUtils.get('accessToken');
+      if (!accessToken) {
+        reconnect = false;
+        socket.close();
+        return;
+      }
+      socket.send(JSON.stringify({ type: 'authenticate', accessToken }));
     });
     let reconnect = true;
     socket.addEventListener('message', (event) => {
@@ -71,7 +72,7 @@ export class SocialEventsService {
       const maximumDelay = Math.min(1_000 * 2 ** this.reconnectAttempts, 15_000);
       const delay = maximumDelay / 2 + Math.random() * (maximumDelay / 2);
       this.reconnectAttempts += 1;
-      this.reconnectTimer = window.setTimeout(() => this.open(accessToken, onResource, onConnected, generation), delay);
+      this.reconnectTimer = window.setTimeout(() => this.open(onResource, onConnected, generation), delay);
     });
     socket.addEventListener('error', () => socket.close());
   }
