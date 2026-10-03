@@ -25,7 +25,10 @@ const marketingHashRoutes: Record<string, string> = {
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   scrollBehavior(to, _from, savedPosition) {
-    const position = savedPosition ?? (to.hash ? { el: to.hash, behavior: 'smooth' as const } : { top: 0 });
+    const target = to.hash ? document.getElementById(to.hash.slice(1)) : null;
+    const hashOffset = target ? Number.parseFloat(getComputedStyle(target).scrollMarginTop) || 0 : 0;
+    const position =
+      savedPosition ?? (to.hash ? { el: to.hash, top: hashOffset, behavior: 'smooth' as const } : { top: 0 });
     return new Promise((resolve) => setTimeout(() => resolve(position), 200));
   },
   routes: [

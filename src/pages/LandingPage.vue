@@ -16,6 +16,7 @@ const { t } = useI18n();
 const { createMeeting, joinMeeting: navigateToMeeting } = useMeetingNavigation();
 const meetingCode = ref('');
 const meetingCodeError = ref('');
+const meetingCodeInput = ref<{ focus: () => void } | null>(null);
 const titleWordIndex = ref(0);
 const titleWordKeys = ['landing.titleWords.freely', 'landing.titleWords.privately', 'landing.titleWords.openly'];
 const titleWord = computed(() => t(titleWordKeys[titleWordIndex.value]!));
@@ -51,7 +52,13 @@ function joinMeeting() {
   meetingCodeError.value = navigateToMeeting(meetingCode.value) ? '' : t('landing.invalidRoom');
 }
 
+function focusMeetingCodeOnDesktop() {
+  if (!window.matchMedia('(min-width: 1024px)').matches) return;
+  requestAnimationFrame(() => meetingCodeInput.value?.focus());
+}
+
 onMounted(() => {
+  focusMeetingCodeOnDesktop();
   if (prefersReducedMotion) return;
   titleWordTimer = setInterval(() => {
     titleWordIndex.value = (titleWordIndex.value + 1) % titleWordKeys.length;
@@ -125,12 +132,12 @@ onUnmounted(() => {
                 {{ t('common.startMeeting') }}
                 <ArrowRight class="size-4" />
               </Button>
-              <a
-                href="#join"
+              <RouterLink
+                :to="{ hash: '#join' }"
                 class="inline-flex h-12 items-center justify-center rounded-full px-5 text-sm font-semibold text-[#27595D] transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
               >
                 {{ t('landing.joinWithCode') }}
-              </a>
+              </RouterLink>
             </motion.div>
 
             <motion.div
@@ -203,6 +210,7 @@ onUnmounted(() => {
           </div>
           <form class="relative flex w-full max-w-xl flex-col gap-2 sm:flex-row" @submit.prevent="joinMeeting">
             <Input
+              ref="meetingCodeInput"
               v-model="meetingCode"
               :aria-label="t('landing.roomInputLabel')"
               :aria-invalid="!!meetingCodeError"

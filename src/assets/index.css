@@ -57,6 +57,7 @@
   }
 }
 
+/* Each page phase is 180ms; App.vue's out-in mode runs leave before enter. */
 .page-fade-enter-active,
 .page-fade-leave-active {
   transition: opacity 180ms ease;
