@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { useMachine } from '@xstate/vue';
 import { describe, expect, it } from 'vitest';
-import { defineComponent, h, inject } from 'vue';
+import { defineComponent, h, provide } from 'vue';
 
 import { authMachine } from '@/xstate/machines/auth';
 import { AuthEventType, AuthState } from '@/xstate/machines/auth/types';
@@ -10,15 +10,8 @@ import { useAuth } from '../useAuth';
 
 // Helper to create and mount test component with auth actor
 function createAuthTestWrapper(initialAccessToken: string | null = null) {
-  // Possible to declar the auth actor outside, and then inject it inside the component
-  const authActorRef = useMachine(authMachine, {
-    input: { initialAccessToken, initialRefreshToken: initialAccessToken ? 'mock-refresh-token' : null },
-  });
-
-  const TestComponent = defineComponent({
+  const AuthConsumer = defineComponent({
     setup() {
-      const authActor = inject<any>('authActor');
-      console.log('authActor in helper: ', authActor);
       const auth = useAuth();
       return { auth };
     },
@@ -32,15 +25,23 @@ function createAuthTestWrapper(initialAccessToken: string | null = null) {
     },
   });
 
-  const wrapper = mount(TestComponent, {
-    global: {
-      provide: {
-        authActor: authActorRef,
-      },
+  const AuthProvider = defineComponent({
+    setup() {
+      const authActorRef = useMachine(authMachine, {
+        input: { initialAccessToken, initialRefreshToken: initialAccessToken ? 'mock-refresh-token' : null },
+      });
+      provide('authActor', authActorRef);
+      return { authActorRef };
+    },
+    render() {
+      return h(AuthConsumer);
     },
   });
 
-  return { wrapper, authActorRef };
+  const providerWrapper = mount(AuthProvider);
+  const wrapper = providerWrapper.findComponent(AuthConsumer);
+
+  return { wrapper, authActorRef: providerWrapper.vm.authActorRef };
 }
 
 describe('useAuth Composable', () => {
@@ -113,10 +114,10 @@ describe('useAuth Composable', () => {
       expect([AuthState.CHECKING_SESSION, AuthState.UNAUTHENTICATED]).toContain(state);
     });
 
-    it('should be true in validatingSession state', async () => {
+    it('should be false after an invalid supplied session', async () => {
       const { wrapper } = createAuthTestWrapper('mock-access-token');
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(wrapper.vm.auth.isCheckingSession.value).toBe(true);
+      expect(wrapper.vm.auth.isCheckingSession.value).toBe(false);
     });
 
     it('should be false in unauthenticated state', async () => {

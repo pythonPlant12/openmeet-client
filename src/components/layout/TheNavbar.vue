@@ -19,7 +19,7 @@ import {
   X,
 } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
@@ -56,6 +56,7 @@ const {
 
 const mobileMenuOpen = ref(false);
 const mobileMenuExpanded = ref(false);
+const mobileMenuIconOpen = ref(false);
 const isClosingMobileMenu = ref(false);
 const activeDesktopMenu = ref<DesktopMenu | null>(null);
 const isDesktop = useMediaQuery('(min-width: 1280px)');
@@ -64,18 +65,47 @@ const supportsHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const navCapsuleRef = ref<HTMLElement | null>(null);
 const navContentRef = ref<HTMLElement | null>(null);
+const mobileMenuShellRef = ref<HTMLElement | null>(null);
 const desktopNavWidth = ref<number>();
+const mobileMenuHeight = ref<number>();
+const closingMobileMenuIsContentSized = ref(false);
 const avatarUrl = ref<string | null>(null);
 const isMeetingChatOpen = ref(false);
 let avatarObjectUrl: string | null = null;
 let avatarRequest = 0;
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
+const isDashboardPage = computed(() => route.path === '/dashboard');
+const hasContentSizedMobileMenu = computed(() => isMeetingPage.value || isDashboardPage.value);
+const activeMobileMenuIsContentSized = computed(() =>
+  isClosingMobileMenu.value ? closingMobileMenuIsContentSized.value : hasContentSizedMobileMenu.value,
+);
 const homePath = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
+const showMarketingNavigation = computed(() => (isLandingPage.value && !isAuthenticated.value) || isMeetingPage.value);
 const isAuthBusy = computed(
   () => isAuthenticating.value || isRegistering.value || isCheckingSession.value || state.value.value === 'loggingOut',
 );
 const isLoggingOut = computed(() => state.value.value === 'loggingOut');
+const MOBILE_MENU_FIRST_ITEM_DELAY = 0.08;
+const MOBILE_MENU_LAST_ITEM_DELAY = 0.74;
+const MOBILE_MENU_ITEM_ENTER_DURATION = 0.28;
+const MOBILE_MENU_ITEM_EXIT_DURATION = 0.22;
+const MOBILE_MENU_ITEMS_EXIT_DURATION =
+  (MOBILE_MENU_LAST_ITEM_DELAY - MOBILE_MENU_FIRST_ITEM_DELAY + MOBILE_MENU_ITEM_EXIT_DURATION) * 1000;
+const MOBILE_MENU_HEIGHT_DURATION = 360;
+const MOBILE_MENU_ICON_START_OFFSET = 300;
+
+const mobileMenuItemMotion = (delay: number, lastItemDelay = MOBILE_MENU_LAST_ITEM_DELAY) => ({
+  initial: prefersReducedMotion.value ? false : { opacity: 0, y: -8 },
+  animate: isClosingMobileMenu.value ? { opacity: 0, y: 8 } : { opacity: 1, y: 0 },
+  transition: prefersReducedMotion.value
+    ? { duration: 0 }
+    : {
+        duration: isClosingMobileMenu.value ? MOBILE_MENU_ITEM_EXIT_DURATION : MOBILE_MENU_ITEM_ENTER_DURATION,
+        delay: isClosingMobileMenu.value ? Math.round((lastItemDelay - delay) * 100) / 100 : delay,
+        ease: 'easeOut' as const,
+      },
+});
 
 const whyOpenMeetItems = computed(() => [
   {
@@ -150,41 +180,99 @@ const { start: expandMobileMenu, stop: cancelMobileMenuExpansion } = useTimeoutF
   { immediate: false },
 );
 
-const { start: collapseMobileMenuWidth, stop: cancelMobileMenuCollapse } = useTimeoutFn(
+const { start: hideMobileMenuContent, stop: cancelMobileMenuContentExit } = useTimeoutFn(
   () => {
-    mobileMenuOpen.value = false;
-    isClosingMobileMenu.value = false;
-    const action = mobileMenuClosedAction;
-    mobileMenuClosedAction = undefined;
-    action?.();
+    mobileMenuExpanded.value = false;
+    scheduleMobileMenuCollapse();
   },
-  400,
+  MOBILE_MENU_ITEMS_EXIT_DURATION,
   { immediate: false },
 );
-let mobileMenuClosedAction: (() => void) | undefined;
+
+let mobileMenuCollapseTimer: number | undefined;
+let mobileMenuIconCloseTimer: number | undefined;
+let mobileMenuCollapseGeneration = 0;
+
+const cancelMobileMenuCollapse = () => {
+  mobileMenuCollapseGeneration += 1;
+  window.clearTimeout(mobileMenuCollapseTimer);
+  window.clearTimeout(mobileMenuIconCloseTimer);
+  mobileMenuCollapseTimer = undefined;
+  mobileMenuIconCloseTimer = undefined;
+};
+
+const parseCssTime = (value: string) =>
+  value.endsWith('ms') ? Number.parseFloat(value) : Number.parseFloat(value) * 1000;
+
+const getMobileMenuCollapseDuration = () => {
+  if (!navCapsuleRef.value) return MOBILE_MENU_HEIGHT_DURATION;
+  const durations = window
+    .getComputedStyle(navCapsuleRef.value)
+    .transitionDuration.split(',')
+    .map((value) => parseCssTime(value.trim()))
+    .filter(Number.isFinite);
+  return Math.max(...durations, MOBILE_MENU_HEIGHT_DURATION);
+};
+
+const scheduleMobileMenuCollapse = () => {
+  const generation = mobileMenuCollapseGeneration;
+  void nextTick(() => {
+    if (generation !== mobileMenuCollapseGeneration || !isClosingMobileMenu.value) return;
+    const collapseDuration = getMobileMenuCollapseDuration();
+    const iconDelay = Math.max(0, collapseDuration - MOBILE_MENU_ICON_START_OFFSET);
+    mobileMenuIconCloseTimer = window.setTimeout(() => {
+      mobileMenuIconOpen.value = false;
+    }, iconDelay);
+    mobileMenuCollapseTimer = window.setTimeout(() => {
+      mobileMenuOpen.value = false;
+      isClosingMobileMenu.value = false;
+    }, collapseDuration);
+  });
+};
+let bodyOverflow = '';
+let documentOverflow = '';
+
+const setMobileMenuPageScroll = (locked: boolean) => {
+  if (locked) {
+    bodyOverflow = document.body.style.overflow;
+    documentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return;
+  }
+
+  document.body.style.overflow = bodyOverflow;
+  document.documentElement.style.overflow = documentOverflow;
+};
 
 const resetMobileMenu = () => {
   cancelMobileMenuExpansion();
+  cancelMobileMenuContentExit();
   cancelMobileMenuCollapse();
   mobileMenuExpanded.value = false;
   mobileMenuOpen.value = false;
+  mobileMenuIconOpen.value = false;
   isClosingMobileMenu.value = false;
-  mobileMenuClosedAction = undefined;
+  closingMobileMenuIsContentSized.value = false;
 };
 
 const closeMobileMenu = (afterClose?: () => void) => {
-  if (!mobileMenuOpen.value || prefersReducedMotion.value) {
+  if (isClosingMobileMenu.value) return;
+
+  if (!mobileMenuOpen.value || !mobileMenuExpanded.value || prefersReducedMotion.value) {
     resetMobileMenu();
     afterClose?.();
     return;
   }
 
   cancelMobileMenuExpansion();
+  cancelMobileMenuContentExit();
   cancelMobileMenuCollapse();
-  mobileMenuClosedAction = afterClose;
+  closingMobileMenuIsContentSized.value = hasContentSizedMobileMenu.value;
   isClosingMobileMenu.value = true;
-  mobileMenuExpanded.value = false;
-  collapseMobileMenuWidth();
+  // Navigate now; page transitions run alongside the drawer's independent exit sequence.
+  afterClose?.();
+  hideMobileMenuContent();
 };
 
 const handleMenuEnter = (menu: DesktopMenu) => {
@@ -211,10 +299,13 @@ watch(isDesktop, (desktop) => {
 watch(
   () => route.fullPath,
   () => {
-    resetMobileMenu();
+    // Preserve the active drawer while its exit animation finishes on the destination page.
+    if (!isClosingMobileMenu.value) resetMobileMenu();
     activeDesktopMenu.value = null;
   },
 );
+
+watch(mobileMenuExpanded, setMobileMenuPageScroll);
 
 const handleToggleMobileMenu = () => {
   if (prefersReducedMotion.value) {
@@ -222,14 +313,11 @@ const handleToggleMobileMenu = () => {
     resetMobileMenu();
     mobileMenuOpen.value = open;
     mobileMenuExpanded.value = open;
+    mobileMenuIconOpen.value = open;
     return;
   }
 
   if (isClosingMobileMenu.value) {
-    cancelMobileMenuCollapse();
-    mobileMenuClosedAction = undefined;
-    isClosingMobileMenu.value = false;
-    mobileMenuExpanded.value = true;
     return;
   }
 
@@ -239,8 +327,10 @@ const handleToggleMobileMenu = () => {
   }
 
   cancelMobileMenuCollapse();
+  cancelMobileMenuContentExit();
   isClosingMobileMenu.value = false;
   mobileMenuOpen.value = true;
+  mobileMenuIconOpen.value = true;
   expandMobileMenu();
 };
 
@@ -252,7 +342,7 @@ const handleBrandNavigation = (event: MouseEvent) => {
   if (isMeetingPage.value && isMobile.value && isMeetingChatOpen.value) {
     event.preventDefault();
     window.dispatchEvent(new Event('openmeet:close-meeting-chat'));
-    closeMobileMenu(() => window.setTimeout(() => router.push('/dashboard'), 300));
+    closeMobileMenu(() => router.push('/dashboard'));
     return;
   }
 
@@ -278,6 +368,11 @@ const handleGoToLogin = () => {
 const handleStartMeeting = () => {
   if (isAuthBusy.value || isMeetingPage.value) return;
   closeMobileMenu(createMeeting);
+};
+
+const handleQuitMeeting = () => {
+  if (!isMeetingPage.value) return;
+  closeMobileMenu(() => router.push('/'));
 };
 
 const handleLogout = () => {
@@ -336,28 +431,49 @@ const updateDesktopNavWidth = () => {
   desktopNavWidth.value = navContentRef.value.offsetWidth + horizontalChrome;
 };
 
+const syncMobileMenuHeight = () => {
+  if (!mobileMenuExpanded.value || !activeMobileMenuIsContentSized.value || !navCapsuleRef.value) {
+    mobileMenuHeight.value = undefined;
+    return;
+  }
+
+  void nextTick(() => {
+    const height = navCapsuleRef.value?.scrollHeight;
+    if (height) mobileMenuHeight.value = Math.min(Math.max(height, 450), window.innerHeight - 24);
+  });
+};
+
+const updateNavLayout = () => {
+  updateDesktopNavWidth();
+  syncMobileMenuHeight();
+};
+
 onMounted(() => {
   window.addEventListener('openmeet:profile-updated', handleProfileUpdated);
   window.addEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   void loadAvatar();
   if (!navContentRef.value) return;
   if (!('ResizeObserver' in window)) {
-    updateDesktopNavWidth();
+    updateNavLayout();
     return;
   }
-  navResizeObserver = new ResizeObserver(updateDesktopNavWidth);
+  navResizeObserver = new ResizeObserver(updateNavLayout);
   navResizeObserver.observe(navContentRef.value);
-  updateDesktopNavWidth();
+  updateNavLayout();
 });
 
 onUnmounted(() => {
+  cancelMobileMenuExpansion();
+  cancelMobileMenuContentExit();
+  cancelMobileMenuCollapse();
+  setMobileMenuPageScroll(false);
   navResizeObserver?.disconnect();
   window.removeEventListener('openmeet:profile-updated', handleProfileUpdated);
   window.removeEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
 });
 
-watch(isDesktop, () => requestAnimationFrame(updateDesktopNavWidth));
+watch([isDesktop, mobileMenuExpanded, activeMobileMenuIsContentSized], () => requestAnimationFrame(updateNavLayout));
 watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar());
 </script>
 
@@ -368,27 +484,34 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
     :aria-label="t('nav.navigationTitle')"
   >
     <div
-      class="harbor-nav-layout pointer-events-auto mx-auto min-w-[min(340px,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] transition-[height,width] ease-[cubic-bezier(0.22,1,0.36,1)] xl:relative xl:left-1/2 xl:mx-0 xl:-translate-x-1/2 xl:h-[60px] xl:w-fit xl:transition-none"
+      ref="mobileMenuShellRef"
+      :style="mobileMenuHeight ? { height: `${mobileMenuHeight}px` } : undefined"
+      class="harbor-nav-layout pointer-events-auto mx-auto min-w-[min(340px,calc(100vw-1.5rem))] max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)] transition-[height,width] ease-[cubic-bezier(0.22,1,0.36,1)] xl:relative xl:left-1/2 xl:mx-0 xl:-translate-x-1/2 xl:h-[60px] xl:w-fit xl:transition-none"
       :class="[
         mobileMenuExpanded
-          ? isMeetingPage
-            ? 'h-auto w-[calc(100vw-1.5rem)] duration-500'
+          ? activeMobileMenuIsContentSized
+            ? `${mobileMenuHeight ? '' : 'h-[60px] '}w-[calc(100vw-1.5rem)] duration-[360ms]`
             : 'h-[calc(100svh-1.5rem)] w-[calc(100vw-1.5rem)] duration-500'
           : mobileMenuOpen
-            ? `h-[60px] w-[calc(100vw-1.5rem)] ${isClosingMobileMenu ? 'duration-400' : 'duration-300'}`
+            ? `h-[60px] w-[calc(100vw-1.5rem)] ${isClosingMobileMenu ? 'duration-[360ms]' : 'duration-300'}`
             : 'h-[60px] w-[min(340px,calc(100vw-1.5rem))] duration-300',
       ]"
     >
       <div
         ref="navCapsuleRef"
-        class="harbor-nav-capsule size-full overflow-hidden rounded-[1.875rem] border border-[#D8E7E3] bg-[#FBFCF8] p-3 shadow-[0_16px_42px_rgba(16,47,53,0.1),0_2px_8px_rgba(16,47,53,0.05)] xl:h-full xl:w-max xl:rounded-full xl:px-5 xl:py-0 xl:transition-[width] xl:duration-[360ms] xl:ease-[cubic-bezier(0.22,1,0.36,1)]"
+        class="harbor-nav-capsule flex size-full flex-col overflow-hidden rounded-[1.875rem] border border-[#D8E7E3] bg-[#FBFCF8] p-3 shadow-[0_16px_42px_rgba(16,47,53,0.1),0_2px_8px_rgba(16,47,53,0.05)] xl:h-full xl:w-max xl:flex-none xl:rounded-full xl:px-5 xl:py-0 xl:transition-[width] xl:duration-[360ms] xl:ease-[cubic-bezier(0.22,1,0.36,1)]"
         :class="{ 'harbor-nav-capsule-active': activeDesktopMenu }"
         :style="isDesktop && desktopNavWidth ? { width: `${desktopNavWidth}px` } : undefined"
       >
         <div
           ref="navContentRef"
-          class="flex size-full xl:h-full xl:w-max xl:flex-row xl:items-center xl:gap-12"
-          :class="mobileMenuExpanded || isClosingMobileMenu ? 'flex-col items-stretch' : 'flex-row items-center'"
+          class="flex w-full xl:h-full xl:w-max xl:flex-row xl:items-center xl:gap-12"
+          :class="[
+            mobileMenuExpanded || isClosingMobileMenu
+              ? 'min-h-0 flex-1 flex-col items-stretch'
+              : 'h-full flex-row items-center',
+            { 'pointer-events-none': isClosingMobileMenu },
+          ]"
         >
           <div class="flex w-full shrink-0 items-center justify-between xl:w-auto">
             <RouterLink
@@ -417,19 +540,17 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                 class="flex items-center justify-center"
                 :initial="false"
                 :animate="
-                  prefersReducedMotion
-                    ? { rotate: 0, scale: 1 }
-                    : { rotate: mobileMenuOpen ? 180 : 0, scale: mobileMenuOpen ? 1.05 : 1 }
+                  prefersReducedMotion ? { rotate: 0, scale: 1 } : { rotate: mobileMenuIconOpen ? 180 : 0, scale: 1 }
                 "
                 :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }"
               >
-                <X v-if="mobileMenuOpen" class="size-5" />
+                <X v-if="mobileMenuIconOpen" class="size-5" />
                 <Menu v-else class="size-5" />
               </motion.span>
             </button>
           </div>
 
-          <div v-if="isLandingPage && !isAuthenticated" class="hidden items-center gap-1 xl:flex">
+          <div v-if="showMarketingNavigation" class="hidden items-center gap-1 xl:flex">
             <DropdownMenu v-model:open="whyMenuOpen" :modal="false">
               <DropdownMenuTrigger as-child>
                 <button
@@ -602,6 +723,15 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
               <Github class="size-[1.15rem]" />
             </a>
             <Button
+              v-if="isMeetingPage"
+              class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
+              :disabled="isAuthBusy"
+              @click="handleQuitMeeting"
+            >
+              <LogOut class="size-4" />
+              {{ t('common.quitMeeting') }}
+            </Button>
+            <Button
               v-if="!isAuthenticated && !isMeetingPage"
               class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
               :disabled="isAuthBusy"
@@ -622,135 +752,167 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
               :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }"
               class="flex min-h-0 flex-1 flex-col pt-7 xl:hidden"
             >
-              <div class="min-h-0 flex-1 overflow-y-auto px-1 pb-5">
+              <div class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1 pb-5">
                 <div v-if="isAuthenticated && !isCheckingSession" data-mobile-account-actions class="space-y-2">
-                  <button
-                    type="button"
-                    class="harbor-ghost-action flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    @click="handleGoToPage('/account')"
-                  >
-                    <span
-                      class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75]"
-                    >
-                      <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
-                      <CircleUserRound v-else class="size-5" />
-                    </span>
-                    <span class="min-w-0 flex-1 font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
-                    <ChevronRight class="size-4 text-[#61777B]" />
-                  </button>
-                  <button
-                    type="button"
-                    class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    @click="handleGoToPage('/dashboard')"
-                  >
-                    {{ t('common.dashboard') }}
-                  </button>
-                  <button
-                    type="button"
-                    class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    @click="handleGoToFriends"
-                  >
-                    {{ t('nav.friends') }}
-                  </button>
-                </div>
-                <template v-if="isLandingPage && !isAuthenticated">
-                  <p class="px-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">
-                    {{ t('nav.why', { appName: branding.appName }) }}
-                  </p>
-                  <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                  <motion.div v-bind="mobileMenuItemMotion(0.08, isMeetingPage ? 0.26 : 0.32)">
                     <button
-                      v-for="item in whyOpenMeetItems"
-                      :key="item.title"
                       type="button"
-                      class="flex items-center gap-4 rounded-2xl bg-[#E6F4F1] p-4 text-left transition-colors hover:bg-[#D8ECE8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] sm:flex-col sm:items-start"
-                      @click="handleGoToPage(item.path)"
+                      class="harbor-ghost-action flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      @click="handleGoToPage('/account')"
                     >
                       <span
-                        class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#0B7A75]"
+                        class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75]"
                       >
-                        <component :is="item.icon" class="size-5" />
+                        <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
+                        <CircleUserRound v-else class="size-5" />
                       </span>
-                      <span>
-                        <strong class="block">{{ item.title }}</strong>
-                        <span class="mt-1 block text-sm leading-6 text-[#61777B]">{{ item.description }}</span>
-                      </span>
+                      <span class="min-w-0 flex-1 font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
+                      <ChevronRight class="size-4 text-[#61777B]" />
                     </button>
-                  </div>
+                  </motion.div>
+                  <motion.div v-bind="mobileMenuItemMotion(0.14, isMeetingPage ? 0.26 : 0.32)">
+                    <button
+                      type="button"
+                      class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      @click="handleGoToPage('/dashboard')"
+                    >
+                      {{ t('common.dashboard') }}
+                    </button>
+                  </motion.div>
+                  <motion.div v-bind="mobileMenuItemMotion(0.2, isMeetingPage ? 0.26 : 0.32)">
+                    <button
+                      type="button"
+                      class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      @click="handleGoToFriends"
+                    >
+                      {{ t('nav.friends') }}
+                    </button>
+                  </motion.div>
+                </div>
+                <template v-if="showMarketingNavigation || (isClosingMobileMenu && !isAuthenticated)">
+                  <div data-mobile-public-navigation class="flex min-h-full flex-col justify-center gap-7 px-2 py-6">
+                    <div>
+                      <motion.div v-bind="mobileMenuItemMotion(0.08)">
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">
+                          {{ t('nav.why', { appName: branding.appName }) }}
+                        </p>
+                      </motion.div>
+                      <div class="mt-3 space-y-1">
+                        <motion.div
+                          v-for="(item, index) in whyOpenMeetItems"
+                          :key="item.title"
+                          v-bind="mobileMenuItemMotion(0.14 + index * 0.06)"
+                        >
+                          <button
+                            type="button"
+                            class="harbor-ghost-action flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-lg font-semibold text-[#102F35] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                            @click="handleGoToPage(item.path)"
+                          >
+                            {{ item.title }}
+                          </button>
+                        </motion.div>
+                      </div>
+                    </div>
 
-                  <div class="my-8 h-px bg-[#D8E7E3]" />
-
-                  <div class="flex items-center justify-between gap-4 px-2">
-                    <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">
-                      {{ t('nav.howToDeploy') }}
-                    </p>
-                    <span class="text-xs text-[#61777B]">{{ t('nav.guidesComingSoon') }}</span>
-                  </div>
-                  <div class="mt-4 divide-y divide-[#D8E7E3] rounded-2xl border border-[#D8E7E3] bg-white px-4">
-                    <div v-for="item in deploymentItems" :key="item.title" class="flex items-center gap-4 py-4">
-                      <span
-                        class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#EDF3F2] text-[#61777B]"
-                      >
-                        <component :is="item.icon" class="size-5" />
-                      </span>
-                      <span class="min-w-0 flex-1">
-                        <strong class="block text-sm">{{ item.title }}</strong>
-                        <span class="mt-0.5 block text-xs text-[#61777B]">{{ item.description }}</span>
-                      </span>
-                      <span
-                        class="rounded-full bg-[#FFF0EA] px-2 py-1 text-[10px] font-semibold uppercase text-[#A94D3B]"
-                      >
-                        {{ t('common.soon') }}
-                      </span>
+                    <div>
+                      <motion.div v-bind="mobileMenuItemMotion(0.38)">
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">
+                          {{ t('nav.howToDeploy') }}
+                        </p>
+                      </motion.div>
+                      <div class="mt-3 space-y-1">
+                        <motion.div
+                          v-for="(item, index) in deploymentItems"
+                          :key="item.title"
+                          v-bind="mobileMenuItemMotion(0.44 + index * 0.06)"
+                        >
+                          <button
+                            type="button"
+                            disabled
+                            class="flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-lg font-semibold text-[#61777B]"
+                          >
+                            {{ item.title }}
+                            <span class="text-xs font-medium uppercase tracking-[0.12em] text-[#9BB4B5]">{{
+                              t('common.soon')
+                            }}</span>
+                          </button>
+                        </motion.div>
+                      </div>
                     </div>
                   </div>
                 </template>
               </div>
 
-              <div class="mt-5 shrink-0 space-y-3 border-t border-[#D8E7E3] pt-5">
+              <div class="shrink-0 space-y-3 border-t border-[#D8E7E3] pt-5">
                 <div v-if="isAuthenticated && !isCheckingSession" class="space-y-2">
-                  <button
-                    type="button"
-                    class="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left font-semibold text-[#9D4636] transition-colors hover:bg-[#FFF0EA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    :disabled="isAuthBusy"
-                    @click="handleLogout"
-                  >
-                    <LoadingRipple v-if="isLoggingOut" size="sm" />
-                    <LogOut v-else class="size-4" />
-                    {{ t('common.logOut') }}
-                  </button>
+                  <motion.div v-bind="mobileMenuItemMotion(0.26, isMeetingPage ? 0.26 : 0.32)">
+                    <button
+                      type="button"
+                      class="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left font-semibold text-[#9D4636] transition-colors hover:bg-[#FFF0EA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      :disabled="isAuthBusy"
+                      @click="handleLogout"
+                    >
+                      <LoadingRipple v-if="isLoggingOut" size="sm" />
+                      <LogOut v-else class="size-4" />
+                      {{ t('common.logOut') }}
+                    </button>
+                  </motion.div>
                 </div>
                 <div class="flex items-center justify-end gap-3">
-                  <button
-                    v-if="!isAuthenticated"
-                    type="button"
-                    class="inline-flex size-11 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75] transition-colors hover:bg-[#D8E7E3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:opacity-50"
-                    :disabled="isAuthBusy"
-                    :aria-label="t('common.logIn')"
-                    @click="handleGoToLogin"
-                  >
-                    <LoadingRipple v-if="isAuthenticating" size="sm" />
-                    <LogIn v-else class="size-5" />
-                  </button>
-                  <a
-                    v-if="!isAuthenticated"
-                    href="https://github.com/pythonPlant12/openmeet"
-                    target="_blank"
-                    rel="noreferrer"
-                    class="inline-flex size-11 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75] transition-colors hover:bg-[#D8E7E3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    :aria-label="t('nav.openSource')"
-                  >
-                    <Github class="size-5" />
-                  </a>
+                  <motion.div v-if="!isAuthenticated" v-bind="mobileMenuItemMotion(0.62)" class="flex-1">
+                    <Button
+                      data-mobile-login
+                      class="harbor-ghost-action min-h-11 w-full rounded-full border border-[#D8E7E3] bg-white text-[#27595D]"
+                      :disabled="isAuthBusy"
+                      @click="handleGoToLogin"
+                    >
+                      <LoadingRipple v-if="isAuthenticating" size="sm" />
+                      <template v-else>
+                        <LogIn class="size-4" />
+                        {{ t('common.logIn') }}
+                      </template>
+                    </Button>
+                  </motion.div>
+                  <motion.div v-if="!isAuthenticated" v-bind="mobileMenuItemMotion(0.68)">
+                    <a
+                      href="https://github.com/pythonPlant12/openmeet"
+                      target="_blank"
+                      rel="noreferrer"
+                      class="inline-flex size-11 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75] transition-colors hover:bg-[#D8E7E3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      :aria-label="t('nav.openSource')"
+                    >
+                      <Github class="size-5" />
+                    </a>
+                  </motion.div>
                 </div>
-                <Button
-                  v-if="!isMeetingPage"
-                  class="harbor-primary-action min-h-11 w-full rounded-full bg-[#0B7A75] text-white"
-                  :disabled="isAuthBusy"
-                  @click="handleStartMeeting"
+                <motion.div
+                  v-if="isMeetingPage"
+                  v-bind="mobileMenuItemMotion(isAuthenticated ? 0.32 : 0.74, isAuthenticated ? 0.32 : 0.74)"
                 >
-                  <Video class="size-4" />
-                  {{ t('common.startMeeting') }}
-                </Button>
+                  <Button
+                    type="button"
+                    class="harbor-primary-action min-h-11 w-full rounded-full bg-[#0B7A75] text-white"
+                    :disabled="isAuthBusy"
+                    @click="handleQuitMeeting"
+                  >
+                    <LogOut class="size-4" />
+                    {{ t('common.quitMeeting') }}
+                  </Button>
+                </motion.div>
+                <motion.div
+                  v-else
+                  v-bind="mobileMenuItemMotion(isAuthenticated ? 0.32 : 0.74, isAuthenticated ? 0.32 : 0.74)"
+                >
+                  <Button
+                    type="button"
+                    class="harbor-primary-action min-h-11 w-full rounded-full bg-[#0B7A75] text-white"
+                    :disabled="isAuthBusy"
+                    @click="handleStartMeeting"
+                  >
+                    <Video class="size-4" />
+                    {{ t('common.startMeeting') }}
+                  </Button>
+                </motion.div>
               </div>
             </motion.div>
           </AnimatePresence>

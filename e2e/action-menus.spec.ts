@@ -11,8 +11,6 @@ test.use({
 });
 
 test.describe('action menus', () => {
-  test.skip(({ browserName }) => browserName !== 'chromium', 'fake media interactions are verified in Chromium');
-
   test('dashboard exposes equivalent ellipsis and context actions without replacing native input menus', async ({
     page,
   }) => {
@@ -39,7 +37,7 @@ test.describe('action menus', () => {
 
     const friendInput = page.getByPlaceholder('friend@example.com');
     await friendInput.dispatchEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' });
-    await page.waitForTimeout(800);
+    await friendInput.evaluate(() => new Promise((resolve) => window.setTimeout(resolve, 800)));
     await friendInput.dispatchEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch' });
     await expect(page.getByRole('menu')).toHaveCount(0);
 
@@ -88,7 +86,7 @@ test.describe('action menus', () => {
       pointerId: 1,
       pointerType: 'touch',
     });
-    await page.waitForTimeout(800);
+    await participantTile.evaluate(() => new Promise((resolve) => window.setTimeout(resolve, 800)));
     await participantTile.dispatchEvent('pointerup', {
       bubbles: true,
       pointerId: 1,

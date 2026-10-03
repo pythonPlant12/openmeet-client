@@ -2,7 +2,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
-import DashboardActionMenu from '@/components/dashboard-page/DashboardActionMenu.vue';
+import DashboardActionMenu from '@/components/dashboard-page/actions/DashboardActionMenu.vue';
 import type { Friend } from '@/services/social-api';
 
 const friends: Friend[] = [

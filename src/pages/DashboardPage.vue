@@ -1,53 +1,17 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
-import { Picker } from 'emoji-picker-element';
-import {
-  ArrowLeft,
-  Ban,
-  Check,
-  ChevronRight,
-  CircleCheck,
-  CircleUserRound,
-  Clock3,
-  LockKeyhole,
-  LogOut,
-  Maximize2,
-  MessageCircleMore,
-  Minimize2,
-  MinusCircle,
-  Phone,
-  Plus,
-  Search,
-  ShieldCheck,
-  Smile,
-  Trash2,
-  UserMinus,
-  UsersRound,
-  X,
-} from 'lucide-vue-next';
-import { AnimatePresence, motion } from 'motion-v';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { motion } from 'motion-v';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Button } from '@/components/ui/button';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuLabel,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu';
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  HarborDialogContent,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
+import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
+import DetailsPane from '@/components/dashboard-page/details/DetailsPane.vue';
+import ContactProfileDialog from '@/components/dashboard-page/friends/ContactProfileDialog.vue';
+import FriendsSidebar from '@/components/dashboard-page/friends/FriendsSidebar.vue';
+import CreateGroupDialog from '@/components/dashboard-page/groups/CreateGroupDialog.vue';
+import GroupInfoDialog from '@/components/dashboard-page/groups/GroupInfoDialog.vue';
+import JoinGroupDialog from '@/components/dashboard-page/groups/JoinGroupDialog.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/composables/useAuth';
@@ -56,6 +20,14 @@ import {
   sortConversationsByActivity,
   upsertConversationByActivity,
 } from '@/pages/dashboard-chat-state';
+import {
+  type GroupMutationToken,
+  type SidebarPanel,
+  beginGroupMutation as acquireGroupMutation,
+  endGroupMutation as releaseGroupMutation,
+  shouldApplyDashboardRequest,
+  sidebarPanelAfterDrag,
+} from '@/pages/dashboard-group-state';
 import { getSystemNotificationPermission, requestSystemNotificationPermission } from '@/services/notifications';
 import {
   type ContactProfile,
@@ -71,13 +43,42 @@ import {
   type UserSearchResult,
   socialApi,
 } from '@/services/social-api';
+import { cookieUtils } from '@/utils';
 
 const router = useRouter();
 const { accessToken, currentUser, isAuthenticated, isCheckingSession } = useAuth();
+const SIDEBAR_PANEL_STORAGE_KEY = 'openmeet.dashboard.sidebar-panel';
+const MESSAGE_PAGE_SIZE = 50;
+
+function parseSidebarPanel(value: string | null): SidebarPanel | null {
+  return value === 'messages' || value === 'friends' ? value : null;
+}
+
+function restoreSidebarPanel() {
+  try {
+    return (
+      parseSidebarPanel(localStorage.getItem(SIDEBAR_PANEL_STORAGE_KEY)) ??
+      parseSidebarPanel(cookieUtils.get(SIDEBAR_PANEL_STORAGE_KEY))
+    );
+  } catch {
+    return parseSidebarPanel(cookieUtils.get(SIDEBAR_PANEL_STORAGE_KEY));
+  }
+}
+
+function persistSidebarPanel(panel: SidebarPanel | null) {
+  const value = panel ?? 'none';
+  try {
+    localStorage.setItem(SIDEBAR_PANEL_STORAGE_KEY, value);
+  } catch {
+    // Cookie persistence keeps the workspace preference when local storage is unavailable.
+  }
+  cookieUtils.set(SIDEBAR_PANEL_STORAGE_KEY, value, 180);
+}
 
 const conversations = ref<Conversation[]>([]);
 const friends = ref<Friend[]>([]);
 const friendAvatarUrls = ref<Record<string, string>>({});
+const groupAvatarUrls = ref<Record<string, string>>({});
 const incomingFriendRequests = ref<FriendRequest[]>([]);
 const directRequests = ref<DirectMessageRequest[]>([]);
 const searchQuery = ref('');
@@ -85,8 +86,6 @@ const isConversationSearchOpen = ref(false);
 const peopleSearchQuery = ref('');
 const isPeopleSearchOpen = ref(false);
 const peopleSearchResults = ref<UserSearchResult[]>([]);
-const conversationSearchInput = ref<HTMLInputElement | null>(null);
-const peopleSearchInput = ref<HTMLInputElement | null>(null);
 const isSearchingUsers = ref(false);
 const selectedConversation = ref<Conversation | null>(null);
 const pendingDirectFriend = ref<Friend | null>(null);
@@ -100,36 +99,53 @@ const isDeletingConversation = ref<string | null>(null);
 const isLeavingGroup = ref<string | null>(null);
 const isRespondingToFriendRequest = ref<string | null>(null);
 const isCreatingGroup = ref(false);
-const expandedSidebarPanel = ref<'messages' | 'friends' | null>(null);
+const startingCallConversationId = ref<string | null>(null);
+const expandedSidebarPanel = ref<SidebarPanel | null>(restoreSidebarPanel());
 const activeContextMenuId = ref<string | null>(null);
 const contextMenuResets = ref<Record<string, number>>({});
 const isGroupDialogOpen = ref(false);
+const isJoinGroupDialogOpen = ref(false);
 const isGroupProfileDialogOpen = ref(false);
 const isContactProfileDialogOpen = ref(false);
+const isContactRemoveConfirmationOpen = ref(false);
 const contactProfile = ref<ContactProfile | null>(null);
 const isContactProfileLoading = ref(false);
 const contactProfileError = ref('');
 const groupInfo = ref<GroupInfo | null>(null);
 const groupMembers = ref<GroupMember[]>([]);
+const activeGroupMutations = reactive(new Map<string, GroupMutationToken>());
 const isGroupProfileLoading = ref(false);
 const groupProfileError = ref('');
 const messages = ref<ConversationMessage[]>([]);
 const messageContent = ref('');
 const nextMessageBefore = ref<number | null>(null);
-const messagePane = ref<HTMLElement | null>(null);
-const messageComposer = ref<HTMLTextAreaElement | null>(null);
+const chatPane = ref<{
+  focusComposer: () => void;
+  getScrollState: () => { height: number; top: number } | null;
+  restoreScroll: (state: { height: number; top: number } | null) => void;
+  scrollToBottom: (behavior?: ScrollBehavior) => void;
+} | null>(null);
+const detailsPane = ref<{
+  openAddMembers: () => void;
+  openQuitGroup: () => void;
+  openRemoveGroup: () => void;
+} | null>(null);
 const conversationActivity = ref<Record<string, ConversationActivity>>({});
 const animatedMessageSequences = ref(new Set<number>());
-const isEmojiPickerOpen = ref(false);
-const emojiPickerControl = ref<HTMLElement | null>(null);
-const emojiPickerPopover = ref<HTMLElement | null>(null);
-const emojiPickerMount = ref<HTMLElement | null>(null);
 const isLoadingMessages = ref(false);
 const isLoadingOlderMessages = ref(false);
 const isSendingMessage = ref(false);
 const groupTitle = ref('');
 const groupPolicy = ref<GroupAccessPolicy>('open');
 const groupPassword = ref('');
+const groupMemberSearch = ref('');
+const groupMemberIds = ref<string[]>([]);
+const joinGroupCode = ref('');
+const joinGroupPassword = ref('');
+const joinGroupPreview = ref<GroupInfo | null>(null);
+const isPreviewingGroup = ref(false);
+const isJoiningGroup = ref(false);
+const joinGroupError = ref('');
 const feedbackError = ref('');
 const feedbackMessage = ref('');
 const notificationPermission = ref(getSystemNotificationPermission());
@@ -138,23 +154,24 @@ let friendSearchRequest = 0;
 let peopleSearchTimer: number | undefined;
 let friendRefreshRequest = 0;
 let friendRefreshPending = false;
+let conversationRefreshRequest = 0;
 let conversationRefreshPending = false;
+let conversationRefreshPromise: Promise<void> | null = null;
 let friendAvatarRequest = 0;
+let groupAvatarRequest = 0;
+let groupAvatarSources: Record<string, string> = {};
 let contactProfileRequest = 0;
 let groupProfileRequest = 0;
+let groupProfilePromise: { groupId: string; promise: Promise<void> } | null = null;
 let messageRequest = 0;
-let emojiPicker: Picker | null = null;
-let friendLongPressTimer: number | undefined;
-let suppressFriendClick = false;
-let conversationLongPressTimer: number | undefined;
-let suppressConversationClick = false;
+let joinGroupPreviewRequest = 0;
+let callLaunchRequest = 0;
+let isUnmounted = false;
+let panelWheelLocked = false;
+let panelWheelTimer: number | undefined;
 
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-const chatStateInitial = computed(() => (prefersReducedMotion.value ? false : { opacity: 0, y: 8, scale: 0.99 }));
-const chatStateExit = computed(() => (prefersReducedMotion.value ? undefined : { opacity: 0, y: -6, scale: 0.99 }));
-const chatStateTransition = computed(() =>
-  prefersReducedMotion.value ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' as const },
-);
+const isDesktop = useMediaQuery('(min-width: 1024px)');
 const showNotificationPermissionWarning = computed(
   () => notificationPermission.value === 'default' || notificationPermission.value === 'denied',
 );
@@ -194,16 +211,33 @@ const selectedTitle = computed(() => {
   return selectedConversation.value ? conversationName(selectedConversation.value) : 'Conversation';
 });
 const selectedIsGroup = computed(() => selectedConversation.value?.kind === 'group');
+const selectedGroupAvatarUrl = computed(() =>
+  selectedConversation.value ? groupAvatarUrls.value[selectedConversation.value.id] : undefined,
+);
 const hasSelectedConversation = computed(() => !!selectedConversation.value || !!pendingDirectFriend.value);
-const groupCreatedAt = computed(() => {
-  const infoCreatedAt = (groupInfo.value as (GroupInfo & { createdAt?: string | null }) | null)?.createdAt;
-  return infoCreatedAt || selectedConversation.value?.createdAt || null;
-});
+const contactProfileFriend = computed(() =>
+  contactProfile.value
+    ? friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId)
+    : null,
+);
 const isDraftDirectConversation = computed(
   () =>
     selectedConversation.value?.kind === 'direct' &&
     !conversations.value.some((conversation) => conversation.id === selectedConversation.value?.id),
 );
+const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
+
+function beginGroupMutation(groupId: string) {
+  return acquireGroupMutation(activeGroupMutations, groupId);
+}
+
+function endGroupMutation(groupId: string, token: GroupMutationToken) {
+  releaseGroupMutation(activeGroupMutations, groupId, token);
+}
+
+function isGroupMutationBusy(groupId: string) {
+  return activeGroupMutations.has(groupId);
+}
 
 function conversationName(conversation: Conversation) {
   if (conversation.kind === 'group') return conversation.title?.trim() || 'Untitled group';
@@ -230,44 +264,8 @@ function formatProfileDate(value: string | null) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
 }
 
-function contactStatusLabel(status: ContactProfile['status']) {
-  return {
-    available: 'Available',
-    away: 'Away',
-    doNotDisturb: 'Do not disturb',
-    offline: 'Offline',
-  }[status];
-}
-
-function contactStatusIcon(status: ContactProfile['status']) {
-  return {
-    available: CircleCheck,
-    away: Clock3,
-    doNotDisturb: MinusCircle,
-    offline: Ban,
-  }[status];
-}
-
-function contactStatusClass(status: ContactProfile['status']) {
-  return {
-    available: 'bg-[#EAF7F4] text-[#17645F]',
-    away: 'bg-[#FFF8E8] text-[#80601D]',
-    doNotDisturb: 'bg-[#FFF0EA] text-[#9D4636]',
-    offline: 'bg-[#F0F4F3] text-[#61777B]',
-  }[status];
-}
-
 function groupAccessPolicyLabel(policy: GroupAccessPolicy | null | undefined) {
   return policy === 'password' ? 'Password protected' : policy === 'friendsOnly' ? 'Friends-only' : 'Open access';
-}
-
-function groupRoleLabel(role: string | null | undefined) {
-  if (!role) return 'Member';
-
-  return role
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function clearFeedback() {
@@ -345,14 +343,27 @@ async function loadLatestMessages(conversationId: string) {
   const request = ++messageRequest;
   isLoadingMessages.value = true;
   try {
-    const response = await socialApi.listConversationMessages(token, conversationId);
+    const response = await socialApi.listConversationMessages(token, conversationId, undefined, MESSAGE_PAGE_SIZE);
     if (request !== messageRequest || selectedConversation.value?.id !== conversationId) return;
 
-    messages.value = response.messages.slice().reverse();
-    animatedMessageSequences.value = new Set();
+    const previousMessages = messages.value;
+    const previousSequences = new Set(previousMessages.map((message) => message.sequence));
+    const latestMessages = response.messages.slice().reverse();
+    const newMessages = latestMessages.filter((message) => !previousSequences.has(message.sequence));
+    const mergedMessages = new Map(previousMessages.map((message) => [message.sequence, message]));
+    latestMessages.forEach((message) => mergedMessages.set(message.sequence, message));
+    messages.value = [...mergedMessages.values()].sort((left, right) => left.sequence - right.sequence);
+    if (previousMessages.length && newMessages.length) {
+      animatedMessageSequences.value = new Set([
+        ...animatedMessageSequences.value,
+        ...newMessages.map((message) => message.sequence),
+      ]);
+    } else if (!previousMessages.length) {
+      animatedMessageSequences.value = new Set();
+    }
     nextMessageBefore.value = response.nextBefore;
     await nextTick();
-    if (messagePane.value) messagePane.value.scrollTop = messagePane.value.scrollHeight;
+    chatPane.value?.scrollToBottom(previousMessages.length && newMessages.length ? 'smooth' : 'auto');
   } catch (error) {
     console.error('[Dashboard] Failed to load messages:', error);
     if (request === messageRequest && selectedConversation.value?.id === conversationId) {
@@ -367,7 +378,7 @@ async function loadOlderMessages() {
   const conversationId = selectedConversation.value?.id;
   const token = accessToken.value;
   const before = nextMessageBefore.value;
-  const pane = messagePane.value;
+  const pane = chatPane.value;
   if (
     !conversationId ||
     !token ||
@@ -380,12 +391,10 @@ async function loadOlderMessages() {
   }
 
   const request = ++messageRequest;
+  const scrollState = pane.getScrollState();
   isLoadingOlderMessages.value = true;
-  await nextTick();
-  const previousHeight = pane.scrollHeight;
-  const previousTop = pane.scrollTop;
   try {
-    const response = await socialApi.listConversationMessages(token, conversationId, before);
+    const response = await socialApi.listConversationMessages(token, conversationId, before, MESSAGE_PAGE_SIZE);
     if (request !== messageRequest || selectedConversation.value?.id !== conversationId) return;
 
     const existingSequences = new Set(messages.value.map((message) => message.sequence));
@@ -397,7 +406,7 @@ async function loadOlderMessages() {
     nextMessageBefore.value = response.nextBefore;
     isLoadingOlderMessages.value = false;
     await nextTick();
-    pane.scrollTop = previousTop + pane.scrollHeight - previousHeight;
+    pane.restoreScroll(scrollState);
   } catch (error) {
     console.error('[Dashboard] Failed to load older messages:', error);
     if (request === messageRequest && selectedConversation.value?.id === conversationId) {
@@ -409,7 +418,7 @@ async function loadOlderMessages() {
 }
 
 function handleMessageScroll() {
-  if (messagePane.value && messagePane.value.scrollTop < 80) void loadOlderMessages();
+  void loadOlderMessages();
 }
 
 async function sendMessage() {
@@ -428,7 +437,7 @@ async function sendMessage() {
     if (selectedConversation.value?.id === conversationId) addConversation(selectedConversation.value);
     messageContent.value = '';
     await nextTick();
-    if (messagePane.value) messagePane.value.scrollTop = messagePane.value.scrollHeight;
+    chatPane.value?.scrollToBottom('smooth');
   } catch (error) {
     console.error('[Dashboard] Failed to send message:', error);
     feedbackError.value = 'Could not send message. Try again.';
@@ -451,28 +460,100 @@ async function syncFriendAvatars(nextFriends: Friend[], token: string) {
     nextFriends.map(async (friend) => {
       if (!friend.avatarUrl) return null;
       try {
-        const objectUrl = URL.createObjectURL(await socialApi.loadAvatar(token, friend.avatarUrl));
-        return [friend.id, objectUrl] as const;
+        return [friend.id, await socialApi.loadAvatar(token, friend.avatarUrl)] as const;
       } catch (error) {
         console.error(`[Dashboard] Failed to load avatar for ${friend.id}:`, error);
         return null;
       }
     }),
   );
-  const loadedEntries = entries.filter((entry): entry is readonly [string, string] => entry !== null);
-  if (request !== friendAvatarRequest) {
-    loadedEntries.forEach(([, objectUrl]) => URL.revokeObjectURL(objectUrl));
-    return;
-  }
+  if (!shouldApplyDashboardRequest(request, friendAvatarRequest, isUnmounted)) return;
 
-  const nextAvatarUrls = Object.fromEntries(loadedEntries);
-  Object.values(friendAvatarUrls.value).forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-  friendAvatarUrls.value = nextAvatarUrls;
+  const loadedEntries = entries.filter((entry): entry is readonly [string, Blob] => entry !== null);
+  const createdUrls: string[] = [];
+  let installed = false;
+  try {
+    const nextAvatarUrls: Record<string, string> = {};
+    for (const [id, avatar] of loadedEntries) {
+      const objectUrl = URL.createObjectURL(avatar);
+      createdUrls.push(objectUrl);
+      nextAvatarUrls[id] = objectUrl;
+    }
+    if (!shouldApplyDashboardRequest(request, friendAvatarRequest, isUnmounted)) return;
+    Object.values(friendAvatarUrls.value).forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    friendAvatarUrls.value = nextAvatarUrls;
+    installed = true;
+  } finally {
+    if (!installed) createdUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  }
+}
+
+async function syncGroupAvatars(nextConversations: Conversation[], token: string) {
+  const request = ++groupAvatarRequest;
+  const groups = nextConversations.filter(
+    (conversation): conversation is Conversation & { avatarUrl: string } =>
+      conversation.kind === 'group' && !!conversation.avatarUrl,
+  );
+  const entries = await Promise.all(
+    groups.map(async (group) => {
+      if (groupAvatarSources[group.id] === group.avatarUrl && groupAvatarUrls.value[group.id]) {
+        return { id: group.id, source: group.avatarUrl, objectUrl: groupAvatarUrls.value[group.id], avatar: null };
+      }
+      try {
+        return {
+          id: group.id,
+          source: group.avatarUrl,
+          objectUrl: null,
+          avatar: await socialApi.loadAvatar(token, group.avatarUrl),
+        };
+      } catch (error) {
+        console.error(`[Dashboard] Failed to load group avatar for ${group.id}:`, error);
+        return null;
+      }
+    }),
+  );
+  if (!shouldApplyDashboardRequest(request, groupAvatarRequest, isUnmounted)) return;
+
+  const loadedEntries = entries.filter((entry): entry is NonNullable<(typeof entries)[number]> => entry !== null);
+  const createdUrls: string[] = [];
+  let installed = false;
+  try {
+    const nextUrls: Record<string, string> = {};
+    const nextSources: Record<string, string> = {};
+    for (const entry of loadedEntries) {
+      const objectUrl = entry.objectUrl ?? URL.createObjectURL(entry.avatar!);
+      if (!entry.objectUrl) createdUrls.push(objectUrl);
+      nextUrls[entry.id] = objectUrl;
+      nextSources[entry.id] = entry.source;
+    }
+    if (!shouldApplyDashboardRequest(request, groupAvatarRequest, isUnmounted)) return;
+    Object.entries(groupAvatarUrls.value).forEach(([id, objectUrl]) => {
+      if (nextUrls[id] !== objectUrl) URL.revokeObjectURL(objectUrl);
+    });
+    groupAvatarUrls.value = nextUrls;
+    groupAvatarSources = nextSources;
+    installed = true;
+  } finally {
+    if (!installed) createdUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  }
+}
+
+async function syncSelectedGroupAvatar(info: GroupInfo) {
+  const token = accessToken.value;
+  const group = selectedConversation.value;
+  if (!token || !group || group.kind !== 'group') return;
+  group.avatarUrl = info.avatarUrl;
+  await syncGroupAvatars(
+    conversations.value.map((item) => (item.id === group.id ? group : item)),
+    token,
+  );
 }
 
 async function loadWorkspace() {
   const token = accessToken.value;
   if (!token) return;
+  const friendRequest = ++friendRefreshRequest;
+  const conversationRequest = ++conversationRefreshRequest;
 
   try {
     const [friendData, conversationData, requestData] = await Promise.all([
@@ -480,20 +561,33 @@ async function loadWorkspace() {
       socialApi.listConversations(token),
       socialApi.listDirectRequests(token),
     ]);
-    friends.value = friendData.friends;
-    void syncFriendAvatars(friendData.friends, token);
-    incomingFriendRequests.value = friendData.incomingRequests;
-    conversations.value = sortConversationsByActivity(
-      excludeUnsentDirectDrafts(conversationData),
-      conversationActivity.value,
-    );
-    directRequests.value = requestData;
-    clearFeedback();
+    let applied = false;
+    if (shouldApplyDashboardRequest(friendRequest, friendRefreshRequest, isUnmounted)) {
+      friends.value = friendData.friends;
+      void syncFriendAvatars(friendData.friends, token);
+      incomingFriendRequests.value = friendData.incomingRequests;
+      applied = true;
+    }
+    if (shouldApplyDashboardRequest(conversationRequest, conversationRefreshRequest, isUnmounted)) {
+      conversations.value = sortConversationsByActivity(
+        excludeUnsentDirectDrafts(conversationData),
+        conversationActivity.value,
+      );
+      void syncGroupAvatars(conversationData, token);
+      directRequests.value = requestData;
+      applied = true;
+    }
+    if (applied) clearFeedback();
   } catch (error) {
+    if (
+      !shouldApplyDashboardRequest(friendRequest, friendRefreshRequest, isUnmounted) &&
+      !shouldApplyDashboardRequest(conversationRequest, conversationRefreshRequest, isUnmounted)
+    )
+      return;
     console.error('[Dashboard] Failed to load conversation workspace:', error);
     feedbackError.value = 'Could not load conversations. Try refreshing this page.';
   } finally {
-    isLoading.value = false;
+    if (!isUnmounted) isLoading.value = false;
   }
 }
 
@@ -509,14 +603,15 @@ async function refreshFriends() {
   isRefreshingFriends.value = true;
   try {
     const friendData = await socialApi.listFriends(token);
-    if (request !== friendRefreshRequest) return;
+    if (!shouldApplyDashboardRequest(request, friendRefreshRequest, isUnmounted)) return;
     friends.value = friendData.friends;
     void syncFriendAvatars(friendData.friends, token);
     incomingFriendRequests.value = friendData.incomingRequests;
   } catch (error) {
+    if (isUnmounted) return;
     console.error('[Dashboard] Failed to refresh friends:', error);
   } finally {
-    if (request === friendRefreshRequest) {
+    if (shouldApplyDashboardRequest(request, friendRefreshRequest, isUnmounted)) {
       isRefreshingFriends.value = false;
       if (friendRefreshPending) {
         friendRefreshPending = false;
@@ -529,40 +624,52 @@ async function refreshFriends() {
 async function refreshConversationWorkspace() {
   const token = accessToken.value;
   if (!token) return;
-  if (isRefreshingConversations.value) {
+  if (conversationRefreshPromise) {
     conversationRefreshPending = true;
-    return;
+    return conversationRefreshPromise;
   }
 
   isRefreshingConversations.value = true;
-  try {
-    const [conversationData, requestData] = await Promise.all([
-      socialApi.listConversations(token),
-      socialApi.listDirectRequests(token),
-    ]);
-    const nextConversations = excludeUnsentDirectDrafts(conversationData);
-    conversations.value = sortConversationsByActivity(nextConversations, conversationActivity.value);
-    directRequests.value = requestData;
-
-    if (selectedConversation.value) {
-      const selectedId = selectedConversation.value.id;
-      const refreshedConversation = conversationData.find((conversation) => conversation.id === selectedId);
-      if (refreshedConversation) {
-        Object.assign(selectedConversation.value, refreshedConversation);
-        await loadLatestMessages(selectedId);
-      } else {
-        selectedConversation.value = null;
-      }
-    }
-  } catch (error) {
-    console.error('[Dashboard] Failed to refresh conversations:', error);
-  } finally {
-    isRefreshingConversations.value = false;
-    if (conversationRefreshPending) {
+  conversationRefreshPromise = (async () => {
+    do {
       conversationRefreshPending = false;
-      void refreshConversationWorkspace();
-    }
-  }
+      const request = ++conversationRefreshRequest;
+      try {
+        const [conversationData, requestData] = await Promise.all([
+          socialApi.listConversations(token),
+          socialApi.listDirectRequests(token),
+        ]);
+        if (!shouldApplyDashboardRequest(request, conversationRefreshRequest, isUnmounted)) continue;
+        const nextConversations = excludeUnsentDirectDrafts(conversationData);
+        conversations.value = sortConversationsByActivity(nextConversations, conversationActivity.value);
+        void syncGroupAvatars(conversationData, token);
+        directRequests.value = requestData;
+
+        if (selectedConversation.value) {
+          const selectedId = selectedConversation.value.id;
+          const refreshedConversation = conversationData.find((conversation) => conversation.id === selectedId);
+          if (refreshedConversation) {
+            Object.assign(selectedConversation.value, refreshedConversation);
+            await loadLatestMessages(selectedId);
+          } else {
+            selectedConversation.value = null;
+          }
+        }
+      } catch (error) {
+        if (isUnmounted) return;
+        console.error('[Dashboard] Failed to refresh conversations:', error);
+      }
+    } while (conversationRefreshPending);
+  })().finally(() => {
+    if (!isUnmounted) isRefreshingConversations.value = false;
+    conversationRefreshPromise = null;
+  });
+  return conversationRefreshPromise;
+}
+
+function invalidateConversationRefresh() {
+  conversationRefreshRequest += 1;
+  if (conversationRefreshPromise) conversationRefreshPending = true;
 }
 
 function startDashboard() {
@@ -624,10 +731,18 @@ watch([feedbackError, feedbackMessage], ([error, message]) => {
   clearFeedback();
 });
 
+watch(isDesktop, (desktop) => {
+  if (desktop) isGroupProfileDialogOpen.value = false;
+});
+
+watch(expandedSidebarPanel, persistSidebarPanel);
+
 watch(selectedConversation, (conversation, previousConversation) => {
+  if (conversation?.kind !== 'group') isGroupProfileDialogOpen.value = false;
   if (conversation?.id === previousConversation?.id) return;
   messageRequest += 1;
   messages.value = [];
+  animatedMessageSequences.value = new Set();
   messageContent.value = '';
   nextMessageBefore.value = null;
   isLoadingMessages.value = false;
@@ -636,6 +751,16 @@ watch(selectedConversation, (conversation, previousConversation) => {
   if (conversation) {
     markConversationRead(conversation.id);
     void loadLatestMessages(conversation.id);
+  }
+
+  if (conversation?.kind === 'group') void loadGroupProfile(conversation);
+  else {
+    groupProfileRequest += 1;
+    groupProfilePromise = null;
+    groupInfo.value = null;
+    groupMembers.value = [];
+    groupProfileError.value = '';
+    isGroupProfileLoading.value = false;
   }
 });
 
@@ -647,13 +772,30 @@ function selectConversation(conversation: Conversation) {
 }
 
 function setContactProfileDialogOpen(open: boolean) {
+  if (!open && isRemovingFriend.value) return;
   isContactProfileDialogOpen.value = open;
-  if (!open) contactProfileRequest += 1;
+  if (!open) {
+    contactProfileRequest += 1;
+    isContactRemoveConfirmationOpen.value = false;
+  }
+}
+
+function setContactRemoveConfirmationOpen(open: boolean) {
+  if (!open && isRemovingFriend.value) return;
+  isContactRemoveConfirmationOpen.value = open;
 }
 
 function setGroupProfileDialogOpen(open: boolean) {
   isGroupProfileDialogOpen.value = open;
-  if (!open) groupProfileRequest += 1;
+}
+
+async function openGroupManagement(action: 'add-members' | 'quit-group' | 'remove-group') {
+  setGroupProfileDialogOpen(false);
+  await nextTick();
+
+  if (action === 'add-members') detailsPane.value?.openAddMembers();
+  else if (action === 'quit-group') detailsPane.value?.openQuitGroup();
+  else detailsPane.value?.openRemoveGroup();
 }
 
 function profileFallback(userId: string, name: string): ContactProfile {
@@ -676,9 +818,11 @@ function openContactProfile(userId?: string, name?: string) {
   const friend = selectedFriend.value;
   const profileUserId = userId ?? friend?.id;
   const profileName = name ?? friend?.name;
-  if (!token || !profileUserId || !profileName || (pendingDirectFriend.value && !userId)) return;
+  if (!token || !profileUserId || !profileName || isRemovingFriend.value || (pendingDirectFriend.value && !userId))
+    return;
 
   const request = ++contactProfileRequest;
+  isContactRemoveConfirmationOpen.value = false;
   isContactProfileDialogOpen.value = true;
   contactProfile.value = profileFallback(profileUserId, profileName);
   contactProfileError.value = '';
@@ -687,16 +831,18 @@ function openContactProfile(userId?: string, name?: string) {
   void socialApi
     .getUserProfile(token, profileUserId)
     .then((profile) => {
-      if (request === contactProfileRequest) contactProfile.value = profile;
+      if (shouldApplyDashboardRequest(request, contactProfileRequest, isUnmounted)) contactProfile.value = profile;
     })
     .catch((error) => {
       console.error('[Dashboard] Failed to load contact profile:', error);
-      if (request === contactProfileRequest) {
+      if (shouldApplyDashboardRequest(request, contactProfileRequest, isUnmounted)) {
         contactProfileError.value = 'Live profile details are unavailable. Showing available member details.';
       }
     })
     .finally(() => {
-      if (request === contactProfileRequest) isContactProfileLoading.value = false;
+      if (shouldApplyDashboardRequest(request, contactProfileRequest, isUnmounted)) {
+        isContactProfileLoading.value = false;
+      }
     });
 }
 
@@ -704,45 +850,61 @@ function openSelectedContactProfile() {
   openContactProfile();
 }
 
-function openGroupProfile(conversation?: Conversation) {
+function loadGroupProfile(conversation?: Conversation) {
   const token = accessToken.value;
   const group = conversation ?? selectedConversation.value;
   if (!token || !group || group.kind !== 'group') return;
+  if (groupProfilePromise?.groupId === group.id) return groupProfilePromise.promise;
 
   const request = ++groupProfileRequest;
-  isGroupProfileDialogOpen.value = true;
   groupInfo.value = null;
   groupMembers.value = [];
   groupProfileError.value = '';
   isGroupProfileLoading.value = true;
 
-  void Promise.all([socialApi.getGroupInfo(token, group.id), socialApi.listGroupMembers(token, group.id)])
+  const promise = Promise.all([socialApi.getGroupInfo(token, group.id), socialApi.listGroupMembers(token, group.id)])
     .then(([info, members]) => {
-      if (request !== groupProfileRequest) return;
+      if (!shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) return;
       groupInfo.value = info;
       groupMembers.value = members;
+      void syncSelectedGroupAvatar(info);
     })
     .catch((error) => {
+      if (isUnmounted) return;
       console.error('[Dashboard] Failed to load group profile:', error);
-      if (request === groupProfileRequest) groupProfileError.value = 'Could not load group details. Try again.';
+      if (shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) {
+        groupProfileError.value = 'Could not load group details. Try again.';
+      }
     })
     .finally(() => {
-      if (request === groupProfileRequest) isGroupProfileLoading.value = false;
+      if (shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) {
+        isGroupProfileLoading.value = false;
+      }
+      if (groupProfilePromise?.promise === promise) groupProfilePromise = null;
     });
+  groupProfilePromise = { groupId: group.id, promise };
+  return promise;
 }
 
-function toggleConversationSearch() {
-  isConversationSearchOpen.value = !isConversationSearchOpen.value;
-  if (isConversationSearchOpen.value) nextTick(() => conversationSearchInput.value?.focus());
+function openGroupProfile(conversation?: Conversation) {
+  const group = conversation ?? selectedConversation.value;
+  if (!group || group.kind !== 'group') return;
+  if (selectedConversation.value?.id !== group.id) selectConversation(group);
+  else if (!groupInfo.value && !isGroupProfileLoading.value) loadGroupProfile(group);
+  isGroupProfileDialogOpen.value = true;
 }
 
-function togglePeopleSearch() {
-  isPeopleSearchOpen.value = !isPeopleSearchOpen.value;
-  if (isPeopleSearchOpen.value) nextTick(() => peopleSearchInput.value?.focus());
+async function refreshSelectedGroup() {
+  const group = selectedConversation.value;
+  if (!group || group.kind !== 'group') return;
+  await refreshConversationWorkspace();
+  if (selectedConversation.value?.id === group.id) await loadGroupProfile(selectedConversation.value);
 }
 
-function toggleSidebarPanel(panel: 'messages' | 'friends') {
-  expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
+function handleGroupRemoved(groupId: string) {
+  isGroupProfileDialogOpen.value = false;
+  removeConversationFromWorkspace(groupId);
+  void refreshConversationWorkspace();
 }
 
 function contextMenuKey(id: string) {
@@ -773,92 +935,27 @@ function handlePanelHeaderDragEnd(
   _event: PointerEvent,
   info: { offset: { y: number }; velocity: { y: number } },
 ) {
-  const movedUp = info.offset.y < -48 || info.velocity.y < -400;
-  const movedDown = info.offset.y > 48 || info.velocity.y > 400;
-  const shouldExpand = panel === 'messages' ? movedDown : movedUp;
-  const shouldCollapse = panel === 'messages' ? movedUp : movedDown;
+  expandedSidebarPanel.value = sidebarPanelAfterDrag(panel, expandedSidebarPanel.value, info.offset.y, info.velocity.y);
+}
 
-  if (expandedSidebarPanel.value && expandedSidebarPanel.value !== panel) {
-    expandedSidebarPanel.value = null;
-    return;
-  }
+function handlePanelHeaderWheel(panel: 'messages' | 'friends', event: WheelEvent) {
+  if (!event.deltaY || panelWheelLocked) return;
+  panelWheelLocked = true;
+  expandedSidebarPanel.value = sidebarPanelAfterDrag(
+    panel,
+    expandedSidebarPanel.value,
+    0,
+    Math.sign(event.deltaY) * 401,
+  );
+  panelWheelTimer = window.setTimeout(() => (panelWheelLocked = false), 250);
+}
 
-  if (shouldExpand && expandedSidebarPanel.value !== panel) {
-    expandedSidebarPanel.value = panel;
-  } else if (shouldCollapse && expandedSidebarPanel.value === panel) {
-    expandedSidebarPanel.value = null;
-  }
+function toggleSidebarPanel(panel: 'messages' | 'friends') {
+  expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
 }
 
 function isExistingFriend(result: UserSearchResult) {
   return friendById.value.has(result.id);
-}
-
-function preventProfileTriggerFocus(event: Event) {
-  event.preventDefault();
-}
-
-function preventDialogAutoFocus(event: Event) {
-  event.preventDefault();
-}
-
-function preventMenuAutoFocus(event: Event) {
-  event.preventDefault();
-}
-
-function handleEmojiClick(event: CustomEvent<{ unicode?: string }>) {
-  const emoji = event.detail.unicode;
-  if (!emoji) return;
-
-  const composer = messageComposer.value;
-  const start = composer?.selectionStart ?? messageContent.value.length;
-  const end = composer?.selectionEnd ?? messageContent.value.length;
-  const content = messageContent.value;
-  const cursor = start + emoji.length;
-
-  messageContent.value = `${content.slice(0, start)}${emoji}${content.slice(end)}`;
-  isEmojiPickerOpen.value = false;
-  void nextTick(() => {
-    messageComposer.value?.focus();
-    messageComposer.value?.setSelectionRange(cursor, cursor);
-  });
-}
-
-function ensureEmojiPicker() {
-  if (!emojiPickerMount.value) return;
-
-  if (!emojiPicker) {
-    emojiPicker = new Picker({ locale: navigator.language });
-    emojiPicker.addEventListener('emoji-click', handleEmojiClick);
-  }
-
-  if (emojiPicker.parentElement !== emojiPickerMount.value) emojiPickerMount.value.append(emojiPicker);
-}
-
-function toggleEmojiPicker() {
-  isEmojiPickerOpen.value = !isEmojiPickerOpen.value;
-  if (isEmojiPickerOpen.value) void nextTick(ensureEmojiPicker);
-}
-
-function closeEmojiPickerOnOutsideClick(event: PointerEvent) {
-  const target = event.target;
-  if (
-    !isEmojiPickerOpen.value ||
-    !(target instanceof Node) ||
-    emojiPickerPopover.value?.contains(target) ||
-    emojiPickerControl.value?.contains(target)
-  ) {
-    return;
-  }
-
-  isEmojiPickerOpen.value = false;
-}
-
-function closeEmojiPickerOnEscape(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !isEmojiPickerOpen.value) return;
-
-  isEmojiPickerOpen.value = false;
-  emojiPickerControl.value?.querySelector<HTMLButtonElement>('button')?.focus();
 }
 
 function handleSocialNotifications(event: Event) {
@@ -874,93 +971,33 @@ function handleFriendsUpdated() {
   void refreshFriends();
 }
 
-function handleConversationsUpdated() {
-  void refreshConversationWorkspace();
+async function handleConversationsUpdated() {
+  await refreshConversationWorkspace();
+  if (selectedConversation.value?.kind === 'group') await loadGroupProfile(selectedConversation.value);
 }
 
 onMounted(() => {
-  document.addEventListener('pointerdown', closeEmojiPickerOnOutsideClick, true);
-  document.addEventListener('keydown', closeEmojiPickerOnEscape);
   window.addEventListener('openmeet:notifications-received', handleSocialNotifications);
   window.addEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
   window.addEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
 });
 
 onBeforeUnmount(() => {
+  isUnmounted = true;
+  friendSearchRequest += 1;
+  window.clearTimeout(peopleSearchTimer);
   friendAvatarRequest += 1;
+  groupAvatarRequest += 1;
+  contactProfileRequest += 1;
+  groupProfileRequest += 1;
+  callLaunchRequest += 1;
   Object.values(friendAvatarUrls.value).forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-  document.removeEventListener('pointerdown', closeEmojiPickerOnOutsideClick, true);
-  document.removeEventListener('keydown', closeEmojiPickerOnEscape);
+  Object.values(groupAvatarUrls.value).forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
   window.removeEventListener('openmeet:notifications-received', handleSocialNotifications);
   window.removeEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
   window.removeEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
-  emojiPicker?.removeEventListener('emoji-click', handleEmojiClick);
-  emojiPicker?.remove();
-  window.clearTimeout(friendLongPressTimer);
-  window.clearTimeout(conversationLongPressTimer);
+  window.clearTimeout(panelWheelTimer);
 });
-
-function clearFriendLongPress() {
-  window.clearTimeout(friendLongPressTimer);
-  friendLongPressTimer = undefined;
-}
-
-function startFriendLongPress(event: PointerEvent, contextMenuId: string) {
-  if (event.pointerType === 'mouse') return;
-
-  friendLongPressTimer = window.setTimeout(() => {
-    suppressFriendClick = true;
-    activateContextMenu(contextMenuId);
-    friendLongPressTimer = undefined;
-  }, 500);
-}
-
-function cancelFriendLongPress() {
-  clearFriendLongPress();
-}
-
-function finishFriendLongPress() {
-  clearFriendLongPress();
-  if (suppressFriendClick) window.setTimeout(() => (suppressFriendClick = false));
-}
-
-function handleFriendClick(friend: Friend) {
-  if (suppressFriendClick) {
-    suppressFriendClick = false;
-    return;
-  }
-
-  void openFriendConversation(friend);
-}
-
-function clearConversationLongPress() {
-  window.clearTimeout(conversationLongPressTimer);
-  conversationLongPressTimer = undefined;
-}
-
-function startConversationLongPress(event: PointerEvent, contextMenuId: string) {
-  if (event.pointerType === 'mouse') return;
-
-  conversationLongPressTimer = window.setTimeout(() => {
-    suppressConversationClick = true;
-    activateContextMenu(contextMenuId);
-    conversationLongPressTimer = undefined;
-  }, 500);
-}
-
-function finishConversationLongPress() {
-  clearConversationLongPress();
-  if (suppressConversationClick) window.setTimeout(() => (suppressConversationClick = false));
-}
-
-function handleConversationClick(conversation: Conversation) {
-  if (suppressConversationClick) {
-    suppressConversationClick = false;
-    return;
-  }
-
-  selectConversation(conversation);
-}
 
 function openConversationDetails(conversation: Conversation) {
   if (conversation.kind === 'group') {
@@ -977,11 +1014,20 @@ function openConversationDetails(conversation: Conversation) {
 }
 
 function removeConversationFromWorkspace(conversationId: string) {
+  invalidateConversationRefresh();
+  groupAvatarRequest += 1;
   conversations.value = conversations.value.filter((conversation) => conversation.id !== conversationId);
   const activity = { ...conversationActivity.value };
   delete activity[conversationId];
   conversationActivity.value = activity;
   if (selectedConversation.value?.id === conversationId) selectedConversation.value = null;
+  if (groupAvatarUrls.value[conversationId]) {
+    URL.revokeObjectURL(groupAvatarUrls.value[conversationId]);
+    const nextUrls = { ...groupAvatarUrls.value };
+    delete nextUrls[conversationId];
+    groupAvatarUrls.value = nextUrls;
+    delete groupAvatarSources[conversationId];
+  }
 }
 
 async function hideDirectConversation(conversation: Conversation) {
@@ -1010,6 +1056,8 @@ async function leaveGroup(conversation: Conversation) {
     return;
   }
 
+  const mutationToken = beginGroupMutation(conversation.id);
+  if (!mutationToken) return;
   clearFeedback();
   isLeavingGroup.value = conversation.id;
   try {
@@ -1021,12 +1069,13 @@ async function leaveGroup(conversation: Conversation) {
     feedbackError.value = error instanceof SocialApiError ? error.message : 'Could not leave this group.';
   } finally {
     isLeavingGroup.value = null;
+    endGroupMutation(conversation.id, mutationToken);
   }
 }
 
-async function openFriendConversation(friend: Friend) {
+async function openFriendConversation(friend: Friend): Promise<Conversation | null> {
   const token = accessToken.value;
-  if (!token || isOpeningDirect.value) return;
+  if (!token || isOpeningDirect.value) return null;
 
   clearFeedback();
   isOpeningDirect.value = friend.id;
@@ -1035,6 +1084,7 @@ async function openFriendConversation(friend: Friend) {
     if (result.state === 'available' && result.conversation) {
       selectedConversation.value = result.conversation;
       pendingDirectFriend.value = null;
+      return result.conversation;
     } else if (result.state === 'pending') {
       selectedConversation.value = null;
       pendingDirectFriend.value = friend;
@@ -1050,6 +1100,7 @@ async function openFriendConversation(friend: Friend) {
   } finally {
     isOpeningDirect.value = null;
   }
+  return null;
 }
 
 async function addFriend(result: UserSearchResult) {
@@ -1097,20 +1148,35 @@ async function respondToFriendRequest(request: FriendRequest, accept: boolean) {
 
 async function removeFriend(friend: Friend) {
   const token = accessToken.value;
-  if (!token || !friend.friendshipId || isRemovingFriend.value) return;
+  if (!token || !friend.friendshipId || isRemovingFriend.value) return false;
 
   clearFeedback();
   isRemovingFriend.value = friend.id;
   try {
     await socialApi.removeFriend(token, friend.friendshipId);
+    if (isUnmounted) return false;
     friends.value = friends.value.filter((item) => item.id !== friend.id);
     feedbackMessage.value = `${friend.name} was removed from your friends.`;
+    return true;
   } catch (error) {
+    if (isUnmounted) return false;
     console.error('[Dashboard] Failed to remove friend:', error);
     feedbackError.value = 'Could not remove friend.';
+    return false;
   } finally {
-    isRemovingFriend.value = null;
+    if (!isUnmounted) isRemovingFriend.value = null;
   }
+}
+
+async function removeProfileFriend() {
+  const friend = contactProfileFriend.value;
+  const profileId = contactProfile.value?.id;
+  if (!friend || !profileId) return;
+  const removed = await removeFriend(friend);
+  if (!removed || contactProfile.value?.id !== profileId) return;
+  isContactRemoveConfirmationOpen.value = false;
+  setContactProfileDialogOpen(false);
+  await refreshFriends();
 }
 
 async function respondToDirectRequest(request: DirectMessageRequest, accept: boolean) {
@@ -1148,34 +1214,177 @@ async function createGroup() {
       title,
       accessPolicy: groupPolicy.value,
       ...(groupPolicy.value === 'password' ? { password: groupPassword.value } : {}),
+      memberIds: groupMemberIds.value,
     });
+    if (isUnmounted) return;
     addConversation(conversation);
     selectedConversation.value = conversation;
     pendingDirectFriend.value = null;
-    groupTitle.value = '';
-    groupPassword.value = '';
-    groupPolicy.value = 'open';
-    isGroupDialogOpen.value = false;
+    setCreateGroupDialogOpen(false, true);
   } catch (error) {
     console.error('[Dashboard] Failed to create group:', error);
     feedbackError.value = 'Could not create group.';
   } finally {
-    isCreatingGroup.value = false;
+    if (!isUnmounted) isCreatingGroup.value = false;
+  }
+}
+
+function resetCreateGroup() {
+  groupTitle.value = '';
+  groupPolicy.value = 'open';
+  groupPassword.value = '';
+  groupMemberSearch.value = '';
+  groupMemberIds.value = [];
+}
+
+function setCreateGroupDialogOpen(open: boolean, force = false) {
+  if (!open && isCreatingGroup.value && !force) return;
+  isGroupDialogOpen.value = open;
+  if (!open) resetCreateGroup();
+}
+
+function toggleCreateGroupMember(friendId: string) {
+  groupMemberIds.value = groupMemberIds.value.includes(friendId)
+    ? groupMemberIds.value.filter((id) => id !== friendId)
+    : [...groupMemberIds.value, friendId];
+}
+
+function resetJoinGroup() {
+  joinGroupPreviewRequest += 1;
+  joinGroupCode.value = '';
+  joinGroupPassword.value = '';
+  joinGroupPreview.value = null;
+  joinGroupError.value = '';
+  isPreviewingGroup.value = false;
+}
+
+function invalidateJoinGroupPreview() {
+  joinGroupPreviewRequest += 1;
+  joinGroupPreview.value = null;
+  joinGroupPassword.value = '';
+  joinGroupError.value = '';
+  isPreviewingGroup.value = false;
+}
+
+function setJoinGroupDialogOpen(open: boolean) {
+  if (!open && isJoiningGroup.value) return;
+  isJoinGroupDialogOpen.value = open;
+  if (!open) resetJoinGroup();
+}
+
+async function previewGroupByCode() {
+  const token = accessToken.value;
+  const code = joinGroupCode.value.trim();
+  if (!token || !code) return;
+  const request = ++joinGroupPreviewRequest;
+  isPreviewingGroup.value = true;
+  joinGroupError.value = '';
+  joinGroupPreview.value = null;
+  joinGroupPassword.value = '';
+  try {
+    const preview = await socialApi.getGroupInfoByCode(token, code);
+    if (request === joinGroupPreviewRequest) joinGroupPreview.value = preview;
+  } catch (error) {
+    console.error('[Dashboard] Failed to preview group:', error);
+    if (request === joinGroupPreviewRequest) {
+      joinGroupError.value = error instanceof SocialApiError ? error.message : 'Could not find a group with that code.';
+    }
+  } finally {
+    if (request === joinGroupPreviewRequest) isPreviewingGroup.value = false;
+  }
+}
+
+async function joinGroupByCode() {
+  const token = accessToken.value;
+  const preview = joinGroupPreview.value;
+  const code = joinGroupCode.value.trim();
+  if (!token || !preview || !code || isJoiningGroup.value) return;
+  if (preview.accessPolicy === 'password' && !joinGroupPassword.value) {
+    joinGroupError.value = "Enter this group's password.";
+    return;
+  }
+
+  isJoiningGroup.value = true;
+  joinGroupError.value = '';
+  try {
+    let conversation = conversations.value.find((item) => item.id === preview.id);
+    if (!preview.isMember || !conversation) {
+      conversation = await socialApi.joinGroupByCode(
+        token,
+        code,
+        preview.accessPolicy === 'password' ? joinGroupPassword.value : undefined,
+      );
+      addConversation(conversation);
+    }
+    selectConversation(conversation);
+    isJoinGroupDialogOpen.value = false;
+    resetJoinGroup();
+    feedbackMessage.value = preview.isMember ? 'Group opened.' : 'Group joined.';
+    void refreshConversationWorkspace();
+  } catch (error) {
+    console.error('[Dashboard] Failed to join group:', error);
+    joinGroupError.value = error instanceof SocialApiError ? error.message : 'Could not join this group.';
+  } finally {
+    isJoiningGroup.value = false;
   }
 }
 
 async function startSelectedConversationCall() {
-  const token = accessToken.value;
   const conversation = selectedConversation.value;
-  if (!token || !conversation || pendingDirectFriend.value) return;
+  if (!conversation || pendingDirectFriend.value) return;
+  await startConversationCall(conversation);
+}
+
+async function startContactProfileCall() {
+  const friend = contactProfileFriend.value;
+  if (!friend) return;
+  const conversation = await openFriendConversation(friend);
+  if (!conversation) return;
+  setContactProfileDialogOpen(false);
+  await startConversationCall(conversation);
+}
+
+async function startMemberCall(member: GroupMember) {
+  const token = accessToken.value;
+  const friend = friends.value.find((item) => item.id === member.id);
+  if (!token || !friend || isCallLaunchActive.value || member.id === currentUser.value?.id) return;
 
   clearFeedback();
+  isOpeningDirect.value = member.id;
+  try {
+    const result = await socialApi.openDirectConversation(token, friend.id);
+    if (result.state !== 'available' || !result.conversation) {
+      feedbackError.value = `A direct conversation with ${member.name} is required before calling.`;
+      return;
+    }
+    await startConversationCall(result.conversation);
+  } catch (error) {
+    console.error('[Dashboard] Failed to start member call:', error);
+    feedbackError.value = 'Could not start call.';
+  } finally {
+    isOpeningDirect.value = null;
+  }
+}
+
+async function startConversationCall(conversation: Conversation) {
+  const token = accessToken.value;
+  if (!token || startingCallConversationId.value) return;
+
+  clearFeedback();
+  const request = ++callLaunchRequest;
+  startingCallConversationId.value = conversation.id;
   try {
     const callSession = await socialApi.startConversationCall(token, conversation.id);
+    if (!shouldApplyDashboardRequest(request, callLaunchRequest, isUnmounted)) return;
     await router.push({ path: `/room/${callSession.id}`, query: { conversation: conversation.id } });
   } catch (error) {
+    if (!shouldApplyDashboardRequest(request, callLaunchRequest, isUnmounted)) return;
     console.error('[Dashboard] Failed to start conversation call:', error);
     feedbackError.value = 'Could not start call.';
+  } finally {
+    if (shouldApplyDashboardRequest(request, callLaunchRequest, isUnmounted)) {
+      startingCallConversationId.value = null;
+    }
   }
 }
 </script>
@@ -1185,10 +1394,9 @@ async function startSelectedConversationCall() {
     <LoadingRipple class="size-8 text-[#0B7A75]" />
     <span class="sr-only">Loading workspace</span>
   </div>
-
   <main
     v-else-if="isAuthenticated"
-    class="marketing-font h-[calc(100dvh-84px)] overflow-hidden bg-[#FBFCF8] px-3 pb-3 pt-0 text-[#102F35] sm:px-5 sm:pb-3 sm:pt-0"
+    class="marketing-font h-[calc(100dvh-84px)] w-full max-w-full overflow-hidden overscroll-none bg-[#FBFCF8] px-3 pb-3 pt-0 text-[#102F35] sm:px-5 sm:pb-3 sm:pt-0"
   >
     <motion.div
       :initial="{ opacity: 0, y: 10 }"
@@ -1205,1091 +1413,195 @@ async function startSelectedConversationCall() {
         "
         aria-label="Conversations"
       >
-        <div class="border-b border-[#E5EFEC] px-4 py-4 sm:px-5">
-          <div class="flex items-center justify-between gap-3">
-            <motion.h1
-              drag="y"
-              :drag-constraints="{ top: 0, bottom: 0 }"
-              :drag-elastic="0.08"
-              :drag-momentum="false"
-              class="-my-4 flex-1 touch-none cursor-ns-resize py-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
-              @drag-end="(event, info) => handlePanelHeaderDragEnd('messages', event, info)"
-            >
-              Messages
-            </motion.h1>
-            <div class="flex shrink-0 items-center gap-2">
-              <Button
-                size="icon"
-                variant="ghost"
-                class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
-                :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isConversationSearchOpen }"
-                :aria-expanded="isConversationSearchOpen"
-                aria-controls="conversation-search"
-                aria-label="Search conversations"
-                title="Search conversations"
-                @click="toggleConversationSearch"
-              >
-                <Search class="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                class="harbor-primary-action size-9 rounded-full bg-[#0B7A75] text-white"
-                aria-label="Create group"
-                title="Create group"
-                @click="isGroupDialogOpen = true"
-              >
-                <Plus class="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
-                :aria-expanded="expandedSidebarPanel === 'messages'"
-                aria-controls="messages-panel"
-                :aria-label="expandedSidebarPanel === 'messages' ? 'Collapse messages' : 'Expand messages'"
-                :title="expandedSidebarPanel === 'messages' ? 'Collapse messages' : 'Expand messages'"
-                @click="toggleSidebarPanel('messages')"
-              >
-                <Minimize2 v-if="expandedSidebarPanel === 'messages'" class="size-4" />
-                <Maximize2 v-else class="size-4" />
-              </Button>
-            </div>
-          </div>
-          <div
-            id="conversation-search"
-            class="grid transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
-            :class="isConversationSearchOpen ? 'mt-4 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
-          >
-            <label class="relative min-h-0 overflow-hidden">
-              <span class="sr-only">Search conversations</span>
-              <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" />
-              <Input
-                ref="conversationSearchInput"
-                v-model="searchQuery"
-                type="search"
-                placeholder="Search conversations"
-                class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div
-          class="min-h-0 overflow-hidden transition-[flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-          :class="
-            expandedSidebarPanel === 'friends'
-              ? 'pointer-events-none flex-none basis-0 opacity-0'
-              : 'flex-1 opacity-100'
+        <ConversationsSidebar
+          v-model:query="searchQuery"
+          :active-context-menu-id="activeContextMenuId"
+          :conversations="filteredConversations"
+          :context-menu-key="contextMenuKey"
+          :conversation-name="conversationName"
+          :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
+          :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
+          :direct-requests="directRequests"
+          :expanded="expandedSidebarPanel !== 'friends'"
+          :group-avatar-urls="groupAvatarUrls"
+          :is-loading="isLoading"
+          :is-refreshing="isRefreshingConversations"
+          :search-open="isConversationSearchOpen"
+          :selected-conversation-id="selectedConversation?.id"
+          :unread-count="unreadCount"
+          @update:search-open="isConversationSearchOpen = $event"
+          @create-group="setCreateGroupDialogOpen(true)"
+          @join-group="isJoinGroupDialogOpen = true"
+          @drag-end="(event, info) => handlePanelHeaderDragEnd('messages', event, info)"
+          @wheel="handlePanelHeaderWheel('messages', $event)"
+          @toggle="toggleSidebarPanel('messages')"
+          @select="selectConversation"
+          @details="openConversationDetails"
+          @delete="
+            (conversation) =>
+              conversation.kind === 'direct' ? hideDirectConversation(conversation) : leaveGroup(conversation)
           "
-          :aria-hidden="expandedSidebarPanel === 'friends'"
-        >
-          <div id="messages-panel" class="h-full min-h-0 overflow-y-auto p-2" aria-live="polite">
-            <div v-if="directRequests.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
-              <div
-                v-for="request in directRequests"
-                :key="request.id"
-                class="flex items-center gap-2 rounded-xl px-2 py-2"
-              >
-                <span
-                  class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
-                >
-                  <CircleUserRound class="size-4" />
-                </span>
-                <p class="min-w-0 flex-1 truncate text-xs text-[#4E6B70]">
-                  Request from account {{ request.requesterId.slice(0, 8) }}
-                </p>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                  :aria-label="`Accept request from account ${request.requesterId.slice(0, 8)}`"
-                  @click="respondToDirectRequest(request, true)"
-                >
-                  <Check class="size-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
-                  :aria-label="`Decline request from account ${request.requesterId.slice(0, 8)}`"
-                  @click="respondToDirectRequest(request, false)"
-                >
-                  <X class="size-4" />
-                </Button>
-              </div>
-            </div>
-            <div v-if="isLoading || isRefreshingConversations" class="flex min-h-44 items-center justify-center">
-              <LoadingRipple class="size-6 text-[#0B7A75]" />
-              <span class="sr-only">Loading conversations</span>
-            </div>
-            <p v-else-if="!filteredConversations.length" class="px-3 py-8 text-center text-sm text-[#61777B]">
-              {{ searchQuery ? 'No conversations match your search.' : 'No conversations yet.' }}
-            </p>
-            <nav v-else aria-label="Persistent conversations" class="space-y-1">
-              <ContextMenu
-                v-for="conversation in filteredConversations"
-                :key="contextMenuKey(`conversation-${conversation.id}`)"
-                :press-open-delay="500"
-                @update:open="handleContextMenuOpen(`conversation-${conversation.id}`, $event)"
-              >
-                <ContextMenuTrigger as-child>
-                  <button
-                    type="button"
-                    class="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition-[background-color,border-color,border-width] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    :class="[
-                      'harbor-ghost-action',
-                      selectedConversation?.id === conversation.id ? 'bg-[#E6F4F1] !text-[#102F35]' : '',
-                      activeContextMenuId === `conversation-${conversation.id}` ? 'border-2 border-[#0B7A75]' : '',
-                    ]"
-                    :aria-current="selectedConversation?.id === conversation.id ? 'page' : undefined"
-                    @click="handleConversationClick(conversation)"
-                    @contextmenu="activateContextMenu(`conversation-${conversation.id}`)"
-                    @pointerdown="startConversationLongPress($event, `conversation-${conversation.id}`)"
-                    @pointermove="clearConversationLongPress"
-                    @pointerup="finishConversationLongPress"
-                    @pointercancel="clearConversationLongPress"
-                  >
-                    <span
-                      class="flex size-10 shrink-0 items-center justify-center rounded-full"
-                      :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
-                    >
-                      <UsersRound v-if="conversation.kind === 'group'" class="size-4" />
-                      <img
-                        v-else-if="friendAvatarUrls[conversation.otherUserId ?? '']"
-                        :src="friendAvatarUrls[conversation.otherUserId ?? '']"
-                        alt=""
-                        class="size-full rounded-full object-cover"
-                      />
-                      <span v-else class="text-xs font-semibold">{{
-                        userInitials(friendById.get(conversation.otherUserId ?? '')?.name)
-                      }}</span>
-                    </span>
-                    <span class="min-w-0 flex-1">
-                      <span class="flex items-center gap-2">
-                        <strong class="truncate text-sm">{{ conversationName(conversation) }}</strong>
-                        <LockKeyhole
-                          v-if="conversation.accessPolicy === 'password'"
-                          class="size-3 shrink-0 text-[#61777B]"
-                          aria-label="Password protected"
-                        />
-                      </span>
-                      <span class="mt-0.5 block truncate text-xs text-[#61777B]">{{
-                        conversation.kind === 'group' ? 'Group conversation' : 'Direct conversation'
-                      }}</span>
-                    </span>
-                    <span
-                      v-if="unreadCount(conversation)"
-                      class="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-[#0B7A75] px-1.5 py-0.5 text-[11px] font-semibold text-white"
-                      :aria-label="`${unreadCount(conversation)} unread messages`"
-                    >
-                      {{ unreadCount(conversation) > 99 ? '99+' : unreadCount(conversation) }}
-                    </span>
-                    <ChevronRight v-else class="size-4 shrink-0 text-[#809697]" />
-                  </button>
-                </ContextMenuTrigger>
-                <ContextMenuContent
-                  class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)] data-[state=open]:duration-200 data-[state=closed]:duration-150 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
-                  @open-auto-focus="preventMenuAutoFocus"
-                  @entry-focus="preventMenuAutoFocus"
-                >
-                  <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
-                    {{ conversationName(conversation) }}
-                  </ContextMenuLabel>
-                  <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
-                  <ContextMenuItem
-                    class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                    @select="openConversationDetails(conversation)"
-                  >
-                    <CircleUserRound v-if="conversation.kind === 'direct'" class="size-4" aria-hidden="true" />
-                    <UsersRound v-else class="size-4" aria-hidden="true" />
-                    {{ conversation.kind === 'direct' ? 'See profile' : 'Group info' }}
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                    :disabled="isDeletingConversation !== null || isLeavingGroup !== null"
-                    @select="
-                      conversation.kind === 'direct' ? hideDirectConversation(conversation) : leaveGroup(conversation)
-                    "
-                  >
-                    <Trash2 v-if="conversation.kind === 'direct'" class="size-4" aria-hidden="true" />
-                    <LogOut v-else class="size-4" aria-hidden="true" />
-                    <template v-if="conversation.kind === 'direct'">
-                      {{ isDeletingConversation === conversation.id ? 'Deleting...' : 'Delete conversation' }}
-                    </template>
-                    <template v-else>
-                      {{ isLeavingGroup === conversation.id ? 'Leaving...' : 'Quit from group' }}
-                    </template>
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            </nav>
-          </div>
-        </div>
-
-        <section
-          class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-          :class="
-            expandedSidebarPanel === 'messages'
-              ? 'basis-20 shrink-0 opacity-100'
-              : expandedSidebarPanel === 'friends'
-                ? 'flex-1 opacity-100'
-                : 'basis-[min(38dvh,23rem)] shrink-0'
-          "
-          aria-labelledby="friends-heading"
-        >
-          <div class="flex items-center justify-between gap-2 px-2">
-            <motion.h2
-              id="friends-heading"
-              drag="y"
-              :drag-constraints="{ top: 0, bottom: 0 }"
-              :drag-elastic="0.08"
-              :drag-momentum="false"
-              class="-my-2 flex-1 touch-none cursor-ns-resize py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
-              @drag-end="(event, info) => handlePanelHeaderDragEnd('friends', event, info)"
-            >
-              Friends
-            </motion.h2>
-            <div class="flex items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isPeopleSearchOpen }"
-                :aria-expanded="isPeopleSearchOpen"
-                aria-controls="people-search"
-                aria-label="Search friends and people"
-                title="Search friends and people"
-                @click="togglePeopleSearch"
-              >
-                <Search class="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                :aria-expanded="expandedSidebarPanel === 'friends'"
-                aria-controls="friends-panel"
-                :aria-label="expandedSidebarPanel === 'friends' ? 'Collapse friends' : 'Expand friends'"
-                :title="expandedSidebarPanel === 'friends' ? 'Collapse friends' : 'Expand friends'"
-                @click="toggleSidebarPanel('friends')"
-              >
-                <Minimize2 v-if="expandedSidebarPanel === 'friends'" class="size-4" />
-                <Maximize2 v-else class="size-4" />
-              </Button>
-            </div>
-          </div>
-          <div
-            id="friends-panel"
-            class="flex min-h-0 flex-col overflow-hidden transition-[height,flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-            :class="
-              expandedSidebarPanel === 'messages' ? 'pointer-events-none h-0 flex-none opacity-0' : 'flex-1 opacity-100'
-            "
-            :aria-hidden="expandedSidebarPanel === 'messages'"
-          >
-            <div
-              id="people-search"
-              class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
-              :class="isPeopleSearchOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
-            >
-              <div class="min-h-0 overflow-hidden">
-                <label class="relative block">
-                  <span class="sr-only">Search friends and people</span>
-                  <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" />
-                  <Input
-                    ref="peopleSearchInput"
-                    v-model="peopleSearchQuery"
-                    type="search"
-                    placeholder="Search friends and people"
-                    class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-                  />
-                </label>
-                <p
-                  v-if="peopleSearchQuery.trim() && peopleSearchQuery.replace(/\s/g, '').length < 2"
-                  class="mt-2 text-xs text-[#61777B]"
-                >
-                  Keep typing to search people outside your friend list.
-                </p>
-                <div v-else-if="isSearchingUsers" class="flex h-16 items-center justify-center">
-                  <LoadingRipple class="size-4 text-[#0B7A75]" />
-                  <span class="sr-only">Searching people</span>
-                </div>
-                <div v-else-if="isPeopleSearchActive && filteredFriends.length" class="mt-2 space-y-1">
-                  <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#0B7A75]">Friends</p>
-                  <button
-                    v-for="friend in filteredFriends"
-                    :key="friend.id"
-                    type="button"
-                    class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                    @click="openFriendConversation(friend)"
-                  >
-                    <span
-                      class="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
-                    >
-                      <img
-                        v-if="friendAvatarUrls[friend.id]"
-                        :src="friendAvatarUrls[friend.id]"
-                        alt=""
-                        class="size-full object-cover"
-                      />
-                      <template v-else>{{ userInitials(friend.name) }}</template>
-                    </span>
-                    <span class="min-w-0 flex-1">
-                      <span class="block truncate text-xs font-semibold">{{ friend.name }}</span>
-                      <span class="block truncate text-[11px] text-[#61777B]">{{ friend.email }}</span>
-                    </span>
-                    <span class="rounded-full bg-[#E6F4F1] px-2 py-0.5 text-[10px] font-semibold text-[#27595D]"
-                      >Friend</span
-                    >
-                  </button>
-                </div>
-                <div v-if="newPeopleSearchResults.length" class="mt-2 space-y-1">
-                  <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">People</p>
-                  <div
-                    v-for="result in newPeopleSearchResults"
-                    :key="result.id"
-                    class="flex items-center gap-2 rounded-xl bg-[#F0F7F5] px-2 py-2"
-                  >
-                    <span
-                      class="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
-                    >
-                      {{ userInitials(result.name) }}
-                    </span>
-                    <span class="min-w-0 flex-1">
-                      <span class="block truncate text-xs font-semibold">{{ result.name }}</span>
-                      <span class="block truncate text-[11px] text-[#61777B]">{{ result.email }}</span>
-                    </span>
-                    <Button
-                      size="sm"
-                      :disabled="isAddingFriend"
-                      class="harbor-primary-action h-7 rounded-full bg-[#0B7A75] px-2 text-xs text-white"
-                      @click="addFriend(result)"
-                    >
-                      {{ isAddingFriend ? 'Adding...' : 'Add' }}
-                    </Button>
-                  </div>
-                </div>
-                <p
-                  v-else-if="
-                    isPeopleSearchActive && !filteredFriends.length && peopleSearchQuery.replace(/\s/g, '').length >= 2
-                  "
-                  class="mt-2 text-xs text-[#61777B]"
-                >
-                  No registered accounts found.
-                </p>
-              </div>
-            </div>
-            <div class="min-h-0 flex-1 overflow-y-auto">
-              <div v-if="incomingFriendRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
-                <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
-                <div
-                  v-for="request in incomingFriendRequests"
-                  :key="request.id"
-                  class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-[#102F35]"
-                >
-                  <span
-                    class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                  >
-                    <img
-                      v-if="friendAvatarUrls[request.user.id]"
-                      :src="friendAvatarUrls[request.user.id]"
-                      alt=""
-                      class="size-full object-cover"
-                    />
-                    <template v-else>{{ userInitials(request.user.name) }}</template>
-                  </span>
-                  <span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-                    :disabled="isRespondingToFriendRequest !== null"
-                    :aria-label="`Accept friend request from ${request.user.name}`"
-                    @click="respondToFriendRequest(request, true)"
-                  >
-                    <Check class="size-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
-                    :disabled="isRespondingToFriendRequest !== null"
-                    :aria-label="`Decline friend request from ${request.user.name}`"
-                    @click="respondToFriendRequest(request, false)"
-                  >
-                    <X class="size-4" />
-                  </Button>
-                </div>
-              </div>
-              <div v-if="!isPeopleSearchActive && visibleFriends.length" id="friend-list" class="mt-2 space-y-1 px-2">
-                <ContextMenu
-                  v-for="friend in visibleFriends"
-                  :key="contextMenuKey(`friend-${friend.id}`)"
-                  :press-open-delay="500"
-                  @update:open="handleContextMenuOpen(`friend-${friend.id}`, $event)"
-                >
-                  <ContextMenuTrigger as-child>
-                    <button
-                      type="button"
-                      class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-2 text-left transition-[background-color,border-color,border-width] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                      :aria-label="`Open direct conversation with ${friend.name}`"
-                      :class="{ 'border-2 border-[#0B7A75]': activeContextMenuId === `friend-${friend.id}` }"
-                      @click="handleFriendClick(friend)"
-                      @contextmenu="activateContextMenu(`friend-${friend.id}`)"
-                      @pointerdown="startFriendLongPress($event, `friend-${friend.id}`)"
-                      @pointermove="cancelFriendLongPress"
-                      @pointerup="finishFriendLongPress"
-                      @pointercancel="cancelFriendLongPress"
-                    >
-                      <span
-                        class="relative flex size-8 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                      >
-                        <img
-                          v-if="friendAvatarUrls[friend.id]"
-                          :src="friendAvatarUrls[friend.id]"
-                          alt=""
-                          class="size-full object-cover"
-                        />
-                        <template v-else>{{ userInitials(friend.name) }}</template>
-                        <span
-                          v-if="friend.isOnline"
-                          class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]"
-                          aria-label="Online"
-                        />
-                      </span>
-                      <span class="min-w-0 flex-1 truncate text-sm">{{
-                        isOpeningDirect === friend.id ? 'Opening...' : friend.name
-                      }}</span>
-                    </button>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent
-                    class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)] data-[state=open]:duration-200 data-[state=closed]:duration-150 data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
-                    @open-auto-focus="preventMenuAutoFocus"
-                    @entry-focus="preventMenuAutoFocus"
-                  >
-                    <ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
-                      {{ friend.name }}
-                    </ContextMenuLabel>
-                    <ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" />
-                    <ContextMenuItem
-                      class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                      @select="openContactProfile(friend.id, friend.name)"
-                    >
-                      <CircleUserRound class="size-4" aria-hidden="true" />
-                      View profile
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      :disabled="isRemovingFriend !== null"
-                      class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                      @select="removeFriend(friend)"
-                    >
-                      <UserMinus class="size-4" aria-hidden="true" />
-                      {{ isRemovingFriend === friend.id ? 'Removing...' : 'Remove friend' }}
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              </div>
-              <p
-                v-else-if="!isPeopleSearchActive && !isLoading && !isRefreshingFriends && friends.length"
-                class="px-2 py-2 text-xs text-[#61777B]"
-              >
-                No friends match your search.
-              </p>
-              <div v-else-if="isLoading || isRefreshingFriends" class="flex h-16 items-center justify-center">
-                <LoadingRipple class="size-4 text-[#0B7A75]" />
-                <span class="sr-only">Loading friends</span>
-              </div>
-              <p v-else class="px-2 py-2 text-xs text-[#61777B]">No accepted friends.</p>
-            </div>
-          </div>
-        </section>
+          @context-open="handleContextMenuOpen"
+          @context-activate="activateContextMenu"
+          @respond-direct-request="respondToDirectRequest"
+        />
+        <FriendsSidebar
+          v-model:query="peopleSearchQuery"
+          :active-context-menu-id="activeContextMenuId"
+          :context-menu-key="contextMenuKey"
+          :expanded="expandedSidebarPanel !== 'messages'"
+          :friend-avatar-urls="friendAvatarUrls"
+          :friends="isPeopleSearchActive ? filteredFriends : visibleFriends"
+          :incoming-requests="incomingFriendRequests"
+          :is-adding="isAddingFriend"
+          :is-loading="isLoading"
+          :is-opening="isOpeningDirect"
+          :is-refreshing="isRefreshingFriends"
+          :is-responding="isRespondingToFriendRequest"
+          :is-searching="isSearchingUsers"
+          :people-search-active="isPeopleSearchActive"
+          :results="newPeopleSearchResults"
+          :search-open="isPeopleSearchOpen"
+          @update:search-open="isPeopleSearchOpen = $event"
+          @drag-end="(event, info) => handlePanelHeaderDragEnd('friends', event, info)"
+          @wheel="handlePanelHeaderWheel('friends', $event)"
+          @toggle="toggleSidebarPanel('friends')"
+          @open="openFriendConversation"
+          @profile="(friend) => openContactProfile(friend.id, friend.name)"
+          @remove="removeFriend"
+          @add="addFriend"
+          @respond="respondToFriendRequest"
+          @context-open="handleContextMenuOpen"
+          @context-activate="activateContextMenu"
+        />
       </aside>
-
-      <section
-        class="flex h-full min-h-0 min-w-0 flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-        :class="
-          hasSelectedConversation
-            ? 'relative translate-x-0 opacity-100'
-            : 'pointer-events-none absolute inset-0 translate-x-3 opacity-0 lg:static lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto'
+      <ChatPane
+        ref="chatPane"
+        v-model:content="messageContent"
+        :conversation="selectedConversation"
+        :pending-friend="pendingDirectFriend"
+        :selected-friend="selectedFriend"
+        :selected-title="selectedTitle"
+        :selected-is-group="selectedIsGroup"
+        :group-avatar-url="selectedGroupAvatarUrl"
+        :friend-avatar-urls="friendAvatarUrls"
+        :messages="messages"
+        :loading="isLoadingMessages"
+        :loading-older="isLoadingOlderMessages"
+        :sending="isSendingMessage"
+        :call-active="isCallLaunchActive"
+        :notification-warning="showNotificationPermissionWarning"
+        :can-request-notification-permission="canRequestNotificationPermission"
+        :is-desktop="isDesktop"
+        :prefers-reduced-motion="prefersReducedMotion"
+        :is-draft="isDraftDirectConversation"
+        :should-animate="shouldAnimateMessage"
+        :is-local="isLocalMessage"
+        :format-time="formatMessageTime"
+        @back="
+          selectedConversation = null;
+          pendingDirectFriend = null;
         "
-        aria-labelledby="conversation-title"
-      >
-        <AnimatePresence mode="wait">
-          <motion.div
-            v-if="selectedConversation || pendingDirectFriend"
-            :key="selectedConversation?.id ?? `pending-${pendingDirectFriend?.id}`"
-            :initial="chatStateInitial"
-            :animate="{ opacity: 1, y: 0, scale: 1 }"
-            :exit="chatStateExit"
-            :transition="chatStateTransition"
-            class="flex h-full min-h-0 flex-col"
-          >
-            <header class="flex min-h-16 items-center gap-3 border-b border-[#E5EFEC] px-4 sm:px-6">
-              <Button
-                variant="ghost"
-                size="icon"
-                class="harbor-ghost-action -ml-2 rounded-full text-[#27595D] lg:hidden"
-                aria-label="Back to conversations"
-                @click="
-                  selectedConversation = null;
-                  pendingDirectFriend = null;
-                "
-              >
-                <ArrowLeft class="size-5" />
-              </Button>
-              <button
-                v-if="selectedFriend && !pendingDirectFriend"
-                type="button"
-                class="harbor-ghost-action -mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                :aria-label="`View profile for ${selectedFriend.name}`"
-                @click="openSelectedContactProfile"
-              >
-                <span
-                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[#0B7A75]"
-                >
-                  <img
-                    v-if="friendAvatarUrls[selectedFriend.id]"
-                    :src="friendAvatarUrls[selectedFriend.id]"
-                    alt=""
-                    class="size-full object-cover"
-                  />
-                  <span v-else class="text-xs font-semibold">{{ userInitials(selectedFriend.name) }}</span>
-                </span>
-                <span class="min-w-0">
-                  <span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span>
-                  <span class="block truncate text-xs text-[#61777B]">{{
-                    isDraftDirectConversation ? 'Draft direct chat' : 'Direct conversation'
-                  }}</span>
-                </span>
-              </button>
-              <button
-                v-else-if="selectedIsGroup"
-                type="button"
-                class="harbor-ghost-action -mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                :aria-label="`View group info for ${selectedTitle}`"
-                @click="openGroupProfile()"
-              >
-                <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#102F35] text-white">
-                  <UsersRound class="size-4" />
-                </span>
-                <span class="min-w-0">
-                  <span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span>
-                  <span class="block truncate text-xs text-[#61777B]">Group conversation</span>
-                </span>
-              </button>
-              <div v-else class="flex min-w-0 flex-1 items-center gap-3">
-                <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-[#0B7A75]">
-                  <span class="text-xs font-semibold">{{ userInitials(selectedFriend?.name) }}</span>
-                </span>
-                <div class="min-w-0">
-                  <h2 id="conversation-title" class="truncate font-semibold">{{ selectedTitle }}</h2>
-                  <p class="truncate text-xs text-[#61777B]">
-                    {{ pendingDirectFriend ? 'Direct-message request pending' : 'Draft direct chat' }}
-                  </p>
-                </div>
-              </div>
-              <Button
-                v-if="selectedFriend && !pendingDirectFriend"
-                variant="ghost"
-                size="icon"
-                class="harbor-ghost-action rounded-full text-[#0B7A75]"
-                :aria-label="`Start call with ${selectedFriend.name}`"
-                @click="startSelectedConversationCall"
-              >
-                <Phone class="size-5" />
-              </Button>
-              <Button
-                v-else-if="selectedIsGroup"
-                variant="ghost"
-                size="icon"
-                class="harbor-ghost-action rounded-full text-[#0B7A75]"
-                :aria-label="`Start call in ${selectedTitle}`"
-                @click="startSelectedConversationCall"
-              >
-                <Phone class="size-5" />
-              </Button>
-            </header>
-
-            <div v-if="selectedConversation" class="flex min-h-0 flex-1 flex-col">
-              <div
-                ref="messagePane"
-                class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
-                aria-label="Message history"
-                @scroll.passive="handleMessageScroll"
-              >
-                <div
-                  v-if="showNotificationPermissionWarning"
-                  class="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] px-3 py-2.5 text-sm text-[#102F35] shadow-sm"
-                >
-                  <p>
-                    {{
-                      canRequestNotificationPermission
-                        ? 'Enable notifications for messages and calls.'
-                        : 'Notifications are blocked. Enable them in your browser settings.'
-                    }}
-                  </p>
-                  <Button
-                    v-if="canRequestNotificationPermission"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    class="harbor-ghost-action h-8 shrink-0 rounded-lg px-2 font-bold text-[#0B7A75]"
-                    @click="requestNotificationPermission"
-                  >
-                    Enable
-                  </Button>
-                </div>
-                <div v-if="isLoadingOlderMessages" class="flex justify-center pb-4" aria-live="polite">
-                  <LoadingRipple class="size-5 text-[#0B7A75]" />
-                  <span class="sr-only">Loading older messages</span>
-                </div>
-                <div v-if="isLoadingMessages" class="flex h-full items-center justify-center" aria-live="polite">
-                  <LoadingRipple class="size-7 text-[#0B7A75]" />
-                  <span class="sr-only">Loading messages</span>
-                </div>
-                <p v-else-if="!messages.length" class="py-10 text-center text-sm text-[#61777B]">
-                  No messages yet. Start the conversation.
-                </p>
-                <ol v-else class="space-y-4">
-                  <motion.li
-                    v-for="message in messages"
-                    :key="message.sequence"
-                    :initial="
-                      shouldAnimateMessage(message) && !prefersReducedMotion
-                        ? { opacity: 0, y: 10, scale: 0.97 }
-                        : false
-                    "
-                    :animate="{ opacity: 1, y: 0, scale: 1 }"
-                    :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }"
-                    :layout="!prefersReducedMotion"
-                    class="flex"
-                    :class="isLocalMessage(message) ? 'justify-end' : 'justify-start'"
-                  >
-                    <article
-                      class="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm sm:max-w-[70%]"
-                      :class="
-                        isLocalMessage(message)
-                          ? 'rounded-br-md bg-[#0B7A75] text-white'
-                          : 'rounded-bl-md border border-[#D8E7E3] bg-[#F6FAF7] text-[#102F35]'
-                      "
-                    >
-                      <div
-                        class="mb-1 flex items-center gap-2 text-xs"
-                        :class="isLocalMessage(message) ? 'text-white/80' : 'text-[#61777B]'"
-                      >
-                        <span class="font-semibold">{{ isLocalMessage(message) ? 'You' : message.senderName }}</span>
-                        <time :datetime="message.createdAt">{{ formatMessageTime(message.createdAt) }}</time>
-                      </div>
-                      <p class="whitespace-pre-wrap break-words leading-5">{{ message.content }}</p>
-                    </article>
-                  </motion.li>
-                </ol>
-              </div>
-
-              <div class="border-t border-[#E5EFEC] bg-[#FBFCF8] px-4 py-3 sm:px-6">
-                <p class="mb-2 text-xs text-[#61777B]">Messages stored by OpenMeet</p>
-                <form class="flex items-end gap-2" @submit.prevent="sendMessage">
-                  <textarea
-                    ref="messageComposer"
-                    v-model="messageContent"
-                    rows="1"
-                    maxlength="2000"
-                    placeholder="Write a message"
-                    aria-label="Message"
-                    class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-[#D8E7E3] bg-white px-3 py-2.5 text-sm text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:outline-none focus-visible:ring-0"
-                    @keydown.enter.exact.prevent="sendMessage"
-                  />
-                  <span ref="emojiPickerControl" class="relative shrink-0">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      class="harbor-ghost-action size-11 rounded-xl text-[#0B7A75]"
-                      :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isEmojiPickerOpen }"
-                      :aria-expanded="isEmojiPickerOpen"
-                      aria-controls="emoji-picker"
-                      aria-label="Choose emoji"
-                      title="Choose emoji"
-                      @click="toggleEmojiPicker"
-                    >
-                      <Smile class="size-5" />
-                    </Button>
-                    <AnimatePresence>
-                      <motion.div
-                        v-if="isEmojiPickerOpen"
-                        id="emoji-picker"
-                        ref="emojiPickerPopover"
-                        :initial="prefersReducedMotion ? false : { opacity: 0, y: 8, scale: 0.96 }"
-                        :animate="{ opacity: 1, y: 0, scale: 1 }"
-                        :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 6, scale: 0.96 }"
-                        :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }"
-                        class="fixed inset-x-3 bottom-20 z-30 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_18px_48px_rgba(16,47,53,0.18)] md:absolute md:inset-x-auto md:bottom-full md:right-0 md:mb-2 md:w-[min(22rem,calc(100vw-2rem))]"
-                      >
-                        <div
-                          ref="emojiPickerMount"
-                          class="max-h-[min(26rem,55dvh)] overflow-y-auto [&>emoji-picker]:w-full"
-                        />
-                      </motion.div>
-                    </AnimatePresence>
-                  </span>
-                  <Button
-                    type="submit"
-                    class="harbor-primary-action h-11 rounded-xl bg-[#0B7A75] px-4 text-white"
-                    :disabled="!messageContent.trim() || isLoadingMessages || isSendingMessage"
-                  >
-                    {{ isSendingMessage ? 'Sending...' : 'Send' }}
-                  </Button>
-                </form>
-              </div>
-            </div>
-
-            <div v-else class="flex flex-1 items-center justify-center px-6 py-10 text-center">
-              <p class="max-w-sm rounded-xl bg-[#FFF8E8] px-4 py-3 text-sm text-[#80601D]">
-                Waiting for {{ pendingDirectFriend?.name }} to accept this direct-message request.
-              </p>
-            </div>
-          </motion.div>
-
-          <motion.div
-            v-else
-            key="empty-conversation"
-            :initial="chatStateInitial"
-            :animate="{ opacity: 1, y: 0, scale: 1 }"
-            :exit="chatStateExit"
-            :transition="chatStateTransition"
-            class="flex h-full flex-1 items-center justify-center px-6 py-10 text-center"
-          >
-            <div class="max-w-sm">
-              <span class="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#E6F4F1] text-[#0B7A75]">
-                <MessageCircleMore class="size-7" />
-              </span>
-              <h2 id="conversation-title" class="mt-5 text-xl font-semibold">Choose a conversation</h2>
-              <p class="mt-2 text-sm leading-6 text-[#61777B]">
-                Select a conversation or an accepted friend to manage its secure access.
-              </p>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </section>
-
-      <aside
-        class="hidden h-full min-h-0 overflow-y-auto border-l border-[#D8E7E3] bg-[#FBFCF8] lg:flex lg:flex-col"
-        aria-label="Conversation details"
-      >
-        <div class="border-b border-[#E5EFEC] px-5 py-5">
-          <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">Details</p>
-          <h2 class="mt-1 font-semibold">
-            {{ selectedConversation || pendingDirectFriend ? selectedTitle : 'Your workspace' }}
-          </h2>
-        </div>
-        <div v-if="selectedConversation || pendingDirectFriend" class="space-y-5 p-5">
-          <div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
-            <p class="text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Message storage</p>
-            <div class="mt-3 flex gap-3">
-              <ShieldCheck class="size-5 shrink-0 text-[#0B7A75]" />
-              <p class="text-sm leading-5 text-[#4E6B70]">Messages stored by OpenMeet.</p>
-            </div>
-          </div>
-          <div v-if="selectedIsGroup" class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
-            <p class="text-sm font-semibold">Group calls</p>
-            <p class="mt-1 text-sm leading-5 text-[#61777B]">Start a call with this group.</p>
-          </div>
-          <Button
-            v-if="selectedConversation && !pendingDirectFriend"
-            class="harbor-primary-action w-full rounded-full bg-[#0B7A75] text-white"
-            @click="startSelectedConversationCall"
-          >
-            <Phone class="size-4" />
-            Start call
-          </Button>
-        </div>
-        <div v-else class="p-5 text-sm leading-6 text-[#61777B]">
-          Create group conversations, review direct-message requests, or select an accepted friend.
-        </div>
-
-        <div class="mt-auto border-t border-[#E5EFEC] p-4">
-          <div class="flex items-center gap-3 rounded-xl bg-white p-3">
-            <span
-              class="flex size-9 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
-              >{{ userInitials(currentUser?.name) }}</span
-            >
-            <span class="min-w-0">
-              <strong class="block truncate text-sm">{{ currentUser?.name }}</strong>
-              <span class="block truncate text-xs text-[#61777B]">{{ currentUser?.email }}</span>
-            </span>
-          </div>
-        </div>
-      </aside>
+        @profile="openSelectedContactProfile"
+        @group-info="openGroupProfile()"
+        @call="startSelectedConversationCall"
+        @scroll-top="handleMessageScroll"
+        @send="sendMessage"
+        @request-notifications="requestNotificationPermission"
+      />
+      <DetailsPane
+        ref="detailsPane"
+        :access-token="accessToken ?? undefined"
+        :avatar-url="selectedGroupAvatarUrl"
+        :current-user-id="currentUser?.id"
+        :current-user="currentUser"
+        :group-error="groupProfileError"
+        :group-info="groupInfo"
+        :group-loading="isGroupProfileLoading"
+        :group-members="groupMembers"
+        :group-mutation-busy="isGroupMutationBusy"
+        :begin-mutation="beginGroupMutation"
+        :end-mutation="endGroupMutation"
+        :friends="friends"
+        :pending-friend="pendingDirectFriend"
+        :selected-conversation="selectedConversation"
+        :selected-is-group="selectedIsGroup"
+        :selected-title="selectedTitle"
+        :call-active="isCallLaunchActive"
+        @call="startSelectedConversationCall"
+        @call-member="startMemberCall"
+        @open-profile="openContactProfile"
+        @refresh-group="refreshSelectedGroup"
+        @group-removed="handleGroupRemoved"
+      />
     </motion.div>
-
-    <Dialog :open="isGroupDialogOpen" @update:open="isGroupDialogOpen = $event">
-      <HarborDialogContent
-        overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-        class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
-      >
-        <DialogHeader>
-          <DialogTitle>Create group</DialogTitle>
-          <DialogDescription class="text-[#61777B]"
-            >Set initial group access. Membership controls remain managed by group admins.</DialogDescription
-          >
-        </DialogHeader>
-        <form class="space-y-5" @submit.prevent="createGroup">
-          <div class="space-y-2">
-            <Label for="group-title" class="text-[#102F35]">Title</Label>
-            <Input
-              id="group-title"
-              v-model="groupTitle"
-              required
-              maxlength="120"
-              placeholder="Group name"
-              class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-          </div>
-          <fieldset class="space-y-2">
-            <legend class="text-sm font-medium text-[#102F35]">Access policy</legend>
-            <label
-              v-for="policy in ['open', 'password', 'friendsOnly'] as GroupAccessPolicy[]"
-              :key="policy"
-              class="flex cursor-pointer items-center gap-3 rounded-xl border border-[#D8E7E3] bg-white px-3 py-3 has-[:checked]:border-[#0B7A75] has-[:checked]:bg-[#EAF7F4]"
-            >
-              <input
-                v-model="groupPolicy"
-                type="radio"
-                name="group-policy"
-                :value="policy"
-                class="size-4 accent-[#0B7A75]"
-              />
-              <span class="text-sm font-medium">{{
-                policy === 'open' ? 'Open' : policy === 'password' ? 'Password' : 'Friends-only'
-              }}</span>
-            </label>
-          </fieldset>
-          <div v-if="groupPolicy === 'password'" class="space-y-2">
-            <Label for="group-password" class="text-[#102F35]">Password</Label>
-            <Input
-              id="group-password"
-              v-model="groupPassword"
-              type="password"
-              required
-              autocomplete="new-password"
-              placeholder="Group password"
-              class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-          </div>
-          <DialogFooter class="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
-              @click="isGroupDialogOpen = false"
-              >Cancel</Button
-            >
-            <Button
-              type="submit"
-              class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
-              :disabled="isCreatingGroup"
-            >
-              {{ isCreatingGroup ? 'Creating...' : 'Create group' }}
-            </Button>
-          </DialogFooter>
-        </form>
-      </HarborDialogContent>
-    </Dialog>
-
-    <Dialog :open="isGroupProfileDialogOpen" @update:open="setGroupProfileDialogOpen">
-      <HarborDialogContent
-        overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-        class="marketing-font flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-4xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
-        @open-auto-focus="preventDialogAutoFocus"
-        @close-auto-focus="preventProfileTriggerFocus"
-      >
-        <DialogHeader>
-          <DialogTitle>Group info</DialogTitle>
-          <DialogDescription class="text-[#61777B]">Members and group access details.</DialogDescription>
-        </DialogHeader>
-
-        <div v-if="isGroupProfileLoading" class="flex min-h-72 items-center justify-center" aria-live="polite">
-          <LoadingRipple class="size-7 text-[#0B7A75]" />
-          <span class="sr-only">Loading group details</span>
-        </div>
-
-        <div
-          v-else-if="groupProfileError"
-          class="rounded-2xl border border-[#F2C7BE] bg-[#FFF4F0] p-4 text-sm text-[#9D4636]"
-          role="alert"
-        >
-          {{ groupProfileError }}
-        </div>
-
-        <div v-else-if="groupInfo" class="min-h-0 space-y-6 overflow-y-auto pr-1">
-          <section
-            class="flex flex-col gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 sm:flex-row sm:items-start sm:p-6"
-          >
-            <span class="flex size-20 shrink-0 items-center justify-center rounded-full bg-[#102F35] text-white">
-              <UsersRound class="size-9" />
-            </span>
-            <div class="min-w-0 flex-1">
-              <h3 class="truncate text-xl font-semibold tracking-[-0.025em]">{{ groupInfo.title }}</h3>
-              <p class="mt-1 text-sm text-[#61777B]">{{ groupAccessPolicyLabel(groupInfo.accessPolicy) }}</p>
-              <div class="mt-4 flex flex-wrap gap-2">
-                <span class="rounded-full bg-[#EAF7F4] px-3 py-1.5 text-xs font-semibold text-[#17645F]">
-                  {{ groupInfo.memberCount }} {{ groupInfo.memberCount === 1 ? 'member' : 'members' }}
-                </span>
-                <span class="rounded-full bg-[#F0F4F3] px-3 py-1.5 text-xs font-semibold text-[#27595D]">
-                  Your role: {{ groupRoleLabel(groupInfo.role) }}
-                </span>
-              </div>
-            </div>
-          </section>
-
-          <section class="grid gap-3 sm:grid-cols-2" aria-label="Group details">
-            <div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
-              <p class="text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Access</p>
-              <p class="mt-2 text-sm font-medium text-[#102F35]">
-                {{ groupAccessPolicyLabel(groupInfo.accessPolicy) }}
-              </p>
-            </div>
-            <div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
-              <p class="text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Created</p>
-              <p class="mt-2 text-sm font-medium text-[#102F35]">{{ formatProfileDate(groupCreatedAt) }}</p>
-            </div>
-          </section>
-
-          <section aria-labelledby="group-members-heading">
-            <div class="mb-3 flex items-baseline justify-between gap-3">
-              <h3 id="group-members-heading" class="text-sm font-semibold text-[#102F35]">Participants</h3>
-              <span class="text-xs text-[#61777B]">{{ groupMembers.length }} listed</span>
-            </div>
-            <div v-if="groupMembers.length" class="overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white">
-              <button
-                v-for="member in groupMembers"
-                :key="member.id"
-                type="button"
-                class="harbor-ghost-action flex w-full items-center gap-3 border-b border-[#E5EFEC] px-4 py-3 text-left last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B7A75]"
-                :aria-label="`View profile for ${member.name}`"
-                @click="openContactProfile(member.id, member.name)"
-              >
-                <span
-                  class="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                >
-                  {{ userInitials(member.name) }}
-                </span>
-                <span class="min-w-0 flex-1">
-                  <span class="block truncate text-sm font-semibold">{{ member.name }}</span>
-                  <span class="block truncate text-xs text-[#61777B]"
-                    >Joined {{ formatProfileDate(member.joinedAt) }}</span
-                  >
-                </span>
-                <span class="flex shrink-0 flex-wrap justify-end gap-1.5">
-                  <span
-                    v-if="member.id === currentUser?.id"
-                    class="rounded-full bg-[#EAF7F4] px-2 py-1 text-[11px] font-semibold text-[#17645F]"
-                  >
-                    You
-                  </span>
-                  <span class="rounded-full bg-[#F0F4F3] px-2 py-1 text-[11px] font-semibold text-[#27595D]">
-                    {{ groupRoleLabel(member.role) }}
-                  </span>
-                </span>
-              </button>
-            </div>
-            <p v-else class="rounded-2xl border border-[#D8E7E3] bg-white p-4 text-sm text-[#61777B]">
-              No participants are listed for this group.
-            </p>
-          </section>
-
-          <section class="rounded-2xl border border-[#D8E7E3] bg-[#F0F7F5] p-4" aria-labelledby="group-media-heading">
-            <p id="group-media-heading" class="text-sm font-semibold text-[#102F35]">Shared media</p>
-            <p class="mt-1 text-sm leading-6 text-[#4E6B70]">No group media yet. Media assets are not available.</p>
-          </section>
-        </div>
-      </HarborDialogContent>
-    </Dialog>
-
-    <Dialog :open="isContactProfileDialogOpen" @update:open="setContactProfileDialogOpen">
-      <HarborDialogContent
-        overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-        class="marketing-font flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-3xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
-        @open-auto-focus="preventDialogAutoFocus"
-        @close-auto-focus="preventProfileTriggerFocus"
-      >
-        <DialogHeader>
-          <DialogTitle>Contact profile</DialogTitle>
-          <DialogDescription class="text-[#61777B]">Profile details shared with accepted friends.</DialogDescription>
-        </DialogHeader>
-
-        <div v-if="isContactProfileLoading" class="flex min-h-64 items-center justify-center" aria-live="polite">
-          <LoadingRipple class="size-7 text-[#0B7A75]" />
-          <span class="sr-only">Loading contact profile</span>
-        </div>
-
-        <div v-else-if="contactProfile" class="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
-          <p
-            v-if="contactProfileError"
-            class="rounded-xl border border-[#F2C7BE] bg-[#FFF4F0] px-4 py-3 text-sm text-[#9D4636]"
-            role="alert"
-          >
-            {{ contactProfileError }}
-          </p>
-          <section
-            class="flex flex-col gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 sm:flex-row sm:items-start sm:p-6"
-          >
-            <span
-              class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
-            >
-              <img
-                v-if="friendAvatarUrls[contactProfile.id]"
-                :src="friendAvatarUrls[contactProfile.id]"
-                alt=""
-                class="size-full object-cover"
-              />
-              <template v-else>{{ userInitials(contactProfile.name) }}</template>
-            </span>
-            <div class="min-w-0 flex-1">
-              <h3 class="truncate text-xl font-semibold tracking-[-0.025em]">{{ contactProfile.name }}</h3>
-              <p class="mt-1 truncate text-sm text-[#61777B]">{{ contactProfile.email }}</p>
-              <p class="mt-4 text-sm leading-6 text-[#4E6B70]">
-                {{ contactProfile.statusMessage || 'No status message.' }}
-              </p>
-              <span
-                class="mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold"
-                :class="contactStatusClass(contactProfile.status)"
-              >
-                <component :is="contactStatusIcon(contactProfile.status)" class="size-4" />
-                {{ contactStatusLabel(contactProfile.status) }}
-              </span>
-            </div>
-          </section>
-
-          <section class="grid gap-3 sm:grid-cols-2" aria-label="Profile activity">
-            <div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
-              <p class="text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Joined</p>
-              <p class="mt-2 text-sm font-medium text-[#102F35]">{{ formatProfileDate(contactProfile.createdAt) }}</p>
-            </div>
-            <div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
-              <p class="text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Last active</p>
-              <p class="mt-2 text-sm font-medium text-[#102F35]">{{ formatProfileDate(contactProfile.lastSeenAt) }}</p>
-            </div>
-          </section>
-
-          <section class="rounded-2xl border border-[#D8E7E3] bg-[#F0F7F5] p-4" aria-labelledby="shared-media-heading">
-            <p id="shared-media-heading" class="text-sm font-semibold text-[#102F35]">Shared media</p>
-            <p class="mt-1 text-sm leading-6 text-[#4E6B70]">
-              No shared media yet. Encrypted attachments are not available, so media cannot be shared in this
-              conversation.
-            </p>
-          </section>
-
-          <DialogFooter class="gap-2 sm:justify-end">
-            <Button
-              class="harbor-primary-action w-full rounded-full bg-[#0B7A75] text-white sm:w-auto"
-              @click="startSelectedConversationCall"
-            >
-              <Phone class="size-4" />
-              Start direct call
-            </Button>
-          </DialogFooter>
-        </div>
-      </HarborDialogContent>
-    </Dialog>
+    <CreateGroupDialog
+      :open="isGroupDialogOpen"
+      :title="groupTitle"
+      :policy="groupPolicy"
+      :password="groupPassword"
+      :member-search="groupMemberSearch"
+      :member-ids="groupMemberIds"
+      :friends="friends"
+      :creating="isCreatingGroup"
+      :prefers-reduced-motion="prefersReducedMotion"
+      @update:open="setCreateGroupDialogOpen"
+      @update:title="groupTitle = String($event)"
+      @update:policy="groupPolicy = $event"
+      @update:password="groupPassword = String($event)"
+      @update:member-search="groupMemberSearch = String($event)"
+      @toggle-member="toggleCreateGroupMember"
+      @submit="createGroup"
+    />
+    <JoinGroupDialog
+      :open="isJoinGroupDialogOpen"
+      :code="joinGroupCode"
+      :password="joinGroupPassword"
+      :preview="joinGroupPreview"
+      :previewing="isPreviewingGroup"
+      :joining="isJoiningGroup"
+      :error="joinGroupError"
+      :prefers-reduced-motion="prefersReducedMotion"
+      :access-label="groupAccessPolicyLabel"
+      @update:open="setJoinGroupDialogOpen"
+      @update:code="joinGroupCode = String($event)"
+      @update:password="joinGroupPassword = String($event)"
+      @invalidate-preview="invalidateJoinGroupPreview"
+      @preview="previewGroupByCode"
+      @join="joinGroupByCode"
+    />
+    <GroupInfoDialog
+      :open="isGroupProfileDialogOpen"
+      :loading="isGroupProfileLoading"
+      :error="groupProfileError"
+      :info="groupInfo"
+      :members="groupMembers"
+      :avatar-url="selectedGroupAvatarUrl"
+      :current-user-id="currentUser?.id"
+      :access-label="groupAccessPolicyLabel"
+      :format-date="formatProfileDate"
+      @update:open="setGroupProfileDialogOpen"
+      @profile="openContactProfile"
+      @add-members="openGroupManagement('add-members')"
+      @quit-group="openGroupManagement('quit-group')"
+      @remove-group="openGroupManagement('remove-group')"
+    />
+    <ContactProfileDialog
+      :open="isContactProfileDialogOpen"
+      :confirmation-open="isContactRemoveConfirmationOpen"
+      :profile="contactProfile"
+      :profile-friend="contactProfileFriend"
+      :loading="isContactProfileLoading"
+      :error="contactProfileError"
+      :removing-id="isRemovingFriend"
+      :opening="isOpeningDirect"
+      :call-active="isCallLaunchActive"
+      :avatar-urls="friendAvatarUrls"
+      :format-date="formatProfileDate"
+      @update:open="setContactProfileDialogOpen"
+      @update:confirmation-open="setContactRemoveConfirmationOpen"
+      @call="startContactProfileCall"
+      @remove="removeProfileFriend"
+    />
   </main>
 </template>

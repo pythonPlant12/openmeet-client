@@ -17,6 +17,7 @@ export enum AuthEventType {
   LOGIN = 'LOGIN',
   LOGOUT = 'LOGOUT',
   REFRESH_TOKEN = 'REFRESH_TOKEN',
+  ACCESS_TOKEN_REFRESHED = 'ACCESS_TOKEN_REFRESHED',
   RETRY = 'RETRY',
   CHECK_SESSION = 'CHECK_SESSION',
   REGISTER = 'REGISTER',
@@ -45,6 +46,7 @@ export type AuthEvents =
   | { type: AuthEventType.REGISTER; email: string; name: string; nickname: string; password: string }
   | { type: AuthEventType.LOGOUT }
   | { type: AuthEventType.REFRESH_TOKEN }
+  | { type: AuthEventType.ACCESS_TOKEN_REFRESHED; accessToken: string }
   | { type: AuthEventType.RETRY }
   | { type: AuthEventType.CHECK_SESSION }
   | { type: AuthEventType.GO_TO_LOGIN }

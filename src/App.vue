@@ -37,6 +37,10 @@ provide('authActor', authActor);
 provide('webrtcActor', webrtcActor);
 
 const handleSessionExpired = () => authActor.send({ type: AuthEventType.LOGOUT });
+const handleAccessTokenRefreshed = (event: Event) => {
+  const accessToken = (event as CustomEvent<string>).detail;
+  if (accessToken) authActor.send({ type: AuthEventType.ACCESS_TOKEN_REFRESHED, accessToken });
+};
 const knownIncomingCallIds = new Set<string>();
 const knownIncomingCallSessionIds = new Set<string>();
 const knownNotificationIds = new Set<string>();
@@ -419,11 +423,7 @@ function handleIncomingCallResolved(event: Event) {
 }
 
 function handleAccessTokenExpired() {
-  if (authActor.snapshot.value.context.refreshToken) {
-    authActor.send({ type: AuthEventType.REFRESH_TOKEN });
-  } else {
-    handleSessionExpired();
-  }
+  authActor.send({ type: AuthEventType.REFRESH_TOKEN });
 }
 
 watch(
@@ -434,7 +434,7 @@ watch(
     void pollIncomingCalls();
     void pollNotifications();
     void updatePresence();
-    socialEventsService.connect(token, handleSocialEvent, refreshSocialState);
+    socialEventsService.connect(handleSocialEvent, refreshSocialState);
     presenceTimer = setInterval(updatePresence, 20_000);
   },
   { immediate: true },
@@ -442,12 +442,14 @@ watch(
 
 onMounted(() => {
   window.addEventListener('openmeet:session-expired', handleSessionExpired);
+  window.addEventListener('openmeet:access-token-refreshed', handleAccessTokenRefreshed);
   window.addEventListener('openmeet:access-token-expired', handleAccessTokenExpired);
   window.addEventListener('openmeet:incoming-call-resolved', handleIncomingCallResolved);
 });
 onUnmounted(() => {
   stopAuthenticatedPolling();
   window.removeEventListener('openmeet:session-expired', handleSessionExpired);
+  window.removeEventListener('openmeet:access-token-refreshed', handleAccessTokenRefreshed);
   window.removeEventListener('openmeet:access-token-expired', handleAccessTokenExpired);
   window.removeEventListener('openmeet:incoming-call-resolved', handleIncomingCallResolved);
 });

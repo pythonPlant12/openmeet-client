@@ -110,6 +110,8 @@ export interface Conversation {
   kind: ConversationKind;
   title: string | null;
   accessPolicy: GroupAccessPolicy | null;
+  groupCode: string | null;
+  avatarUrl: string | null;
   role: string | null;
   otherUserId: string | null;
   messageCount: number;
@@ -122,6 +124,7 @@ export interface CreateGroupRequest {
   title: string;
   accessPolicy: GroupAccessPolicy;
   password?: string;
+  memberIds?: string[];
 }
 
 export interface UpdateGroupPolicyRequest {
@@ -129,10 +132,19 @@ export interface UpdateGroupPolicyRequest {
   password?: string;
 }
 
+export interface UpdateGroupRequest {
+  title?: string;
+  accessPolicy?: GroupAccessPolicy;
+  password?: string;
+}
+
 export interface GroupInfo {
   id: string;
   title: string;
   accessPolicy: GroupAccessPolicy;
+  groupCode: string;
+  avatarUrl: string | null;
+  createdAt: string;
   memberCount: number;
   isMember: boolean;
   role: string | null;
@@ -182,49 +194,75 @@ export class SocialApiError extends Error {
   }
 }
 
-async function request<T>(path: string, accessToken: string, init?: RequestInit): Promise<T> {
-  const performRequest = (token: string) =>
+async function refreshAccessToken(): Promise<string> {
+  const previousAccessToken = cookieUtils.get('accessToken');
+  const refreshToken = cookieUtils.get('refreshToken');
+  if (!refreshToken) {
+    expireSession();
+    throw new SocialApiError('Missing refresh token', 401);
+  }
+
+  const refreshRequest =
+    refreshInFlight?.refreshToken === refreshToken
+      ? refreshInFlight
+      : {
+          refreshToken,
+          promise: authApi.refresh(refreshToken).then(({ access_token }) => access_token),
+        };
+  refreshInFlight = refreshRequest;
+
+  let accessToken: string;
+  try {
+    accessToken = await refreshRequest.promise;
+  } catch (error) {
+    if (cookieUtils.get('accessToken') === previousAccessToken && cookieUtils.get('refreshToken') === refreshToken) {
+      expireSession();
+    }
+    throw error;
+  } finally {
+    if (refreshInFlight === refreshRequest) refreshInFlight = null;
+  }
+
+  const currentAccessToken = cookieUtils.get('accessToken');
+  if (cookieUtils.get('refreshToken') !== refreshToken) {
+    throw new SocialApiError('Session changed while refreshing', 401);
+  }
+  if (currentAccessToken !== previousAccessToken) {
+    if (currentAccessToken) return currentAccessToken;
+    throw new SocialApiError('Session changed while refreshing', 401);
+  }
+
+  cookieUtils.set('accessToken', accessToken, 1);
+  window.dispatchEvent(new CustomEvent<string>('openmeet:access-token-refreshed', { detail: accessToken }));
+  return accessToken;
+}
+
+async function sendAuthorizedRequest(send: (accessToken: string) => Promise<Response>): Promise<Response> {
+  let accessToken = cookieUtils.get('accessToken') ?? (await refreshAccessToken());
+  let response = await send(accessToken);
+
+  if (response.status === 401) {
+    accessToken = await refreshAccessToken();
+    response = await send(accessToken);
+  }
+
+  if (response.status === 401 && cookieUtils.get('accessToken') === accessToken && cookieUtils.get('refreshToken')) {
+    expireSession();
+  }
+  return response;
+}
+
+async function request<T>(path: string, _accessToken: string, init?: RequestInit): Promise<T> {
+  const response = await sendAuthorizedRequest((accessToken) =>
     fetch(`${API_BASE_URL}/social${path}`, {
       ...init,
       headers: {
         ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${accessToken}`,
         ...init?.headers,
       },
-    });
-
-  let response = await performRequest(cookieUtils.get('accessToken') || accessToken);
-  const refreshToken = cookieUtils.get('refreshToken');
-  if (response.status === 401 && refreshToken) {
-    const refreshRequest =
-      refreshInFlight?.refreshToken === refreshToken
-        ? refreshInFlight
-        : {
-            refreshToken,
-            promise: authApi.refresh(refreshToken).then(({ access_token }) => access_token),
-          };
-    refreshInFlight = refreshRequest;
-
-    let refreshedAccessToken: string;
-    try {
-      refreshedAccessToken = await refreshRequest.promise;
-    } catch (error) {
-      expireSession();
-      throw error;
-    } finally {
-      if (refreshInFlight === refreshRequest) refreshInFlight = null;
-    }
-
-    if (cookieUtils.get('refreshToken') !== refreshToken) {
-      throw new SocialApiError('Session changed while refreshing', 401);
-    }
-    cookieUtils.set('accessToken', refreshedAccessToken, 1);
-    response = await performRequest(refreshedAccessToken);
-  }
-
-  if (response.status === 401) {
-    expireSession();
-  }
+    }),
+  );
 
   if (!response.ok) {
     const message = (await response.text()) || `Request failed with status ${response.status}`;
@@ -241,10 +279,12 @@ export const socialApi = {
     return `${API_BASE_URL}${path}`;
   },
 
-  async loadAvatar(accessToken: string, path: string) {
-    const response = await fetch(this.resolveMediaUrl(path)!, {
-      headers: { Authorization: `Bearer ${cookieUtils.get('accessToken') || accessToken}` },
-    });
+  async loadAvatar(_accessToken: string, path: string) {
+    const response = await sendAuthorizedRequest((accessToken) =>
+      fetch(this.resolveMediaUrl(path)!, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }),
+    );
     if (!response.ok) {
       throw new SocialApiError((await response.text()) || 'Could not load avatar', response.status);
     }
@@ -384,6 +424,13 @@ export const socialApi = {
     return request<GroupInfo>(`/conversations/groups/${groupId}/info`, accessToken);
   },
 
+  getGroupInfoByCode(accessToken: string, code: string) {
+    return request<GroupInfo>('/conversations/groups/code/info', accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ groupCode: code }),
+    });
+  },
+
   listGroupMembers(accessToken: string, groupId: string) {
     return request<GroupMember[]>(`/conversations/groups/${groupId}/members`, accessToken);
   },
@@ -395,8 +442,22 @@ export const socialApi = {
     });
   },
 
+  joinGroupByCode(accessToken: string, code: string, password?: string) {
+    return request<Conversation>('/conversations/groups/code/join', accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ groupCode: code, password }),
+    });
+  },
+
   leaveGroup(accessToken: string, groupId: string) {
     return request<void>(`/conversations/groups/${groupId}/leave`, accessToken, { method: 'POST' });
+  },
+
+  updateGroup(accessToken: string, groupId: string, group: UpdateGroupRequest) {
+    return request<Conversation>(`/conversations/groups/${groupId}`, accessToken, {
+      method: 'PATCH',
+      body: JSON.stringify(group),
+    });
   },
 
   updateGroupPolicy(accessToken: string, groupId: string, policy: UpdateGroupPolicyRequest) {
@@ -404,6 +465,16 @@ export const socialApi = {
       method: 'POST',
       body: JSON.stringify(policy),
     });
+  },
+
+  deleteGroup(accessToken: string, groupId: string) {
+    return request<void>(`/conversations/groups/${groupId}`, accessToken, { method: 'DELETE' });
+  },
+
+  uploadGroupAvatar(accessToken: string, groupId: string, avatar: File) {
+    const body = new FormData();
+    body.append('avatar', avatar);
+    return request<Conversation>(`/conversations/groups/${groupId}/avatar`, accessToken, { method: 'POST', body });
   },
 
   addGroupMember(accessToken: string, groupId: string, userId: string) {
@@ -447,8 +518,10 @@ export const socialApi = {
     });
   },
 
-  listConversationMessages(accessToken: string, conversationId: string, before?: number) {
-    const query = before === undefined ? '' : `?before=${encodeURIComponent(before)}`;
+  listConversationMessages(accessToken: string, conversationId: string, before?: number, limit = 50) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (before !== undefined) params.set('before', String(before));
+    const query = `?${params.toString()}`;
     return request<ConversationMessagesResponse>(`/conversations/${conversationId}/messages${query}`, accessToken);
   },
 

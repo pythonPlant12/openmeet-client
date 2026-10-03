@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertCircle, ArrowLeft, ArrowRight, Video } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
 
@@ -27,6 +27,15 @@ const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
 const passwordMismatch = ref(false);
+const emailInput = ref<{ focus: () => void } | null>(null);
+
+watch(
+  isCheckingSession,
+  (checkingSession) => {
+    if (!checkingSession) nextTick(() => emailInput.value?.focus());
+  },
+  { immediate: true },
+);
 
 const handleRegister = () => {
   if (password.value !== confirmPassword.value) {
@@ -145,6 +154,7 @@ const goToLogin = () => {
           <div class="space-y-2">
             <Label for="email" class="text-[#27595D]">{{ t('auth.email') }}</Label>
             <Input
+              ref="emailInput"
               id="email"
               v-model="email"
               type="email"
@@ -220,7 +230,7 @@ const goToLogin = () => {
           class="mt-6 flex flex-col gap-3 border-t border-[#D8E7E3] pt-6 text-sm sm:flex-row sm:items-center sm:justify-between"
         >
           <p class="text-[#61777B]">
-            <SplitText class="mr-2" as="span" :text="t('auth.register.alreadyRegistered')" />
+            <span class="mr-2">{{ t('auth.register.alreadyRegistered') }}</span>
             <button
               type="button"
               class="font-semibold text-[#0B7A75] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"

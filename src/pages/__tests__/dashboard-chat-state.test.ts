@@ -12,6 +12,8 @@ const first: Conversation = {
   kind: 'direct',
   title: null,
   accessPolicy: null,
+  groupCode: null,
+  avatarUrl: null,
   role: null,
   otherUserId: 'friend-1',
   messageCount: 0,

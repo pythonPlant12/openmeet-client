@@ -209,7 +209,7 @@ onUnmounted(() => {
   <Dialog :open="open" :modal="false">
     <DialogContent
       overlay-class="pointer-events-none bg-white/55 backdrop-blur-[2px]"
-      class="marketing-font fixed left-1/2 top-1/2 max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border-transparent bg-white text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.14)] sm:max-w-lg"
+      class="marketing-font fixed left-1/2 top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border-transparent bg-white text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.14)] sm:max-w-lg"
     >
       <DialogHeader>
         <DialogTitle class="flex items-center justify-center sm:justify-start gap-2">

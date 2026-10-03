@@ -2,7 +2,7 @@ import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
-import DashboardFriendsPanel from '@/components/dashboard-page/DashboardFriendsPanel.vue';
+import DashboardFriendsPanel from '@/components/dashboard-page/friends/DashboardFriendsPanel.vue';
 import type { Friend, FriendRequest } from '@/services/social-api';
 
 const friends: Friend[] = Array.from({ length: 7 }, (_, index) => ({

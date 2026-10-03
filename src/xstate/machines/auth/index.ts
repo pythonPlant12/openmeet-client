@@ -18,18 +18,21 @@ const registerActor = fromPromise<AuthResponse, { email: string; name: string; n
 
 const checkSessionActor = fromPromise<
   User & { newAccessToken?: string },
-  { accessToken: string; refreshToken: string | null }
+  { accessToken: string | null; refreshToken: string | null }
 >(async ({ input }) => {
   return authApi.me(input.accessToken, input.refreshToken ?? undefined);
 });
 
-const refreshTokenActor = fromPromise<string, { refreshToken: string }>(async ({ input }) => {
+const refreshTokenActor = fromPromise<string, { refreshToken: string | null }>(async ({ input }) => {
+  if (!input.refreshToken || cookieUtils.get('refreshToken') !== input.refreshToken) {
+    throw new Error('Refresh token changed');
+  }
   const response = await authApi.refresh(input.refreshToken);
   return response.access_token;
 });
 
 const logoutActor = fromPromise<void, { refreshToken: string | null }>(async ({ input }) => {
-  if (input.refreshToken) {
+  if (input.refreshToken && cookieUtils.get('refreshToken') === input.refreshToken) {
     await authApi.logout(input.refreshToken);
   }
 });
@@ -73,6 +76,17 @@ export const authMachine = setup({
       accessToken: ({ event }) => (event as any).output,
     }),
 
+    setRefreshedAccessToken: assign({
+      accessToken: ({ event }) => (event as { accessToken: string }).accessToken,
+    }),
+
+    reloadStoredTokens: assign({
+      user: null,
+      accessToken: () => cookieUtils.get('accessToken'),
+      refreshToken: () => cookieUtils.get('refreshToken'),
+      error: null,
+    }),
+
     setError: assign({
       error: ({ event }) => {
         const error = (event as any).error;
@@ -100,6 +114,10 @@ export const authMachine = setup({
       }
     },
 
+    saveAccessTokenToStorage: ({ context }) => {
+      if (context.accessToken) cookieUtils.set('accessToken', context.accessToken, 1);
+    },
+
     clearTokensFromStorage: () => {
       cookieUtils.remove('accessToken');
       cookieUtils.remove('refreshToken');
@@ -125,7 +143,20 @@ export const authMachine = setup({
   },
 
   guards: {
-    hasAuthTokens: ({ context }) => !!context.accessToken,
+    hasAuthTokens: ({ context }) => !!context.accessToken || !!context.refreshToken,
+    validationMatchesSession: ({ context, event }) => {
+      const newAccessToken = (event as any).output?.newAccessToken;
+      return (
+        cookieUtils.get('refreshToken') === context.refreshToken &&
+        (newAccessToken || cookieUtils.get('accessToken') === context.accessToken)
+      );
+    },
+    refreshTokenMatchesSession: ({ context }) =>
+      !!context.refreshToken && cookieUtils.get('refreshToken') === context.refreshToken,
+    logoutMatchesSession: ({ context }) =>
+      context.refreshToken
+        ? cookieUtils.get('refreshToken') === context.refreshToken
+        : cookieUtils.get('refreshToken') === null && cookieUtils.get('accessToken') === context.accessToken,
   },
 }).createMachine({
   id: 'auth',
@@ -162,14 +193,28 @@ export const authMachine = setup({
           accessToken: context.accessToken!,
           refreshToken: context.refreshToken,
         }),
-        onDone: {
-          target: 'authenticated',
-          actions: ['setUserFromSession', 'saveTokensToStorage'],
-        },
-        onError: {
-          target: 'unauthenticated',
-          actions: ['clearAuth', 'clearTokensFromStorage'],
-        },
+        onDone: [
+          {
+            guard: 'validationMatchesSession',
+            target: 'authenticated',
+            actions: ['setUserFromSession', 'saveTokensToStorage'],
+          },
+          {
+            target: 'checkingSession',
+            actions: 'reloadStoredTokens',
+          },
+        ],
+        onError: [
+          {
+            guard: 'validationMatchesSession',
+            target: 'unauthenticated',
+            actions: ['clearAuth', 'clearTokensFromStorage'],
+          },
+          {
+            target: 'checkingSession',
+            actions: 'reloadStoredTokens',
+          },
+        ],
       },
     },
 
@@ -280,22 +325,45 @@ export const authMachine = setup({
         REFRESH_TOKEN: {
           target: 'refreshingToken',
         },
+        ACCESS_TOKEN_REFRESHED: {
+          actions: ['setRefreshedAccessToken', 'saveAccessTokenToStorage'],
+        },
       },
     },
 
     refreshingToken: {
       description: 'Refreshing authentication token',
+      on: {
+        ACCESS_TOKEN_REFRESHED: {
+          target: 'authenticated',
+          actions: ['setRefreshedAccessToken', 'saveAccessTokenToStorage'],
+        },
+      },
       invoke: {
         src: 'refreshTokenActor',
-        input: ({ context }) => ({ refreshToken: context.refreshToken! }),
-        onDone: {
-          target: 'authenticated',
-          actions: ['setAccessToken', 'saveTokensToStorage'],
-        },
-        onError: {
-          target: 'unauthenticated',
-          actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
-        },
+        input: ({ context }) => ({ refreshToken: context.refreshToken }),
+        onDone: [
+          {
+            guard: 'refreshTokenMatchesSession',
+            target: 'authenticated',
+            actions: ['setAccessToken', 'saveAccessTokenToStorage'],
+          },
+          {
+            target: 'checkingSession',
+            actions: 'reloadStoredTokens',
+          },
+        ],
+        onError: [
+          {
+            guard: 'refreshTokenMatchesSession',
+            target: 'unauthenticated',
+            actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
+          },
+          {
+            target: 'checkingSession',
+            actions: 'reloadStoredTokens',
+          },
+        ],
       },
     },
 
@@ -304,14 +372,28 @@ export const authMachine = setup({
       invoke: {
         src: 'logoutActor',
         input: ({ context }) => ({ refreshToken: context.refreshToken }),
-        onDone: {
-          target: 'unauthenticated',
-          actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
-        },
-        onError: {
-          target: 'unauthenticated',
-          actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
-        },
+        onDone: [
+          {
+            guard: 'logoutMatchesSession',
+            target: 'unauthenticated',
+            actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
+          },
+          {
+            target: 'checkingSession',
+            actions: 'reloadStoredTokens',
+          },
+        ],
+        onError: [
+          {
+            guard: 'logoutMatchesSession',
+            target: 'unauthenticated',
+            actions: ['clearAuth', 'clearTokensFromStorage', 'navigateToLogin'],
+          },
+          {
+            target: 'checkingSession',
+            actions: 'reloadStoredTokens',
+          },
+        ],
       },
     },
   },
