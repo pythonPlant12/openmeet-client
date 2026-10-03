@@ -93,6 +93,7 @@ The WebRTC service manages peer connections to the SFU server:
 - **Media Controls**: Toggle audio/video tracks
 
 **Key Methods:**
+
 - `initializeMedia()`: Initialize local media devices
 - `createPeerConnection()`: Create WebRTC peer connection
 - `handleOffer()`: Process SDP offers from server
@@ -109,6 +110,7 @@ WebSocket-based signaling for call setup and control:
 - **Event Handlers**: Publish/subscribe pattern for message handling
 
 **Message Types:**
+
 - `join`: Join a room
 - `offer/answer`: SDP negotiation
 - `iceCandidate`: ICE candidates
@@ -121,6 +123,7 @@ WebSocket-based signaling for call setup and control:
 XState machine managing WebRTC lifecycle:
 
 **States:**
+
 - `idle`: Initial state, no connection
 - `initializingMedia`: Requesting camera/microphone access
 - `mediaReady`: Media initialized, ready to join
@@ -131,6 +134,7 @@ XState machine managing WebRTC lifecycle:
 - `error`: Error state
 
 **Events:**
+
 - `INIT_MEDIA`: Initialize media devices
 - `JOIN_ROOM`: Join a room
 - `LEAVE_ROOM`: Leave current room
@@ -140,20 +144,26 @@ XState machine managing WebRTC lifecycle:
 ### 4. Composables
 
 #### `useWebrtc.ts`
+
 Reactive interface to WebRTC state machine:
+
 - Exposes state and context as computed properties
 - Provides action methods (initMedia, joinRoom, etc.)
 - Type-safe event dispatching
 
 #### `useAuth.ts`
+
 Authentication management:
+
 - Login/logout functionality
 - JWT token storage and refresh
 - Session persistence
 - Protected route guards
 
 #### `useMediaDevices.ts`
+
 Media device management:
+
 - Enumerate available devices
 - Device selection and switching
 - Device permissions handling
@@ -163,6 +173,7 @@ Media device management:
 Main interface for video calls:
 
 **Features:**
+
 - Video grid layout for participants
 - Local video preview
 - Media controls (mute, camera, screen share)
@@ -171,6 +182,7 @@ Main interface for video calls:
 - Connection status indicators
 
 **Child Components:**
+
 - `VideoGrid.vue`: Responsive grid layout for video tiles
 - `ParticipantTile.vue`: Individual participant video/audio
 - `MeetingControls.vue`: Control bar (mute, camera, etc.)
@@ -187,6 +199,7 @@ Main interface for video calls:
 ### Setup
 
 1. Install pnpm and dependencies:
+
 ```bash
 cd openmeet-client
 npm install --global pnpm@11.20.0
@@ -194,11 +207,13 @@ pnpm install --frozen-lockfile
 ```
 
 2. Configure environment:
+
 ```bash
 cp .env.example .env.development
 ```
 
 Edit `.env.development`:
+
 ```env
 VITE_SFU_WSS_URL=ws://localhost:8081/ws
 VITE_STUN_URL=stun:stun.l.google.com:19302
@@ -209,6 +224,7 @@ VITE_LANDING_PAGE=true
 ```
 
 3. Start development server:
+
 ```bash
 pnpm dev
 ```
@@ -238,6 +254,7 @@ pnpm type-check       # Type-check without building
 ## WebRTC Flow
 
 ### 1. Initialization
+
 ```
 User opens app
   ↓
@@ -251,6 +268,7 @@ Media ready
 ```
 
 ### 2. Joining a Room
+
 ```
 Enter room ID and name
   ↓
@@ -272,6 +290,7 @@ Connection established
 ```
 
 ### 3. Late Joiner Flow
+
 ```
 New participant joins
   ↓
@@ -287,6 +306,7 @@ Display remote video/audio
 ```
 
 ### 4. Media Control
+
 ```
 User clicks mute/unmute
   ↓
@@ -305,19 +325,31 @@ Update UI for all participants
 
 ```typescript
 // Login
-POST /auth/login
-Body: { email, password }
-Response: { access_token, refresh_token }
+POST / auth / login;
+Body: {
+  (email, password);
+}
+Response: {
+  (access_token, refresh_token);
+}
 
 // Register
-POST /auth/register
-Body: { email, password, name }
-Response: { access_token, refresh_token }
+POST / auth / register;
+Body: {
+  (email, password, name);
+}
+Response: {
+  (access_token, refresh_token);
+}
 
 // Refresh token
-POST /auth/refresh
-Body: { refresh_token }
-Response: { access_token }
+POST / auth / refresh;
+Body: {
+  refresh_token;
+}
+Response: {
+  access_token;
+}
 ```
 
 ### WebSocket Signaling
@@ -430,18 +462,21 @@ docker run -p 8080:80 openmeet-client
 ## Architecture Decisions
 
 ### Why XState?
+
 - Explicit state management for complex WebRTC lifecycle
 - Type-safe transitions and events
 - Easier testing and debugging
 - Visualizable state machine diagrams
 
 ### Why SFU Pattern?
+
 - Better scalability than mesh (P2P)
 - Lower bandwidth for multi-party calls
 - Server controls media routing
 - Easier to implement features (recording, transcoding)
 
 ### Why Composition API?
+
 - Better TypeScript support
 - More flexible code organization
 - Easier to reuse logic (composables)

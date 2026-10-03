@@ -67,8 +67,6 @@ test.use({
 });
 
 test.describe('multi-participant media', () => {
-  test.skip(({ browserName }) => browserName !== 'chromium', 'fake media and WebRTC stats are asserted in Chromium');
-
   test('navigates away from prejoin without transition warnings or stale viewport locks', async ({ page, baseURL }) => {
     const transitionWarnings: string[] = [];
     page.on('console', (message) => {
@@ -101,6 +99,7 @@ test.describe('multi-participant media', () => {
     const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'two-participant-media-e2e');
 
     try {
+      expect(session.pages).toHaveLength(twoParticipantCount);
       await waitForParticipantCount(session.pages, twoParticipantCount);
       await waitForAllConnections(session.pages);
       await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
@@ -128,6 +127,7 @@ test.describe('multi-participant media', () => {
     const session = await joinParticipants(browser, baseURL!, participantCount, 'media-e2e');
 
     try {
+      expect(session.pages).toHaveLength(participantCount);
       await waitForParticipantCount(session.pages, participantCount);
       await waitForAllConnections(session.pages);
       await waitForHtmlVideoPlayback(session.pages, participantCount);
