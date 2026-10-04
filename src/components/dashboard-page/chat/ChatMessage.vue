@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Copy, Reply, SmilePlus } from 'lucide-vue-next';
+import { Copy, CornerUpLeft, Reply, SmilePlus } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import {
   ContextMenu,
@@ -42,6 +42,9 @@ const SWIPE_DISTANCE = 56;
 const reactions = computed(() => props.message.reactions ?? []);
 // Only other people's messages can be quoted.
 const canReply = computed(() => !props.local);
+const isMenuOpen = ref(false);
+// A message is lifted while it is the target of a reaction picker or its own menu.
+const isLifted = computed(() => props.reactionPickerOpen || isMenuOpen.value);
 const initial = computed(() =>
   props.animateIn && !props.prefersReducedMotion
     ? props.local
@@ -90,21 +93,19 @@ const initial = computed(() =>
           /></span>
         </span>
       </template>
-      <ContextMenu :press-open-delay="450">
+      <ContextMenu :press-open-delay="450" @update:open="isMenuOpen = $event">
         <ContextMenuTrigger as-child>
           <div class="flex w-full" :class="local ? 'justify-end' : 'justify-start'">
             <motion.article
               data-message-bubble
               :data-repliable="canReply"
-              :animate="reactionPickerOpen ? { scale: 1.02, y: -2 } : { scale: 1, y: 0 }"
+              :animate="isLifted ? { scale: 1.02, y: -2 } : { scale: 1, y: 0 }"
               :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 26 }"
-              class="max-w-[82%] rounded-[1.15rem] px-3 pb-1.5 pt-2 text-[0.9375rem] sm:max-w-[68%] [@media(pointer:coarse)]:select-none"
+              class="max-w-[82%] rounded-[1.15rem] px-3 pb-1.5 pt-2 text-[0.9375rem] transition-shadow duration-200 sm:max-w-[68%] [@media(pointer:coarse)]:select-none"
               :class="[
-                local ? 'bg-[#0B7A75] text-white' : 'border border-[#E4ECE9] bg-white text-[#102F35]',
+                local ? 'bg-[#0B7A75] text-white' : 'bg-white text-[#102F35]',
                 !grouped && (local ? 'rounded-br-md' : 'rounded-bl-md'),
-                reactionPickerOpen
-                  ? 'shadow-[0_14px_34px_rgba(16,47,53,0.18)]'
-                  : 'shadow-[0_1px_2px_rgba(16,47,53,0.06)]',
+                isLifted ? 'harbor-message-lifted' : 'harbor-message-resting',
                 { 'harbor-message-flash': highlighted },
               ]"
             >
@@ -118,19 +119,21 @@ const initial = computed(() =>
                 v-if="message.replyTo"
                 type="button"
                 data-message-quote
-                class="mb-1.5 mt-0.5 block w-full rounded-lg border-l-[3px] px-2.5 py-1.5 text-left text-xs transition-colors"
+                class="mb-1.5 mt-0.5 block w-full rounded-xl px-2.5 py-2 text-left text-xs transition-colors"
                 :class="
                   local
-                    ? 'border-white/70 bg-white/15 text-white/85 [@media(hover:hover)]:hover:bg-white/20'
-                    : 'border-[#0B7A75] bg-[#F3F5F4] text-[#5F7375] [@media(hover:hover)]:hover:bg-[#ECF0EF]'
+                    ? 'bg-white/[0.14] text-white/80 [@media(hover:hover)]:hover:bg-white/20'
+                    : 'bg-[#F1F4F3] text-[#61777B] [@media(hover:hover)]:hover:bg-[#EAEFED]'
                 "
                 :aria-label="`Show the message from ${message.replyTo.senderName}`"
                 @click="emit('jump-to', message.replyTo.sequence)"
               >
-                <span class="block font-semibold" :class="local ? 'text-white' : 'text-[#0B7A75]'">{{
-                  message.replyTo.senderName
-                }}</span>
-                <span class="line-clamp-2 block">{{ message.replyTo.content }}</span>
+                <span
+                  class="mb-0.5 flex items-center gap-1 font-semibold"
+                  :class="local ? 'text-white' : 'text-[#27595D]'"
+                  ><CornerUpLeft class="size-3 shrink-0" />{{ message.replyTo.senderName }}</span
+                >
+                <span class="line-clamp-2 block leading-snug">{{ message.replyTo.content }}</span>
               </button>
               <p class="whitespace-pre-wrap break-words leading-snug">{{ message.content }}</p>
               <time

@@ -385,10 +385,11 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 32 }"
                 class="overflow-hidden"
               >
-                <div
-                  class="mb-2 flex items-center gap-2 rounded-xl border-l-[3px] border-[#0B7A75] bg-[#F3F5F4] px-3 py-2"
-                >
-                  <Reply class="size-4 shrink-0 text-[#0B7A75]" />
+                <div class="mb-2 flex items-center gap-2.5 rounded-2xl bg-[#F3F5F4] px-3 py-2">
+                  <span
+                    class="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-[#0B7A75] shadow-[0_1px_2px_rgba(16,47,53,0.08)]"
+                    ><Reply class="size-3.5"
+                  /></span>
                   <div class="min-w-0 flex-1 text-xs">
                     <p class="font-semibold text-[#102F35]">
                       Replying to {{ isLocal(replyTo) ? 'yourself' : replyTo.senderName }}

@@ -74,6 +74,8 @@ const navContentRef = ref<HTMLElement | null>(null);
 const mobileMenuShellRef = ref<HTMLElement | null>(null);
 const desktopNavWidth = ref<number>();
 const mobileMenuHeight = ref<number>();
+const mobileScrollAreaRef = ref<HTMLElement | null>(null);
+const mobileAccountActionsRef = ref<HTMLElement | null>(null);
 const closingMobileMenuIsContentSized = ref(false);
 const avatarUrl = ref<string | null>(null);
 const nickname = ref<string | null>(null);
@@ -497,8 +499,17 @@ const syncMobileMenuHeight = () => {
   }
 
   void nextTick(() => {
-    const height = navCapsuleRef.value?.scrollHeight;
-    if (height) mobileMenuHeight.value = Math.min(Math.max(height, 450), window.innerHeight - 24);
+    const capsule = navCapsuleRef.value;
+    const scrollArea = mobileScrollAreaRef.value;
+    const content = mobileAccountActionsRef.value;
+    if (!capsule || !scrollArea || !content) return;
+    // The scroll area is stretched to the drawer, so swap its box height for the content's natural
+    // height: the drawer then fits its content exactly, both when it grows and when it shrinks.
+    const scrollStyle = window.getComputedStyle(scrollArea);
+    const scrollPadding = (parseFloat(scrollStyle.paddingTop) || 0) + (parseFloat(scrollStyle.paddingBottom) || 0);
+    const naturalHeight = capsule.offsetHeight - scrollArea.clientHeight + content.offsetHeight + scrollPadding;
+    // Same cap as the shell's max height: the viewport minus the navbar's top and bottom margins.
+    if (naturalHeight > 0) mobileMenuHeight.value = Math.min(naturalHeight, window.innerHeight - 24);
   });
 };
 
@@ -534,6 +545,11 @@ onUnmounted(() => {
 });
 
 watch([isDesktop, mobileMenuExpanded, activeMobileMenuIsContentSized], () => requestAnimationFrame(updateNavLayout));
+// The account content changes size when the status picker expands, so the drawer follows it.
+watch(mobileAccountActionsRef, (element, previous) => {
+  if (previous) navResizeObserver?.unobserve(previous);
+  if (element) navResizeObserver?.observe(element);
+});
 watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar());
 </script>
 
@@ -868,8 +884,13 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
               :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }"
               class="flex min-h-0 flex-1 flex-col pt-7 xl:hidden"
             >
-              <div class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1 pb-5">
-                <div v-if="isAuthenticated && !isCheckingSession" data-mobile-account-actions class="space-y-2">
+              <div ref="mobileScrollAreaRef" class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1 pb-5">
+                <div
+                  v-if="isAuthenticated && !isCheckingSession"
+                  ref="mobileAccountActionsRef"
+                  data-mobile-account-actions
+                  class="space-y-2"
+                >
                   <motion.div v-bind="mobileMenuItemMotion(0.08, accountMenuLastItemDelay)">
                     <div
                       data-mobile-account-card

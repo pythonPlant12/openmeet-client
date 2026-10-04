@@ -14,6 +14,19 @@ const social = vi.hoisted(() => ({
 }));
 let resizeObserverCallback: ResizeObserverCallback;
 
+// The drawer fits its content: capsule height minus the stretched scroll area plus the content's natural height.
+function mockDrawerLayout(
+  wrapper: { get: (selector: string) => { element: Element } },
+  sizes: { capsule: number; scrollArea: number; content: number },
+) {
+  const define = (element: Element, property: string, value: number) =>
+    Object.defineProperty(element, property, { configurable: true, value });
+  const content = wrapper.get('[data-mobile-account-actions]').element;
+  define(wrapper.get('.harbor-nav-capsule').element, 'offsetHeight', sizes.capsule);
+  define(content.parentElement!, 'clientHeight', sizes.scrollArea);
+  define(content, 'offsetHeight', sizes.content);
+}
+
 vi.mock('@vueuse/core', async () => {
   const { ref, toValue } = await import('vue');
 
@@ -167,6 +180,7 @@ beforeEach(() => {
       }
 
       observe() {}
+      unobserve() {}
       disconnect() {}
     },
   );
@@ -430,14 +444,12 @@ describe('TheNavbar', () => {
     const mobile = await mountNavbar('/room/meeting-id');
     await mobile.wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
-    Object.defineProperty(mobile.wrapper.get('.harbor-nav-capsule').element, 'scrollHeight', {
-      configurable: true,
-      value: 264,
-    });
+    mockDrawerLayout(mobile.wrapper, { capsule: 450, scrollArea: 300, content: 180 });
     resizeObserverCallback([], {} as ResizeObserver);
     await vi.advanceTimersByTimeAsync(16);
 
-    expect(mobile.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
+    // No minimum height: the drawer shrinks to its content.
+    expect(mobile.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 330px');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.accountInformation');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('common.dashboard');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.friends');
@@ -448,14 +460,12 @@ describe('TheNavbar', () => {
     const dashboard = await mountNavbar('/dashboard');
     await dashboard.wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
-    Object.defineProperty(dashboard.wrapper.get('.harbor-nav-capsule').element, 'scrollHeight', {
-      configurable: true,
-      value: 308,
-    });
+    mockDrawerLayout(dashboard.wrapper, { capsule: 300, scrollArea: 150, content: 260 });
     resizeObserverCallback([], {} as ResizeObserver);
     await vi.advanceTimersByTimeAsync(16);
 
-    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
+    // And grows when its content needs more room, such as an expanded status picker.
+    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 410px');
 
     await dashboard.wrapper
       .get('[data-mobile-account-actions] button[aria-label="nav.accountInformation"]')
@@ -463,7 +473,7 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     expect(dashboard.router.currentRoute.value.path).toBe('/account');
-    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
+    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 410px');
   });
 
   it('expands the anonymous meeting drawer to the mobile viewport', async () => {
@@ -491,10 +501,7 @@ describe('TheNavbar', () => {
 
     await wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
-    Object.defineProperty(wrapper.get('.harbor-nav-capsule').element, 'scrollHeight', {
-      configurable: true,
-      value: 600,
-    });
+    mockDrawerLayout(wrapper, { capsule: 300, scrollArea: 150, content: 450 });
     resizeObserverCallback([], {} as ResizeObserver);
     await vi.advanceTimersByTimeAsync(16);
 

@@ -108,6 +108,22 @@ describe('ChatPane', () => {
     expect(wrapper.emitted('react')?.[0]).toEqual([reply, '👍']);
   });
 
+  it('lifts the selected message and draws quotes without a coloured edge', async () => {
+    const wrapper = mountPane({ conversation, messages: [message, reply] });
+    const [first] = wrapper.findAllComponents({ name: 'ChatMessage' });
+
+    expect(
+      wrapper
+        .get('[data-message-quote]')
+        .classes()
+        .some((name) => name.startsWith('border-l')),
+    ).toBe(false);
+    expect(wrapper.findAll('[data-message-bubble]')[0]!.classes()).toContain('harbor-message-resting');
+
+    await first!.vm.$emit('open-reactions');
+    expect(wrapper.findAll('[data-message-bubble]')[0]!.classes()).toContain('harbor-message-lifted');
+  });
+
   it('opens one reaction picker at a time and closes it on an outside press', async () => {
     const wrapper = mountPane({ conversation, messages: [message, reply] }, { attachTo: document.body });
     const [first, second] = wrapper.findAllComponents({ name: 'ChatMessage' });
