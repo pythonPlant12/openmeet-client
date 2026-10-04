@@ -165,6 +165,7 @@ const nextMessageBefore = ref<number | null>(null);
 const chatPane = ref<{
   focusComposer: () => void;
   getScrollState: () => { height: number; top: number } | null;
+  isNearBottom: () => boolean;
   restoreScroll: (state: { height: number; top: number } | null) => void;
   scrollToBottom: (behavior?: ScrollBehavior) => void;
 } | null>(null);
@@ -210,6 +211,7 @@ let contactProfileRequest = 0;
 let groupProfileRequest = 0;
 let groupProfilePromise: { groupId: string; promise: Promise<void> } | null = null;
 let messageRequest = 0;
+const reactionRequestByMessage = new Map<number, number>();
 let joinGroupPreviewRequest = 0;
 let callLaunchRequest = 0;
 let isUnmounted = false;
@@ -418,6 +420,7 @@ async function loadLatestMessages(conversationId: string) {
     if (request !== messageRequest || selectedConversation.value?.id !== conversationId) return;
 
     const previousMessages = messages.value;
+    const wasNearBottom = chatPane.value?.isNearBottom() ?? true;
     const previousSequences = new Set(previousMessages.map((message) => message.sequence));
     const latestMessages = response.messages.slice().reverse();
     const newMessages = latestMessages.filter((message) => !previousSequences.has(message.sequence));
@@ -435,7 +438,7 @@ async function loadLatestMessages(conversationId: string) {
     nextMessageBefore.value = response.nextBefore;
     await nextTick();
     if (!previousMessages.length) chatPane.value?.scrollToBottom('auto');
-    else if (newMessages.length) chatPane.value?.scrollToBottom('smooth');
+    else if (newMessages.length && wasNearBottom) chatPane.value?.scrollToBottom('smooth');
   } catch (error) {
     console.error('[Dashboard] Failed to load messages:', error);
     if (request === messageRequest && selectedConversation.value?.id === conversationId) {
@@ -525,14 +528,20 @@ async function toggleMessageReaction(message: ConversationMessage, emoji: string
   const token = accessToken.value;
   if (!token) return;
   const conversationId = message.conversationId;
+  const request = (reactionRequestByMessage.get(message.sequence) ?? 0) + 1;
+  reactionRequestByMessage.set(message.sequence, request);
   const previous = message.reactions ?? [];
   setMessageReactions(message.sequence, toggledReactions(previous, emoji));
   try {
     const reactions = await socialApi.toggleMessageReaction(token, conversationId, message.sequence, emoji);
-    if (selectedConversation.value?.id === conversationId) setMessageReactions(message.sequence, reactions);
+    if (selectedConversation.value?.id === conversationId && reactionRequestByMessage.get(message.sequence) === request) {
+      setMessageReactions(message.sequence, reactions);
+    }
   } catch (error) {
     console.error('[Dashboard] Failed to update reaction:', error);
-    if (selectedConversation.value?.id === conversationId) setMessageReactions(message.sequence, previous);
+    if (selectedConversation.value?.id === conversationId && reactionRequestByMessage.get(message.sequence) === request) {
+      setMessageReactions(message.sequence, previous);
+    }
     toast({ title: 'Could not update the reaction.', variant: 'destructive' });
   }
 }
@@ -1657,7 +1666,13 @@ async function updateOwnStatus(status: UserStatus) {
   if (!token) return;
   try {
     const profile = await socialApi.updateCurrentUserStatus(token, status);
-    if (contactProfile.value?.id === profile.id) contactProfile.value = profile;
+    if (contactProfile.value?.id === profile.id) {
+      contactProfile.value = {
+        ...profile,
+        isOnline: contactProfile.value.isOnline,
+        lastSeenAt: contactProfile.value.lastSeenAt,
+      };
+    }
     window.dispatchEvent(new Event('openmeet:profile-updated'));
   } catch (error) {
     console.error('[Dashboard] Failed to update status:', error);

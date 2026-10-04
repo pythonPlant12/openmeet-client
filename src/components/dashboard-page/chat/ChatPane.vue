@@ -132,6 +132,10 @@ function updateScrollState() {
   showJumpToLatest.value = !wasNearBottom && countMessagesBelowView() > JUMP_TO_LATEST_THRESHOLD;
 }
 
+function isNearBottom() {
+  return wasNearBottom;
+}
+
 function onPaneScroll() {
   if (pane.value && pane.value.scrollTop < 80) emit('scroll-top');
   if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(updateScrollState);
@@ -289,7 +293,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', closeReactionPickerOnOutsidePress, true);
 });
 
-defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
+defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focusComposer });
 </script>
 <template>
   <section
