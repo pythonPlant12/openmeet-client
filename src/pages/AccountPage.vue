@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Camera, Eye, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Camera, Check, Copy, Eye, Trash2 } from 'lucide-vue-next';
 import { motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -20,7 +20,8 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast/store';
 import { useAuth } from '@/composables/useAuth';
 import { useFullAvatar } from '@/composables/useFullAvatar';
-import { socialApi } from '@/services/social-api';
+import { USER_STATUS_OPTIONS } from '@/config/user-status.config';
+import { type UserStatus, socialApi } from '@/services/social-api';
 
 const router = useRouter();
 const { t } = useI18n();
@@ -30,6 +31,10 @@ const name = ref('');
 const nickname = ref('');
 const email = ref('');
 const statusMessage = ref('');
+const status = ref<UserStatus | null>(null);
+const isUpdatingStatus = ref(false);
+const isNicknameCopied = ref(false);
+let nicknameCopiedTimer: number | undefined;
 const avatarUrl = ref<string | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 const isAvatarPreviewOpen = ref(false);
@@ -80,6 +85,7 @@ watch(
         nickname.value = profile.nickname;
         void loadAvatar(profile.avatarUrl);
         statusMessage.value = profile.statusMessage;
+        status.value = profile.status;
       })
       .catch((error) => {
         console.error('[Account] Failed to load profile:', error);
@@ -91,6 +97,49 @@ watch(
   },
   { immediate: true },
 );
+
+// Statuses apply immediately, independent of the profile form's Save button.
+async function updateStatus(nextStatus: UserStatus) {
+  if (!accessToken.value || nextStatus === status.value || isUpdatingStatus.value) return;
+  const previous = status.value;
+  status.value = nextStatus;
+  isUpdatingStatus.value = true;
+  try {
+    await socialApi.updateCurrentUserStatus(accessToken.value, nextStatus);
+    window.dispatchEvent(new Event('openmeet:profile-updated'));
+  } catch (error) {
+    console.error('[Account] Failed to update status:', error);
+    status.value = previous;
+    toast({ title: 'Could not update your status.', variant: 'destructive' });
+  } finally {
+    isUpdatingStatus.value = false;
+  }
+}
+
+async function copyNickname() {
+  if (!nickname.value) return;
+  try {
+    await navigator.clipboard.writeText(nickname.value);
+    isNicknameCopied.value = true;
+    window.clearTimeout(nicknameCopiedTimer);
+    nicknameCopiedTimer = window.setTimeout(() => (isNicknameCopied.value = false), 2_000);
+  } catch (error) {
+    console.error('[Account] Failed to copy nickname:', error);
+    toast({ title: 'Could not copy nickname.', variant: 'destructive' });
+  }
+}
+
+// The navbar can change the status too; keep this page in step without touching unsaved form fields.
+async function refreshStatus() {
+  if (!accessToken.value) return;
+  try {
+    status.value = (await socialApi.getCurrentUserProfile(accessToken.value)).status;
+  } catch (error) {
+    console.error('[Account] Failed to refresh status:', error);
+  }
+}
+
+window.addEventListener('openmeet:profile-updated', refreshStatus);
 
 async function handleProfileSave() {
   if (!accessToken.value) return;
@@ -198,6 +247,8 @@ async function removeAvatar() {
 }
 
 onBeforeUnmount(() => {
+  window.removeEventListener('openmeet:profile-updated', refreshStatus);
+  window.clearTimeout(nicknameCopiedTimer);
   if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
 });
 </script>
@@ -286,7 +337,24 @@ onBeforeUnmount(() => {
               <h1 class="truncate text-4xl font-semibold tracking-[-0.05em] text-[#102F35] sm:text-5xl">
                 {{ name || nickname || email }}
               </h1>
-              <p class="mt-2 truncate text-lg font-semibold text-[#0B7A75]">@{{ nickname || 'nickname' }}</p>
+              <button
+                v-if="nickname"
+                type="button"
+                data-copy-nickname
+                class="harbor-ghost-action mt-2 inline-flex max-w-full items-center gap-2 rounded-lg px-1 text-lg font-semibold text-[#0B7A75]"
+                :aria-label="
+                  isNicknameCopied ? t('nav.nicknameCopied') : t('nav.copyNickname', { nickname: `@${nickname}` })
+                "
+                :title="
+                  isNicknameCopied ? t('nav.nicknameCopied') : t('nav.copyNickname', { nickname: `@${nickname}` })
+                "
+                @click="copyNickname"
+              >
+                <span class="truncate">@{{ nickname }}</span>
+                <Check v-if="isNicknameCopied" class="size-4 shrink-0" />
+                <Copy v-else class="size-4 shrink-0" />
+              </button>
+              <p v-else class="mt-2 truncate text-lg font-semibold text-[#0B7A75]">@nickname</p>
             </div>
           </div>
         </section>
@@ -325,6 +393,29 @@ onBeforeUnmount(() => {
                 class="h-11 rounded-xl border-[#D8E7E3] bg-[#F6FAF8] px-4 text-[#4E6B70] shadow-none"
               />
             </div>
+
+            <fieldset v-if="status" class="space-y-2" data-account-status>
+              <legend class="text-sm font-medium text-[#27595D]">{{ t('nav.status') }}</legend>
+              <div class="flex flex-wrap gap-2" role="radiogroup" :aria-label="t('nav.status')">
+                <button
+                  v-for="option in USER_STATUS_OPTIONS"
+                  :key="option.value"
+                  type="button"
+                  role="radio"
+                  :aria-checked="option.value === status"
+                  :disabled="isUpdatingStatus"
+                  class="inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors disabled:opacity-60"
+                  :class="
+                    option.value === status
+                      ? 'border-[#0B7A75] bg-[#E6F4F1] text-[#102F35]'
+                      : 'border-[#D8E7E3] bg-white text-[#27595D] [@media(hover:hover)]:hover:bg-[#EDF8F5]'
+                  "
+                  @click="updateStatus(option.value)"
+                >
+                  <span class="size-2.5 rounded-full" :class="option.dotClass" />{{ option.label }}
+                </button>
+              </div>
+            </fieldset>
 
             <div class="space-y-2">
               <Label for="account-status-message" class="text-[#27595D]">{{ t('account.statusMessage') }}</Label>

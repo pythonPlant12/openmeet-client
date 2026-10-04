@@ -6,6 +6,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import EmojiPickerButton from '@/components/dashboard-page/chat/EmojiPickerButton.vue';
 import { Button } from '@/components/ui/button';
 import { LoadingRipple } from '@/components/ui/loading';
+import { PresenceDot } from '@/components/ui/presence-dot';
 import type { Conversation, ConversationMessage, Friend } from '@/services/social-api';
 
 const props = defineProps<{
@@ -126,17 +127,23 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
             class="harbor-ghost-action -mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left"
             @click="emit('profile')"
           >
-            <span
-              class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[#0B7A75]"
-              ><img
-                v-if="friendAvatarUrls[selectedFriend.id]"
-                :src="friendAvatarUrls[selectedFriend.id]"
-                alt=""
-                class="size-full object-cover"
-              /><LoadingRipple
-                v-else-if="isFriendAvatarLoading(selectedFriend.id)"
-                class="size-4 text-[#0B7A75]"
-              /><span v-else class="text-xs font-semibold">{{ initials(selectedFriend.name) }}</span></span
+            <span class="relative shrink-0"
+              ><span
+                class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[#0B7A75]"
+                ><img
+                  v-if="friendAvatarUrls[selectedFriend.id]"
+                  :src="friendAvatarUrls[selectedFriend.id]"
+                  alt=""
+                  class="size-full object-cover"
+                /><LoadingRipple
+                  v-else-if="isFriendAvatarLoading(selectedFriend.id)"
+                  class="size-4 text-[#0B7A75]"
+                /><span v-else class="text-xs font-semibold">{{ initials(selectedFriend.name) }}</span></span
+              ><PresenceDot
+                surface="directMessages"
+                :online="selectedFriend.isOnline"
+                :status="selectedFriend.status"
+                class="size-3 border-2 border-white" /></span
             ><span class="min-w-0"
               ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
               ><span class="block truncate text-xs text-[#61777B]">{{ directConversationLabel }}</span></span

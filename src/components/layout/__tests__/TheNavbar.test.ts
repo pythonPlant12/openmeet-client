@@ -10,6 +10,7 @@ const auth = vi.hoisted(() => ({ authenticated: false }));
 const social = vi.hoisted(() => ({
   getCurrentUserProfile: vi.fn(),
   loadAvatar: vi.fn(),
+  updateCurrentUserStatus: vi.fn(),
 }));
 let resizeObserverCallback: ResizeObserverCallback;
 
@@ -137,8 +138,11 @@ async function mountNavbar(path = '/') {
         Button: { template: '<button><slot /></button>' },
         DropdownMenu: { template: '<div><slot /></div>' },
         DropdownMenuContent: { template: '<div><slot /></div>' },
-        DropdownMenuItem: { template: '<div><slot /></div>' },
+        DropdownMenuItem: { template: '<div @click="$emit(\'select\', $event)"><slot /></div>' },
         DropdownMenuSeparator: { template: '<div />' },
+        DropdownMenuSub: { template: '<div><slot /></div>' },
+        DropdownMenuSubContent: { template: '<div><slot /></div>' },
+        DropdownMenuSubTrigger: { template: '<div><slot /></div>' },
         DropdownMenuTrigger: { template: '<div><slot /></div>' },
         LoadingRipple: { template: '<span />' },
       },
@@ -573,6 +577,37 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-copy-nickname]').text()).toContain('@ada_l');
+  });
+
+  it('changes the status from the desktop account menu and shows it on the avatar', async () => {
+    auth.authenticated = true;
+    social.getCurrentUserProfile
+      .mockResolvedValueOnce({ avatarUrl: null, nickname: 'ada_l', status: 'available' })
+      .mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'doNotDisturb' });
+    social.updateCurrentUserStatus.mockResolvedValue({ status: 'doNotDisturb' });
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Online');
+
+    await wrapper.get('[data-status-option="doNotDisturb"]').trigger('click');
+    await flushPromises();
+
+    expect(social.updateCurrentUserStatus).toHaveBeenCalledWith('token', 'doNotDisturb');
+    expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Do not disturb');
+  });
+
+  it('rolls the status back when saving fails', async () => {
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'away' });
+    social.updateCurrentUserStatus.mockRejectedValue(new Error('offline'));
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    await wrapper.get('[data-status-option="sleeping"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Away');
   });
 
   it('shows Login text for logged-out desktop users', async () => {

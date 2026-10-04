@@ -1,17 +1,5 @@
 <script setup lang="ts">
-import {
-  Ban,
-  CalendarDays,
-  Check,
-  CircleCheck,
-  Clock3,
-  Copy,
-  Mail,
-  MinusCircle,
-  Phone,
-  UserCheck,
-  UserMinus,
-} from 'lucide-vue-next';
+import { CalendarDays, Check, ChevronDown, Clock3, Copy, Lock, Mail, Phone, UserCheck, UserMinus, UserPlus } from 'lucide-vue-next';
 import { ref } from 'vue';
 
 import { Button } from '@/components/ui/button';
@@ -23,10 +11,17 @@ import {
   DialogTitle,
   HarborDialogContent,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
-import type { ContactProfile, Friend } from '@/services/social-api';
+import { USER_STATUS_OPTIONS, userStatusOption } from '@/config/user-status.config';
+import type { ContactProfile, Friend, UserStatus } from '@/services/social-api';
 
 const props = defineProps<{
   open: boolean;
@@ -53,6 +48,8 @@ const emit = defineEmits<{
   (event: 'update:confirmationOpen', value: boolean): void;
   (event: 'call'): void;
   (event: 'remove'): void;
+  (event: 'add-friend'): void;
+  (event: 'update-status', status: UserStatus): void;
 }>();
 function initials(name: string) {
   return name
@@ -63,18 +60,13 @@ function initials(name: string) {
     .join('');
 }
 function statusIcon(status: ContactProfile['status']) {
-  return { available: CircleCheck, away: Clock3, doNotDisturb: MinusCircle, offline: Ban }[status];
+  return userStatusOption(status).icon;
 }
 function statusLabel(status: ContactProfile['status']) {
-  return { available: 'Available', away: 'Away', doNotDisturb: 'Do not disturb', offline: 'Offline' }[status];
+  return userStatusOption(status).label;
 }
 function statusClass(status: ContactProfile['status']) {
-  return {
-    available: 'bg-[#EAF7F4] text-[#17645F]',
-    away: 'bg-[#FFF8E8] text-[#80601D]',
-    doNotDisturb: 'bg-[#FFF0EA] text-[#9D4636]',
-    offline: 'bg-[#F0F4F3] text-[#61777B]',
-  }[status];
+  return userStatusOption(status).chipClass;
 }
 async function copyNickname(nickname: string) {
   try {
@@ -149,8 +141,10 @@ async function copyNickname(nickname: string) {
               v-if="profile.isOnline"
               data-online-indicator
               role="img"
-              aria-label="Online"
-              class="absolute bottom-1 right-1 size-4 rounded-full border-[3px] border-white bg-[#2DA58F]"
+              :aria-label="statusLabel(profile.status)"
+              :title="statusLabel(profile.status)"
+              class="absolute bottom-1 right-1 size-4 rounded-full border-[3px] border-white"
+              :class="userStatusOption(profile.status).dotClass"
             />
           </span>
           <div class="min-w-0 max-w-full">
@@ -172,10 +166,44 @@ async function copyNickname(nickname: string) {
               </button>
             </div>
             <div class="mt-4 flex flex-wrap justify-center gap-2">
+              <DropdownMenu v-if="profile.relationship === 'owner'">
+                <DropdownMenuTrigger as-child>
+                  <button
+                    type="button"
+                    data-status-menu
+                    class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+                    :class="statusClass(profile.status)"
+                    aria-label="Change your status"
+                  >
+                    <component :is="statusIcon(profile.status)" class="size-3.5" />{{ statusLabel(profile.status) }}
+                    <ChevronDown class="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="center"
+                  class="harbor-action-menu min-w-52 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
+                >
+                  <DropdownMenuItem
+                    v-for="option in USER_STATUS_OPTIONS"
+                    :key="option.value"
+                    class="harbor-floating-menu-item cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                    @select="emit('update-status', option.value)"
+                  >
+                    <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
+                    <span class="flex-1 font-semibold">{{ option.label }}</span>
+                    <Check v-if="option.value === profile.status" class="size-4 text-[#0B7A75]" />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <span
+                v-else-if="profile.relationship !== 'none'"
                 class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
                 :class="statusClass(profile.status)"
                 ><component :is="statusIcon(profile.status)" class="size-3.5" />{{ statusLabel(profile.status) }}</span
+              ><span
+                v-else
+                class="inline-flex items-center gap-1.5 rounded-full bg-[#F0F4F3] px-3 py-1.5 text-xs font-semibold text-[#61777B]"
+                ><Lock class="size-3.5" />Status shared with friends</span
               ><span
                 v-if="profileFriend"
                 class="inline-flex items-center gap-1.5 rounded-full bg-[#E6F4F1] px-3 py-1.5 text-xs font-semibold text-[#102F35]"
@@ -186,12 +214,34 @@ async function copyNickname(nickname: string) {
               class="mx-auto mt-4 max-w-md text-sm leading-6"
               :class="profile.statusMessage ? 'text-[#4E6B70]' : 'text-[#809697]'"
             >
-              {{ profile.statusMessage ? `“${profile.statusMessage}”` : 'No status message.' }}
+              {{
+                profile.statusMessage
+                  ? `“${profile.statusMessage}”`
+                  : profile.relationship === 'none'
+                    ? 'Add each other as friends to see status and contact details.'
+                    : 'No status message.'
+              }}
             </p>
           </div>
         </section>
         <section
-          v-if="profileFriend"
+          v-if="profile.relationship === 'none'"
+          class="flex flex-wrap items-center justify-center gap-2"
+          aria-label="Profile actions"
+        >
+          <Button
+            data-add-friend
+            class="harbor-primary-action group size-11 rounded-full bg-[#0B7A75] p-0 text-white sm:w-auto sm:px-4"
+            aria-label="Add friend"
+            title="Add friend"
+            @click="emit('add-friend')"
+            ><UserPlus
+              class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 motion-reduce:transition-none"
+            /><span class="hidden sm:inline">Add friend</span></Button
+          >
+        </section>
+        <section
+          v-else-if="profileFriend"
           class="flex flex-wrap items-center justify-center gap-2"
           aria-label="Profile actions"
         >
@@ -220,7 +270,9 @@ async function copyNickname(nickname: string) {
           <div class="inline-flex min-w-0 items-center gap-2 text-[#61777B]">
             <Mail class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
               ><span class="block text-xs">Email</span
-              ><strong class="block truncate font-semibold text-[#102F35]">{{ profile.email }}</strong></span
+              ><strong class="block truncate font-semibold text-[#102F35]">{{
+                profile.relationship === 'none' ? 'Shared with friends' : profile.email
+              }}</strong></span
             >
           </div>
           <div class="inline-flex items-center gap-2 text-[#61777B]">

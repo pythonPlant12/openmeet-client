@@ -30,6 +30,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -39,6 +40,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
           nickname: 'member_1',
           avatarUrl: '/social/users/member-1/avatar',
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -81,6 +83,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -90,6 +93,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'member_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -99,6 +103,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'me',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'creator',
           joinedAt: '',
         },
@@ -153,6 +158,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: true,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -162,6 +168,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'member_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -182,6 +189,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -191,6 +199,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'member_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -200,6 +209,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'me',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'creator',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -216,13 +226,17 @@ describe('GroupInfoDialog', () => {
     expect(badges[0]!.attributes('aria-label')).toBe('Your friend');
   });
 
-  it('only requests profiles for accepted friends', async () => {
+  it('opens every participant profile, including people who are not friends yet', async () => {
     const wrapper = mountDialog();
+    const [friendRow, memberRow] = wrapper.findAll('[title="Open profile"]');
 
-    await wrapper.get('[title="Open profile"]').trigger('click');
-    await wrapper.get('[title="Profile details are available to accepted friends only."]').trigger('click');
+    await friendRow!.trigger('click');
+    await memberRow!.trigger('click');
 
-    expect(wrapper.emitted('profile')).toEqual([['friend-1', 'Friend']]);
+    expect(wrapper.emitted('profile')).toEqual([
+      ['friend-1', 'Friend'],
+      ['member-1', 'Member'],
+    ]);
   });
 
   it('only offers icon changes to group managers', () => {

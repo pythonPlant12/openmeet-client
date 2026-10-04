@@ -45,6 +45,7 @@ import {
   type GroupMember,
   SocialApiError,
   type UserSearchResult,
+  type UserStatus,
   socialApi,
 } from '@/services/social-api';
 import { cookieUtils } from '@/utils';
@@ -242,6 +243,21 @@ const filteredFriends = computed(() => {
 });
 const isPeopleSearchActive = computed(() => isPeopleSearchOpen.value && !!peopleSearchQuery.value.trim());
 const newPeopleSearchResults = computed(() => peopleSearchResults.value.filter((result) => !isExistingFriend(result)));
+const peopleResultAvatarUrls = computed(() =>
+  Object.fromEntries(
+    newPeopleSearchResults.value.flatMap((result) => {
+      const url = result.avatarUrl ? memberAvatarCache.urls.value[result.avatarUrl] : undefined;
+      return url ? [[result.id, url]] : [];
+    }),
+  ),
+);
+// Statuses are only visible between friends, so the friends list is the live source for participants too.
+const groupMembersWithPresence = computed(() =>
+  groupMembers.value.map((member) => {
+    const friend = friendById.value.get(member.id);
+    return friend ? { ...member, isOnline: friend.isOnline, status: friend.status ?? member.status } : member;
+  }),
+);
 const visibleFriends = computed(() =>
   expandedSidebarPanel.value === 'friends' ? filteredFriends.value : filteredFriends.value.slice(0, 5),
 );
@@ -847,6 +863,10 @@ watch(contactProfile, (profile) => {
   if (profile?.avatarUrl && !friendAvatarUrls.value[profile.id]) void memberAvatarCache.ensure([profile.avatarUrl]);
 });
 
+watch(newPeopleSearchResults, (results) => {
+  void memberAvatarCache.ensure(results.flatMap((result) => (result.avatarUrl ? [result.avatarUrl] : [])));
+});
+
 watch(groupMembers, (members) => {
   void memberAvatarCache.ensure(
     members.flatMap((member) => (member.avatarUrl && !friendAvatarUrls.value[member.id] ? [member.avatarUrl] : [])),
@@ -889,17 +909,19 @@ function openGroupManagement(action: 'add-members' | 'quit-group' | 'remove-grou
 
 function profileFallback(userId: string, name: string): ContactProfile {
   const member = groupMembers.value.find(({ id }) => id === userId);
+  const isFriend = friendById.value.has(userId);
   return {
     id: userId,
     name,
     nickname: member?.nickname ?? '',
-    email: 'Profile details unavailable',
+    email: '',
     avatarUrl: member?.avatarUrl ?? null,
     status: 'offline',
     statusMessage: '',
     createdAt: '',
     lastSeenAt: null,
     isOnline: false,
+    relationship: userId === currentUser.value?.id ? 'owner' : isFriend ? 'friend' : 'none',
   };
 }
 
@@ -1240,7 +1262,7 @@ async function addFriend(result: UserSearchResult) {
   clearFeedback();
   isAddingFriend.value = true;
   try {
-    await socialApi.addFriend(token, result.email);
+    await socialApi.addFriendById(token, result.id);
     isPeopleSearchOpen.value = false;
     peopleSearchQuery.value = '';
     peopleSearchResults.value = [];
@@ -1583,6 +1605,36 @@ async function changeMemberFriendship(member: GroupMember, change: 'add' | 'remo
   }
 }
 
+async function addProfileFriend() {
+  const token = accessToken.value;
+  const profile = contactProfile.value;
+  if (!token || !profile) return;
+  try {
+    await socialApi.addFriendById(token, profile.id);
+    toast({ title: `Friend request sent to ${profile.name}.`, variant: 'success' });
+  } catch (error) {
+    console.error('[Dashboard] Failed to send friend request:', error);
+    toast({
+      title: 'Could not send friend request.',
+      description: error instanceof SocialApiError ? error.message : undefined,
+      variant: 'destructive',
+    });
+  }
+}
+
+async function updateOwnStatus(status: UserStatus) {
+  const token = accessToken.value;
+  if (!token) return;
+  try {
+    const profile = await socialApi.updateCurrentUserStatus(token, status);
+    if (contactProfile.value?.id === profile.id) contactProfile.value = profile;
+    window.dispatchEvent(new Event('openmeet:profile-updated'));
+  } catch (error) {
+    console.error('[Dashboard] Failed to update status:', error);
+    toast({ title: 'Could not update your status.', variant: 'destructive' });
+  }
+}
+
 async function startMemberCall(member: GroupMember) {
   const token = accessToken.value;
   const friend = friends.value.find((item) => item.id === member.id);
@@ -1661,6 +1713,7 @@ async function startConversationCall(conversation: Conversation) {
           :conversation-identifier="conversationIdentifier"
           :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
           :is-direct-online="(conversation) => friendById.get(conversation.otherUserId ?? '')?.isOnline ?? false"
+          :direct-status="(conversation) => friendById.get(conversation.otherUserId ?? '')?.status"
           :is-friend-avatar-loading="isFriendAvatarLoading"
           :is-group-avatar-loading="isGroupAvatarLoading"
           :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
@@ -1711,6 +1764,7 @@ async function startConversationCall(conversation: Conversation) {
           :is-searching="isSearchingUsers"
           :people-search-active="isPeopleSearchActive"
           :results="newPeopleSearchResults"
+          :result-avatar-urls="peopleResultAvatarUrls"
           :search-open="isPeopleSearchOpen"
           @update:search-open="setPeopleSearchOpen"
           @drag-end="(event, info) => handlePanelHeaderDragEnd('friends', event, info)"
@@ -1721,6 +1775,7 @@ async function startConversationCall(conversation: Conversation) {
           @call="startFriendCall"
           @remove="removeFriend"
           @add="addFriend"
+          @open-result="(result) => openContactProfile(result.id, result.name)"
           @respond="respondToFriendRequest"
           @context-open="handleContextMenuOpen"
           @context-activate="activateContextMenu"
@@ -1771,7 +1826,8 @@ async function startConversationCall(conversation: Conversation) {
         :group-error="groupProfileError"
         :group-info="groupInfo"
         :group-loading="isGroupProfileLoading"
-        :group-members="groupMembers"
+        :group-members="groupMembersWithPresence"
+        :change-friendship="changeMemberFriendship"
         :group-member-avatar-urls="groupMemberAvatarUrls"
         :group-members-has-more="groupMembersNextOffset !== null"
         :group-members-loading-more="isLoadingMoreGroupMembers"
@@ -1790,6 +1846,7 @@ async function startConversationCall(conversation: Conversation) {
         @open-profile="openContactProfile"
         @refresh-group="refreshSelectedGroup"
         @load-more-members="loadMoreGroupMembers"
+        @chat-member="openMemberChat"
         @group-removed="handleGroupRemoved"
       />
     </motion.div>
@@ -1833,7 +1890,7 @@ async function startConversationCall(conversation: Conversation) {
       :loading="isGroupProfileLoading"
       :error="groupProfileError"
       :info="groupInfo"
-      :members="groupMembers"
+      :members="groupMembersWithPresence"
       :member-avatar-urls="groupMemberAvatarUrls"
       :members-has-more="groupMembersNextOffset !== null"
       :members-loading-more="isLoadingMoreGroupMembers"
@@ -1882,6 +1939,8 @@ async function startConversationCall(conversation: Conversation) {
       @update:confirmation-open="setContactRemoveConfirmationOpen"
       @call="startContactProfileCall"
       @remove="removeProfileFriend"
+      @add-friend="addProfileFriend"
+      @update-status="updateOwnStatus"
     />
   </main>
 </template>

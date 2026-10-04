@@ -10,6 +10,8 @@ function expireSession() {
   window.dispatchEvent(new Event('openmeet:session-expired'));
 }
 
+export type UserStatus = 'available' | 'away' | 'doNotDisturb' | 'sleeping' | 'offline';
+
 export interface Friend {
   id: string;
   name: string;
@@ -17,13 +19,17 @@ export interface Friend {
   email: string;
   avatarUrl?: string | null;
   isOnline: boolean;
+  /** Null when the viewer may not see this person's status. */
+  status?: UserStatus | null;
   friendshipId?: string;
 }
 
+/** People search returns public identity only. */
 export interface UserSearchResult {
   id: string;
   name: string;
-  email: string;
+  nickname: string;
+  avatarUrl: string | null;
 }
 
 export interface ContactProfile {
@@ -32,11 +38,13 @@ export interface ContactProfile {
   nickname: string;
   email: string;
   avatarUrl: string | null;
-  status: 'available' | 'away' | 'doNotDisturb' | 'offline';
+  status: UserStatus;
   statusMessage: string;
   createdAt: string;
   lastSeenAt: string | null;
   isOnline: boolean;
+  /** `none` means not friends: only public fields are filled in. */
+  relationship: 'owner' | 'friend' | 'none';
 }
 
 export interface UpdateCurrentUserProfileRequest {
@@ -160,6 +168,7 @@ export interface GroupMember {
   nickname: string;
   avatarUrl: string | null;
   isOnline: boolean;
+  status: UserStatus | null;
   role: string;
   joinedAt: string;
 }
@@ -173,7 +182,6 @@ export interface GroupCandidate {
   id: string;
   name: string;
   nickname: string;
-  email: string;
 }
 
 export interface GroupCandidatesPage {
@@ -339,6 +347,13 @@ export const socialApi = {
     return request<ContactProfile>('/me/profile', accessToken, {
       method: 'PATCH',
       body: JSON.stringify(profile),
+    });
+  },
+
+  updateCurrentUserStatus(accessToken: string, status: UserStatus) {
+    return request<ContactProfile>('/me/profile', accessToken, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
     });
   },
 

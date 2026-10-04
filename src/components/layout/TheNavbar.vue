@@ -31,13 +31,17 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useAuth } from '@/composables/useAuth';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useBranding } from '@/config/branding.config';
-import { socialApi } from '@/services/social-api';
+import { USER_STATUS_OPTIONS, userStatusOption } from '@/config/user-status.config';
+import { type UserStatus, socialApi } from '@/services/social-api';
 import { AuthEventType } from '@/xstate/machines/auth/types';
 
 const route = useRoute();
@@ -73,6 +77,8 @@ const mobileMenuHeight = ref<number>();
 const closingMobileMenuIsContentSized = ref(false);
 const avatarUrl = ref<string | null>(null);
 const nickname = ref<string | null>(null);
+const ownStatus = ref<UserStatus | null>(null);
+const ownStatusOption = computed(() => userStatusOption(ownStatus.value));
 const isNicknameCopied = ref(false);
 let nicknameCopiedTimer: number | undefined;
 const isMeetingChatOpen = ref(false);
@@ -397,6 +403,21 @@ const handleGoToFriends = () => {
   closeMobileMenu(() => router.push({ path: '/dashboard', query: { panel: 'friends' } }));
 };
 
+// Status changes show immediately and roll back if the server rejects them.
+async function setOwnStatus(status: UserStatus) {
+  const token = accessToken.value;
+  const previous = ownStatus.value;
+  if (!token || status === previous) return;
+  ownStatus.value = status;
+  try {
+    await socialApi.updateCurrentUserStatus(token, status);
+    window.dispatchEvent(new Event('openmeet:profile-updated'));
+  } catch (error) {
+    console.error('[Navbar] Failed to update status:', error);
+    ownStatus.value = previous;
+  }
+}
+
 async function copyNickname() {
   if (!nickname.value) return;
   try {
@@ -417,6 +438,7 @@ async function loadAvatar() {
     avatarObjectUrl = null;
     avatarUrl.value = null;
     nickname.value = null;
+    ownStatus.value = null;
     return;
   }
 
@@ -424,6 +446,7 @@ async function loadAvatar() {
     const profile = await socialApi.getCurrentUserProfile(token);
     if (request !== avatarRequest) return;
     nickname.value = profile.nickname;
+    ownStatus.value = profile.status;
     if (!profile.avatarUrl) return;
     const objectUrl = URL.createObjectURL(await socialApi.loadAvatar(token, profile.avatarUrl));
     if (request !== avatarRequest) {
@@ -697,12 +720,20 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                 <DropdownMenuTrigger as-child>
                   <button
                     type="button"
-                    class="harbor-ghost-action inline-flex size-10 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75] transition-[background-color,border-color,border-width,color] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] data-[state=open]:border-2 data-[state=open]:border-[#0B7A75]"
+                    class="harbor-ghost-action relative inline-flex size-10 items-center justify-center rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75] transition-[background-color,border-color,border-width,color] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] data-[state=open]:border-2 data-[state=open]:border-[#0B7A75]"
                     :aria-label="t('nav.accountInformation')"
                     :title="t('nav.accountInformation')"
                   >
                     <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
                     <CircleUserRound v-else class="size-5" />
+                    <span
+                      v-if="ownStatus"
+                      data-own-status-dot
+                      role="img"
+                      :aria-label="ownStatusOption.label"
+                      class="pointer-events-none absolute bottom-0 right-0 size-3 rounded-full border-2 border-[#FBFCF8]"
+                      :class="ownStatusOption.dotClass"
+                    />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -748,6 +779,34 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                   >
                     {{ t('nav.friends') }}
                   </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      data-status-submenu
+                      class="harbor-floating-menu-item cursor-pointer gap-2 rounded-xl px-3 py-2.5"
+                    >
+                      <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
+                      <span class="flex-1">{{ t('nav.status') }}</span>
+                      <span class="text-xs text-[#61777B]">{{ ownStatusOption.label }}</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent
+                      class="harbor-action-menu !z-[1040] min-w-56 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+                    >
+                      <DropdownMenuItem
+                        v-for="option in USER_STATUS_OPTIONS"
+                        :key="option.value"
+                        :data-status-option="option.value"
+                        class="harbor-floating-menu-item cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                        @select="setOwnStatus(option.value)"
+                      >
+                        <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
+                        <span class="min-w-0 flex-1">
+                          <span class="block font-semibold">{{ option.label }}</span>
+                          <span class="block text-xs text-[#61777B]">{{ option.description }}</span>
+                        </span>
+                        <Check v-if="option.value === ownStatus" class="size-4 text-[#0B7A75]" />
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                   <DropdownMenuSeparator class="my-1 bg-[#E5EFEC]" />
                   <DropdownMenuItem
                     class="cursor-pointer rounded-xl px-3 py-2.5 text-[#9D4636] focus:bg-[#FFF0EA] focus:text-[#9D4636]"
@@ -816,10 +875,15 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                         @click="handleGoToPage('/account')"
                       />
                       <span
-                        class="pointer-events-none flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75]"
+                        class="pointer-events-none relative flex size-11 shrink-0 items-center justify-center rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75]"
                       >
                         <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
                         <CircleUserRound v-else class="size-5" />
+                        <span
+                          v-if="ownStatus"
+                          class="absolute bottom-0 right-0 size-3 rounded-full border-2 border-[#FBFCF8]"
+                          :class="ownStatusOption.dotClass"
+                        />
                       </span>
                       <span class="pointer-events-none min-w-0 flex-1">
                         <span class="block font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
@@ -841,6 +905,31 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                         </button>
                       </span>
                       <ChevronRight class="pointer-events-none size-4 text-[#61777B]" />
+                    </div>
+                    <div
+                      v-if="ownStatus"
+                      data-mobile-status-options
+                      class="mt-2 flex flex-wrap gap-1.5 px-1"
+                      role="radiogroup"
+                      :aria-label="t('nav.status')"
+                    >
+                      <button
+                        v-for="option in USER_STATUS_OPTIONS"
+                        :key="option.value"
+                        type="button"
+                        role="radio"
+                        :aria-checked="option.value === ownStatus"
+                        :data-status-option="option.value"
+                        class="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors"
+                        :class="
+                          option.value === ownStatus
+                            ? 'border-[#0B7A75] bg-[#E6F4F1] text-[#102F35]'
+                            : 'border-[#D8E7E3] bg-white text-[#27595D]'
+                        "
+                        @click="setOwnStatus(option.value)"
+                      >
+                        <span class="size-2 rounded-full" :class="option.dotClass" />{{ option.label }}
+                      </button>
                     </div>
                   </motion.div>
                   <motion.div v-bind="mobileMenuItemMotion(0.14, accountMenuLastItemDelay)">

@@ -22,6 +22,15 @@ describe('PresenceDot', () => {
     ).toBe(false);
   });
 
+  it('colours the dot by status and labels it', () => {
+    const dot = mount(PresenceDot, { props: { online: true, surface: 'friends', status: 'doNotDisturb' } }).get(
+      '[data-presence-dot]',
+    );
+
+    expect(dot.classes()).toContain('bg-[#C4513D]');
+    expect(dot.attributes('aria-label')).toBe('Do not disturb');
+  });
+
   it('respects the per-surface configuration', () => {
     PRESENCE_INDICATOR_SURFACES.friends = false;
 

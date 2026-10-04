@@ -33,6 +33,7 @@
     "accountInformation": "Account Information",
     "copyNickname": "Copy nickname {nickname}",
     "nicknameCopied": "Nickname copied",
+    "status": "Status",
     "friends": "Friends",
     "technologies": {
       "title": "Technologies",

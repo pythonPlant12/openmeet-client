@@ -34,6 +34,7 @@ const props = defineProps<{
   isSearching: boolean;
   peopleSearchActive: boolean;
   results: UserSearchResult[];
+  resultAvatarUrls: Record<string, string>;
   searchOpen: boolean;
   contextMenuKey: (id: string) => string;
 }>();
@@ -48,6 +49,7 @@ const emit = defineEmits<{
   (event: 'call', friend: Friend): void;
   (event: 'remove', friend: Friend): void;
   (event: 'add', result: UserSearchResult): void;
+  (event: 'open-result', result: UserSearchResult): void;
   (event: 'respond', request: FriendRequest, accept: boolean): void;
   (event: 'context-open', id: string, open: boolean): void;
   (event: 'context-activate', id: string): void;
@@ -194,15 +196,29 @@ onBeforeUnmount(clearLongPress);
             <div
               v-for="result in results"
               :key="result.id"
+              data-people-result
               class="flex items-center gap-2 rounded-xl bg-[#F0F7F5] px-2 py-2"
             >
-              <span
-                class="flex size-7 items-center justify-center rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
-                >{{ initials(result.name) }}</span
-              ><span class="min-w-0 flex-1"
-                ><span class="block truncate text-xs font-semibold">{{ result.name }}</span
-                ><span class="block truncate text-[11px] text-[#61777B]">{{ result.email }}</span></span
-              ><Button
+              <button
+                type="button"
+                class="harbor-ghost-action flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                :aria-label="`View ${result.name}'s profile`"
+                @click="emit('open-result', result)"
+              >
+                <span
+                  class="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
+                  ><img
+                    v-if="resultAvatarUrls[result.id]"
+                    :src="resultAvatarUrls[result.id]"
+                    alt=""
+                    class="size-full object-cover"
+                  /><template v-else>{{ initials(result.name) }}</template></span
+                ><span class="min-w-0 flex-1"
+                  ><span class="block truncate text-xs font-semibold">{{ result.name }}</span
+                  ><span class="block truncate text-[11px] text-[#61777B]">@{{ result.nickname }}</span></span
+                >
+              </button>
+              <Button
                 size="sm"
                 :disabled="isAdding"
                 class="harbor-primary-action h-7 rounded-full bg-[#0B7A75] px-2 text-xs text-white"
@@ -320,6 +336,7 @@ onBeforeUnmount(clearLongPress);
                     ><PresenceDot
                       surface="friends"
                       :online="friend.isOnline"
+                      :status="friend.status"
                       class="size-2.5 border-2 border-[#FBFCF8]" /></span
                   ><span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
                     ><span class="truncate">{{ friend.name }}</span

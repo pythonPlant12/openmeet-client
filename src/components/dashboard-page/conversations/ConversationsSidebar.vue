@@ -38,7 +38,7 @@ import { Input } from '@/components/ui/input';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
-import type { Conversation, DirectMessageRequest, GroupInvitation } from '@/services/social-api';
+import type { Conversation, DirectMessageRequest, GroupInvitation, UserStatus } from '@/services/social-api';
 
 const props = defineProps<{
   activeContextMenuId: string | null;
@@ -56,6 +56,7 @@ const props = defineProps<{
   conversationIdentifier: (conversation: Conversation) => string;
   directAvatarUrl: (conversation: Conversation) => string | undefined;
   isDirectOnline: (conversation: Conversation) => boolean;
+  directStatus: (conversation: Conversation) => UserStatus | null | undefined;
   isFriendAvatarLoading: (userId: string) => boolean;
   isGroupAvatarLoading: (groupId: string) => boolean;
   directInitials: (conversation: Conversation) => string;
@@ -402,6 +403,7 @@ onBeforeUnmount(clearLongPress);
                   ><PresenceDot
                     surface="directMessages"
                     :online="conversation.kind === 'direct' && isDirectOnline(conversation)"
+                    :status="directStatus(conversation)"
                     class="size-3 border-2 border-[#FBFCF8]" /></span
                 ><span class="min-w-0 flex-1"
                   ><span class="flex items-center gap-2"
