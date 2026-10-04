@@ -31,6 +31,8 @@
     "closeNavigation": "Close navigation",
     "navigationTitle": "OpenMeet navigation",
     "accountInformation": "Account Information",
+    "copyNickname": "Copy nickname {nickname}",
+    "nicknameCopied": "Nickname copied",
     "friends": "Friends",
     "technologies": {
       "title": "Technologies",

@@ -7,9 +7,13 @@ import {
   Copy,
   Crown,
   Eye,
+  Info,
+  LockKeyhole,
   LogOut,
+  MessageCircle,
   ShieldCheck,
   Trash2,
+  UserCheck,
   UserMinus,
   UserPlus,
   UserRound,
@@ -28,8 +32,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
+import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { toast } from '@/components/ui/toast';
-import type { GroupMutationToken } from '@/pages/dashboard-group-state';
+import { useFullAvatar } from '@/composables/useFullAvatar';
+import { type GroupMutationToken, groupAddActionLabel } from '@/pages/dashboard-group-state';
 import { type Friend, type GroupInfo, type GroupMember, type GroupMemberRole, socialApi } from '@/services/social-api';
 
 const props = defineProps<{
@@ -38,6 +44,9 @@ const props = defineProps<{
   error: string;
   info: GroupInfo | null;
   members: GroupMember[];
+  memberAvatarUrls: Record<string, string>;
+  membersHasMore: boolean;
+  membersLoadingMore: boolean;
   friends: Friend[];
   avatarUrl?: string;
   avatarLoading: boolean;
@@ -46,12 +55,17 @@ const props = defineProps<{
   mutationBusy: boolean;
   beginMutation: (groupId: string) => GroupMutationToken | null;
   endMutation: (groupId: string, token: GroupMutationToken) => void;
+  changeFriendship: (member: GroupMember, change: FriendshipChange) => Promise<boolean>;
   accessLabel: (policy: GroupInfo['accessPolicy']) => string;
   formatDate: (value: string | null) => string;
 }>();
 const copiedGroupId = ref(false);
 const avatarInput = ref<HTMLInputElement | null>(null);
 const isAvatarPreviewOpen = ref(false);
+const fullAvatarUrl = useFullAvatar(
+  () => props.info?.avatarUrl,
+  () => isAvatarPreviewOpen.value,
+);
 const isUploadingAvatar = ref(false);
 const activeParticipantContextMenuId = ref<string | null>(null);
 const participantContextMenuResets = ref<Record<string, number>>({});
@@ -62,8 +76,17 @@ const emit = defineEmits<{
   (event: 'add-members'): void;
   (event: 'quit-group'): void;
   (event: 'remove-group'): void;
+  (event: 'group-settings'): void;
   (event: 'refresh'): void;
+  (event: 'load-more-members'): void;
+  (event: 'chat-member', member: GroupMember): void;
 }>();
+
+type FriendshipChange = 'add' | 'remove';
+const pendingFriendChange = ref<{ member: GroupMember; change: FriendshipChange } | null>(null);
+const isChangingFriendship = ref(false);
+
+const SWIPE_ACTION_WIDTH = 80;
 function initials(name: string) {
   return name
     .trim()
@@ -93,8 +116,12 @@ function canManage(role: string | null) {
   return role === 'creator' || role === 'admin';
 }
 
+function isFriend(member: GroupMember) {
+  return member.id !== props.currentUserId && props.friends.some((friend) => friend.id === member.id);
+}
+
 function canOpenProfile(member: GroupMember) {
-  return member.id === props.currentUserId || props.friends.some((friend) => friend.id === member.id);
+  return member.id === props.currentUserId || isFriend(member);
 }
 
 function canRemoveMember(member: GroupMember) {
@@ -103,6 +130,29 @@ function canRemoveMember(member: GroupMember) {
 
 function canChangeMemberRole(member: GroupMember) {
   return props.info?.role === 'creator' && member.role !== 'creator' && member.id !== props.currentUserId;
+}
+
+function isSelf(member: GroupMember) {
+  return member.id === props.currentUserId;
+}
+
+function requestFriendChange(member: GroupMember, change: FriendshipChange) {
+  pendingFriendChange.value = { member, change };
+}
+
+function setFriendChangeOpen(open: boolean) {
+  if (!open && !isChangingFriendship.value) pendingFriendChange.value = null;
+}
+
+async function confirmFriendChange() {
+  const pending = pendingFriendChange.value;
+  if (!pending || isChangingFriendship.value) return;
+  isChangingFriendship.value = true;
+  try {
+    if (await props.changeFriendship(pending.member, pending.change)) pendingFriendChange.value = null;
+  } finally {
+    isChangingFriendship.value = false;
+  }
 }
 
 function hasParticipantAction(member: GroupMember) {
@@ -384,14 +434,28 @@ watch(
             v-if="canManage(info.role)"
             variant="ghost"
             class="group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#08635F] sm:w-auto sm:px-2"
-            aria-label="Add friends"
-            title="Add friends"
+            :aria-label="groupAddActionLabel(info.accessPolicy)"
+            :title="groupAddActionLabel(info.accessPolicy)"
             @click="emit('add-members')"
           >
             <UserPlus
               class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 motion-reduce:transition-none"
             />
-            <span class="hidden sm:inline">Add friends</span>
+            <span class="hidden sm:inline">{{ groupAddActionLabel(info.accessPolicy) }}</span>
+          </Button>
+          <Button
+            v-if="canManage(info.role)"
+            data-group-security
+            variant="ghost"
+            class="group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#102F35] sm:w-auto sm:px-4"
+            aria-label="Security"
+            title="Change group access and password"
+            @click="emit('group-settings')"
+          >
+            <LockKeyhole
+              class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 motion-reduce:transition-none"
+            />
+            <span class="hidden sm:inline">Security</span>
           </Button>
           <Button
             v-if="info.role !== 'creator'"
@@ -423,84 +487,177 @@ watch(
         <section>
           <div class="mb-3 flex items-baseline justify-between gap-3">
             <h3 class="text-sm font-semibold">Participants</h3>
-            <span class="text-xs text-[#61777B]">{{ members.length }} listed</span>
+            <span class="text-xs text-[#61777B]">{{ members.length }} of {{ info.memberCount }} listed</span>
           </div>
-          <div v-if="members.length" class="overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white">
-            <ContextMenu
+          <div v-if="members.length" class="space-y-1 rounded-2xl border border-[#D8E7E3] bg-white p-1.5">
+            <SwipeableRow
               v-for="member in members"
-              :key="participantContextMenuKey(member.id)"
-              :press-open-delay="500"
-              @update:open="setParticipantContextMenuOpen(member.id, $event)"
+              :id="`participant-${member.id}`"
+              :key="member.id"
+              class="rounded-xl"
+              :leading-width="isSelf(member) ? 0 : SWIPE_ACTION_WIDTH"
+              :trailing-width="(isSelf(member) ? 1 : 2) * SWIPE_ACTION_WIDTH"
+              full-swipe-leading
+              @full-swipe-leading="emit('chat-member', member)"
             >
-              <ContextMenuTrigger as-child>
+              <template v-if="!isSelf(member)" #leading="{ armed, close }">
                 <button
                   type="button"
-                  class="flex w-full items-center gap-3 border-b border-[#E5EFEC] px-4 py-3 text-left last:border-b-0"
-                  :class="canOpenProfile(member) ? 'harbor-ghost-action' : 'cursor-default'"
-                  :title="
-                    canOpenProfile(member) ? 'Open profile' : 'Profile details are available to accepted friends only.'
+                  data-swipe-action
+                  class="flex flex-1 items-center justify-start text-white transition-colors"
+                  :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
+                  :aria-label="`Chat with ${member.name}`"
+                  @click="
+                    close();
+                    emit('chat-member', member);
                   "
-                  :disabled="!hasParticipantAction(member)"
-                  @pointerdown="closeParticipantContextMenuBeforeClick"
-                  @click="openProfile(member)"
                 >
-                  <span
-                    class="flex size-10 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                    >{{ initials(member.name) }}</span
-                  ><span class="min-w-0 flex-1"
-                    ><span class="block truncate text-sm font-semibold">{{ member.name }}</span
-                    ><span class="inline-flex items-center gap-1 truncate text-xs text-[#61777B]"
-                      ><Clock3 class="size-3" />{{ formatDate(member.joinedAt) }}</span
-                    ></span
-                  ><span
-                    class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold"
-                    :class="roleClass(member.role)"
-                    ><component :is="roleIcon(member.role)" class="size-3" />{{ roleLabel(member.role) }}</span
-                  ><span
-                    v-if="member.id === currentUserId"
-                    class="rounded-full bg-[#EAF7F4] px-2 py-1 text-[11px] font-semibold text-[#17645F]"
-                    >You</span
+                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                    ><MessageCircle class="size-4" />Chat</span
                   >
                 </button>
-              </ContextMenuTrigger>
-              <ContextMenuContent
-                class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
+              </template>
+              <template #trailing="{ close }">
+                <button
+                  type="button"
+                  data-swipe-action
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1] text-[11px] font-semibold text-[#102F35]"
+                  :aria-label="`View ${member.name}'s info`"
+                  @click="
+                    close();
+                    emit('profile', member.id, member.name);
+                  "
+                >
+                  <Info class="size-4 shrink-0" />Info
+                </button>
+                <button
+                  v-if="!isSelf(member) && isFriend(member)"
+                  type="button"
+                  data-swipe-action
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D] text-[11px] font-semibold text-white"
+                  :aria-label="`Remove ${member.name} from your friends`"
+                  @click="
+                    close();
+                    requestFriendChange(member, 'remove');
+                  "
+                >
+                  <UserMinus class="size-4 shrink-0" />Unfriend
+                </button>
+                <button
+                  v-else-if="!isSelf(member)"
+                  type="button"
+                  data-swipe-action
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#0B7A75] text-[11px] font-semibold text-white"
+                  :aria-label="`Add ${member.name} as a friend`"
+                  @click="
+                    close();
+                    requestFriendChange(member, 'add');
+                  "
+                >
+                  <UserPlus class="size-4 shrink-0" />Add friend
+                </button>
+              </template>
+              <ContextMenu
+                :key="participantContextMenuKey(member.id)"
+                :press-open-delay="500"
+                @update:open="setParticipantContextMenuOpen(member.id, $event)"
               >
-                <ContextMenuItem
-                  v-if="canOpenProfile(member)"
-                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  @select="emit('profile', member.id, member.name)"
+                <ContextMenuTrigger as-child>
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none focus:outline-none [@media(hover:hover)]:focus-visible:ring-2 [@media(hover:hover)]:focus-visible:ring-inset [@media(hover:hover)]:focus-visible:ring-[#0B7A75]"
+                    :class="canOpenProfile(member) ? 'harbor-ghost-action' : 'cursor-default'"
+                    :title="
+                      canOpenProfile(member)
+                        ? 'Open profile'
+                        : 'Profile details are available to accepted friends only.'
+                    "
+                    :disabled="!hasParticipantAction(member)"
+                    @pointerdown="closeParticipantContextMenuBeforeClick"
+                    @click="openProfile(member)"
+                  >
+                    <span
+                      class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                      ><img
+                        v-if="memberAvatarUrls[member.id]"
+                        :src="memberAvatarUrls[member.id]"
+                        alt=""
+                        class="size-full object-cover"
+                      /><template v-else>{{ initials(member.name) }}</template></span
+                    ><span class="min-w-0 flex-1"
+                      ><span class="flex min-w-0 flex-col items-start"
+                        ><span class="max-w-full truncate text-sm font-semibold">{{ member.name }}</span
+                        ><span class="max-w-full truncate text-xs text-[#61777B]">@{{ member.nickname }}</span></span
+                      ><span class="inline-flex items-center gap-1 truncate text-xs text-[#61777B]"
+                        ><Clock3 class="size-3" />{{ formatDate(member.joinedAt) }}</span
+                      ></span
+                    ><span
+                      class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold"
+                      :class="roleClass(member.role)"
+                      ><component :is="roleIcon(member.role)" class="size-3" />{{ roleLabel(member.role) }}</span
+                    ><span
+                      v-if="isFriend(member)"
+                      data-friend-badge
+                      class="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#E6F4F1] px-2 py-1 text-[11px] font-semibold text-[#102F35]"
+                      title="Your friend"
+                      aria-label="Your friend"
+                      ><UserCheck class="size-3" /><span class="hidden sm:inline">Friend</span></span
+                    ><span
+                      v-if="member.id === currentUserId"
+                      class="rounded-full bg-[#EAF7F4] px-2 py-1 text-[11px] font-semibold text-[#17645F]"
+                      >You</span
+                    >
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent
+                  class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
                 >
-                  <UserRound class="size-4" />See profile
-                </ContextMenuItem>
-                <ContextMenuItem
-                  v-if="canRemoveMember(member)"
-                  class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                  :disabled="mutationBusy"
-                  @select="removeMember(member)"
-                >
-                  <UserMinus class="size-4" />Remove from group
-                </ContextMenuItem>
-                <ContextMenuItem
-                  v-if="canChangeMemberRole(member) && member.role === 'member'"
-                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  :disabled="mutationBusy"
-                  @select="updateMemberRole(member, 'admin')"
-                >
-                  <ShieldCheck class="size-4" />Make admin
-                </ContextMenuItem>
-                <ContextMenuItem
-                  v-if="canChangeMemberRole(member) && member.role === 'admin'"
-                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  :disabled="mutationBusy"
-                  @select="updateMemberRole(member, 'member')"
-                >
-                  <UserRound class="size-4" />Make participant
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
+                  <ContextMenuItem
+                    v-if="canOpenProfile(member)"
+                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                    @select="emit('profile', member.id, member.name)"
+                  >
+                    <UserRound class="size-4" />See profile
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    v-if="canRemoveMember(member)"
+                    class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                    :disabled="mutationBusy"
+                    @select="removeMember(member)"
+                  >
+                    <UserMinus class="size-4" />Remove from group
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    v-if="canChangeMemberRole(member) && member.role === 'member'"
+                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                    :disabled="mutationBusy"
+                    @select="updateMemberRole(member, 'admin')"
+                  >
+                    <ShieldCheck class="size-4" />Make admin
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    v-if="canChangeMemberRole(member) && member.role === 'admin'"
+                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                    :disabled="mutationBusy"
+                    @select="updateMemberRole(member, 'member')"
+                  >
+                    <UserRound class="size-4" />Make participant
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
+            </SwipeableRow>
           </div>
-          <p v-else class="rounded-2xl border border-[#D8E7E3] bg-white p-4 text-sm text-[#61777B]">
+          <Button
+            v-if="members.length && membersHasMore"
+            variant="ghost"
+            class="harbor-ghost-action mt-2 w-full rounded-full text-[#0B7A75]"
+            :disabled="membersLoadingMore"
+            @click="emit('load-more-members')"
+          >
+            <LoadingRipple v-if="membersLoadingMore" size="sm" />
+            {{ membersLoadingMore ? 'Loading participants...' : 'Load more participants' }}
+          </Button>
+          <p v-if="!members.length" class="rounded-2xl border border-[#D8E7E3] bg-white p-4 text-sm text-[#61777B]">
             No participants are listed for this group.
           </p>
         </section>
@@ -515,10 +672,51 @@ watch(
       ><DialogTitle class="sr-only">{{ info?.title }} group icon</DialogTitle
       ><img
         v-if="avatarUrl"
-        :src="avatarUrl"
+        :src="fullAvatarUrl ?? avatarUrl"
         :alt="`${info?.title} group icon`"
         class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-full object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
       />
     </HarborDialogContent>
   </Dialog>
+  <Dialog :open="pendingFriendChange !== null" @update:open="setFriendChangeOpen"
+    ><HarborDialogContent
+      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] sm:w-full"
+      ><DialogHeader
+        ><DialogTitle>{{
+          pendingFriendChange?.change === 'remove' ? 'Remove friend?' : 'Send friend request?'
+        }}</DialogTitle
+        ><DialogDescription class="text-[#61777B]">{{
+          pendingFriendChange?.change === 'remove'
+            ? `Remove ${pendingFriendChange.member.name} from your friends? You can send another request later.`
+            : `Send a friend request to ${pendingFriendChange?.member.name}?`
+        }}</DialogDescription></DialogHeader
+      >
+      <div class="mt-2 flex justify-end gap-2">
+        <Button
+          variant="outline"
+          class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+          :disabled="isChangingFriendship"
+          @click="setFriendChangeOpen(false)"
+          >Cancel</Button
+        >
+        <Button
+          v-if="pendingFriendChange?.change === 'remove'"
+          data-confirm-friend-change
+          class="rounded-full bg-[#C4513D] text-white hover:bg-[#9D4636]"
+          :disabled="isChangingFriendship"
+          @click="confirmFriendChange"
+          ><LoadingRipple v-if="isChangingFriendship" size="sm" />Remove friend</Button
+        >
+        <Button
+          v-else
+          data-confirm-friend-change
+          class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
+          :disabled="isChangingFriendship"
+          @click="confirmFriendChange"
+          ><LoadingRipple v-if="isChangingFriendship" size="sm" />Send request</Button
+        >
+      </div>
+    </HarborDialogContent></Dialog
+  >
 </template>

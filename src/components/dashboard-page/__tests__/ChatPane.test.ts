@@ -15,6 +15,7 @@ const conversation: Conversation = {
   otherUserId: 'friend-1',
   messageCount: 1,
   unreadCount: 0,
+  markedUnread: false,
   createdAt: '2026-10-02T12:00:00Z',
   updatedAt: '2026-10-02T12:00:00Z',
 };
@@ -71,6 +72,15 @@ function mountPane(props: Record<string, unknown> = {}) {
 describe('ChatPane', () => {
   it('does not mount the empty conversation state on mobile', () => {
     expect(mountPane().text()).not.toContain('Choose a conversation');
+  });
+
+  it('lets the blocked-notifications notice be dismissed', async () => {
+    const wrapper = mountPane({ conversation, messages: [message], notificationWarning: true });
+
+    expect(wrapper.text()).toContain('Notifications are blocked');
+    await wrapper.get('[aria-label="Dismiss notification notice"]').trigger('click');
+
+    expect(wrapper.emitted('dismiss-notifications')).toHaveLength(1);
   });
 
   it('keeps rendered history visible during a message refresh', () => {

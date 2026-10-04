@@ -102,8 +102,9 @@ export interface RecentMeeting {
   lastJoinedAt: string;
 }
 
+export type AvatarSize = 'thumb' | 'full';
 export type ConversationKind = 'group' | 'direct';
-export type GroupAccessPolicy = 'open' | 'password' | 'friendsOnly';
+export type GroupAccessPolicy = 'open' | 'password' | 'friendsOnly' | 'friendsOfFriends';
 export type GroupMemberRole = 'admin' | 'member';
 
 export interface Conversation {
@@ -117,6 +118,7 @@ export interface Conversation {
   otherUserId: string | null;
   messageCount: number;
   unreadCount: number;
+  markedUnread: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -155,8 +157,37 @@ export interface GroupInfo {
 export interface GroupMember {
   id: string;
   name: string;
+  nickname: string;
+  avatarUrl: string | null;
   role: string;
   joinedAt: string;
+}
+
+export interface GroupMembersPage {
+  members: GroupMember[];
+  nextOffset: number | null;
+}
+
+export interface GroupCandidate {
+  id: string;
+  name: string;
+  nickname: string;
+  email: string;
+}
+
+export interface GroupCandidatesPage {
+  results: GroupCandidate[];
+  nextOffset: number | null;
+}
+
+export interface GroupInvitation {
+  id: string;
+  groupId: string;
+  groupTitle: string;
+  accessPolicy: GroupAccessPolicy;
+  inviterId: string;
+  inviterName: string;
+  createdAt: string;
 }
 
 export interface OpenDirectConversationResponse {
@@ -281,9 +312,11 @@ export const socialApi = {
     return `${API_BASE_URL}${path}`;
   },
 
-  async loadAvatar(_accessToken: string, path: string) {
+  // Lists and avatars use small server-rendered thumbnails; only expanded previews request the full image.
+  async loadAvatar(_accessToken: string, path: string, size: AvatarSize = 'thumb') {
+    const sizedPath = size === 'thumb' ? `${path}${path.includes('?') ? '&' : '?'}size=thumb` : path;
     const response = await sendAuthorizedRequest((accessToken) =>
-      fetch(this.resolveMediaUrl(path)!, {
+      fetch(this.resolveMediaUrl(sizedPath)!, {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
     );
@@ -330,6 +363,13 @@ export const socialApi = {
     return request<void>('/friends', accessToken, {
       method: 'POST',
       body: JSON.stringify({ email }),
+    });
+  },
+
+  addFriendById(accessToken: string, userId: string) {
+    return request<void>('/friends', accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
     });
   },
 
@@ -437,8 +477,40 @@ export const socialApi = {
     });
   },
 
-  listGroupMembers(accessToken: string, groupId: string) {
-    return request<GroupMember[]>(`/conversations/groups/${groupId}/members`, accessToken);
+  listGroupMembers(accessToken: string, groupId: string, offset = 0) {
+    return request<GroupMembersPage>(`/conversations/groups/${groupId}/members?offset=${offset}`, accessToken);
+  },
+
+  searchGroupCandidates(accessToken: string, groupId: string, query: string, offset = 0) {
+    const params = new URLSearchParams({ query, offset: String(offset) });
+    return request<GroupCandidatesPage>(
+      `/conversations/groups/${groupId}/candidates?${params.toString()}`,
+      accessToken,
+    );
+  },
+
+  inviteToGroup(accessToken: string, groupId: string, userId: string) {
+    return request<void>(`/conversations/groups/${groupId}/invitations`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+  },
+
+  listGroupInvitations(accessToken: string) {
+    return request<GroupInvitation[]>('/conversations/groups/invitations', accessToken);
+  },
+
+  acceptGroupInvitation(accessToken: string, invitationId: string, password?: string) {
+    return request<Conversation>(`/conversations/groups/invitations/${invitationId}/accept`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  declineGroupInvitation(accessToken: string, invitationId: string) {
+    return request<void>(`/conversations/groups/invitations/${invitationId}/decline`, accessToken, {
+      method: 'POST',
+    });
   },
 
   joinGroup(accessToken: string, groupId: string, password?: string) {
@@ -533,6 +605,14 @@ export const socialApi = {
     if (before !== undefined) params.set('before', String(before));
     const query = `?${params.toString()}`;
     return request<ConversationMessagesResponse>(`/conversations/${conversationId}/messages${query}`, accessToken);
+  },
+
+  markConversationRead(accessToken: string, conversationId: string) {
+    return request<void>(`/conversations/${conversationId}/read`, accessToken, { method: 'POST' });
+  },
+
+  markConversationUnread(accessToken: string, conversationId: string) {
+    return request<void>(`/conversations/${conversationId}/unread`, accessToken, { method: 'POST' });
   },
 
   createConversationMessage(accessToken: string, conversationId: string, content: string) {

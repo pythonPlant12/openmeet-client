@@ -2,11 +2,13 @@
 import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleUserRound,
   Code2,
   Container,
+  Copy,
   Github,
   HeartHandshake,
   Lightbulb,
@@ -70,6 +72,9 @@ const desktopNavWidth = ref<number>();
 const mobileMenuHeight = ref<number>();
 const closingMobileMenuIsContentSized = ref(false);
 const avatarUrl = ref<string | null>(null);
+const nickname = ref<string | null>(null);
+const isNicknameCopied = ref(false);
+let nicknameCopiedTimer: number | undefined;
 const isMeetingChatOpen = ref(false);
 let avatarObjectUrl: string | null = null;
 let avatarRequest = 0;
@@ -87,10 +92,19 @@ const isAuthBusy = computed(
 const isLoggingOut = computed(() => state.value.value === 'loggingOut');
 const MOBILE_MENU_FIRST_ITEM_DELAY = 0.08;
 const MOBILE_MENU_LAST_ITEM_DELAY = 0.74;
+const ACCOUNT_MENU_LAST_ITEM_DELAY = 0.32;
+const MEETING_ACCOUNT_MENU_LAST_ITEM_DELAY = 0.26;
 const MOBILE_MENU_ITEM_ENTER_DURATION = 0.28;
 const MOBILE_MENU_ITEM_EXIT_DURATION = 0.22;
-const MOBILE_MENU_ITEMS_EXIT_DURATION =
-  (MOBILE_MENU_LAST_ITEM_DELAY - MOBILE_MENU_FIRST_ITEM_DELAY + MOBILE_MENU_ITEM_EXIT_DURATION) * 1000;
+const ACCOUNT_MENU_COLLAPSE_DELAY = 400;
+const accountMenuLastItemDelay = computed(() =>
+  isMeetingPage.value ? MEETING_ACCOUNT_MENU_LAST_ITEM_DELAY : ACCOUNT_MENU_LAST_ITEM_DELAY,
+);
+// The account drawer has few items, so its height collapse starts early and overlaps the final item fade.
+const mobileMenuItemsExitDuration = () =>
+  hasContentSizedMobileMenu.value
+    ? ACCOUNT_MENU_COLLAPSE_DELAY
+    : Math.round((MOBILE_MENU_LAST_ITEM_DELAY - MOBILE_MENU_FIRST_ITEM_DELAY + MOBILE_MENU_ITEM_EXIT_DURATION) * 1000);
 const MOBILE_MENU_HEIGHT_DURATION = 360;
 const MOBILE_MENU_ICON_START_OFFSET = 300;
 
@@ -184,7 +198,7 @@ const { start: hideMobileMenuContent, stop: cancelMobileMenuContentExit } = useT
     mobileMenuExpanded.value = false;
     scheduleMobileMenuCollapse();
   },
-  MOBILE_MENU_ITEMS_EXIT_DURATION,
+  mobileMenuItemsExitDuration,
   { immediate: false },
 );
 
@@ -383,6 +397,18 @@ const handleGoToFriends = () => {
   closeMobileMenu(() => router.push({ path: '/dashboard', query: { panel: 'friends' } }));
 };
 
+async function copyNickname() {
+  if (!nickname.value) return;
+  try {
+    await navigator.clipboard.writeText(nickname.value);
+    isNicknameCopied.value = true;
+    window.clearTimeout(nicknameCopiedTimer);
+    nicknameCopiedTimer = window.setTimeout(() => (isNicknameCopied.value = false), 2_000);
+  } catch (error) {
+    console.error('[Navbar] Failed to copy nickname:', error);
+  }
+}
+
 async function loadAvatar() {
   const token = accessToken.value;
   const request = ++avatarRequest;
@@ -390,12 +416,15 @@ async function loadAvatar() {
     if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
     avatarObjectUrl = null;
     avatarUrl.value = null;
+    nickname.value = null;
     return;
   }
 
   try {
     const profile = await socialApi.getCurrentUserProfile(token);
-    if (request !== avatarRequest || !profile.avatarUrl) return;
+    if (request !== avatarRequest) return;
+    nickname.value = profile.nickname;
+    if (!profile.avatarUrl) return;
     const objectUrl = URL.createObjectURL(await socialApi.loadAvatar(token, profile.avatarUrl));
     if (request !== avatarRequest) {
       URL.revokeObjectURL(objectUrl);
@@ -466,6 +495,7 @@ onUnmounted(() => {
   cancelMobileMenuExpansion();
   cancelMobileMenuContentExit();
   cancelMobileMenuCollapse();
+  window.clearTimeout(nicknameCopiedTimer);
   setMobileMenuPageScroll(false);
   navResizeObserver?.disconnect();
   window.removeEventListener('openmeet:profile-updated', handleProfileUpdated);
@@ -684,7 +714,27 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                     class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
                     @select="handleGoToPage('/account')"
                   >
-                    {{ t('nav.accountInformation') }}
+                    <span class="min-w-0 flex-1">
+                      <span class="block">{{ t('nav.accountInformation') }}</span>
+                      <button
+                        v-if="nickname"
+                        type="button"
+                        tabindex="-1"
+                        data-copy-nickname
+                        class="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-xs font-medium text-[#27595D] hover:text-[#08635F]"
+                        :aria-label="
+                          isNicknameCopied
+                            ? t('nav.nicknameCopied')
+                            : t('nav.copyNickname', { nickname: `@${nickname}` })
+                        "
+                        :title="isNicknameCopied ? t('nav.nicknameCopied') : undefined"
+                        @click.stop="copyNickname"
+                      >
+                        <span class="truncate">@{{ nickname }}</span>
+                        <Check v-if="isNicknameCopied" class="size-3 shrink-0" />
+                        <Copy v-else class="size-3 shrink-0" />
+                      </button>
+                    </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
@@ -754,23 +804,46 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
             >
               <div class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1 pb-5">
                 <div v-if="isAuthenticated && !isCheckingSession" data-mobile-account-actions class="space-y-2">
-                  <motion.div v-bind="mobileMenuItemMotion(0.08, isMeetingPage ? 0.26 : 0.32)">
-                    <button
-                      type="button"
-                      class="harbor-ghost-action flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-                      @click="handleGoToPage('/account')"
+                  <motion.div v-bind="mobileMenuItemMotion(0.08, accountMenuLastItemDelay)">
+                    <div
+                      data-mobile-account-card
+                      class="harbor-ghost-action relative flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left"
                     >
+                      <button
+                        type="button"
+                        class="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                        :aria-label="t('nav.accountInformation')"
+                        @click="handleGoToPage('/account')"
+                      />
                       <span
-                        class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75]"
+                        class="pointer-events-none flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#BBDDD6] bg-[#E6F4F1] p-0.5 text-[#0B7A75]"
                       >
                         <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
                         <CircleUserRound v-else class="size-5" />
                       </span>
-                      <span class="min-w-0 flex-1 font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
-                      <ChevronRight class="size-4 text-[#61777B]" />
-                    </button>
+                      <span class="pointer-events-none min-w-0 flex-1">
+                        <span class="block font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
+                        <button
+                          v-if="nickname"
+                          type="button"
+                          data-copy-nickname
+                          class="pointer-events-auto relative mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-xs font-medium text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                          :aria-label="
+                            isNicknameCopied
+                              ? t('nav.nicknameCopied')
+                              : t('nav.copyNickname', { nickname: `@${nickname}` })
+                          "
+                          @click="copyNickname"
+                        >
+                          <span class="truncate">@{{ nickname }}</span>
+                          <Check v-if="isNicknameCopied" class="size-3 shrink-0" />
+                          <Copy v-else class="size-3 shrink-0" />
+                        </button>
+                      </span>
+                      <ChevronRight class="pointer-events-none size-4 text-[#61777B]" />
+                    </div>
                   </motion.div>
-                  <motion.div v-bind="mobileMenuItemMotion(0.14, isMeetingPage ? 0.26 : 0.32)">
+                  <motion.div v-bind="mobileMenuItemMotion(0.14, accountMenuLastItemDelay)">
                     <button
                       type="button"
                       class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
@@ -779,7 +852,7 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                       {{ t('common.dashboard') }}
                     </button>
                   </motion.div>
-                  <motion.div v-bind="mobileMenuItemMotion(0.2, isMeetingPage ? 0.26 : 0.32)">
+                  <motion.div v-bind="mobileMenuItemMotion(0.2, accountMenuLastItemDelay)">
                     <button
                       type="button"
                       class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
@@ -845,7 +918,7 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
 
               <div class="shrink-0 space-y-3 border-t border-[#D8E7E3] pt-5">
                 <div v-if="isAuthenticated && !isCheckingSession" class="space-y-2">
-                  <motion.div v-bind="mobileMenuItemMotion(0.26, isMeetingPage ? 0.26 : 0.32)">
+                  <motion.div v-bind="mobileMenuItemMotion(0.26, accountMenuLastItemDelay)">
                     <button
                       type="button"
                       class="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left font-semibold text-[#9D4636] transition-colors hover:bg-[#FFF0EA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"

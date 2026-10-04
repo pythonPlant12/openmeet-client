@@ -14,7 +14,7 @@ const social = vi.hoisted(() => ({
 let resizeObserverCallback: ResizeObserverCallback;
 
 vi.mock('@vueuse/core', async () => {
-  const { ref } = await import('vue');
+  const { ref, toValue } = await import('vue');
 
   return {
     useMediaQuery: (query: string) =>
@@ -25,11 +25,11 @@ vi.mock('@vueuse/core', async () => {
             ? media.desktop
             : media.hover,
       ),
-    useTimeoutFn: (callback: () => void, delay: number) => {
+    useTimeoutFn: (callback: () => void, delay: number | (() => number)) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       return {
         start: () => {
-          timer = setTimeout(callback, delay);
+          timer = setTimeout(callback, toValue(delay));
         },
         stop: () => {
           if (timer) clearTimeout(timer);
@@ -368,6 +368,49 @@ describe('TheNavbar', () => {
     expect(JSON.parse(startMeeting!.attributes('data-transition'))).toMatchObject({ delay: 0.32 });
   });
 
+  it('starts collapsing the authenticated mobile drawer after 400ms', async () => {
+    vi.useFakeTimers();
+    media.desktop = false;
+    media.hover = false;
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar('/dashboard');
+    const shell = wrapper.get('.harbor-nav-layout');
+    const icon = wrapper.get('[data-motion-tag="span"]');
+
+    await wrapper.get('button[aria-expanded="false"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(300);
+    await wrapper.get('button[aria-expanded="true"]').trigger('click');
+    expect(JSON.parse(icon.attributes('data-animate'))).toMatchObject({ rotate: 0 });
+
+    await vi.advanceTimersByTimeAsync(399);
+    expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(360);
+    expect(shell.classes()).toContain('w-[min(340px,calc(100vw-1.5rem))]');
+    expect(wrapper.get('button[aria-expanded="false"]')).toBeDefined();
+  });
+
+  it('starts collapsing the authenticated meeting drawer after 400ms', async () => {
+    vi.useFakeTimers();
+    media.desktop = false;
+    media.hover = false;
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar('/room/meeting-id');
+
+    await wrapper.get('button[aria-expanded="false"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(300);
+    await wrapper.get('button[aria-expanded="true"]').trigger('click');
+
+    await vi.advanceTimersByTimeAsync(399);
+    expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(false);
+  });
+
   it('uses an account dropdown instead of the account name and keeps meeting and dashboard menus content-sized', async () => {
     vi.useFakeTimers();
     auth.authenticated = true;
@@ -411,8 +454,7 @@ describe('TheNavbar', () => {
     expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
 
     await dashboard.wrapper
-      .findAll('[data-mobile-account-actions] button')
-      .find((button) => button.text().trim() === 'nav.accountInformation')!
+      .get('[data-mobile-account-actions] button[aria-label="nav.accountInformation"]')
       .trigger('click');
     await flushPromises();
 
@@ -495,6 +537,42 @@ describe('TheNavbar', () => {
 
     expect(wrapper.get('button[aria-label="nav.accountInformation"] img').attributes('src')).toBe('blob:avatar');
     expect(social.loadAvatar).toHaveBeenCalledWith('token', '/social/users/user-id/avatar');
+  });
+
+  it('copies the nickname from the mobile account card without navigating', async () => {
+    vi.useFakeTimers();
+    media.desktop = false;
+    media.hover = false;
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l' });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    const { router, wrapper } = await mountNavbar('/dashboard');
+
+    await wrapper.get('button[aria-expanded="false"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(300);
+    const copyButton = wrapper.get('[data-mobile-account-card] [data-copy-nickname]');
+    expect(copyButton.text()).toContain('@ada_l');
+
+    await copyButton.trigger('click');
+    await flushPromises();
+
+    expect(writeText).toHaveBeenCalledWith('ada_l');
+    expect(copyButton.attributes('aria-label')).toBe('nav.nicknameCopied');
+    expect(router.currentRoute.value.path).toBe('/dashboard');
+
+    await wrapper.get('[data-mobile-account-card] > button[aria-label="nav.accountInformation"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/account');
+  });
+
+  it('shows the nickname inside the desktop account item', async () => {
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l' });
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    expect(wrapper.get('[data-copy-nickname]').text()).toContain('@ada_l');
   });
 
   it('shows Login text for logged-out desktop users', async () => {

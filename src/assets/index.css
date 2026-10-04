@@ -49,6 +49,19 @@
     color: #102f35;
   }
 
+  /* Search fields use a Harbor clear button; the native WebKit one would duplicate it. */
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+  }
+
+  /* Avatars and icons are not drag sources: a native image drag would hijack swipes and drags. */
+  img {
+    -webkit-user-drag: none;
+  }
+
   @media (hover: none) and (pointer: coarse) {
     body {
       -webkit-touch-callout: none;

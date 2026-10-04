@@ -305,6 +305,13 @@ function notificationCopy(notification: UserNotification) {
       description: `${notification.actorName} sent you a friend request.`,
     };
   }
+  if (notification.kind === 'groupInvitation') {
+    const groupTitle = typeof notification.data.groupTitle === 'string' ? notification.data.groupTitle : 'a group';
+    return {
+      title: 'Group invitation',
+      description: `${notification.actorName} invited you to join ${groupTitle}.`,
+    };
+  }
   if (notification.kind === 'friendRemoved') {
     return {
       title: 'Friend removed',

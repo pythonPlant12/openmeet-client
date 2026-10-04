@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast/store';
 import { useAuth } from '@/composables/useAuth';
+import { useFullAvatar } from '@/composables/useFullAvatar';
 import { socialApi } from '@/services/social-api';
 
 const router = useRouter();
@@ -32,6 +33,11 @@ const statusMessage = ref('');
 const avatarUrl = ref<string | null>(null);
 const avatarInput = ref<HTMLInputElement | null>(null);
 const isAvatarPreviewOpen = ref(false);
+const avatarPath = ref<string | null>(null);
+const fullAvatarUrl = useFullAvatar(
+  () => avatarPath.value,
+  () => isAvatarPreviewOpen.value,
+);
 const isLoadingProfile = ref(false);
 const isSaving = ref(false);
 const profileError = ref('');
@@ -114,6 +120,7 @@ async function loadAvatar(path: string | null) {
   if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
   avatarObjectUrl = null;
   avatarUrl.value = null;
+  avatarPath.value = path;
   if (!path || !accessToken.value) return false;
 
   try {
@@ -352,7 +359,7 @@ onBeforeUnmount(() => {
         ><DialogTitle class="sr-only">Your profile avatar</DialogTitle
         ><img
           v-if="avatarUrl"
-          :src="avatarUrl"
+          :src="fullAvatarUrl ?? avatarUrl"
           alt="Your profile avatar"
           class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-full object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
         />

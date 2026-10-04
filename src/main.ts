@@ -8,6 +8,11 @@ import './assets/index.css';
 import { initializeTheme } from './composables/useTheme';
 import router from './router';
 
+// Firefox ignores -webkit-user-drag, so image drags are cancelled here for every browser.
+document.addEventListener('dragstart', (event) => {
+  if (event.target instanceof HTMLImageElement) event.preventDefault();
+});
+
 initializeTheme().then((theme) => {
   document.documentElement.lang = i18n.global.locale.value;
   document.title = i18n.global.t('meta.title', { appName: theme.branding.appName });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, MessageCircleMore, Phone, UsersRound } from 'lucide-vue-next';
+import { ArrowLeft, MessageCircleMore, Phone, UsersRound, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, nextTick, ref, watch } from 'vue';
 
@@ -39,6 +39,7 @@ const emit = defineEmits<{
   (event: 'scroll-top'): void;
   (event: 'send'): void;
   (event: 'request-notifications'): void;
+  (event: 'dismiss-notifications'): void;
 }>();
 const content = defineModel<string>('content', { required: true });
 const pane = ref<HTMLElement | null>(null);
@@ -136,9 +137,9 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 v-else-if="isFriendAvatarLoading(selectedFriend.id)"
                 class="size-4 text-[#0B7A75]"
               /><span v-else class="text-xs font-semibold">{{ initials(selectedFriend.name) }}</span></span
-              ><span class="min-w-0"
-                ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
-                ><span class="block truncate text-xs text-[#61777B]">{{ directConversationLabel }}</span></span
+            ><span class="min-w-0"
+              ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
+              ><span class="block truncate text-xs text-[#61777B]">{{ directConversationLabel }}</span></span
             ></button
           ><button
             v-else-if="selectedIsGroup"
@@ -192,14 +193,25 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                     : 'Notifications are blocked. Enable them in your browser settings.'
                 }}
               </p>
-              <Button
-                v-if="canRequestNotificationPermission"
-                variant="ghost"
-                size="sm"
-                class="harbor-ghost-action h-8 shrink-0 rounded-lg px-2 font-bold text-[#0B7A75]"
-                @click="emit('request-notifications')"
-                >Enable</Button
-              >
+              <div class="flex shrink-0 items-center gap-1">
+                <Button
+                  v-if="canRequestNotificationPermission"
+                  variant="ghost"
+                  size="sm"
+                  class="harbor-ghost-action h-8 rounded-lg px-2 font-bold text-[#0B7A75]"
+                  @click="emit('request-notifications')"
+                  >Enable</Button
+                >
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="harbor-ghost-action size-8 rounded-lg text-[#27595D]"
+                  aria-label="Dismiss notification notice"
+                  title="Dismiss"
+                  @click="emit('dismiss-notifications')"
+                  ><X class="size-4"
+                /></Button>
+              </div>
             </div>
             <div v-if="loadingOlder" class="flex justify-center pb-4">
               <LoadingRipple class="size-5 text-[#0B7A75]" />

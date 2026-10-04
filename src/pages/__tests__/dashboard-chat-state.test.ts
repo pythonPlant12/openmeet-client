@@ -18,6 +18,7 @@ const first: Conversation = {
   otherUserId: 'friend-1',
   messageCount: 0,
   unreadCount: 0,
+  markedUnread: false,
   createdAt: '2026-08-01T12:00:00Z',
   updatedAt: '2026-08-01T12:00:00Z',
 };
