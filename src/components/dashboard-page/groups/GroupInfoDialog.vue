@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
+import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
@@ -606,15 +607,17 @@ watch(
                     @pointerdown="closeParticipantContextMenuBeforeClick"
                     @click="openProfile(member)"
                   >
-                    <span
-                      class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                      ><img
-                        v-if="memberAvatarUrls[member.id]"
-                        :src="memberAvatarUrls[member.id]"
-                        alt=""
-                        class="size-full object-cover"
-                      /><template v-else>{{ initials(member.name) }}</template></span
-                    ><span class="min-w-0 flex-1"
+                    <span class="relative shrink-0"
+                      ><span
+                        class="flex size-10 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        ><img
+                          v-if="memberAvatarUrls[member.id]"
+                          :src="memberAvatarUrls[member.id]"
+                          alt=""
+                          class="size-full object-cover"
+                        /><template v-else>{{ initials(member.name) }}</template></span
+                      ><PresenceDot surface="groupParticipants" :online="member.isOnline" class="size-3 border-2 border-white"
+                    /></span><span class="min-w-0 flex-1"
                       ><span class="flex min-w-0 flex-col items-start"
                         ><span class="max-w-full truncate text-sm font-semibold">{{ member.name }}</span
                         ><span class="max-w-full truncate text-xs text-[#61777B]">@{{ member.nickname }}</span></span

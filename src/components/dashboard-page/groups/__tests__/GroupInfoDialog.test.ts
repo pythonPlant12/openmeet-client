@@ -29,6 +29,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
           name: 'Friend',
           nickname: 'friend_1',
           avatarUrl: null,
+          isOnline: false,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -37,6 +38,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
           name: 'Member',
           nickname: 'member_1',
           avatarUrl: '/social/users/member-1/avatar',
+          isOnline: false,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -73,9 +75,33 @@ describe('GroupInfoDialog', () => {
   it('swipes right to chat and left to info plus the matching friend action', async () => {
     const wrapper = mountDialog({
       members: [
-        { id: 'friend-1', name: 'Friend', nickname: 'friend_1', avatarUrl: null, role: 'member', joinedAt: '' },
-        { id: 'member-1', name: 'Member', nickname: 'member_1', avatarUrl: null, role: 'member', joinedAt: '' },
-        { id: 'current-user', name: 'Me', nickname: 'me', avatarUrl: null, role: 'creator', joinedAt: '' },
+        {
+          id: 'friend-1',
+          name: 'Friend',
+          nickname: 'friend_1',
+          avatarUrl: null,
+          isOnline: false,
+          role: 'member',
+          joinedAt: '',
+        },
+        {
+          id: 'member-1',
+          name: 'Member',
+          nickname: 'member_1',
+          avatarUrl: null,
+          isOnline: false,
+          role: 'member',
+          joinedAt: '',
+        },
+        {
+          id: 'current-user',
+          name: 'Me',
+          nickname: 'me',
+          avatarUrl: null,
+          isOnline: false,
+          role: 'creator',
+          joinedAt: '',
+        },
       ],
     });
     const [friendRow, memberRow, selfRow] = wrapper.findAll('[data-swipeable-row]');
@@ -118,6 +144,35 @@ describe('GroupInfoDialog', () => {
     expect(admin.emitted('group-settings')).toHaveLength(1);
   });
 
+  it('shows the online dot only for participants reported online', () => {
+    const wrapper = mountDialog({
+      members: [
+        {
+          id: 'friend-1',
+          name: 'Friend',
+          nickname: 'friend_1',
+          avatarUrl: null,
+          isOnline: true,
+          role: 'member',
+          joinedAt: '',
+        },
+        {
+          id: 'member-1',
+          name: 'Member',
+          nickname: 'member_1',
+          avatarUrl: null,
+          isOnline: false,
+          role: 'member',
+          joinedAt: '',
+        },
+      ],
+    });
+    const [onlineRow, offlineRow] = wrapper.findAll('[data-swipeable-row]');
+
+    expect(onlineRow!.find('[data-presence-dot]').exists()).toBe(true);
+    expect(offlineRow!.find('[data-presence-dot]').exists()).toBe(false);
+  });
+
   it('marks only participants who are accepted friends', () => {
     const wrapper = mountDialog({
       members: [
@@ -126,6 +181,7 @@ describe('GroupInfoDialog', () => {
           name: 'Friend',
           nickname: 'friend_1',
           avatarUrl: null,
+          isOnline: false,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -134,6 +190,7 @@ describe('GroupInfoDialog', () => {
           name: 'Member',
           nickname: 'member_1',
           avatarUrl: null,
+          isOnline: false,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -142,6 +199,7 @@ describe('GroupInfoDialog', () => {
           name: 'Me',
           nickname: 'me',
           avatarUrl: null,
+          isOnline: false,
           role: 'creator',
           joinedAt: '2026-08-17T12:00:00Z',
         },

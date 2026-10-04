@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/context-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingRipple } from '@/components/ui/loading';
+import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import type { Friend, FriendRequest, UserSearchResult } from '@/services/social-api';
 
@@ -304,18 +305,22 @@ onBeforeUnmount(clearLongPress);
                   @pointerup="clearLongPress"
                   @pointercancel="clearLongPress"
                 >
-                  <span
-                    class="relative flex size-8 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                    ><img
-                      v-if="friendAvatarUrls[friend.id]"
-                      :src="friendAvatarUrls[friend.id]"
-                      alt=""
-                      class="size-full object-cover" /><LoadingRipple
-                      v-else-if="isAvatarLoading(friend.id)"
-                      class="size-4 text-[#0B7A75]" /><template v-else>{{ initials(friend.name) }}</template
+                  <span class="relative shrink-0"
                     ><span
-                      v-if="friend.isOnline"
-                      class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]" /></span
+                      class="flex size-8 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                      ><img
+                        v-if="friendAvatarUrls[friend.id]"
+                        :src="friendAvatarUrls[friend.id]"
+                        alt=""
+                        class="size-full object-cover"
+                      /><LoadingRipple v-else-if="isAvatarLoading(friend.id)" class="size-4 text-[#0B7A75]" /><template
+                        v-else
+                        >{{ initials(friend.name) }}</template
+                      ></span
+                    ><PresenceDot
+                      surface="friends"
+                      :online="friend.isOnline"
+                      class="size-2.5 border-2 border-[#FBFCF8]" /></span
                   ><span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
                     ><span class="truncate">{{ friend.name }}</span
                     ><span v-if="friend.nickname" class="shrink-0 text-xs text-[#61777B]"

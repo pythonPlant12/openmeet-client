@@ -37,6 +37,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingRipple } from '@/components/ui/loading';
+import { PresenceDot } from '@/components/ui/presence-dot';
 import { toast } from '@/components/ui/toast';
 import {
   GROUP_ACCESS_POLICIES,
@@ -662,16 +663,23 @@ defineExpose({
                       : canOpenProfile(member) && emit('open-profile', member.id, member.name)
                   "
                 >
-                  <span
-                    class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                  >
-                    <img
-                      v-if="memberAvatarUrls[member.id]"
-                      :src="memberAvatarUrls[member.id]"
-                      alt=""
-                      class="size-full object-cover"
+                  <span class="relative shrink-0">
+                    <span
+                      class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                    >
+                      <img
+                        v-if="memberAvatarUrls[member.id]"
+                        :src="memberAvatarUrls[member.id]"
+                        alt=""
+                        class="size-full object-cover"
+                      />
+                      <template v-else>{{ initials(member.name) }}</template>
+                    </span>
+                    <PresenceDot
+                      surface="groupParticipants"
+                      :online="member.isOnline"
+                      class="size-3 border-2 border-white"
                     />
-                    <template v-else>{{ initials(member.name) }}</template>
                   </span>
                   <span class="min-w-0 flex-1">
                     <span class="block truncate text-sm font-semibold">{{ member.name }}</span>

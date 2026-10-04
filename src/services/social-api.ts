@@ -159,6 +159,7 @@ export interface GroupMember {
   name: string;
   nickname: string;
   avatarUrl: string | null;
+  isOnline: boolean;
   role: string;
   joinedAt: string;
 }

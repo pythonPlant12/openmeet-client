@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingRipple } from '@/components/ui/loading';
+import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import type { Conversation, DirectMessageRequest, GroupInvitation } from '@/services/social-api';
 
@@ -54,6 +55,7 @@ const props = defineProps<{
   conversationName: (conversation: Conversation) => string;
   conversationIdentifier: (conversation: Conversation) => string;
   directAvatarUrl: (conversation: Conversation) => string | undefined;
+  isDirectOnline: (conversation: Conversation) => boolean;
   isFriendAvatarLoading: (userId: string) => boolean;
   isGroupAvatarLoading: (groupId: string) => boolean;
   directInitials: (conversation: Conversation) => string;
@@ -301,7 +303,7 @@ onBeforeUnmount(clearLongPress);
           :key="conversation.id"
           class="rounded-xl"
           :leading-width="SWIPE_ACTION_WIDTH"
-          :trailing-width="canDeleteOrLeave(conversation) ? SWIPE_ACTION_WIDTH : 0"
+          :trailing-width="(canDeleteOrLeave(conversation) ? 2 : 1) * SWIPE_ACTION_WIDTH"
           full-swipe-leading
           @full-swipe-leading="emit('toggle-read', conversation)"
         >
@@ -324,11 +326,27 @@ onBeforeUnmount(clearLongPress);
               >
             </button>
           </template>
-          <template v-if="canDeleteOrLeave(conversation)" #trailing="{ close }">
+          <template #trailing="{ close }">
             <button
               type="button"
               data-swipe-action
-              class="flex h-full w-full items-center justify-end bg-[#C4513D] text-white"
+              class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1] text-[11px] font-semibold text-[#102F35]"
+              :aria-label="conversation.kind === 'direct' ? 'See profile' : 'Group info'"
+              @click="
+                close();
+                emit('details', conversation);
+              "
+            >
+              <CircleUserRound v-if="conversation.kind === 'direct'" class="size-4 shrink-0" /><UsersRound
+                v-else
+                class="size-4 shrink-0"
+              />{{ conversation.kind === 'direct' ? 'Profile' : 'Info' }}
+            </button>
+            <button
+              v-if="canDeleteOrLeave(conversation)"
+              type="button"
+              data-swipe-action
+              class="flex min-w-0 flex-1 items-center justify-center overflow-hidden bg-[#C4513D] text-white"
               :aria-label="conversation.kind === 'direct' ? 'Delete conversation' : 'Quit from group'"
               @click="
                 close();
@@ -360,26 +378,31 @@ onBeforeUnmount(clearLongPress);
                 @pointerup="clearLongPress"
                 @pointercancel="clearLongPress"
               >
-                <span
-                  class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full"
-                  :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
-                  ><img
-                    v-if="conversation.kind === 'group' && groupAvatarUrls[conversation.id]"
-                    :src="groupAvatarUrls[conversation.id]"
-                    alt=""
-                    class="size-full object-cover"
-                  /><LoadingRipple
-                    v-else-if="conversation.kind === 'group' && isGroupAvatarLoading(conversation.id)"
-                    class="size-4 text-white"
-                  /><UsersRound v-else-if="conversation.kind === 'group'" class="size-4" /><img
-                    v-else-if="directAvatarUrl(conversation)"
-                    :src="directAvatarUrl(conversation)"
-                    alt=""
-                    class="size-full object-cover"
-                  /><LoadingRipple
-                    v-else-if="conversation.otherUserId && isFriendAvatarLoading(conversation.otherUserId)"
-                    class="size-4 text-[#0B7A75]"
-                  /><span v-else class="text-xs font-semibold">{{ directInitials(conversation) }}</span></span
+                <span class="relative shrink-0"
+                  ><span
+                    class="flex size-10 items-center justify-center overflow-hidden rounded-full"
+                    :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
+                    ><img
+                      v-if="conversation.kind === 'group' && groupAvatarUrls[conversation.id]"
+                      :src="groupAvatarUrls[conversation.id]"
+                      alt=""
+                      class="size-full object-cover"
+                    /><LoadingRipple
+                      v-else-if="conversation.kind === 'group' && isGroupAvatarLoading(conversation.id)"
+                      class="size-4 text-white"
+                    /><UsersRound v-else-if="conversation.kind === 'group'" class="size-4" /><img
+                      v-else-if="directAvatarUrl(conversation)"
+                      :src="directAvatarUrl(conversation)"
+                      alt=""
+                      class="size-full object-cover"
+                    /><LoadingRipple
+                      v-else-if="conversation.otherUserId && isFriendAvatarLoading(conversation.otherUserId)"
+                      class="size-4 text-[#0B7A75]"
+                    /><span v-else class="text-xs font-semibold">{{ directInitials(conversation) }}</span></span
+                  ><PresenceDot
+                    surface="directMessages"
+                    :online="conversation.kind === 'direct' && isDirectOnline(conversation)"
+                    class="size-3 border-2 border-[#FBFCF8]" /></span
                 ><span class="min-w-0 flex-1"
                   ><span class="flex items-center gap-2"
                     ><strong class="truncate text-sm">{{ conversationName(conversation) }}</strong
