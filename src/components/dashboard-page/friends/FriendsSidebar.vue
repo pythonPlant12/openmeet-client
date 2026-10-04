@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, CircleUserRound, Phone, Search, UserMinus, X } from 'lucide-vue-next';
+import { Check, CircleUserRound, Phone, Search, UserCheck, UserMinus, UsersRound, X } from 'lucide-vue-next';
 import { motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -188,10 +188,17 @@ onBeforeUnmount(clearLongPress);
                 ></span
               ><span class="min-w-0 flex-1"
                 ><span class="block truncate text-xs font-semibold">{{ friend.name }}</span
-                ><span class="block truncate text-[11px] text-[#61777B]">{{ friend.email }}</span></span
-              ><span class="rounded-full bg-[#E6F4F1] px-2 py-0.5 text-[10px] font-semibold text-[#27595D]"
-                >Friend</span
-              >
+                ><span class="block truncate text-[11px] text-[#61777B]">{{
+                  friend.nickname ? `@${friend.nickname}` : friend.email
+                }}</span></span
+              ><span
+                data-friend-icon
+                role="img"
+                aria-label="Friend"
+                title="Friend"
+                class="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
+                ><UserCheck class="size-3.5"
+              /></span>
             </button>
             <div
               v-for="result in results"
@@ -368,7 +375,26 @@ onBeforeUnmount(clearLongPress);
         <div v-else-if="isLoading || isRefreshing" class="flex h-16 items-center justify-center">
           <LoadingRipple class="size-4 text-[#0B7A75]" />
         </div>
-        <p v-else-if="!peopleSearchActive" class="px-2 py-2 text-xs text-[#61777B]">No accepted friends.</p>
+        <div
+          v-else-if="!peopleSearchActive"
+          data-friends-empty
+          class="mx-2 mt-2 flex flex-col items-center rounded-2xl border border-dashed border-[#D8E7E3] bg-white px-4 py-6 text-center"
+        >
+          <span class="flex size-11 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
+            ><UsersRound class="size-5"
+          /></span>
+          <p class="mt-3 text-sm font-semibold text-[#102F35]">No friends yet</p>
+          <p class="mt-1 text-xs leading-5 text-[#61777B]">
+            Search by name or @nickname to find people and send a friend request.
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="harbor-ghost-action mt-3 rounded-full bg-[#E6F4F1] px-4 text-[#0B7A75]"
+            @click="emit('update:searchOpen', true)"
+            ><Search class="size-4" />Find people</Button
+          >
+        </div>
       </div>
     </div>
   </section>

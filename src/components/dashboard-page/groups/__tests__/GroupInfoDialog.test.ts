@@ -74,7 +74,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
 }
 
 describe('GroupInfoDialog', () => {
-  it('swipes right to chat and left to info plus the matching friend action', async () => {
+  it('swipes right to message friends only, and left to profile plus the friend action', async () => {
     const wrapper = mountDialog({
       members: [
         {
@@ -113,14 +113,15 @@ describe('GroupInfoDialog', () => {
     const trailingLabels = (row: typeof friendRow) =>
       row!.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text());
 
-    expect(friendRow!.get('[data-swipe-pane="leading"]').text()).toBe('Chat');
-    expect(trailingLabels(friendRow)).toEqual(['Info', 'Unfriend']);
-    expect(trailingLabels(memberRow)).toEqual(['Info', 'Add friend']);
+    expect(friendRow!.get('[data-swipe-pane="leading"]').text()).toBe('Message');
+    expect(memberRow!.find('[data-swipe-pane="leading"]').exists()).toBe(false);
     expect(selfRow!.find('[data-swipe-pane="leading"]').exists()).toBe(false);
-    expect(trailingLabels(selfRow)).toEqual(['Info']);
+    expect(trailingLabels(friendRow)).toEqual(['Profile', 'Remove friend']);
+    expect(trailingLabels(memberRow)).toEqual(['Profile', 'Add friend']);
+    expect(trailingLabels(selfRow)).toEqual(['Profile']);
 
-    await memberRow!.get('[data-swipe-pane="leading"] button').trigger('click');
-    expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'member-1' });
+    await friendRow!.get('[data-swipe-pane="leading"] button').trigger('click');
+    expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'friend-1' });
 
     await memberRow!.get('[data-swipe-pane="trailing"] button').trigger('click');
     const profileEvents = wrapper.emitted('profile') ?? [];

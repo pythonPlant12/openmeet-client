@@ -7,7 +7,6 @@ import {
   Copy,
   Crown,
   Eye,
-  Info,
   LockKeyhole,
   LogOut,
   MessageCircle,
@@ -499,25 +498,25 @@ watch(
               :id="`participant-${member.id}`"
               :key="member.id"
               class="rounded-xl"
-              :leading-width="isSelf(member) ? 0 : SWIPE_ACTION_WIDTH"
+              :leading-width="isFriend(member) ? SWIPE_ACTION_WIDTH : 0"
               :trailing-width="(isSelf(member) ? 1 : 2) * SWIPE_ACTION_WIDTH"
-              full-swipe-leading
+              :full-swipe-leading="isFriend(member)"
               @full-swipe-leading="emit('chat-member', member)"
             >
-              <template v-if="!isSelf(member)" #leading="{ armed, close }">
+              <template v-if="isFriend(member)" #leading="{ armed, close }">
                 <button
                   type="button"
                   data-swipe-action
                   class="flex flex-1 items-center justify-start text-white transition-colors"
                   :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
-                  :aria-label="`Chat with ${member.name}`"
+                  :aria-label="`Message ${member.name}`"
                   @click="
                     close();
                     emit('chat-member', member);
                   "
                 >
                   <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
-                    ><MessageCircle class="size-4" />Chat</span
+                    ><MessageCircle class="size-4" />Message</span
                   >
                 </button>
               </template>
@@ -529,13 +528,13 @@ watch(
                     flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1]
                     text-[11px] font-semibold text-[#102F35]
                   "
-                  :aria-label="`View ${member.name}'s info`"
+                  :aria-label="`View ${member.name}'s profile`"
                   @click="
                     close();
                     emit('profile', member.id, member.name);
                   "
                 >
-                  <Info class="size-4 shrink-0" />Info
+                  <UserRound class="size-4 shrink-0" />Profile
                 </button>
                 <button
                   v-if="!isSelf(member) && isFriend(member)"
@@ -551,7 +550,7 @@ watch(
                     requestFriendChange(member, 'remove');
                   "
                 >
-                  <UserMinus class="size-4 shrink-0" />Unfriend
+                  <UserMinus class="size-4 shrink-0" /><span class="leading-tight">Remove friend</span>
                 </button>
                 <button
                   v-else-if="!isSelf(member)"
@@ -567,7 +566,7 @@ watch(
                     requestFriendChange(member, 'add');
                   "
                 >
-                  <UserPlus class="size-4 shrink-0" />Add friend
+                  <UserPlus class="size-4 shrink-0" /><span class="leading-tight">Add friend</span>
                 </button>
               </template>
               <ContextMenu
@@ -611,10 +610,11 @@ watch(
                     ><span
                       v-if="isFriend(member)"
                       data-friend-badge
-                      class="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#E6F4F1] px-2 py-1 text-[11px] font-semibold text-[#102F35]"
+                      role="img"
+                      class="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
                       title="Your friend"
                       aria-label="Your friend"
-                      ><UserCheck class="size-3" /><span class="hidden sm:inline">Friend</span></span
+                      ><UserCheck class="size-3.5" /></span
                     ><span
                       v-if="member.id === currentUserId"
                       class="rounded-full bg-[#EAF7F4] px-2 py-1 text-[11px] font-semibold text-[#17645F]"

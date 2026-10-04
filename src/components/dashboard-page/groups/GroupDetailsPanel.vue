@@ -4,7 +4,6 @@ import {
   Camera,
   Check,
   Copy,
-  Info,
   LogOut,
   MessageCircle,
   Phone,
@@ -12,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   Trash2,
+  UserCheck,
   UserMinus,
   UserPlus,
   UserRound,
@@ -662,25 +662,25 @@ defineExpose({
               :key="member.id"
               class="rounded-xl"
               :disabled="isSelectionMode"
-              :leading-width="isSelf(member) ? 0 : SWIPE_ACTION_WIDTH"
+              :leading-width="isFriend(member) ? SWIPE_ACTION_WIDTH : 0"
               :trailing-width="(isSelf(member) ? 1 : 2) * SWIPE_ACTION_WIDTH"
-              full-swipe-leading
+              :full-swipe-leading="isFriend(member)"
               @full-swipe-leading="emit('chat-member', member)"
             >
-              <template v-if="!isSelf(member)" #leading="{ armed, close }">
+              <template v-if="isFriend(member)" #leading="{ armed, close }">
                 <button
                   type="button"
                   data-swipe-action
                   class="flex flex-1 items-center justify-start text-white transition-colors"
                   :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
-                  :aria-label="`Chat with ${member.name}`"
+                  :aria-label="`Message ${member.name}`"
                   @click="
                     close();
                     emit('chat-member', member);
                   "
                 >
                   <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
-                    ><MessageCircle class="size-4" />Chat</span
+                    ><MessageCircle class="size-4" />Message</span
                   >
                 </button>
               </template>
@@ -689,13 +689,13 @@ defineExpose({
                   type="button"
                   data-swipe-action
                   class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1] text-[11px] font-semibold text-[#102F35]"
-                  :aria-label="`View ${member.name}'s info`"
+                  :aria-label="`View ${member.name}'s profile`"
                   @click="
                     close();
                     emit('open-profile', member.id, member.name);
                   "
                 >
-                  <Info class="size-4 shrink-0" />Info
+                  <UserRound class="size-4 shrink-0" />Profile
                 </button>
                 <button
                   v-if="isFriend(member)"
@@ -708,7 +708,7 @@ defineExpose({
                     pendingFriendChange = { member, change: 'remove' };
                   "
                 >
-                  <UserMinus class="size-4 shrink-0" />Unfriend
+                  <UserMinus class="size-4 shrink-0" /><span class="leading-tight">Remove friend</span>
                 </button>
                 <button
                   v-else-if="!isSelf(member)"
@@ -721,7 +721,7 @@ defineExpose({
                     pendingFriendChange = { member, change: 'add' };
                   "
                 >
-                  <UserPlus class="size-4 shrink-0" />Add friend
+                  <UserPlus class="size-4 shrink-0" /><span class="leading-tight">Add friend</span>
                 </button>
               </template>
               <ContextMenu>
@@ -755,6 +755,16 @@ defineExpose({
                     <span class="min-w-0 flex-1">
                       <span class="block truncate text-sm font-semibold">{{ member.name }}</span>
                       <span class="block truncate text-xs text-[#61777B]">@{{ member.nickname }}</span>
+                    </span>
+                    <span
+                      v-if="isFriend(member)"
+                      data-friend-icon
+                      role="img"
+                      aria-label="Your friend"
+                      title="Your friend"
+                      class="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
+                    >
+                      <UserCheck class="size-3.5" />
                     </span>
                   </button>
                 </ContextMenuTrigger>

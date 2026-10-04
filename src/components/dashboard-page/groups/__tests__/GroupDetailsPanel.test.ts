@@ -44,7 +44,7 @@ const member = (id: string, name: string): GroupMember => ({
   joinedAt: '',
 });
 
-function mountPanel() {
+function mountPanel(props: Record<string, unknown> = {}) {
   return mount(GroupDetailsPanel, {
     props: {
       accessToken: 'token',
@@ -61,6 +61,7 @@ function mountPanel() {
       beginMutation: () => Symbol('group-1'),
       endMutation: () => undefined,
       changeFriendship: async () => true,
+      ...props,
     },
     global: {
       stubs: {
@@ -88,12 +89,24 @@ describe('GroupDetailsPanel', () => {
     const samRow = rows.find((row) => row.text().includes('Sam'))!;
 
     expect(samRow.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text())).toEqual([
-      'Info',
+      'Profile',
       'Add friend',
     ]);
+    expect(samRow.find('[data-swipe-pane="leading"]').exists()).toBe(false);
 
     await samRow.get('[title="Open profile"]').trigger('click');
     expect(wrapper.emitted('open-profile')).toEqual([['sam', 'Sam']]);
+  });
+
+  it('offers direct messages on the right swipe only for friends', async () => {
+    const wrapper = mountPanel({ friends: [{ id: 'sam', name: 'Sam', email: '', isOnline: true }] });
+    const samRow = wrapper.findAll('[data-swipeable-row]').find((row) => row.text().includes('Sam'))!;
+
+    expect(samRow.find('[data-friend-icon]').exists()).toBe(true);
+    expect(samRow.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text())).toEqual([
+      'Profile',
+      'Remove friend',
+    ]);
 
     await samRow.get('[data-swipe-pane="leading"] button').trigger('click');
     expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'sam' });
