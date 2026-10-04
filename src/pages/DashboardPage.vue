@@ -1660,6 +1660,7 @@ async function startConversationCall(conversation: Conversation) {
           :conversation-name="conversationName"
           :conversation-identifier="conversationIdentifier"
           :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
+          :is-direct-online="(conversation) => friendById.get(conversation.otherUserId ?? '')?.isOnline ?? false"
           :is-friend-avatar-loading="isFriendAvatarLoading"
           :is-group-avatar-loading="isGroupAvatarLoading"
           :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"

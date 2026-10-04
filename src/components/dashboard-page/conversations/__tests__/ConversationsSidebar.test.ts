@@ -37,6 +37,7 @@ function mountSidebar(props: Record<string, unknown> = {}) {
       conversationName: () => 'Alex',
       conversationIdentifier: () => '@alex',
       directAvatarUrl: () => undefined,
+      isDirectOnline: () => true,
       isFriendAvatarLoading: () => false,
       isGroupAvatarLoading: () => false,
       directInitials: () => 'A',
@@ -59,6 +60,30 @@ describe('ConversationsSidebar', () => {
     const wrapper = mountSidebar({ conversations: [], isLoading: true });
 
     expect(wrapper.text()).toContain('Loading conversations');
+  });
+
+  it('shows the online dot for direct conversations with an online participant', () => {
+    expect(mountSidebar().find('[data-presence-dot]').exists()).toBe(true);
+    expect(
+      mountSidebar({ isDirectOnline: () => false })
+        .find('[data-presence-dot]')
+        .exists(),
+    ).toBe(false);
+  });
+
+  it('swipes left to Profile and Delete for direct chats, and Info only for group creators', async () => {
+    const direct = mountSidebar();
+    const labels = (wrapper: ReturnType<typeof mountSidebar>) =>
+      wrapper.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text());
+
+    expect(labels(direct)).toEqual(['Profile', 'Delete']);
+    await direct.get('[data-swipe-pane="trailing"] button').trigger('click');
+    expect(direct.emitted('details')?.[0]?.[0]).toMatchObject({ id: 'conversation-1' });
+
+    const creatorGroup = mountSidebar({
+      conversations: [{ ...conversation, kind: 'group', title: 'Team', role: 'creator', otherUserId: null }],
+    });
+    expect(labels(creatorGroup)).toEqual(['Info']);
   });
 
   it('marks manually unread conversations without an unread count', () => {
