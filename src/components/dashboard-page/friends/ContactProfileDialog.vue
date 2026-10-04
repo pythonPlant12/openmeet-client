@@ -94,12 +94,7 @@ async function copyNickname(nickname: string) {
       class="marketing-font flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] min-h-[min(34rem,calc(100dvh-6rem))] w-[calc(100%-2rem)] max-w-3xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       @open-auto-focus="$event.preventDefault()"
       @close-auto-focus="$event.preventDefault()"
-      ><DialogHeader
-        ><DialogTitle>Profile info</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
-          >Profile details shared with accepted friends.</DialogDescription
-        ></DialogHeader
-      >
+      ><DialogHeader><DialogTitle>Profile info</DialogTitle></DialogHeader>
       <!-- Render the fallback profile immediately and update it in place: swapping a spinner for the
            loaded body changes the centered dialog's height and makes it jump vertically. -->
       <div v-if="loading && !profile" class="flex min-h-64 items-center justify-center">
@@ -114,13 +109,19 @@ async function copyNickname(nickname: string) {
           {{ error }}
         </p>
         <section
-          class="flex flex-col items-center justify-center gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 text-center sm:p-6"
+          class="
+            flex flex-col items-center justify-center gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 text-center
+            sm:p-6
+          "
         >
           <span class="relative shrink-0">
             <button
               v-if="avatarUrls[profile.id]"
               type="button"
-              class="harbor-ghost-action flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] p-0"
+              class="
+                harbor-ghost-action flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED]
+                p-0
+              "
               :aria-label="`View ${profile.name}'s profile picture`"
               @click="isAvatarPreviewOpen = true"
             >
@@ -138,7 +139,10 @@ async function copyNickname(nickname: string) {
             </span>
             <span
               v-else
-              class="flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
+              class="
+                flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xl font-semibold
+                text-[#0B7A75]
+              "
               >{{ initials(profile.name) }}</span
             >
             <span
