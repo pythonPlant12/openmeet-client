@@ -556,6 +556,18 @@
   background-repeat: repeat;
 }
 
+/* Horizontal-only clipping: hidden as a fallback, and clip on one axis where supported so the other stays visible. */
+.harbor-clip-x {
+  overflow: hidden;
+}
+
+@supports (overflow-x: clip) {
+  .harbor-clip-x {
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+}
+
 /* Message depth: a soft resting shadow, deeper while selected, and a neutral bounce for quotes. */
 .harbor-message-resting {
   box-shadow:

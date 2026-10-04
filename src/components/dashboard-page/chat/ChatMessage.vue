@@ -63,11 +63,16 @@ const initial = computed(() =>
     :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
     :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: 'easeOut' }"
     class="relative flex flex-col"
-    :class="[local ? 'items-end' : 'items-start', grouped ? 'mt-0.5' : 'mt-3 first:mt-0', { 'mb-2': reactions.length }]"
+    :class="[
+      local ? 'items-end' : 'items-start',
+      grouped ? 'mt-0.5' : 'mt-3 first:mt-0',
+      { 'z-10': isLifted || highlighted },
+    ]"
   >
     <SwipeableRow
       :id="`message-${message.sequence}`"
-      class="w-full"
+      class="-mx-2 w-[calc(100%+1rem)] px-2"
+      clip-horizontally
       :leading-width="canReply ? SWIPE_DISTANCE : 0"
       :trailing-width="SWIPE_DISTANCE"
       :full-swipe-distance="SWIPE_DISTANCE"
@@ -222,10 +227,11 @@ const initial = computed(() =>
         :animate="{ height: 'auto', opacity: 1 }"
         :exit="prefersReducedMotion ? undefined : { height: 0, opacity: 0 }"
         :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }"
-        class="relative z-10 -mt-1.5 flex max-w-[82%] flex-wrap gap-1 px-2 sm:max-w-[68%]"
+        class="relative z-10 -mt-2.5 flex max-w-[82%] flex-wrap gap-1 overflow-hidden px-2 pb-2.5 pt-1 sm:max-w-[68%]"
         :class="local ? 'justify-end' : 'justify-start'"
       >
-        <AnimatePresence>
+        <!-- popLayout lifts a leaving chip out of the flow at once, so the remaining chips glide over. -->
+        <AnimatePresence mode="popLayout">
           <motion.button
             v-for="reaction in reactions"
             :key="reaction.emoji"

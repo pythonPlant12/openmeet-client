@@ -176,6 +176,13 @@ describe('SwipeableRow', () => {
     expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-trailing')).toHaveLength(1);
   });
 
+  it('clips both axes by default and only sideways when asked', () => {
+    expect(mountRow().get('[data-swipeable-row]').classes()).toContain('overflow-hidden');
+    const sideways = mountRow({ id: 'row-2', clipHorizontally: true }).get('[data-swipeable-row]');
+    expect(sideways.classes()).toContain('harbor-clip-x');
+    expect(sideways.classes()).not.toContain('overflow-hidden');
+  });
+
   it('leaves vertical gestures to native scrolling', async () => {
     const wrapper = mountRow();
 

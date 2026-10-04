@@ -19,6 +19,8 @@ const props = withDefaults(
     /** One-shot rows never rest open: a release either runs the full-swipe action or springs back. */
     momentary?: boolean;
     disabled?: boolean;
+    /** Clip only sideways, so the content's vertical shadows are not cut off. */
+    clipHorizontally?: boolean;
   }>(),
   {
     leadingWidth: 0,
@@ -28,6 +30,7 @@ const props = withDefaults(
     fullSwipeDistance: undefined,
     momentary: false,
     disabled: false,
+    clipHorizontally: false,
   },
 );
 const emit = defineEmits<{ (event: 'full-swipe-leading'): void; (event: 'full-swipe-trailing'): void }>();
@@ -241,8 +244,8 @@ defineExpose({ close });
   <div
     ref="root"
     data-swipeable-row
-    class="relative touch-pan-y overflow-hidden"
-    :class="{ 'select-none': isDragging }"
+    class="relative touch-pan-y"
+    :class="[clipHorizontally ? 'harbor-clip-x' : 'overflow-hidden', { 'select-none': isDragging }]"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerEnd"

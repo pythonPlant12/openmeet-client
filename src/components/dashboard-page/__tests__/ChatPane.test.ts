@@ -144,7 +144,13 @@ describe('ChatPane', () => {
     const chips = wrapper.findAll('[data-reaction-chip]');
     expect(chips[0]!.text()).toBe('👍2');
     expect(chips[1]!.text()).toBe('🎉');
-    expect(wrapper.findAll('[data-message-sequence]')[1]!.classes()).toContain('mb-2');
+    // Spacing to the next message lives inside the animated row so it collapses with the chips.
+    expect(wrapper.findAll('[data-reaction-row]')[1]!.classes()).toEqual(
+      expect.arrayContaining(['overflow-hidden', 'pb-2.5']),
+    );
+    // Message rows clip only sideways, and the lifted message paints above its neighbours.
+    expect(wrapper.findAll('[data-swipeable-row]')[0]!.classes()).toContain('harbor-clip-x');
+    expect(wrapper.findAll('[data-message-sequence]')[0]!.classes()).toContain('z-10');
   });
 
   it('opens one reaction picker at a time and closes it on an outside press', async () => {
