@@ -42,6 +42,9 @@ const emit = defineEmits<{
 const SWIPE_DISTANCE = 56;
 
 const reactions = computed(() => props.message.reactions ?? []);
+const myReactions = computed(
+  () => new Set(reactions.value.filter((reaction) => reaction.reactedByMe).map((reaction) => reaction.emoji)),
+);
 // Only other people's messages can be quoted.
 const canReply = computed(() => !props.local);
 const isMenuOpen = ref(false);
@@ -210,8 +213,10 @@ const initial = computed(() =>
               ? { duration: 0 }
               : { type: 'spring', stiffness: 600, damping: 26, delay: index * 0.025 }
           "
-          class="flex size-9 items-center justify-center rounded-full text-lg active:scale-90 [@media(hover:hover)]:hover:scale-110 [@media(hover:hover)]:hover:bg-[#E6F4F1]"
-          :aria-label="`React with ${emoji}`"
+          class="flex size-9 items-center justify-center rounded-full text-lg transition-colors active:scale-90 [@media(hover:hover)]:hover:scale-110"
+          :class="myReactions.has(emoji) ? 'bg-[#E6F4F1]' : '[@media(hover:hover)]:hover:bg-[#F1F4F3]'"
+          :aria-label="myReactions.has(emoji) ? `Remove ${emoji} reaction` : `React with ${emoji}`"
+          :aria-pressed="myReactions.has(emoji)"
           @click="emit('react', emoji)"
         >
           {{ emoji }}

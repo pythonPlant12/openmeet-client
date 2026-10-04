@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, MessageCircleMore, Phone, Reply, UsersRound, X } from 'lucide-vue-next';
+import { ArrowDown, ArrowLeft, MessageCircleMore, Phone, Reply, UsersRound, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -99,10 +99,82 @@ function restoreScroll(state: { height: number; top: number } | null) {
 function focusComposer() {
   void nextTick(() => composer.value?.focus());
 }
+// More hidden newer messages than this shows the jump-to-latest button.
+const JUMP_TO_LATEST_THRESHOLD = 10;
+const NEAR_BOTTOM_DISTANCE = 80;
+// The reply preview springs in over roughly this long before the quoted message is revealed.
+const REPLY_PREVIEW_SETTLE_MS = 280;
+const showJumpToLatest = ref(false);
+let wasNearBottom = true;
+let scrollFrame: number | undefined;
+let revealTimer: number | undefined;
+let paneResizeObserver: ResizeObserver | undefined;
+
+function countMessagesBelowView() {
+  const element = pane.value;
+  if (!element) return 0;
+  const viewBottom = element.getBoundingClientRect().bottom;
+  const items = element.querySelectorAll<HTMLElement>('[data-message-sequence]');
+  let hidden = 0;
+  // Newest messages are last, so counting stops at the first one that is in view.
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (items[index]!.getBoundingClientRect().top < viewBottom) break;
+    hidden += 1;
+  }
+  return hidden;
+}
+
+function updateScrollState() {
+  scrollFrame = undefined;
+  const element = pane.value;
+  if (!element) return;
+  wasNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_DISTANCE;
+  showJumpToLatest.value = !wasNearBottom && countMessagesBelowView() > JUMP_TO_LATEST_THRESHOLD;
+}
+
+function onPaneScroll() {
+  if (pane.value && pane.value.scrollTop < 80) emit('scroll-top');
+  if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(updateScrollState);
+}
+
+function jumpToLatest() {
+  showJumpToLatest.value = false;
+  pane.value?.scrollTo({ top: pane.value.scrollHeight, behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
+}
+
+function revealQuotedMessage() {
+  const sequence = replyTo.value?.sequence;
+  if (sequence === undefined) return;
+  pane.value
+    ?.querySelector(`[data-message-sequence="${sequence}"]`)
+    ?.scrollIntoView({ block: 'nearest', behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
+}
+
+// When the visible chat shrinks (reply preview, mobile keyboard), keep the reader's place: the quoted
+// message while replying, otherwise the newest messages if the reader was already at the bottom.
+function keepPlaceAfterResize() {
+  if (replyTo.value) revealQuotedMessage();
+  else if (wasNearBottom) scrollToBottom('auto');
+}
+
 watch(
   pane,
-  (element) => {
-    if (element && pendingBottomScroll) requestAnimationFrame(applyPendingBottomScroll);
+  (element, previous) => {
+    if (previous) paneResizeObserver?.unobserve(previous);
+    if (!element) return;
+    if (pendingBottomScroll) requestAnimationFrame(applyPendingBottomScroll);
+    if ('ResizeObserver' in window) {
+      paneResizeObserver ??= new ResizeObserver(keepPlaceAfterResize);
+      paneResizeObserver.observe(element);
+    }
+  },
+  { flush: 'post' },
+);
+
+watch(
+  () => props.messages.length,
+  () => {
+    if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(updateScrollState);
   },
   { flush: 'post' },
 );
@@ -123,10 +195,12 @@ function startReply(message: ConversationMessage) {
   reactionPickerSequence.value = null;
   flash(message.sequence);
   focusComposer();
+  window.clearTimeout(revealTimer);
+  revealTimer = window.setTimeout(revealQuotedMessage, props.prefersReducedMotion ? 0 : REPLY_PREVIEW_SETTLE_MS);
 }
 
+// The picker stays open so several reactions can be toggled; a press outside it closes it.
 function react(message: ConversationMessage, emoji: string) {
-  reactionPickerSequence.value = null;
   emit('react', message, emoji);
 }
 
@@ -203,8 +277,15 @@ function onEdgePointerEnd(event: PointerEvent) {
   if (shouldGoBack) emit('back');
 }
 
+// Mobile keyboards often shrink only the visual viewport, which a resize observer cannot see.
+window.visualViewport?.addEventListener('resize', keepPlaceAfterResize);
+
 onBeforeUnmount(() => {
   window.clearTimeout(highlightTimer);
+  window.clearTimeout(revealTimer);
+  if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+  paneResizeObserver?.disconnect();
+  window.visualViewport?.removeEventListener('resize', keepPlaceAfterResize);
   document.removeEventListener('pointerdown', closeReactionPickerOnOutsidePress, true);
 });
 
@@ -305,73 +386,92 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
           /></Button>
         </header>
         <div v-if="conversation" class="flex min-h-0 flex-1 flex-col">
-          <div
-            ref="pane"
-            class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
-            aria-label="Message history"
-            @scroll.passive="pane && pane.scrollTop < 80 && emit('scroll-top')"
-          >
+          <div class="relative flex min-h-0 flex-1 flex-col">
             <div
-              v-if="notificationWarning"
-              class="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] px-3 py-2.5 text-sm text-[#102F35]"
+              ref="pane"
+              class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
+              aria-label="Message history"
+              @scroll.passive="onPaneScroll"
             >
-              <p>
-                {{
-                  canRequestNotificationPermission
-                    ? 'Enable notifications for messages and calls.'
-                    : 'Notifications are blocked. Enable them in your browser settings.'
-                }}
-              </p>
-              <div class="flex shrink-0 items-center gap-1">
-                <Button
-                  v-if="canRequestNotificationPermission"
-                  variant="ghost"
-                  size="sm"
-                  class="harbor-ghost-action h-8 rounded-lg px-2 font-bold text-[#0B7A75]"
-                  @click="emit('request-notifications')"
-                  >Enable</Button
-                >
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="harbor-ghost-action size-8 rounded-lg text-[#27595D]"
-                  aria-label="Dismiss notification notice"
-                  title="Dismiss"
-                  @click="emit('dismiss-notifications')"
-                  ><X class="size-4"
-                /></Button>
+              <div
+                v-if="notificationWarning"
+                class="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] px-3 py-2.5 text-sm text-[#102F35]"
+              >
+                <p>
+                  {{
+                    canRequestNotificationPermission
+                      ? 'Enable notifications for messages and calls.'
+                      : 'Notifications are blocked. Enable them in your browser settings.'
+                  }}
+                </p>
+                <div class="flex shrink-0 items-center gap-1">
+                  <Button
+                    v-if="canRequestNotificationPermission"
+                    variant="ghost"
+                    size="sm"
+                    class="harbor-ghost-action h-8 rounded-lg px-2 font-bold text-[#0B7A75]"
+                    @click="emit('request-notifications')"
+                    >Enable</Button
+                  >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="harbor-ghost-action size-8 rounded-lg text-[#27595D]"
+                    aria-label="Dismiss notification notice"
+                    title="Dismiss"
+                    @click="emit('dismiss-notifications')"
+                    ><X class="size-4"
+                  /></Button>
+                </div>
               </div>
+              <div v-if="loadingOlder" class="flex justify-center pb-4">
+                <LoadingRipple class="size-5 text-[#0B7A75]" />
+              </div>
+              <div v-if="loading && !messages.length" class="flex h-full items-center justify-center">
+                <LoadingRipple class="size-7 text-[#0B7A75]" />
+              </div>
+              <p v-else-if="!messages.length" class="py-10 text-center text-sm text-[#61777B]">
+                No messages yet. Start the conversation.
+              </p>
+              <ol v-else>
+                <ChatMessage
+                  v-for="(message, index) in messages"
+                  :key="message.sequence"
+                  :message="message"
+                  :grouped="isGroupedWithPrevious(index)"
+                  :first="index === 0"
+                  :show-sender="selectedIsGroup"
+                  :local="isLocal(message)"
+                  :animate-in="shouldAnimate(message)"
+                  :highlighted="highlightedSequence === message.sequence"
+                  :reaction-picker-open="reactionPickerSequence === message.sequence"
+                  :prefers-reduced-motion="prefersReducedMotion"
+                  :format-time="formatTime"
+                  @reply="startReply(message)"
+                  @react="(emoji) => react(message, emoji)"
+                  @open-reactions="reactionPickerSequence = message.sequence"
+                  @copy="copyMessage(message)"
+                  @jump-to="jumpToMessage"
+                />
+              </ol>
             </div>
-            <div v-if="loadingOlder" class="flex justify-center pb-4">
-              <LoadingRipple class="size-5 text-[#0B7A75]" />
-            </div>
-            <div v-if="loading && !messages.length" class="flex h-full items-center justify-center">
-              <LoadingRipple class="size-7 text-[#0B7A75]" />
-            </div>
-            <p v-else-if="!messages.length" class="py-10 text-center text-sm text-[#61777B]">
-              No messages yet. Start the conversation.
-            </p>
-            <ol v-else>
-              <ChatMessage
-                v-for="(message, index) in messages"
-                :key="message.sequence"
-                :message="message"
-                :grouped="isGroupedWithPrevious(index)"
-                :first="index === 0"
-                :show-sender="selectedIsGroup"
-                :local="isLocal(message)"
-                :animate-in="shouldAnimate(message)"
-                :highlighted="highlightedSequence === message.sequence"
-                :reaction-picker-open="reactionPickerSequence === message.sequence"
-                :prefers-reduced-motion="prefersReducedMotion"
-                :format-time="formatTime"
-                @reply="startReply(message)"
-                @react="(emoji) => react(message, emoji)"
-                @open-reactions="reactionPickerSequence = message.sequence"
-                @copy="copyMessage(message)"
-                @jump-to="jumpToMessage"
-              />
-            </ol>
+            <AnimatePresence>
+              <motion.button
+                v-if="showJumpToLatest"
+                type="button"
+                data-jump-to-latest
+                :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.6, y: 12 }"
+                :animate="{ opacity: 1, scale: 1, y: 0 }"
+                :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.6, y: 12 }"
+                :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 30 }"
+                class="absolute bottom-4 right-4 z-30 flex size-11 items-center justify-center rounded-full bg-white text-[#0B7A75] shadow-[0_6px_20px_rgba(16,47,53,0.18),0_1px_3px_rgba(16,47,53,0.1)] [@media(hover:hover)]:hover:bg-[#E6F4F1] [@media(hover:hover)]:hover:text-[#102F35]"
+                aria-label="Scroll to the latest message"
+                title="Scroll to the latest message"
+                @click="jumpToLatest"
+              >
+                <ArrowDown class="size-5" />
+              </motion.button>
+            </AnimatePresence>
           </div>
           <div class="border-t border-[#E5EFEC] bg-white px-4 py-3 sm:px-6">
             <p class="mb-2 text-xs text-[#61777B]">Messages stored by OpenMeet</p>

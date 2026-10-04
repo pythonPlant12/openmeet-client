@@ -153,6 +153,57 @@ describe('ChatPane', () => {
     expect(wrapper.findAll('[data-message-sequence]')[0]!.classes()).toContain('z-10');
   });
 
+  it('keeps the reaction picker open while several emojis are picked', async () => {
+    const wrapper = mountPane({ conversation, messages: [message, reply] }, { attachTo: document.body });
+    const [, second] = wrapper.findAllComponents({ name: 'ChatMessage' });
+
+    await second!.vm.$emit('open-reactions');
+    const picker = wrapper.get('[data-reaction-picker]');
+    expect(picker.get('[aria-pressed="true"]').text()).toBe('👍');
+
+    await picker.findAll('button')[1]!.trigger('click');
+    await picker.findAll('button')[2]!.trigger('click');
+
+    expect(wrapper.emitted('react')).toHaveLength(2);
+    expect(wrapper.find('[data-reaction-picker]').exists()).toBe(true);
+  });
+
+  it('scrolls the quoted message into view once the reply preview opens', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const wrapper = mountPane({ conversation, messages: [message] });
+
+    await wrapper.findComponent({ name: 'ChatMessage' }).vm.$emit('reply');
+    await wrapper.setProps({ replyTo: message });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }));
+  });
+
+  it('offers a jump to the latest message when more than ten messages are below the view', async () => {
+    const many = Array.from({ length: 14 }, (_, index) => ({ ...message, sequence: index + 1 }));
+    const wrapper = mountPane({ conversation, messages: many }, { attachTo: document.body });
+    const pane = wrapper.get('[aria-label="Message history"]').element as HTMLElement;
+    const items = wrapper.findAll('[data-message-sequence]').map((item) => item.element as HTMLElement);
+    const rect = (top: number) => ({ top, bottom: top + 40 }) as DOMRect;
+    pane.getBoundingClientRect = () => rect(0 - 40 + 300);
+    items.forEach((item, index) => (item.getBoundingClientRect = () => rect(index < 3 ? 100 : 400 + index * 50)));
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 2000 });
+    Object.defineProperty(pane, 'clientHeight', { configurable: true, value: 300 });
+    pane.scrollTop = 200;
+    const scrollTo = vi.fn();
+    pane.scrollTo = scrollTo;
+
+    pane.dispatchEvent(new Event('scroll'));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await wrapper.vm.$nextTick();
+
+    await wrapper.get('[data-jump-to-latest]').trigger('click');
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 2000 }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-jump-to-latest]').exists()).toBe(false);
+  });
+
   it('opens one reaction picker at a time and closes it on an outside press', async () => {
     const wrapper = mountPane({ conversation, messages: [message, reply] }, { attachTo: document.body });
     const [first, second] = wrapper.findAllComponents({ name: 'ChatMessage' });
