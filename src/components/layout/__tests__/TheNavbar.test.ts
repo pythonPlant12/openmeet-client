@@ -597,6 +597,31 @@ describe('TheNavbar', () => {
     expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Do not disturb');
   });
 
+  it('expands the mobile status picker on tap and collapses it after choosing', async () => {
+    vi.useFakeTimers();
+    media.desktop = false;
+    media.hover = false;
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
+    social.updateCurrentUserStatus.mockResolvedValue({ status: 'away' });
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+    await wrapper.get('button[aria-expanded="false"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(300);
+
+    const toggle = wrapper.get('[data-mobile-status-toggle]');
+    expect(toggle.text()).toContain('Online');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+
+    await wrapper.get('[data-mobile-status-options] [data-status-option="away"]').trigger('click');
+    await flushPromises();
+    expect(social.updateCurrentUserStatus).toHaveBeenCalledWith('token', 'away');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+  });
+
   it('rolls the status back when saving fails', async () => {
     auth.authenticated = true;
     social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'away' });

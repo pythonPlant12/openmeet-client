@@ -52,8 +52,11 @@ const highlightedSequence = ref<number | null>(null);
 const edgeSwipeOffset = ref(0);
 let highlightTimer: number | undefined;
 let edgeSwipe: { pointerId: number; startX: number; startY: number; axis: 'x' | 'y' | null } | null = null;
-// Mobile back gesture: start near the left edge and pull right, like a native back swipe.
-const EDGE_SWIPE_ZONE = 28;
+// Mobile back gesture: a right swipe anywhere in the chat goes back, except on messages that can be
+// quoted, where the same swipe starts a reply. Fields stay excluded so text selection keeps working.
+const BACK_SWIPE_EXCLUDED = '[data-repliable="true"], textarea, input, button, [data-reaction-picker]';
+// Consecutive messages from one sender within this window are grouped tightly.
+const MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000;
 const EDGE_SWIPE_BACK_DISTANCE = 96;
 const pane = ref<HTMLElement | null>(null);
 const composer = ref<HTMLTextAreaElement | null>(null);
@@ -114,6 +117,8 @@ function flash(sequence: number) {
 }
 
 function startReply(message: ConversationMessage) {
+  // Only other people's messages can be quoted.
+  if (props.isLocal(message)) return;
   replyTo.value = message;
   reactionPickerSequence.value = null;
   flash(message.sequence);
@@ -165,9 +170,15 @@ watch(
 
 function onEdgePointerDown(event: PointerEvent) {
   if (props.isDesktop || event.pointerType === 'mouse') return;
-  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  if (event.clientX - bounds.left > EDGE_SWIPE_ZONE) return;
+  if ((event.target as Element | null)?.closest(BACK_SWIPE_EXCLUDED)) return;
   edgeSwipe = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, axis: null };
+}
+
+function isGroupedWithPrevious(index: number) {
+  const message = props.messages[index];
+  const previous = props.messages[index - 1];
+  if (!message || !previous || previous.senderId !== message.senderId) return false;
+  return Date.parse(message.createdAt) - Date.parse(previous.createdAt) < MESSAGE_GROUP_WINDOW_MS;
 }
 
 function onEdgePointerMove(event: PointerEvent) {
@@ -297,7 +308,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
         <div v-if="conversation" class="flex min-h-0 flex-1 flex-col">
           <div
             ref="pane"
-            class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
+            class="min-h-0 flex-1 overflow-y-auto bg-[#F7F9F8] px-4 py-5 sm:px-6"
             aria-label="Message history"
             @scroll.passive="pane && pane.scrollTop < 80 && emit('scroll-top')"
           >
@@ -341,11 +352,13 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
             <p v-else-if="!messages.length" class="py-10 text-center text-sm text-[#61777B]">
               No messages yet. Start the conversation.
             </p>
-            <ol v-else class="space-y-4">
+            <ol v-else>
               <ChatMessage
-                v-for="message in messages"
+                v-for="(message, index) in messages"
                 :key="message.sequence"
                 :message="message"
+                :grouped="isGroupedWithPrevious(index)"
+                :show-sender="selectedIsGroup"
                 :local="isLocal(message)"
                 :animate-in="shouldAnimate(message)"
                 :highlighted="highlightedSequence === message.sequence"
@@ -360,7 +373,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
               />
             </ol>
           </div>
-          <div class="border-t border-[#E5EFEC] bg-[#FBFCF8] px-4 py-3 sm:px-6">
+          <div class="border-t border-[#E5EFEC] bg-white px-4 py-3 sm:px-6">
             <p class="mb-2 text-xs text-[#61777B]">Messages stored by OpenMeet</p>
             <AnimatePresence>
               <motion.div
@@ -373,7 +386,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 class="overflow-hidden"
               >
                 <div
-                  class="mb-2 flex items-center gap-2 rounded-xl border-l-[3px] border-[#0B7A75] bg-[#E6F4F1] px-3 py-2"
+                  class="mb-2 flex items-center gap-2 rounded-xl border-l-[3px] border-[#0B7A75] bg-[#F3F5F4] px-3 py-2"
                 >
                   <Reply class="size-4 shrink-0 text-[#0B7A75]" />
                   <div class="min-w-0 flex-1 text-xs">
@@ -401,7 +414,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 maxlength="2000"
                 placeholder="Write a message"
                 aria-label="Message"
-                class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-[#D8E7E3] bg-white px-3 py-2.5 text-sm text-[#102F35] focus-visible:border-[#D8E7E3] focus-visible:outline-none focus-visible:ring-0"
+                class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-transparent bg-[#F3F5F4] px-3 py-2.5 text-sm text-[#102F35] placeholder:text-[#8A9C9E] focus-visible:border-[#D8E7E3] focus-visible:bg-white focus-visible:outline-none focus-visible:ring-0"
                 @keydown.enter.exact.prevent="emit('send')"
                 @keydown.esc="replyTo = null"
               />

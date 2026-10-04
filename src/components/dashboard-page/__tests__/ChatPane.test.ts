@@ -121,7 +121,28 @@ describe('ChatPane', () => {
     expect(wrapper.find('[data-reaction-picker]').exists()).toBe(false);
   });
 
-  it('goes back to the conversation list when the chat is swiped from the left edge on mobile', async () => {
+  it("starts a quote instead of going back when the swipe begins on someone else's message", () => {
+    const wrapper = mountPane({ conversation, messages: [message] });
+    const bubble = wrapper.get('[data-message-bubble]').element;
+    const pointer = (type: string, clientX: number) =>
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 8,
+        pointerType: 'touch',
+        clientX,
+        clientY: 100,
+      });
+
+    bubble.dispatchEvent(pointer('pointerdown', 40));
+    bubble.dispatchEvent(pointer('pointermove', 120));
+    bubble.dispatchEvent(pointer('pointermove', 220));
+    bubble.dispatchEvent(pointer('pointerup', 220));
+
+    expect(wrapper.emitted('back')).toBeUndefined();
+  });
+
+  it('goes back to the conversation list when the chat body is swiped right on mobile', async () => {
     const wrapper = mountPane({ conversation, messages: [message] });
     const pane = wrapper.get('[data-chat-pane]').element;
     const pointer = (type: string, clientX: number) =>
@@ -134,10 +155,10 @@ describe('ChatPane', () => {
         clientY: 100,
       });
 
-    pane.dispatchEvent(pointer('pointerdown', 4));
-    pane.dispatchEvent(pointer('pointermove', 60));
-    pane.dispatchEvent(pointer('pointermove', 140));
-    pane.dispatchEvent(pointer('pointerup', 140));
+    pane.dispatchEvent(pointer('pointerdown', 140));
+    pane.dispatchEvent(pointer('pointermove', 200));
+    pane.dispatchEvent(pointer('pointermove', 280));
+    pane.dispatchEvent(pointer('pointerup', 280));
 
     expect(wrapper.emitted('back')).toHaveLength(1);
   });
@@ -162,10 +183,33 @@ describe('ChatPane', () => {
     expect(wrapper.find('[data-loading]').exists()).toBe(false);
   });
 
-  it('shows remote sender nicknames', () => {
-    const wrapper = mountPane({ conversation, messages: [message] });
+  it('names senders in group chats but not in direct chats', () => {
+    expect(mountPane({ conversation, messages: [message], selectedIsGroup: true }).text()).toContain('@friend');
+    expect(mountPane({ conversation, messages: [message] }).text()).not.toContain('@friend');
+  });
 
-    expect(wrapper.text()).toContain('@friend');
+  it("only lets other people's messages be quoted", async () => {
+    const own: ConversationMessage = { ...message, sequence: 3, senderId: 'me', content: 'Mine' };
+    const wrapper = mountPane({
+      conversation,
+      messages: [message, own],
+      isLocal: (item: ConversationMessage) => item.senderId === 'me',
+    });
+    const [theirs, mine] = wrapper.findAll('[data-message-bubble]');
+
+    expect(theirs!.attributes('data-repliable')).toBe('true');
+    expect(mine!.attributes('data-repliable')).toBe('false');
+    await wrapper.findAllComponents({ name: 'ChatMessage' })[1]!.vm.$emit('reply');
+    expect(wrapper.emitted('update:replyTo')).toBeUndefined();
+  });
+
+  it('groups consecutive messages from the same sender', () => {
+    const followUp: ConversationMessage = { ...message, sequence: 4, createdAt: '2026-10-02T12:01:00Z' };
+    const later: ConversationMessage = { ...message, sequence: 5, createdAt: '2026-10-02T12:30:00Z' };
+    const items = mountPane({ conversation, messages: [message, followUp, later] }).findAll('[data-message-sequence]');
+
+    expect(items[1]!.classes()).toContain('mt-0.5');
+    expect(items[2]!.classes()).not.toContain('mt-0.5');
   });
 
   it('smoothly scrolls to the newest message when requested', async () => {

@@ -18,6 +18,10 @@ import { QUICK_REACTIONS } from './reactions';
 const props = defineProps<{
   message: ConversationMessage;
   local: boolean;
+  /** Follows a message from the same sender, so the name and spacing are tightened. */
+  grouped: boolean;
+  /** Group chats name the sender of incoming messages. */
+  showSender: boolean;
   animateIn: boolean;
   highlighted: boolean;
   reactionPickerOpen: boolean;
@@ -36,6 +40,8 @@ const emit = defineEmits<{
 const SWIPE_DISTANCE = 56;
 
 const reactions = computed(() => props.message.reactions ?? []);
+// Only other people's messages can be quoted.
+const canReply = computed(() => !props.local);
 const initial = computed(() =>
   props.animateIn && !props.prefersReducedMotion
     ? props.local
@@ -52,21 +58,21 @@ const initial = computed(() =>
     :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
     :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: 'easeOut' }"
     class="flex flex-col"
-    :class="local ? 'items-end' : 'items-start'"
+    :class="[local ? 'items-end' : 'items-start', grouped ? 'mt-0.5' : 'mt-3 first:mt-0']"
   >
     <SwipeableRow
       :id="`message-${message.sequence}`"
       class="w-full"
-      :leading-width="SWIPE_DISTANCE"
+      :leading-width="canReply ? SWIPE_DISTANCE : 0"
       :trailing-width="SWIPE_DISTANCE"
       :full-swipe-distance="SWIPE_DISTANCE"
-      full-swipe-leading
+      :full-swipe-leading="canReply"
       full-swipe-trailing
       momentary
       @full-swipe-leading="emit('reply')"
       @full-swipe-trailing="emit('open-reactions')"
     >
-      <template #leading="{ armed }">
+      <template v-if="canReply" #leading="{ armed }">
         <span class="flex flex-1 items-center justify-start pl-2" aria-hidden="true">
           <span
             class="flex size-8 items-center justify-center rounded-full transition-[transform,background-color,color] duration-150"
@@ -88,37 +94,51 @@ const initial = computed(() =>
         <ContextMenuTrigger as-child>
           <div class="flex w-full" :class="local ? 'justify-end' : 'justify-start'">
             <motion.article
+              data-message-bubble
+              :data-repliable="canReply"
               :animate="reactionPickerOpen ? { scale: 1.02, y: -2 } : { scale: 1, y: 0 }"
               :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 26 }"
-              class="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm sm:max-w-[70%] [@media(pointer:coarse)]:select-none"
+              class="max-w-[82%] rounded-[1.15rem] px-3 pb-1.5 pt-2 text-[0.9375rem] sm:max-w-[68%] [@media(pointer:coarse)]:select-none"
               :class="[
-                local
-                  ? 'rounded-br-md bg-[#0B7A75] text-white'
-                  : 'rounded-bl-md border border-[#D8E7E3] bg-[#F6FAF7] text-[#102F35]',
-                reactionPickerOpen ? 'shadow-[0_14px_34px_rgba(16,47,53,0.18)]' : 'shadow-sm',
+                local ? 'bg-[#0B7A75] text-white' : 'border border-[#E4ECE9] bg-white text-[#102F35]',
+                !grouped && (local ? 'rounded-br-md' : 'rounded-bl-md'),
+                reactionPickerOpen
+                  ? 'shadow-[0_14px_34px_rgba(16,47,53,0.18)]'
+                  : 'shadow-[0_1px_2px_rgba(16,47,53,0.06)]',
                 { 'harbor-message-flash': highlighted },
               ]"
             >
+              <p v-if="showSender && !local && !grouped" class="mb-0.5 text-xs font-semibold text-[#0B7A75]">
+                {{ message.senderName }}
+                <span v-if="message.senderNickname" class="font-medium text-[#8A9C9E]"
+                  >@{{ message.senderNickname }}</span
+                >
+              </p>
               <button
                 v-if="message.replyTo"
                 type="button"
                 data-message-quote
-                class="mb-2 block w-full rounded-lg border-l-[3px] px-2.5 py-1.5 text-left text-xs"
+                class="mb-1.5 mt-0.5 block w-full rounded-lg border-l-[3px] px-2.5 py-1.5 text-left text-xs transition-colors"
                 :class="
-                  local ? 'border-white/70 bg-white/15 text-white/90' : 'border-[#0B7A75] bg-[#E6F4F1] text-[#27595D]'
+                  local
+                    ? 'border-white/70 bg-white/15 text-white/85 [@media(hover:hover)]:hover:bg-white/20'
+                    : 'border-[#0B7A75] bg-[#F3F5F4] text-[#5F7375] [@media(hover:hover)]:hover:bg-[#ECF0EF]'
                 "
                 :aria-label="`Show the message from ${message.replyTo.senderName}`"
                 @click="emit('jump-to', message.replyTo.sequence)"
               >
-                <span class="block font-semibold">{{ message.replyTo.senderName }}</span>
+                <span class="block font-semibold" :class="local ? 'text-white' : 'text-[#0B7A75]'">{{
+                  message.replyTo.senderName
+                }}</span>
                 <span class="line-clamp-2 block">{{ message.replyTo.content }}</span>
               </button>
-              <div class="mb-1 flex items-center gap-2 text-xs" :class="local ? 'text-white/80' : 'text-[#61777B]'">
-                <span class="font-semibold">{{ local ? 'You' : message.senderName }}</span>
-                <span v-if="!local && message.senderNickname">@{{ message.senderNickname }}</span>
-                <time :datetime="message.createdAt">{{ formatTime(message.createdAt) }}</time>
-              </div>
-              <p class="whitespace-pre-wrap break-words leading-5">{{ message.content }}</p>
+              <p class="whitespace-pre-wrap break-words leading-snug">{{ message.content }}</p>
+              <time
+                :datetime="message.createdAt"
+                class="mt-0.5 block text-right text-[0.6875rem] tabular-nums"
+                :class="local ? 'text-white/70' : 'text-[#8A9C9E]'"
+                >{{ formatTime(message.createdAt) }}</time
+              >
             </motion.article>
           </div>
         </ContextMenuTrigger>
@@ -139,6 +159,7 @@ const initial = computed(() =>
           </div>
           <ContextMenuSeparator class="mx-1 my-1 bg-[#E5EFEC]" />
           <ContextMenuItem
+            v-if="canReply"
             class="harbor-context-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
             @select="emit('reply')"
             ><Reply class="size-4" />Reply</ContextMenuItem
@@ -189,8 +210,8 @@ const initial = computed(() =>
           class="inline-flex min-h-7 items-center gap-1 rounded-full border px-2 text-xs font-semibold"
           :class="
             reaction.reactedByMe
-              ? 'border-[#0B7A75] bg-[#E6F4F1] text-[#102F35]'
-              : 'border-[#D8E7E3] bg-white text-[#27595D]'
+              ? 'border-[#9BCFC7] bg-[#E6F4F1] text-[#102F35]'
+              : 'border-transparent bg-[#EEF2F1] text-[#4E6B70]'
           "
           :aria-pressed="reaction.reactedByMe"
           :aria-label="`${reaction.emoji} ${reaction.count}${reaction.reactedByMe ? ', including you' : ''}`"

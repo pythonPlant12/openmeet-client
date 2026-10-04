@@ -79,6 +79,7 @@ const avatarUrl = ref<string | null>(null);
 const nickname = ref<string | null>(null);
 const ownStatus = ref<UserStatus | null>(null);
 const ownStatusOption = computed(() => userStatusOption(ownStatus.value));
+const isMobileStatusOpen = ref(false);
 const isNicknameCopied = ref(false);
 let nicknameCopiedTimer: number | undefined;
 const isMeetingChatOpen = ref(false);
@@ -265,6 +266,7 @@ const setMobileMenuPageScroll = (locked: boolean) => {
 };
 
 const resetMobileMenu = () => {
+  isMobileStatusOpen.value = false;
   cancelMobileMenuExpansion();
   cancelMobileMenuContentExit();
   cancelMobileMenuCollapse();
@@ -416,6 +418,11 @@ async function setOwnStatus(status: UserStatus) {
     console.error('[Navbar] Failed to update status:', error);
     ownStatus.value = previous;
   }
+}
+
+function selectMobileStatus(status: UserStatus) {
+  isMobileStatusOpen.value = false;
+  void setOwnStatus(status);
 }
 
 async function copyNickname() {
@@ -906,30 +913,56 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                       </span>
                       <ChevronRight class="pointer-events-none size-4 text-[#61777B]" />
                     </div>
-                    <div
-                      v-if="ownStatus"
-                      data-mobile-status-options
-                      class="mt-2 flex flex-wrap gap-1.5 px-1"
-                      role="radiogroup"
-                      :aria-label="t('nav.status')"
-                    >
+                    <div v-if="ownStatus" data-mobile-status class="mt-2 px-1">
                       <button
-                        v-for="option in USER_STATUS_OPTIONS"
-                        :key="option.value"
                         type="button"
-                        role="radio"
-                        :aria-checked="option.value === ownStatus"
-                        :data-status-option="option.value"
-                        class="inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors"
-                        :class="
-                          option.value === ownStatus
-                            ? 'border-[#0B7A75] bg-[#E6F4F1] text-[#102F35]'
-                            : 'border-[#D8E7E3] bg-white text-[#27595D]'
-                        "
-                        @click="setOwnStatus(option.value)"
+                        data-mobile-status-toggle
+                        class="flex min-h-11 w-full items-center gap-2 rounded-xl border border-[#D8E7E3] bg-white px-3 text-left text-sm font-semibold text-[#102F35]"
+                        :aria-expanded="isMobileStatusOpen"
+                        aria-controls="mobile-status-options"
+                        @click="isMobileStatusOpen = !isMobileStatusOpen"
                       >
-                        <span class="size-2 rounded-full" :class="option.dotClass" />{{ option.label }}
+                        <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
+                        <span class="min-w-0 flex-1 truncate">{{ ownStatusOption.label }}</span>
+                        <span class="text-xs font-medium text-[#61777B]">{{ t('nav.status') }}</span>
+                        <ChevronDown
+                          class="size-4 shrink-0 text-[#61777B] transition-transform duration-200"
+                          :class="{ 'rotate-180': isMobileStatusOpen }"
+                        />
                       </button>
+                      <div
+                        id="mobile-status-options"
+                        class="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+                        :class="isMobileStatusOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
+                      >
+                        <div class="min-h-0 overflow-hidden" :inert="!isMobileStatusOpen">
+                          <div
+                            data-mobile-status-options
+                            role="radiogroup"
+                            :aria-label="t('nav.status')"
+                            class="mt-1 space-y-0.5 rounded-xl border border-[#D8E7E3] bg-white p-1"
+                          >
+                            <button
+                              v-for="option in USER_STATUS_OPTIONS"
+                              :key="option.value"
+                              type="button"
+                              role="radio"
+                              :aria-checked="option.value === ownStatus"
+                              :data-status-option="option.value"
+                              class="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left"
+                              :class="option.value === ownStatus ? 'bg-[#E6F4F1]' : ''"
+                              @click="selectMobileStatus(option.value)"
+                            >
+                              <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
+                              <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-semibold text-[#102F35]">{{ option.label }}</span>
+                                <span class="block text-xs text-[#61777B]">{{ option.description }}</span>
+                              </span>
+                              <Check v-if="option.value === ownStatus" class="size-4 shrink-0 text-[#0B7A75]" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </motion.div>
                   <motion.div v-bind="mobileMenuItemMotion(0.14, accountMenuLastItemDelay)">
