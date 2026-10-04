@@ -137,8 +137,8 @@ function onPaneScroll() {
   if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(updateScrollState);
 }
 
+// The button stays during the smooth scroll and leaves through the scroll handler once near the bottom.
 function jumpToLatest() {
-  showJumpToLatest.value = false;
   pane.value?.scrollTo({ top: pane.value.scrollHeight, behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
 }
 
@@ -199,8 +199,8 @@ function startReply(message: ConversationMessage) {
   revealTimer = window.setTimeout(revealQuotedMessage, props.prefersReducedMotion ? 0 : REPLY_PREVIEW_SETTLE_MS);
 }
 
-// The picker stays open so several reactions can be toggled; a press outside it closes it.
 function react(message: ConversationMessage, emoji: string) {
+  reactionPickerSequence.value = null;
   emit('react', message, emoji);
 }
 

@@ -149,13 +149,13 @@ describe('ChatPane', () => {
     expect(row.classes()).toContain('overflow-hidden');
     // Padding sits on an inner wrapper, so the animated row can collapse to exactly zero height.
     expect(row.classes().some((name) => /^p[tbxy]?-/.test(name))).toBe(false);
-    expect(row.get('div').classes()).toContain('pb-2.5');
+    expect(row.get('div').classes()).toContain('pb-1');
     // Message rows clip only sideways, and the lifted message paints above its neighbours.
     expect(wrapper.findAll('[data-swipeable-row]')[0]!.classes()).toContain('harbor-clip-x');
     expect(wrapper.findAll('[data-message-sequence]')[0]!.classes()).toContain('z-10');
   });
 
-  it('keeps the reaction picker open while several emojis are picked', async () => {
+  it('closes the reaction picker after a pick', async () => {
     const wrapper = mountPane({ conversation, messages: [message, reply] }, { attachTo: document.body });
     const [, second] = wrapper.findAllComponents({ name: 'ChatMessage' });
 
@@ -164,10 +164,10 @@ describe('ChatPane', () => {
     expect(picker.get('[aria-pressed="true"]').text()).toBe('👍');
 
     await picker.findAll('button')[1]!.trigger('click');
-    await picker.findAll('button')[2]!.trigger('click');
 
-    expect(wrapper.emitted('react')).toHaveLength(2);
-    expect(wrapper.find('[data-reaction-picker]').exists()).toBe(true);
+    expect(wrapper.emitted('react')).toHaveLength(1);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-reaction-picker]').exists()).toBe(false);
   });
 
   it('scrolls the quoted message into view once the reply preview opens', async () => {
@@ -202,8 +202,9 @@ describe('ChatPane', () => {
 
     await wrapper.get('[data-jump-to-latest]').trigger('click');
     expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 2000 }));
+    // No exit on click: the button leaves only once the scroll reaches the bottom.
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('[data-jump-to-latest]').exists()).toBe(false);
+    expect(wrapper.find('[data-jump-to-latest]').exists()).toBe(true);
   });
 
   it('opens one reaction picker at a time and closes it on an outside press', async () => {
@@ -306,8 +307,8 @@ describe('ChatPane', () => {
     const later: ConversationMessage = { ...message, sequence: 5, createdAt: '2026-10-02T12:30:00Z' };
     const items = mountPane({ conversation, messages: [message, followUp, later] }).findAll('[data-message-sequence]');
 
-    expect(items[1]!.classes()).toContain('mt-0.5');
-    expect(items[2]!.classes()).not.toContain('mt-0.5');
+    expect(items[1]!.classes()).toContain('mt-2.5');
+    expect(items[2]!.classes()).toContain('mt-2.5');
   });
 
   it('smoothly scrolls to the newest message when requested', async () => {

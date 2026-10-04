@@ -66,11 +66,7 @@ const initial = computed(() =>
     :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
     :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: 'easeOut' }"
     class="relative flex flex-col"
-    :class="[
-      local ? 'items-end' : 'items-start',
-      grouped ? 'mt-0.5' : 'mt-3 first:mt-0',
-      { 'z-10': isLifted || highlighted },
-    ]"
+    :class="[local ? 'items-end' : 'items-start', 'mt-2.5 first:mt-0', { 'z-10': isLifted || highlighted }]"
   >
     <SwipeableRow
       :id="`message-${message.sequence}`"
@@ -228,15 +224,15 @@ const initial = computed(() =>
       <motion.div
         v-if="reactions.length"
         data-reaction-row
-        :initial="prefersReducedMotion ? false : { height: 0, marginTop: 0, opacity: 0 }"
-        :animate="{ height: 'auto', marginTop: -10, opacity: 1 }"
-        :exit="prefersReducedMotion ? undefined : { height: 0, marginTop: 0, opacity: 0 }"
+        :initial="prefersReducedMotion ? false : { height: 0, marginTop: 0, marginBottom: 0, opacity: 0 }"
+        :animate="{ height: 'auto', marginTop: -10, marginBottom: -4, opacity: 1 }"
+        :exit="prefersReducedMotion ? undefined : { height: 0, marginTop: 0, marginBottom: 0, opacity: 0 }"
         :transition="
           prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 36, mass: 0.9 }
         "
         class="relative z-10 max-w-[82%] overflow-hidden sm:max-w-[68%]"
       >
-        <div class="flex flex-wrap gap-1 px-2 pb-2.5 pt-1" :class="local ? 'justify-end' : 'justify-start'">
+        <div class="flex flex-wrap gap-1 px-2 pb-1 pt-1" :class="local ? 'justify-end' : 'justify-start'">
           <!-- popLayout lifts a leaving chip out of the flow at once, so the remaining chips glide over. -->
           <AnimatePresence mode="popLayout">
             <motion.button
