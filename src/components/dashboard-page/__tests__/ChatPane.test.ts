@@ -83,7 +83,7 @@ describe('ChatPane', () => {
   it('shows remote sender nicknames', () => {
     const wrapper = mountPane({ conversation, messages: [message] });
 
-    expect(wrapper.text()).toContain('#friend');
+    expect(wrapper.text()).toContain('@friend');
   });
 
   it('smoothly scrolls to the newest message when requested', async () => {

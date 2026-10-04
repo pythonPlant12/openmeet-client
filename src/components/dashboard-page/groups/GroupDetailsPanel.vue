@@ -503,7 +503,7 @@ defineExpose({
           <div class="min-w-0 rounded-xl border border-[#D8E7E3] bg-white p-3">
             <span class="block text-xs text-[#61777B]">Group ID</span>
             <div class="mt-1 flex items-center gap-1">
-              <code class="min-w-0 flex-1 truncate text-xs font-semibold">{{ info.groupCode }}</code
+              <code class="min-w-0 flex-1 truncate text-xs font-semibold">#{{ info.groupCode }}</code
               ><button
                 type="button"
                 class="harbor-ghost-action shrink-0 rounded-md p-1 text-[#0B7A75]"

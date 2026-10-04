@@ -27,7 +27,6 @@ const props = defineProps<{
   canRequestNotificationPermission: boolean;
   isDesktop: boolean;
   prefersReducedMotion: boolean;
-  isDraft: boolean;
   shouldAnimate: (message: ConversationMessage) => boolean;
   isLocal: (message: ConversationMessage) => boolean;
   formatTime: (value: string) => string;
@@ -47,6 +46,12 @@ const composer = ref<HTMLTextAreaElement | null>(null);
 let pendingBottomScroll: ScrollBehavior | null = null;
 const initial = computed(() => (props.prefersReducedMotion ? false : { opacity: 0, y: 8, scale: 0.99 }));
 const exit = computed(() => (props.prefersReducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.99 }));
+const directConversationLabel = computed(() =>
+  props.selectedFriend?.nickname ? `@${props.selectedFriend.nickname}` : props.selectedTitle,
+);
+const groupConversationLabel = computed(() =>
+  props.conversation?.groupCode ? `#${props.conversation.groupCode}` : props.selectedTitle,
+);
 function initials(name?: string | null) {
   return (
     name
@@ -131,15 +136,9 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 v-else-if="isFriendAvatarLoading(selectedFriend.id)"
                 class="size-4 text-[#0B7A75]"
               /><span v-else class="text-xs font-semibold">{{ initials(selectedFriend.name) }}</span></span
-            ><span class="min-w-0"
-              ><span class="flex items-center gap-2"
-                ><span id="conversation-title" class="truncate font-semibold">{{ selectedTitle }}</span
-                ><span v-if="selectedFriend.nickname" class="shrink-0 text-xs font-medium text-[#61777B]"
-                  >#{{ selectedFriend.nickname }}</span
-                ></span
-              ><span class="block truncate text-xs text-[#61777B]">{{
-                isDraft ? 'Draft direct chat' : 'Direct conversation'
-              }}</span></span
+              ><span class="min-w-0"
+                ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
+                ><span class="block truncate text-xs text-[#61777B]">{{ directConversationLabel }}</span></span
             ></button
           ><button
             v-else-if="selectedIsGroup"
@@ -153,7 +152,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 class="size-4 text-white" /><UsersRound v-else class="size-4" /></span
             ><span class="min-w-0"
               ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
-              ><span class="block truncate text-xs text-[#61777B]">Group conversation</span></span
+              ><span class="block truncate text-xs text-[#61777B]">{{ groupConversationLabel }}</span></span
             >
           </button>
           <div v-else class="flex min-w-0 flex-1 items-center gap-3">
@@ -239,7 +238,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                     :class="isLocal(message) ? 'text-white/80' : 'text-[#61777B]'"
                   >
                     <span class="font-semibold">{{ isLocal(message) ? 'You' : message.senderName }}</span>
-                    <span v-if="!isLocal(message) && message.senderNickname">#{{ message.senderNickname }}</span>
+                    <span v-if="!isLocal(message) && message.senderNickname">@{{ message.senderNickname }}</span>
                     <time :datetime="message.createdAt">{{ formatTime(message.createdAt) }}</time>
                   </div>
                   <p class="whitespace-pre-wrap break-words leading-5">{{ message.content }}</p>

@@ -367,7 +367,7 @@ watch(
           <div class="inline-flex min-w-0 items-center gap-2 text-[#61777B]">
             <Copy class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0 flex-1"
               ><span class="block text-xs">Group ID</span
-              ><code class="block truncate font-semibold text-[#102F35]">{{ info.groupCode }}</code></span
+              ><code class="block truncate font-semibold text-[#102F35]">#{{ info.groupCode }}</code></span
             ><button
               type="button"
               class="harbor-ghost-action shrink-0 rounded-lg p-2 text-[#0B7A75]"

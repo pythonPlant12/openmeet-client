@@ -48,6 +48,7 @@ const props = defineProps<{
   selectedConversationId?: string;
   unreadCount: (conversation: Conversation) => number;
   conversationName: (conversation: Conversation) => string;
+  conversationIdentifier: (conversation: Conversation) => string;
   directAvatarUrl: (conversation: Conversation) => string | undefined;
   isFriendAvatarLoading: (userId: string) => boolean;
   isGroupAvatarLoading: (groupId: string) => boolean;
@@ -286,7 +287,7 @@ onBeforeUnmount(clearLongPress);
                     class="size-3 shrink-0 text-[#61777B]"
                     aria-label="Password protected" /></span
                 ><span class="mt-0.5 block truncate text-xs text-[#61777B]">{{
-                  conversation.kind === 'group' ? 'Group conversation' : 'Direct conversation'
+                  conversationIdentifier(conversation)
                 }}</span></span
               ><span
                 v-if="unreadCount(conversation)"

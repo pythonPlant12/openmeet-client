@@ -274,7 +274,7 @@ onBeforeUnmount(clearLongPress);
                 ><span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
                   ><span class="truncate">{{ friend.name }}</span
                   ><span v-if="friend.nickname" class="shrink-0 text-xs text-[#61777B]"
-                    >#{{ friend.nickname }}</span
+                    >@{{ friend.nickname }}</span
                   ></span
                 ><LoadingRipple
                   v-if="isOpening === friend.id"

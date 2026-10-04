@@ -129,7 +129,7 @@ async function copyNickname(nickname: string) {
             >
             <h3 class="mt-5 truncate text-xl font-semibold tracking-[-0.025em]">{{ profile.name }}</h3>
             <div v-if="profile.nickname" class="mt-2 flex items-center gap-1.5 text-sm text-[#61777B]">
-              <span>#{{ profile.nickname }}</span>
+              <span>@{{ profile.nickname }}</span>
               <button
                 type="button"
                 class="harbor-ghost-action rounded-md p-1 text-[#0B7A75]"

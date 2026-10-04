@@ -222,11 +222,6 @@ const contactProfileFriend = computed(() =>
     ? friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId)
     : null,
 );
-const isDraftDirectConversation = computed(
-  () =>
-    selectedConversation.value?.kind === 'direct' &&
-    !conversations.value.some((conversation) => conversation.id === selectedConversation.value?.id),
-);
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
 
 function beginGroupMutation(groupId: string) {
@@ -252,6 +247,15 @@ function isGroupAvatarLoading(groupId: string) {
 function conversationName(conversation: Conversation) {
   if (conversation.kind === 'group') return conversation.title?.trim() || 'Untitled group';
   return friendById.value.get(conversation.otherUserId ?? '')?.name || 'Direct conversation';
+}
+
+function conversationIdentifier(conversation: Conversation) {
+  if (conversation.kind === 'group') {
+    return conversation.groupCode ? `#${conversation.groupCode}` : conversationName(conversation);
+  }
+
+  const nickname = friendById.value.get(conversation.otherUserId ?? '')?.nickname;
+  return nickname ? `@${nickname}` : conversationName(conversation);
 }
 
 function userInitials(name?: string | null) {
@@ -1446,6 +1450,7 @@ async function startConversationCall(conversation: Conversation) {
           :conversations="filteredConversations"
           :context-menu-key="contextMenuKey"
           :conversation-name="conversationName"
+          :conversation-identifier="conversationIdentifier"
           :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
           :is-friend-avatar-loading="isFriendAvatarLoading"
           :is-group-avatar-loading="isGroupAvatarLoading"
@@ -1528,7 +1533,6 @@ async function startConversationCall(conversation: Conversation) {
         :can-request-notification-permission="canRequestNotificationPermission"
         :is-desktop="isDesktop"
         :prefers-reduced-motion="prefersReducedMotion"
-        :is-draft="isDraftDirectConversation"
         :should-animate="shouldAnimateMessage"
         :is-local="isLocalMessage"
         :format-time="formatMessageTime"

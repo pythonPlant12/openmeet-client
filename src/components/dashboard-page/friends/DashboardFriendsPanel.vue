@@ -196,7 +196,7 @@ function userInitials(name: string) {
             <p class="flex items-center gap-1.5 truncate text-sm font-semibold">
               <span class="truncate">{{ friend.name }}</span>
               <span v-if="friend.nickname" class="shrink-0 text-xs font-medium text-[#61777B]"
-                >#{{ friend.nickname }}</span
+                >@{{ friend.nickname }}</span
               >
             </p>
             <p class="truncate text-xs text-[#809697]">

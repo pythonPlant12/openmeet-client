@@ -269,6 +269,7 @@ const closeMobileMenu = (afterClose?: () => void) => {
   cancelMobileMenuCollapse();
   closingMobileMenuIsContentSized.value = hasContentSizedMobileMenu.value;
   isClosingMobileMenu.value = true;
+  if (closingMobileMenuIsContentSized.value) mobileMenuIconOpen.value = false;
   // Navigate now; page transitions run alongside the drawer's independent exit sequence.
   afterClose?.();
   hideMobileMenuContent();
