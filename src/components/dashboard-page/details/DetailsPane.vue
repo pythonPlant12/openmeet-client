@@ -34,6 +34,7 @@ const groupDetailsPanel = ref<{
 const emit = defineEmits<{
   (event: 'call'): void;
   (event: 'call-member', member: GroupMember): void;
+  (event: 'account'): void;
   (event: 'open-profile', id: string, name: string): void;
   (event: 'refresh-group'): void;
   (event: 'group-removed', id: string): void;
@@ -110,7 +111,12 @@ defineExpose({
       Create group conversations, review direct-message requests, or select an accepted friend.
     </div>
     <div class="mt-auto border-t border-[#E5EFEC] p-4">
-      <div class="flex items-center gap-3 rounded-xl bg-white p-3">
+      <button
+        type="button"
+        class="harbor-ghost-action flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left"
+        aria-label="Open account settings"
+        @click="emit('account')"
+      >
         <span
           class="flex size-9 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
           >{{ initials(currentUser?.name) }}</span
@@ -118,7 +124,7 @@ defineExpose({
           ><strong class="block truncate text-sm">{{ currentUser?.name }}</strong
           ><span class="block truncate text-xs text-[#61777B]">{{ currentUser?.email }}</span></span
         >
-      </div>
+      </button>
     </div>
   </aside>
 </template>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import {
   CalendarDays,
+  Check,
   Clock3,
+  Copy,
   Crown,
   LogOut,
   ShieldCheck,
@@ -10,23 +12,26 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-vue-next';
+import { ref } from 'vue';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
 import { LoadingRipple } from '@/components/ui/loading';
-import type { GroupInfo, GroupMember } from '@/services/social-api';
+import type { Friend, GroupInfo, GroupMember } from '@/services/social-api';
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
   loading: boolean;
   error: string;
   info: GroupInfo | null;
   members: GroupMember[];
+  friends: Friend[];
   avatarUrl?: string;
   currentUserId?: string;
   accessLabel: (policy: GroupInfo['accessPolicy']) => string;
   formatDate: (value: string | null) => string;
 }>();
+const copiedGroupId = ref(false);
 const emit = defineEmits<{
   (event: 'update:open', value: boolean): void;
   (event: 'profile', id: string, name: string): void;
@@ -61,6 +66,17 @@ function roleClass(role: string | null) {
 
 function canManage(role: string | null) {
   return role === 'creator' || role === 'admin';
+}
+
+function canOpenProfile(member: GroupMember) {
+  return member.id === props.currentUserId || props.friends.some((friend) => friend.id === member.id);
+}
+
+async function copyGroupId() {
+  if (!props.info) return;
+  await navigator.clipboard.writeText(props.info.groupCode);
+  copiedGroupId.value = true;
+  window.setTimeout(() => (copiedGroupId.value = false), 2_000);
 }
 </script>
 <template>
@@ -107,18 +123,33 @@ function canManage(role: string | null) {
             </div>
           </div>
         </section>
-        <section
-          class="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-[#D8E7E3] bg-white px-4 py-3 text-sm"
-        >
-          <span class="inline-flex items-center gap-2 text-[#61777B]"
-            ><ShieldCheck class="size-4 text-[#0B7A75]" /><span>Access</span
-            ><strong class="font-semibold text-[#102F35]">{{ accessLabel(info.accessPolicy) }}</strong></span
-          >
-          <span class="hidden h-4 w-px bg-[#D8E7E3] sm:block" aria-hidden="true" />
-          <span class="inline-flex items-center gap-2 text-[#61777B]"
-            ><CalendarDays class="size-4 text-[#0B7A75]" /><span>Created</span
-            ><strong class="font-semibold text-[#102F35]">{{ formatDate(info.createdAt) }}</strong></span
-          >
+        <section class="grid gap-3 rounded-2xl border border-[#D8E7E3] bg-white p-4 text-sm sm:grid-cols-3">
+          <div class="inline-flex items-center gap-2 text-[#61777B]">
+            <ShieldCheck class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
+              ><span class="block text-xs">Access</span
+              ><strong class="block font-semibold text-[#102F35]">{{ accessLabel(info.accessPolicy) }}</strong></span
+            >
+          </div>
+          <div class="inline-flex items-center gap-2 text-[#61777B]">
+            <CalendarDays class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
+              ><span class="block text-xs">Created</span
+              ><strong class="block font-semibold text-[#102F35]">{{ formatDate(info.createdAt) }}</strong></span
+            >
+          </div>
+          <div class="inline-flex min-w-0 items-center gap-2 text-[#61777B]">
+            <Copy class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0 flex-1"
+              ><span class="block text-xs">Group ID</span
+              ><code class="block truncate font-semibold text-[#102F35]">{{ info.groupCode }}</code></span
+            ><button
+              type="button"
+              class="harbor-ghost-action shrink-0 rounded-lg p-2 text-[#0B7A75]"
+              :aria-label="copiedGroupId ? 'Group ID copied' : 'Copy group ID'"
+              :title="copiedGroupId ? 'Copied' : 'Copy group ID'"
+              @click="copyGroupId"
+            >
+              <Check v-if="copiedGroupId" class="size-4" /><Copy v-else class="size-4" />
+            </button>
+          </div>
         </section>
         <section class="flex flex-wrap items-center justify-center gap-2" aria-label="Group actions">
           <Button
@@ -171,7 +202,12 @@ function canManage(role: string | null) {
               v-for="member in members"
               :key="member.id"
               type="button"
-              class="harbor-ghost-action flex w-full items-center gap-3 border-b border-[#E5EFEC] px-4 py-3 text-left last:border-b-0"
+              class="flex w-full items-center gap-3 border-b border-[#E5EFEC] px-4 py-3 text-left last:border-b-0"
+              :class="canOpenProfile(member) ? 'harbor-ghost-action' : 'cursor-default'"
+              :disabled="!canOpenProfile(member)"
+              :title="
+                canOpenProfile(member) ? 'Open profile' : 'Profile details are available to accepted friends only.'
+              "
               @click="emit('profile', member.id, member.name)"
             >
               <span

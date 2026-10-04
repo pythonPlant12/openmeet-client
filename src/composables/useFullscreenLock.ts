@@ -7,6 +7,7 @@ import { onMounted, onUnmounted } from 'vue';
  */
 export function useFullscreenLock() {
   let originalOverflow: string;
+  let originalHtmlOverflow: string;
   let originalTouchAction: string;
   let originalUserSelect: string;
   let originalViewport: string | null;
@@ -14,6 +15,7 @@ export function useFullscreenLock() {
   const lock = () => {
     // Store original values
     originalOverflow = document.body.style.overflow;
+    originalHtmlOverflow = document.documentElement.style.overflow;
     originalTouchAction = document.body.style.touchAction;
     originalUserSelect = document.body.style.userSelect;
 
@@ -41,7 +43,7 @@ export function useFullscreenLock() {
     document.body.style.overflow = originalOverflow || '';
     document.body.style.touchAction = originalTouchAction || '';
     document.body.style.userSelect = originalUserSelect || '';
-    document.documentElement.style.overflow = '';
+    document.documentElement.style.overflow = originalHtmlOverflow || '';
 
     // Restore viewport meta
     const viewportMeta = document.querySelector('meta[name="viewport"]');

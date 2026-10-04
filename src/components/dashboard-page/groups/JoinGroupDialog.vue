@@ -44,7 +44,7 @@ const emit = defineEmits<{
       ><DialogHeader
         ><DialogTitle>Join group</DialogTitle
         ><DialogDescription class="text-[#61777B]"
-          >Enter word code shared by group member.</DialogDescription
+          >Enter the 22-character Group ID shared by a group member.</DialogDescription
         ></DialogHeader
       ><motion.form
         layout
@@ -52,14 +52,14 @@ const emit = defineEmits<{
         class="space-y-4"
         @submit.prevent="preview ? emit('join') : emit('preview')"
         ><div class="space-y-2">
-          <Label for="join-group-code">Group code</Label>
+          <Label for="join-group-code">Group ID</Label>
           <div class="flex gap-2">
             <Input
               id="join-group-code"
               :model-value="code"
               required
               autocomplete="off"
-              placeholder="harbor-words"
+              placeholder="2aIFX0J6L4w7Y9KzQp8VrN"
               :disabled="joining"
               class="h-11 min-w-0 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
               @update:model-value="

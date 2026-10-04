@@ -76,12 +76,14 @@ let avatarRequest = 0;
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
 const isDashboardPage = computed(() => route.path === '/dashboard');
-const hasContentSizedMobileMenu = computed(() => isMeetingPage.value || isDashboardPage.value);
+const hasContentSizedMobileMenu = computed(
+  () => isAuthenticated.value && (isMeetingPage.value || isDashboardPage.value),
+);
 const activeMobileMenuIsContentSized = computed(() =>
   isClosingMobileMenu.value ? closingMobileMenuIsContentSized.value : hasContentSizedMobileMenu.value,
 );
 const homePath = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
-const showMarketingNavigation = computed(() => (isLandingPage.value && !isAuthenticated.value) || isMeetingPage.value);
+const showMarketingNavigation = computed(() => !isAuthenticated.value && (isLandingPage.value || isMeetingPage.value));
 const isAuthBusy = computed(
   () => isAuthenticating.value || isRegistering.value || isCheckingSession.value || state.value.value === 'loggingOut',
 );

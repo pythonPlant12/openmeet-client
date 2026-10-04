@@ -396,6 +396,7 @@ describe('TheNavbar', () => {
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.friends');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).not.toContain('common.logOut');
     expect(mobile.wrapper.text()).toContain('common.logOut');
+    expect(mobile.wrapper.find('[data-mobile-public-navigation]').exists()).toBe(false);
 
     const dashboard = await mountNavbar('/dashboard');
     await dashboard.wrapper.get('button[aria-expanded="false"]').trigger('click');
@@ -417,6 +418,20 @@ describe('TheNavbar', () => {
 
     expect(dashboard.router.currentRoute.value.path).toBe('/account');
     expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
+  });
+
+  it('expands the anonymous meeting drawer to the mobile viewport', async () => {
+    vi.useFakeTimers();
+    media.desktop = false;
+    media.hover = false;
+    const { wrapper } = await mountNavbar('/room/meeting-id');
+    const shell = wrapper.get('.harbor-nav-layout');
+
+    await wrapper.get('button[aria-expanded="false"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(shell.classes()).toContain('h-[calc(100svh-1.5rem)]');
+    expect(wrapper.find('[data-mobile-public-navigation]').exists()).toBe(true);
   });
 
   it('caps content-sized drawers to the visible mobile viewport', async () => {
@@ -443,7 +458,7 @@ describe('TheNavbar', () => {
 
   it('uses landing navigation and a quit action in meeting rooms', async () => {
     vi.useFakeTimers();
-    auth.authenticated = true;
+    auth.authenticated = false;
     const desktop = await mountNavbar('/room/meeting-id');
 
     expect(desktop.wrapper.text()).toContain('nav.why');

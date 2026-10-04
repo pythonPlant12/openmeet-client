@@ -165,7 +165,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="marketing-font min-h-[calc(100dvh-84px)] bg-[#FBFCF8] px-4 pb-10 pt-3 text-[#102F35] sm:px-6 sm:pt-6">
+  <main
+    class="marketing-font h-[calc(100dvh-84px)] overflow-y-auto overscroll-contain bg-[#FBFCF8] px-4 pb-10 pt-3 text-[#102F35] sm:px-6 sm:pt-6"
+  >
     <div v-if="isCheckingSession" class="flex min-h-[calc(100dvh-132px)] items-center justify-center">
       <LoadingRipple class="size-8 text-[#0B7A75]" />
       <span class="sr-only">{{ t('common.loading') }}</span>

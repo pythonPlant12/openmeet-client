@@ -1,6 +1,6 @@
 export function hslToHex(hsl: string): string {
   const parts = hsl.split(' ');
-  if (parts.length < 3) return '#10b981';
+  if (parts.length < 3) return '#0b7a75';
 
   const h = parseFloat(parts[0]) / 360;
   const s = parseFloat(parts[1]) / 100;
@@ -36,7 +36,7 @@ export function hslToHex(hsl: string): string {
 
 export function hexToHsl(hex: string): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return '154 94% 40%';
+  if (!result) return '177 83% 26%';
 
   const r = parseInt(result[1], 16) / 255;
   const g = parseInt(result[2], 16) / 255;

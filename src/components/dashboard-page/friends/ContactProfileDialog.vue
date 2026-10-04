@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Ban, CalendarDays, CircleCheck, Clock3, MinusCircle, Phone, UserMinus } from 'lucide-vue-next';
+import { ref } from 'vue';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -26,6 +27,7 @@ defineProps<{
   avatarUrls: Record<string, string>;
   formatDate: (value: string | null) => string;
 }>();
+const isAvatarPreviewOpen = ref(false);
 const emit = defineEmits<{
   (event: 'update:open', value: boolean): void;
   (event: 'update:confirmationOpen', value: boolean): void;
@@ -82,14 +84,23 @@ function statusClass(status: ContactProfile['status']) {
         <section
           class="flex flex-col items-center gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 sm:flex-row sm:items-start sm:p-6"
         >
-          <span
-            class="flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
-            ><img
-              v-if="avatarUrls[profile.id]"
+          <button
+            v-if="avatarUrls[profile.id]"
+            type="button"
+            class="harbor-ghost-action size-20 shrink-0 overflow-hidden rounded-full bg-[#DDF1ED] p-0 text-xl font-semibold text-[#0B7A75]"
+            :aria-label="`View ${profile.name}'s profile picture`"
+            @click="isAvatarPreviewOpen = true"
+          >
+            <img
               :src="avatarUrls[profile.id]"
-              alt=""
+              :alt="`${profile.name}'s profile picture`"
               class="size-full object-cover"
-            /><template v-else>{{ initials(profile.name) }}</template></span
+            />
+          </button>
+          <span
+            v-else
+            class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
+            >{{ initials(profile.name) }}</span
           >
           <div class="min-w-0 flex-1">
             <h3 class="truncate text-xl font-semibold tracking-[-0.025em]">{{ profile.name }}</h3>
@@ -144,6 +155,19 @@ function statusClass(status: ContactProfile['status']) {
         >
       </div></HarborDialogContent
     ></Dialog
+  ><Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
+    ><HarborDialogContent
+      overlay-class="bg-[#102F35]/50 backdrop-blur-lg"
+      hide-close
+      class="w-auto max-w-[min(88dvw,42rem)] border-0 bg-transparent p-0 shadow-none"
+      ><DialogTitle class="sr-only">{{ profile?.name }} profile picture</DialogTitle
+      ><img
+        v-if="profile && avatarUrls[profile.id]"
+        :src="avatarUrls[profile.id]"
+        :alt="`${profile.name}'s profile picture`"
+        class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-full object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
+      />
+    </HarborDialogContent> </Dialog
   ><Dialog :open="confirmationOpen" @update:open="emit('update:confirmationOpen', $event)"
     ><HarborDialogContent
       overlay-class="bg-[#102F35]/30 backdrop-blur-md"

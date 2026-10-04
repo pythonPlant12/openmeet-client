@@ -132,6 +132,9 @@ test.describe('multi-participant media', () => {
       await waitForAllConnections(session.pages);
       await waitForHtmlVideoPlayback(session.pages, participantCount);
       await expectMediaStillFlowing(session.pages, participantCount - 1);
+      await session.pages[0].waitForTimeout(20_000);
+      await expectMediaStillFlowing(session.pages, participantCount - 1);
+      await expectNoConnectionErrorDialog(session.pages);
     } finally {
       await closeContexts(session.contexts);
     }

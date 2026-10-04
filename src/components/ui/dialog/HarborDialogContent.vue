@@ -10,6 +10,7 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps<{
   class?: HTMLAttributes['class'];
   overlayClass?: HTMLAttributes['class'];
+  hideClose?: boolean;
 }>();
 </script>
 
@@ -18,6 +19,7 @@ const props = defineProps<{
     v-bind="$attrs"
     :class="cn('harbor-dialog-content', props.class)"
     :overlay-class="cn('harbor-dialog-overlay', props.overlayClass)"
+    :hide-close="props.hideClose"
   >
     <slot />
   </DialogContent>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
-import { Camera, LogOut, Phone, Search, Settings, Trash2, UserMinus, UserPlus } from 'lucide-vue-next';
+import { Camera, Check, Copy, LogOut, Phone, Search, Settings, Trash2, UserMinus, UserPlus } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
 
@@ -86,6 +86,7 @@ const isLeaving = ref(false);
 const isDeleteOpen = ref(false);
 const deleteConfirmation = ref('');
 const isDeleting = ref(false);
+const copiedGroupId = ref(false);
 let searchRequest = 0;
 let searchTimer: number | undefined;
 let settingsDialogSession = 0;
@@ -227,6 +228,17 @@ function isSelectableMember(member: GroupMember, currentUserId = props.currentUs
 
 function canCallMember(member: GroupMember) {
   return member.id !== props.currentUserId && props.friends.some((friend) => friend.id === member.id);
+}
+
+function canOpenProfile(member: GroupMember) {
+  return member.id === props.currentUserId || props.friends.some((friend) => friend.id === member.id);
+}
+
+async function copyGroupId() {
+  if (!props.info) return;
+  await navigator.clipboard.writeText(props.info.groupCode);
+  copiedGroupId.value = true;
+  window.setTimeout(() => (copiedGroupId.value = false), 2_000);
 }
 
 function selectMember(member: GroupMember) {
@@ -445,6 +457,31 @@ defineExpose({
     </div>
     <template v-else-if="info">
       <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1">
+        <section class="grid grid-cols-3 gap-2 py-4 text-sm">
+          <div class="rounded-xl border border-[#D8E7E3] bg-white p-3">
+            <span class="block text-xs text-[#61777B]">Access</span
+            ><strong class="mt-1 block text-xs leading-4">{{ accessLabel(info.accessPolicy) }}</strong>
+          </div>
+          <div class="rounded-xl border border-[#D8E7E3] bg-white p-3">
+            <span class="block text-xs text-[#61777B]">Created</span
+            ><strong class="mt-1 block text-xs leading-4">{{ new Date(info.createdAt).toLocaleDateString() }}</strong>
+          </div>
+          <div class="min-w-0 rounded-xl border border-[#D8E7E3] bg-white p-3">
+            <span class="block text-xs text-[#61777B]">Group ID</span>
+            <div class="mt-1 flex items-center gap-1">
+              <code class="min-w-0 flex-1 truncate text-xs font-semibold">{{ info.groupCode }}</code
+              ><button
+                type="button"
+                class="harbor-ghost-action shrink-0 rounded-md p-1 text-[#0B7A75]"
+                :aria-label="copiedGroupId ? 'Group ID copied' : 'Copy group ID'"
+                :title="copiedGroupId ? 'Copied' : 'Copy group ID'"
+                @click="copyGroupId"
+              >
+                <Check v-if="copiedGroupId" class="size-3.5" /><Copy v-else class="size-3.5" />
+              </button>
+            </div>
+          </div>
+        </section>
         <section
           :class="isSelectionMode ? 'grid-cols-3' : 'grid-cols-2'"
           class="grid gap-2 pb-4"
@@ -510,7 +547,19 @@ defineExpose({
                 <button
                   type="button"
                   class="flex w-full items-center gap-3 border-b border-[#E5EFEC] px-3 py-3 text-left transition-colors last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B7A75]"
-                  :class="selectedMemberIds.includes(member.id) ? 'bg-[#E6F4F1]' : 'hover:bg-[#F6FAF7]'"
+                  :class="
+                    selectedMemberIds.includes(member.id)
+                      ? 'bg-[#E6F4F1]'
+                      : isSelectionMode || canOpenProfile(member)
+                        ? 'hover:bg-[#F6FAF7]'
+                        : 'cursor-default'
+                  "
+                  :disabled="!isSelectionMode && !canOpenProfile(member)"
+                  :title="
+                    !isSelectionMode && !canOpenProfile(member)
+                      ? 'Profile details are available to accepted friends only.'
+                      : undefined
+                  "
                   @click="isSelectionMode ? selectMember(member) : emit('open-profile', member.id, member.name)"
                 >
                   <span

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlertCircle, ArrowLeft, ArrowRight, Video } from 'lucide-vue-next';
+import { AlertCircle, ArrowLeft, ArrowRight, Eye, EyeOff, Video } from 'lucide-vue-next';
 import { nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
@@ -26,6 +26,8 @@ const nickname = ref('');
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
+const isPasswordVisible = ref(false);
+const isConfirmPasswordVisible = ref(false);
 const passwordMismatch = ref(false);
 const emailInput = ref<{ focus: () => void } | null>(null);
 
@@ -169,30 +171,54 @@ const goToLogin = () => {
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="password" class="text-[#27595D]">{{ t('auth.password') }}</Label>
-              <Input
-                id="password"
-                v-model="password"
-                type="password"
-                autocomplete="new-password"
-                :placeholder="t('auth.register.passwordPlaceholder')"
-                required
-                minlength="6"
-                :disabled="isRegistering"
-                class="h-11 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
-              />
+              <div class="relative">
+                <Input
+                  id="password"
+                  v-model="password"
+                  :type="isPasswordVisible ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  :placeholder="t('auth.register.passwordPlaceholder')"
+                  required
+                  minlength="6"
+                  :disabled="isRegistering"
+                  class="h-11 rounded-xl border-[#D8E7E3] bg-white px-4 pr-12 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
+                />
+                <button
+                  type="button"
+                  class="harbor-ghost-action absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#27595D]"
+                  :aria-label="isPasswordVisible ? 'Hide password' : 'Show password'"
+                  :disabled="isRegistering"
+                  @click="isPasswordVisible = !isPasswordVisible"
+                >
+                  <EyeOff v-if="isPasswordVisible" class="size-4" />
+                  <Eye v-else class="size-4" />
+                </button>
+              </div>
             </div>
             <div class="space-y-2">
               <Label for="confirmPassword" class="text-[#27595D]">{{ t('auth.register.confirmPassword') }}</Label>
-              <Input
-                id="confirmPassword"
-                v-model="confirmPassword"
-                type="password"
-                autocomplete="new-password"
-                :placeholder="t('auth.register.confirmPasswordPlaceholder')"
-                required
-                :disabled="isRegistering"
-                class="h-11 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
-              />
+              <div class="relative">
+                <Input
+                  id="confirmPassword"
+                  v-model="confirmPassword"
+                  :type="isConfirmPasswordVisible ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  :placeholder="t('auth.register.confirmPasswordPlaceholder')"
+                  required
+                  :disabled="isRegistering"
+                  class="h-11 rounded-xl border-[#D8E7E3] bg-white px-4 pr-12 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
+                />
+                <button
+                  type="button"
+                  class="harbor-ghost-action absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#27595D]"
+                  :aria-label="isConfirmPasswordVisible ? 'Hide password' : 'Show password'"
+                  :disabled="isRegistering"
+                  @click="isConfirmPasswordVisible = !isConfirmPasswordVisible"
+                >
+                  <EyeOff v-if="isConfirmPasswordVisible" class="size-4" />
+                  <Eye v-else class="size-4" />
+                </button>
+              </div>
             </div>
           </div>
 
