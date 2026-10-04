@@ -6,7 +6,6 @@ import type { UserStatus } from '@/services/social-api';
 export interface UserStatusOption {
   value: UserStatus;
   label: string;
-  description: string;
   icon: Component;
   /** Background of the presence dot shown beside avatars while the user is online. */
   dotClass: string;
@@ -18,7 +17,6 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
   {
     value: 'available',
     label: 'Online',
-    description: 'Friends see you as available.',
     icon: CircleCheck,
     dotClass: 'bg-[#2DA58F]',
     chipClass: 'bg-[#EAF7F4] text-[#17645F]',
@@ -26,7 +24,6 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
   {
     value: 'away',
     label: 'Away',
-    description: 'You may reply later.',
     icon: Clock3,
     dotClass: 'bg-[#D9A441]',
     chipClass: 'bg-[#FFF8E8] text-[#80601D]',
@@ -34,7 +31,6 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
   {
     value: 'doNotDisturb',
     label: 'Do not disturb',
-    description: 'Friends know you are busy.',
     icon: MinusCircle,
     dotClass: 'bg-[#C4513D]',
     chipClass: 'bg-[#FFF0EA] text-[#9D4636]',
@@ -42,7 +38,6 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
   {
     value: 'sleeping',
     label: 'Sleeping',
-    description: 'Friends know you are resting.',
     icon: Moon,
     dotClass: 'bg-[#6B7BC4]',
     chipClass: 'bg-[#EEF0FA] text-[#3E4B8A]',
@@ -50,7 +45,6 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
   {
     value: 'offline',
     label: 'Appear offline',
-    description: 'Friends see you as offline.',
     icon: Ban,
     dotClass: 'bg-[#B8C6C5]',
     chipClass: 'bg-[#F0F4F3] text-[#61777B]',

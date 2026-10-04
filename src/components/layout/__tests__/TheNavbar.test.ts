@@ -617,7 +617,15 @@ describe('TheNavbar', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const toggle = wrapper.get('[data-mobile-status-toggle]');
-    expect(toggle.text()).toContain('Online');
+    expect(toggle.text()).toBe('nav.status');
+    const options = wrapper.get('[data-mobile-status-options]');
+    expect(options.findAll('[data-status-option]').map((option) => option.text())).toEqual([
+      'Online',
+      'Away',
+      'Do not disturb',
+      'Sleeping',
+      'Appear offline',
+    ]);
     expect(toggle.attributes('aria-expanded')).toBe('false');
 
     await toggle.trigger('click');

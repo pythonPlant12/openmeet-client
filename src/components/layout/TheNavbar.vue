@@ -809,7 +809,6 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                     >
                       <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
                       <span class="flex-1">{{ t('nav.status') }}</span>
-                      <span class="text-xs text-[#61777B]">{{ ownStatusOption.label }}</span>
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent
                       class="harbor-action-menu !z-[1040] min-w-56 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
@@ -822,10 +821,7 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                         @select="setOwnStatus(option.value)"
                       >
                         <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
-                        <span class="min-w-0 flex-1">
-                          <span class="block font-semibold">{{ option.label }}</span>
-                          <span class="block text-xs text-[#61777B]">{{ option.description }}</span>
-                        </span>
+                        <span class="min-w-0 flex-1 font-semibold">{{ option.label }}</span>
                         <Check v-if="option.value === ownStatus" class="size-4 text-[#0B7A75]" />
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
@@ -944,8 +940,7 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                         @click="isMobileStatusOpen = !isMobileStatusOpen"
                       >
                         <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
-                        <span class="min-w-0 flex-1 truncate">{{ ownStatusOption.label }}</span>
-                        <span class="text-xs font-medium text-[#61777B]">{{ t('nav.status') }}</span>
+                        <span class="min-w-0 flex-1 truncate">{{ t('nav.status') }}</span>
                         <ChevronDown
                           class="size-4 shrink-0 text-[#61777B] transition-transform duration-200"
                           :class="{ 'rotate-180': isMobileStatusOpen }"
@@ -975,10 +970,9 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                               @click="selectMobileStatus(option.value)"
                             >
                               <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
-                              <span class="min-w-0 flex-1">
-                                <span class="block text-sm font-semibold text-[#102F35]">{{ option.label }}</span>
-                                <span class="block text-xs text-[#61777B]">{{ option.description }}</span>
-                              </span>
+                              <span class="min-w-0 flex-1 text-sm font-semibold text-[#102F35]">{{
+                                option.label
+                              }}</span>
                               <Check v-if="option.value === ownStatus" class="size-4 shrink-0 text-[#0B7A75]" />
                             </button>
                           </div>
