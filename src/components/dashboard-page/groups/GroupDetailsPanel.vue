@@ -316,6 +316,11 @@ function isSelf(member: GroupMember) {
   return member.id === props.currentUserId;
 }
 
+// Left swipe: Profile always, Add friend for non-friends, and Remove for group managers.
+function trailingActionCount(member: GroupMember) {
+  return 1 + Number(!isSelf(member) && !isFriend(member)) + Number(isSelectableMember(member));
+}
+
 function isFriend(member: GroupMember) {
   return !isSelf(member) && props.friends.some((friend) => friend.id === member.id);
 }
@@ -663,7 +668,7 @@ defineExpose({
               class="rounded-xl"
               :disabled="isSelectionMode"
               :leading-width="isFriend(member) ? SWIPE_ACTION_WIDTH : 0"
-              :trailing-width="(isSelf(member) ? 1 : 2) * SWIPE_ACTION_WIDTH"
+              :trailing-width="trailingActionCount(member) * SWIPE_ACTION_WIDTH"
               :full-swipe-leading="isFriend(member)"
               @full-swipe-leading="emit('chat-member', member)"
             >
@@ -698,20 +703,7 @@ defineExpose({
                   <UserRound class="size-4 shrink-0" />Profile
                 </button>
                 <button
-                  v-if="isFriend(member)"
-                  type="button"
-                  data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D] text-[11px] font-semibold text-white"
-                  :aria-label="`Remove ${member.name} from your friends`"
-                  @click="
-                    close();
-                    pendingFriendChange = { member, change: 'remove' };
-                  "
-                >
-                  <UserMinus class="size-4 shrink-0" /><span class="leading-tight">Remove friend</span>
-                </button>
-                <button
-                  v-else-if="!isSelf(member)"
+                  v-if="!isSelf(member) && !isFriend(member)"
                   type="button"
                   data-swipe-action
                   class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#0B7A75] text-[11px] font-semibold text-white"
@@ -722,6 +714,20 @@ defineExpose({
                   "
                 >
                   <UserPlus class="size-4 shrink-0" /><span class="leading-tight">Add friend</span>
+                </button>
+                <button
+                  v-if="isSelectableMember(member)"
+                  type="button"
+                  data-swipe-action
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D] text-[11px] font-semibold text-white disabled:opacity-60"
+                  :aria-label="`Remove ${member.name} from the group`"
+                  :disabled="mutationBusy"
+                  @click="
+                    close();
+                    removeMember(member);
+                  "
+                >
+                  <UserMinus class="size-4 shrink-0" />Remove
                 </button>
               </template>
               <ContextMenu>

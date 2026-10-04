@@ -20,6 +20,7 @@ import { useAvatarCache } from '@/composables/useAvatarCache';
 import {
   type ConversationActivity,
   sortConversationsByActivity,
+  toggledReactions,
   upsertConversationByActivity,
 } from '@/pages/dashboard-chat-state';
 import {
@@ -43,6 +44,7 @@ import {
   type GroupInfo,
   type GroupInvitation,
   type GroupMember,
+  type MessageReaction,
   SocialApiError,
   type UserSearchResult,
   type UserStatus,
@@ -158,6 +160,7 @@ const isGroupProfileLoading = ref(false);
 const groupProfileError = ref('');
 const messages = ref<ConversationMessage[]>([]);
 const messageContent = ref('');
+const messageReplyTo = ref<ConversationMessage | null>(null);
 const nextMessageBefore = ref<number | null>(null);
 const chatPane = ref<{
   focusComposer: () => void;
@@ -431,7 +434,8 @@ async function loadLatestMessages(conversationId: string) {
     }
     nextMessageBefore.value = response.nextBefore;
     await nextTick();
-    chatPane.value?.scrollToBottom(previousMessages.length && newMessages.length ? 'smooth' : 'auto');
+    if (!previousMessages.length) chatPane.value?.scrollToBottom('auto');
+    else if (newMessages.length) chatPane.value?.scrollToBottom('smooth');
   } catch (error) {
     console.error('[Dashboard] Failed to load messages:', error);
     if (request === messageRequest && selectedConversation.value?.id === conversationId) {
@@ -498,12 +502,14 @@ async function sendMessage() {
   clearFeedback();
   isSendingMessage.value = true;
   try {
-    const message = await socialApi.createConversationMessage(token, conversationId, content);
+    const replyToSequence = messageReplyTo.value?.sequence;
+    const message = await socialApi.createConversationMessage(token, conversationId, content, replyToSequence);
     if (selectedConversation.value?.id !== conversationId) return;
 
     appendMessage(message);
     if (selectedConversation.value?.id === conversationId) addConversation(selectedConversation.value);
     messageContent.value = '';
+    messageReplyTo.value = null;
     await nextTick();
     chatPane.value?.scrollToBottom('smooth');
   } catch (error) {
@@ -512,6 +518,29 @@ async function sendMessage() {
   } finally {
     isSendingMessage.value = false;
   }
+}
+
+// Reactions update optimistically; the server's summary replaces the guess, and a failure restores it.
+async function toggleMessageReaction(message: ConversationMessage, emoji: string) {
+  const token = accessToken.value;
+  if (!token) return;
+  const conversationId = message.conversationId;
+  const previous = message.reactions ?? [];
+  setMessageReactions(message.sequence, toggledReactions(previous, emoji));
+  try {
+    const reactions = await socialApi.toggleMessageReaction(token, conversationId, message.sequence, emoji);
+    if (selectedConversation.value?.id === conversationId) setMessageReactions(message.sequence, reactions);
+  } catch (error) {
+    console.error('[Dashboard] Failed to update reaction:', error);
+    if (selectedConversation.value?.id === conversationId) setMessageReactions(message.sequence, previous);
+    toast({ title: 'Could not update the reaction.', variant: 'destructive' });
+  }
+}
+
+function setMessageReactions(sequence: number, reactions: MessageReaction[]) {
+  messages.value = messages.value.map((message) =>
+    message.sequence === sequence ? { ...message, reactions } : message,
+  );
 }
 
 function addConversation(conversation: Conversation) {
@@ -874,6 +903,7 @@ watch(groupMembers, (members) => {
 });
 
 function selectConversation(conversation: Conversation) {
+  if (selectedConversation.value?.id !== conversation.id) messageReplyTo.value = null;
   pendingDirectFriend.value = null;
   selectedConversation.value = conversation;
   markConversationRead(conversation.id);
@@ -1784,6 +1814,7 @@ async function startConversationCall(conversation: Conversation) {
       <ChatPane
         ref="chatPane"
         v-model:content="messageContent"
+        v-model:reply-to="messageReplyTo"
         :conversation="selectedConversation"
         :pending-friend="pendingDirectFriend"
         :selected-friend="selectedFriend"
@@ -1815,6 +1846,7 @@ async function startConversationCall(conversation: Conversation) {
         @scroll-top="handleMessageScroll"
         @send="sendMessage"
         @request-notifications="requestNotificationPermission"
+        @react="toggleMessageReaction"
         @dismiss-notifications="dismissNotificationWarning"
       />
       <DetailsPane

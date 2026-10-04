@@ -135,6 +135,11 @@ function isSelf(member: GroupMember) {
   return member.id === props.currentUserId;
 }
 
+// Left swipe: Profile always, Add friend for non-friends, and Remove for group managers.
+function trailingActionCount(member: GroupMember) {
+  return 1 + Number(!isSelf(member) && !isFriend(member)) + Number(canRemoveMember(member));
+}
+
 function requestFriendChange(member: GroupMember, change: FriendshipChange) {
   pendingFriendChange.value = { member, change };
 }
@@ -499,7 +504,7 @@ watch(
               :key="member.id"
               class="rounded-xl"
               :leading-width="isFriend(member) ? SWIPE_ACTION_WIDTH : 0"
-              :trailing-width="(isSelf(member) ? 1 : 2) * SWIPE_ACTION_WIDTH"
+              :trailing-width="trailingActionCount(member) * SWIPE_ACTION_WIDTH"
               :full-swipe-leading="isFriend(member)"
               @full-swipe-leading="emit('chat-member', member)"
             >
@@ -537,23 +542,7 @@ watch(
                   <UserRound class="size-4 shrink-0" />Profile
                 </button>
                 <button
-                  v-if="!isSelf(member) && isFriend(member)"
-                  type="button"
-                  data-swipe-action
-                  class="
-                    flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D]
-                    text-[11px] font-semibold text-white
-                  "
-                  :aria-label="`Remove ${member.name} from your friends`"
-                  @click="
-                    close();
-                    requestFriendChange(member, 'remove');
-                  "
-                >
-                  <UserMinus class="size-4 shrink-0" /><span class="leading-tight">Remove friend</span>
-                </button>
-                <button
-                  v-else-if="!isSelf(member)"
+                  v-if="!isSelf(member) && !isFriend(member)"
                   type="button"
                   data-swipe-action
                   class="
@@ -567,6 +556,23 @@ watch(
                   "
                 >
                   <UserPlus class="size-4 shrink-0" /><span class="leading-tight">Add friend</span>
+                </button>
+                <button
+                  v-if="canRemoveMember(member)"
+                  type="button"
+                  data-swipe-action
+                  class="
+                    flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D]
+                    text-[11px] font-semibold text-white disabled:opacity-60
+                  "
+                  :aria-label="`Remove ${member.name} from the group`"
+                  :disabled="mutationBusy"
+                  @click="
+                    close();
+                    removeMember(member);
+                  "
+                >
+                  <UserMinus class="size-4 shrink-0" />Remove
                 </button>
               </template>
               <ContextMenu

@@ -103,12 +103,20 @@ describe('GroupDetailsPanel', () => {
     const samRow = wrapper.findAll('[data-swipeable-row]').find((row) => row.text().includes('Sam'))!;
 
     expect(samRow.find('[data-friend-icon]').exists()).toBe(true);
-    expect(samRow.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text())).toEqual([
-      'Profile',
-      'Remove friend',
-    ]);
+    expect(samRow.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text())).toEqual(['Profile']);
 
     await samRow.get('[data-swipe-pane="leading"] button').trigger('click');
     expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'sam' });
+  });
+
+  it('shows Remove from group only to group managers', () => {
+    const admin = mountPanel({ info: { ...info, role: 'admin' }, group: { ...group, role: 'admin' } });
+    const samRow = admin.findAll('[data-swipeable-row]').find((row) => row.text().includes('Sam'))!;
+
+    expect(samRow.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text())).toEqual([
+      'Profile',
+      'Add friend',
+      'Remove',
+    ]);
   });
 });

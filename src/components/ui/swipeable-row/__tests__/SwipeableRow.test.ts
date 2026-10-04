@@ -153,6 +153,29 @@ describe('SwipeableRow', () => {
     expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-leading')).toBeUndefined();
   });
 
+  it('runs a trailing full swipe when enabled', async () => {
+    const wrapper = mountRow({ fullSwipeTrailing: true });
+
+    await swipe(wrapper, -400);
+
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-trailing')).toHaveLength(1);
+    expect(contentOffset(wrapper)).toBe('translate3d(0px, 0, 0)');
+  });
+
+  it('never rests open in momentary mode and honours a custom trigger distance', async () => {
+    const wrapper = mountRow({ momentary: true, fullSwipeDistance: 50, fullSwipeTrailing: true });
+
+    await swipe(wrapper, 40);
+    expect(contentOffset(wrapper)).toBe('translate3d(0px, 0, 0)');
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-leading')).toBeUndefined();
+
+    await swipe(wrapper, 60);
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-leading')).toHaveLength(1);
+
+    await swipe(wrapper, -60);
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-trailing')).toHaveLength(1);
+  });
+
   it('leaves vertical gestures to native scrolling', async () => {
     const wrapper = mountRow();
 

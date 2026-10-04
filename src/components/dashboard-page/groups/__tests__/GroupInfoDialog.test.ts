@@ -116,7 +116,7 @@ describe('GroupInfoDialog', () => {
     expect(friendRow!.get('[data-swipe-pane="leading"]').text()).toBe('Message');
     expect(memberRow!.find('[data-swipe-pane="leading"]').exists()).toBe(false);
     expect(selfRow!.find('[data-swipe-pane="leading"]').exists()).toBe(false);
-    expect(trailingLabels(friendRow)).toEqual(['Profile', 'Remove friend']);
+    expect(trailingLabels(friendRow)).toEqual(['Profile']);
     expect(trailingLabels(memberRow)).toEqual(['Profile', 'Add friend']);
     expect(trailingLabels(selfRow)).toEqual(['Profile']);
 
@@ -131,14 +131,25 @@ describe('GroupInfoDialog', () => {
   it('confirms before changing a friendship', async () => {
     const changeFriendship = vi.fn().mockResolvedValue(true);
     const wrapper = mountDialog({ changeFriendship });
-    const [friendRow] = wrapper.findAll('[data-swipeable-row]');
+    const [, memberRow] = wrapper.findAll('[data-swipeable-row]');
 
-    await friendRow!.findAll('[data-swipe-pane="trailing"] button')[1]!.trigger('click');
+    await memberRow!.findAll('[data-swipe-pane="trailing"] button')[1]!.trigger('click');
     expect(changeFriendship).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Remove Friend from your friends?');
+    expect(wrapper.text()).toContain('Send a friend request to Member?');
 
     await wrapper.get('[data-confirm-friend-change]').trigger('click');
-    expect(changeFriendship).toHaveBeenCalledWith(expect.objectContaining({ id: 'friend-1' }), 'remove');
+    expect(changeFriendship).toHaveBeenCalledWith(expect.objectContaining({ id: 'member-1' }), 'add');
+  });
+
+  it('lets group managers remove participants from the left swipe', () => {
+    const wrapper = mountDialog({ info: { ...groupInfo, role: 'admin' } });
+    const [friendRow, memberRow] = wrapper.findAll('[data-swipeable-row]');
+    const labels = (row: typeof friendRow) =>
+      row!.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text());
+
+    expect(labels(friendRow)).toEqual(['Profile', 'Remove']);
+    expect(labels(memberRow)).toEqual(['Profile', 'Add friend', 'Remove']);
+    expect(wrapper.text()).not.toContain('Remove friend');
   });
 
   it('offers the security action only to group managers', async () => {

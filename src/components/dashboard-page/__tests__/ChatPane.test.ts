@@ -32,8 +32,9 @@ const message: ConversationMessage = {
 
 enableAutoUnmount(afterEach);
 
-function mountPane(props: Record<string, unknown> = {}) {
+function mountPane(props: Record<string, unknown> = {}, options: { attachTo?: Element } = {}) {
   return mount(ChatPane, {
+    ...options,
     props: {
       content: '',
       conversation: null,
@@ -69,7 +70,78 @@ function mountPane(props: Record<string, unknown> = {}) {
   });
 }
 
+const reply: ConversationMessage = {
+  ...message,
+  sequence: 2,
+  senderId: 'me',
+  senderName: 'Me',
+  content: 'Hi back',
+  replyTo: { sequence: 1, senderId: 'friend-1', senderName: 'Friend', senderNickname: 'friend', content: 'Hello' },
+  reactions: [{ emoji: '👍', count: 2, reactedByMe: true }],
+};
+
 describe('ChatPane', () => {
+  it('quotes a message in the composer and cancels the reply', async () => {
+    const wrapper = mountPane({ conversation, messages: [message] });
+
+    await wrapper.findComponent({ name: 'ChatMessage' }).vm.$emit('reply');
+    expect(wrapper.emitted('update:replyTo')?.[0]?.[0]).toMatchObject({ sequence: 1 });
+
+    await wrapper.setProps({ replyTo: message });
+    expect(wrapper.get('[data-reply-preview]').text()).toContain('Replying to Friend');
+
+    await wrapper.get('[aria-label="Cancel reply"]').trigger('click');
+    const replyUpdates = wrapper.emitted('update:replyTo') ?? [];
+    expect(replyUpdates[replyUpdates.length - 1]).toEqual([null]);
+  });
+
+  it('shows quotes and reaction chips, and forwards reaction toggles', async () => {
+    const wrapper = mountPane({
+      conversation,
+      messages: [message, reply],
+      isLocal: (item: ConversationMessage) => item.senderId === 'me',
+    });
+
+    expect(wrapper.get('[data-message-quote]').text()).toContain('Hello');
+    await wrapper.get('[data-reaction-chip]').trigger('click');
+
+    expect(wrapper.emitted('react')?.[0]).toEqual([reply, '👍']);
+  });
+
+  it('opens one reaction picker at a time and closes it on an outside press', async () => {
+    const wrapper = mountPane({ conversation, messages: [message, reply] }, { attachTo: document.body });
+    const [first, second] = wrapper.findAllComponents({ name: 'ChatMessage' });
+
+    await first!.vm.$emit('open-reactions');
+    await second!.vm.$emit('open-reactions');
+    expect(wrapper.findAll('[data-reaction-picker]')).toHaveLength(1);
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-reaction-picker]').exists()).toBe(false);
+  });
+
+  it('goes back to the conversation list when the chat is swiped from the left edge on mobile', async () => {
+    const wrapper = mountPane({ conversation, messages: [message] });
+    const pane = wrapper.get('[data-chat-pane]').element;
+    const pointer = (type: string, clientX: number) =>
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 7,
+        pointerType: 'touch',
+        clientX,
+        clientY: 100,
+      });
+
+    pane.dispatchEvent(pointer('pointerdown', 4));
+    pane.dispatchEvent(pointer('pointermove', 60));
+    pane.dispatchEvent(pointer('pointermove', 140));
+    pane.dispatchEvent(pointer('pointerup', 140));
+
+    expect(wrapper.emitted('back')).toHaveLength(1);
+  });
+
   it('does not mount the empty conversation state on mobile', () => {
     expect(mountPane().text()).not.toContain('Choose a conversation');
   });

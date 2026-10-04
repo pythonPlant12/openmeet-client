@@ -203,6 +203,26 @@ describe('socialApi', () => {
     ]);
   });
 
+  it('sends quoted replies and toggles reactions', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('[]', { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await socialApi.createConversationMessage('token', 'chat-1', 'Hi', 7);
+    await socialApi.createConversationMessage('token', 'chat-1', 'Plain');
+    await socialApi.toggleMessageReaction('token', 'chat-1', 7, '👍');
+
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ body: JSON.stringify({ content: 'Hi', replyToSequence: 7 }) }),
+    );
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({ body: JSON.stringify({ content: 'Plain' }) }),
+    );
+    expect(fetchMock.mock.calls[2]).toEqual([
+      'http://localhost:8081/social/conversations/chat-1/messages/7/reactions',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ emoji: '👍' }) }),
+    ]);
+  });
+
   it('sends friend requests by user ID', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);

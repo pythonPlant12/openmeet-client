@@ -547,3 +547,29 @@
     opacity: 1;
   }
 }
+
+/* Quoted and jumped-to messages pulse once so the eye lands on them. */
+@keyframes harbor-message-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(11, 122, 117, 0.45);
+    transform: scale(1);
+  }
+  35% {
+    box-shadow: 0 0 0 6px rgba(11, 122, 117, 0.18);
+    transform: scale(1.03);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(11, 122, 117, 0);
+    transform: scale(1);
+  }
+}
+
+.harbor-message-flash {
+  animation: harbor-message-flash 900ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .harbor-message-flash {
+    animation: none;
+  }
+}

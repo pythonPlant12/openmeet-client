@@ -12,8 +12,26 @@ import {
 import type { GroupMember } from '@/services/social-api';
 
 const members: GroupMember[] = [
-  { id: 'member-b', name: 'Zed', nickname: 'member_b', avatarUrl: null, isOnline: false, status: null, role: 'member', joinedAt: '' },
-  { id: 'admin', name: 'Ada', nickname: 'admin', avatarUrl: null, isOnline: false, status: null, role: 'admin', joinedAt: '' },
+  {
+    id: 'member-b',
+    name: 'Zed',
+    nickname: 'member_b',
+    avatarUrl: null,
+    isOnline: false,
+    status: null,
+    role: 'member',
+    joinedAt: '',
+  },
+  {
+    id: 'admin',
+    name: 'Ada',
+    nickname: 'admin',
+    avatarUrl: null,
+    isOnline: false,
+    status: null,
+    role: 'admin',
+    joinedAt: '',
+  },
   {
     id: 'creator',
     name: 'Creator',

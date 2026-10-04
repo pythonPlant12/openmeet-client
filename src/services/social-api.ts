@@ -211,6 +211,21 @@ export interface DirectMessageRequest {
   createdAt: string;
 }
 
+export interface MessageReplyPreview {
+  sequence: number;
+  senderId: string;
+  senderName: string;
+  senderNickname: string;
+  /** Short excerpt of the quoted message. */
+  content: string;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+}
+
 export interface ConversationMessage {
   sequence: number;
   conversationId: string;
@@ -219,6 +234,8 @@ export interface ConversationMessage {
   senderNickname?: string;
   content: string;
   createdAt: string;
+  replyTo?: MessageReplyPreview | null;
+  reactions?: MessageReaction[];
 }
 
 export interface ConversationMessagesResponse {
@@ -631,10 +648,17 @@ export const socialApi = {
     return request<void>(`/conversations/${conversationId}/unread`, accessToken, { method: 'POST' });
   },
 
-  createConversationMessage(accessToken: string, conversationId: string, content: string) {
+  createConversationMessage(accessToken: string, conversationId: string, content: string, replyToSequence?: number) {
     return request<ConversationMessage>(`/conversations/${conversationId}/messages`, accessToken, {
       method: 'POST',
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(replyToSequence === undefined ? { content } : { content, replyToSequence }),
+    });
+  },
+
+  toggleMessageReaction(accessToken: string, conversationId: string, sequence: number, emoji: string) {
+    return request<MessageReaction[]>(`/conversations/${conversationId}/messages/${sequence}/reactions`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ emoji }),
     });
   },
 };

@@ -13,11 +13,24 @@ const props = withDefaults(
     leadingWidth?: number;
     trailingWidth?: number;
     fullSwipeLeading?: boolean;
+    fullSwipeTrailing?: boolean;
+    /** Distance that arms a full swipe; defaults to half the row (at least two action widths). */
+    fullSwipeDistance?: number;
+    /** One-shot rows never rest open: a release either runs the full-swipe action or springs back. */
+    momentary?: boolean;
     disabled?: boolean;
   }>(),
-  { leadingWidth: 0, trailingWidth: 0, fullSwipeLeading: false, disabled: false },
+  {
+    leadingWidth: 0,
+    trailingWidth: 0,
+    fullSwipeLeading: false,
+    fullSwipeTrailing: false,
+    fullSwipeDistance: undefined,
+    momentary: false,
+    disabled: false,
+  },
 );
-const emit = defineEmits<{ (event: 'full-swipe-leading'): void }>();
+const emit = defineEmits<{ (event: 'full-swipe-leading'): void; (event: 'full-swipe-trailing'): void }>();
 
 const AXIS_LOCK_DISTANCE = 8;
 const RUBBER_BAND = 0.25;
@@ -43,10 +56,15 @@ let velocity = 0;
 let lastSample: { x: number; time: number } | null = null;
 
 // Read the width on demand: a computed would cache a DOM measurement that changes on resize.
-function fullSwipeThreshold() {
-  return Math.max(props.leadingWidth * 2, (root.value?.offsetWidth || props.leadingWidth * 4) * 0.5);
+function fullSwipeThreshold(actionWidth: number) {
+  return props.fullSwipeDistance ?? Math.max(actionWidth * 2, (root.value?.offsetWidth || actionWidth * 4) * 0.5);
 }
-const isFullSwipeArmed = computed(() => props.fullSwipeLeading && offset.value >= fullSwipeThreshold());
+const isFullSwipeArmed = computed(
+  () => props.fullSwipeLeading && offset.value >= fullSwipeThreshold(props.leadingWidth),
+);
+const isTrailingFullSwipeArmed = computed(
+  () => props.fullSwipeTrailing && offset.value <= -fullSwipeThreshold(props.trailingWidth),
+);
 // The side a row rests on, not the live offset: spring overshoot past zero must not count as opening the other side.
 const openSide = computed(() => (isDragging.value ? null : restingSide.value));
 // Panes and content both read the same offset, so they always move together.
@@ -100,7 +118,7 @@ function resist(next: number) {
     return next <= limit ? next : limit + (next - limit) * RUBBER_BAND;
   }
   if (!props.trailingWidth) return 0;
-  const limit = -props.trailingWidth;
+  const limit = props.fullSwipeTrailing ? -width : -props.trailingWidth;
   return next >= limit ? next : limit + (next - limit) * RUBBER_BAND;
 }
 
@@ -111,12 +129,15 @@ function close() {
 
 function settle() {
   isDragging.value = false;
-  if (isFullSwipeArmed.value) {
+  if (isFullSwipeArmed.value || isTrailingFullSwipeArmed.value) {
+    const side = isFullSwipeArmed.value ? 'full-swipe-leading' : 'full-swipe-trailing';
     springTo(0, FULL_SWIPE_RETURN_SPRING);
     if (activeSwipeRowId.value === props.id) activeSwipeRowId.value = null;
-    emit('full-swipe-leading');
+    if (side === 'full-swipe-leading') emit('full-swipe-leading');
+    else emit('full-swipe-trailing');
     return;
   }
+  if (props.momentary) return close();
   if (offset.value > props.leadingWidth / 2 && props.leadingWidth) springTo(props.leadingWidth);
   else if (offset.value < -props.trailingWidth / 2 && props.trailingWidth) springTo(-props.trailingWidth);
   else close();
@@ -197,8 +218,8 @@ watch(activeSwipeRowId, (id) => {
   if (id !== props.id && restingSide.value && !isDragging.value) close();
 });
 
-watch(isFullSwipeArmed, (armed) => {
-  if (armed && isDragging.value) navigator.vibrate?.(10);
+watch([isFullSwipeArmed, isTrailingFullSwipeArmed], ([leading, trailing]) => {
+  if ((leading || trailing) && isDragging.value) navigator.vibrate?.(10);
 });
 
 watch(openSide, (side) => {
@@ -252,7 +273,7 @@ defineExpose({ close });
       :inert="openSide !== 'trailing'"
       :aria-hidden="openSide !== 'trailing'"
     >
-      <slot name="trailing" :close="close" />
+      <slot name="trailing" :armed="isTrailingFullSwipeArmed" :close="close" />
     </div>
     <div data-swipe-content class="relative" :style="contentStyle">
       <slot />

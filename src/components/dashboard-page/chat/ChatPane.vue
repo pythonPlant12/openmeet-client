@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ArrowLeft, MessageCircleMore, Phone, UsersRound, X } from 'lucide-vue-next';
+import { ArrowLeft, MessageCircleMore, Phone, Reply, UsersRound, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
+import ChatMessage from '@/components/dashboard-page/chat/ChatMessage.vue';
 import EmojiPickerButton from '@/components/dashboard-page/chat/EmojiPickerButton.vue';
 import { Button } from '@/components/ui/button';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
+import { toast } from '@/components/ui/toast';
 import type { Conversation, ConversationMessage, Friend } from '@/services/social-api';
 
 const props = defineProps<{
@@ -41,8 +43,18 @@ const emit = defineEmits<{
   (event: 'send'): void;
   (event: 'request-notifications'): void;
   (event: 'dismiss-notifications'): void;
+  (event: 'react', message: ConversationMessage, emoji: string): void;
 }>();
 const content = defineModel<string>('content', { required: true });
+const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
+const reactionPickerSequence = ref<number | null>(null);
+const highlightedSequence = ref<number | null>(null);
+const edgeSwipeOffset = ref(0);
+let highlightTimer: number | undefined;
+let edgeSwipe: { pointerId: number; startX: number; startY: number; axis: 'x' | 'y' | null } | null = null;
+// Mobile back gesture: start near the left edge and pull right, like a native back swipe.
+const EDGE_SWIPE_ZONE = 28;
+const EDGE_SWIPE_BACK_DISTANCE = 96;
 const pane = ref<HTMLElement | null>(null);
 const composer = ref<HTMLTextAreaElement | null>(null);
 let pendingBottomScroll: ScrollBehavior | null = null;
@@ -91,11 +103,111 @@ watch(
   },
   { flush: 'post' },
 );
+function flash(sequence: number) {
+  highlightedSequence.value = null;
+  window.clearTimeout(highlightTimer);
+  // Re-adding the class on the next frame restarts the animation for repeated targets.
+  requestAnimationFrame(() => {
+    highlightedSequence.value = sequence;
+    highlightTimer = window.setTimeout(() => (highlightedSequence.value = null), 900);
+  });
+}
+
+function startReply(message: ConversationMessage) {
+  replyTo.value = message;
+  reactionPickerSequence.value = null;
+  flash(message.sequence);
+  focusComposer();
+}
+
+function react(message: ConversationMessage, emoji: string) {
+  reactionPickerSequence.value = null;
+  emit('react', message, emoji);
+}
+
+async function copyMessage(message: ConversationMessage) {
+  try {
+    await navigator.clipboard.writeText(message.content);
+    toast({ title: 'Message copied', variant: 'success' });
+  } catch (error) {
+    console.error('[ChatPane] Failed to copy message:', error);
+    toast({ title: 'Could not copy the message.', variant: 'destructive' });
+  }
+}
+
+function jumpToMessage(sequence: number) {
+  const target = pane.value?.querySelector(`[data-message-sequence="${sequence}"]`);
+  if (!target) {
+    toast({ title: 'The quoted message is further back in the history.' });
+    return;
+  }
+  target.scrollIntoView({ block: 'center', behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
+  flash(sequence);
+}
+
+// One reaction picker at a time; a press anywhere outside it closes it.
+function closeReactionPickerOnOutsidePress(event: PointerEvent) {
+  if (!(event.target as Element | null)?.closest('[data-reaction-picker]')) reactionPickerSequence.value = null;
+}
+
+watch(reactionPickerSequence, (sequence) => {
+  if (sequence === null) document.removeEventListener('pointerdown', closeReactionPickerOnOutsidePress, true);
+  else document.addEventListener('pointerdown', closeReactionPickerOnOutsidePress, true);
+});
+
+watch(
+  () => props.conversation?.id,
+  () => {
+    reactionPickerSequence.value = null;
+    highlightedSequence.value = null;
+  },
+);
+
+function onEdgePointerDown(event: PointerEvent) {
+  if (props.isDesktop || event.pointerType === 'mouse') return;
+  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  if (event.clientX - bounds.left > EDGE_SWIPE_ZONE) return;
+  edgeSwipe = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, axis: null };
+}
+
+function onEdgePointerMove(event: PointerEvent) {
+  if (!edgeSwipe || event.pointerId !== edgeSwipe.pointerId) return;
+  const dx = event.clientX - edgeSwipe.startX;
+  const dy = event.clientY - edgeSwipe.startY;
+  if (!edgeSwipe.axis) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    edgeSwipe.axis = dx > Math.abs(dy) ? 'x' : 'y';
+  }
+  if (edgeSwipe.axis !== 'x') return;
+  event.stopPropagation();
+  edgeSwipeOffset.value = Math.max(0, dx);
+}
+
+function onEdgePointerEnd(event: PointerEvent) {
+  if (!edgeSwipe || event.pointerId !== edgeSwipe.pointerId) return;
+  const shouldGoBack = edgeSwipe.axis === 'x' && edgeSwipeOffset.value >= EDGE_SWIPE_BACK_DISTANCE;
+  edgeSwipe = null;
+  edgeSwipeOffset.value = 0;
+  // The back action reuses the same slide transition as the header's back arrow.
+  if (shouldGoBack) emit('back');
+}
+
+onBeforeUnmount(() => {
+  window.clearTimeout(highlightTimer);
+  document.removeEventListener('pointerdown', closeReactionPickerOnOutsidePress, true);
+});
+
 defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
 </script>
 <template>
   <section
+    data-chat-pane
     class="flex h-full min-h-0 min-w-0 flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    :style="edgeSwipeOffset ? { transform: `translateX(${edgeSwipeOffset}px)`, transition: 'none' } : undefined"
+    @pointerdown.capture="onEdgePointerDown"
+    @pointermove.capture="onEdgePointerMove"
+    @pointerup.capture="onEdgePointerEnd"
+    @pointercancel.capture="onEdgePointerEnd"
     :class="
       conversation || pendingFriend
         ? 'relative translate-x-0 opacity-100'
@@ -230,43 +342,57 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
               No messages yet. Start the conversation.
             </p>
             <ol v-else class="space-y-4">
-              <motion.li
+              <ChatMessage
                 v-for="message in messages"
                 :key="message.sequence"
-                :initial="
-                  shouldAnimate(message) && !prefersReducedMotion
-                    ? isLocal(message)
-                      ? { opacity: 0, x: 14, y: 18, scale: 0.86 }
-                      : { opacity: 0, x: -10, y: 14, scale: 0.92 }
-                    : false
-                "
-                :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
-                :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: 'easeOut' }"
-                class="flex"
-                :class="isLocal(message) ? 'justify-end' : 'justify-start'"
-                ><article
-                  class="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm sm:max-w-[70%]"
-                  :class="
-                    isLocal(message)
-                      ? 'rounded-br-md bg-[#0B7A75] text-white'
-                      : 'rounded-bl-md border border-[#D8E7E3] bg-[#F6FAF7] text-[#102F35]'
-                  "
-                >
-                  <div
-                    class="mb-1 flex items-center gap-2 text-xs"
-                    :class="isLocal(message) ? 'text-white/80' : 'text-[#61777B]'"
-                  >
-                    <span class="font-semibold">{{ isLocal(message) ? 'You' : message.senderName }}</span>
-                    <span v-if="!isLocal(message) && message.senderNickname">@{{ message.senderNickname }}</span>
-                    <time :datetime="message.createdAt">{{ formatTime(message.createdAt) }}</time>
-                  </div>
-                  <p class="whitespace-pre-wrap break-words leading-5">{{ message.content }}</p>
-                </article></motion.li
-              >
+                :message="message"
+                :local="isLocal(message)"
+                :animate-in="shouldAnimate(message)"
+                :highlighted="highlightedSequence === message.sequence"
+                :reaction-picker-open="reactionPickerSequence === message.sequence"
+                :prefers-reduced-motion="prefersReducedMotion"
+                :format-time="formatTime"
+                @reply="startReply(message)"
+                @react="(emoji) => react(message, emoji)"
+                @open-reactions="reactionPickerSequence = message.sequence"
+                @copy="copyMessage(message)"
+                @jump-to="jumpToMessage"
+              />
             </ol>
           </div>
           <div class="border-t border-[#E5EFEC] bg-[#FBFCF8] px-4 py-3 sm:px-6">
             <p class="mb-2 text-xs text-[#61777B]">Messages stored by OpenMeet</p>
+            <AnimatePresence>
+              <motion.div
+                v-if="replyTo"
+                data-reply-preview
+                :initial="prefersReducedMotion ? false : { opacity: 0, y: 10, height: 0 }"
+                :animate="{ opacity: 1, y: 0, height: 'auto' }"
+                :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 10, height: 0 }"
+                :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 32 }"
+                class="overflow-hidden"
+              >
+                <div
+                  class="mb-2 flex items-center gap-2 rounded-xl border-l-[3px] border-[#0B7A75] bg-[#E6F4F1] px-3 py-2"
+                >
+                  <Reply class="size-4 shrink-0 text-[#0B7A75]" />
+                  <div class="min-w-0 flex-1 text-xs">
+                    <p class="font-semibold text-[#102F35]">
+                      Replying to {{ isLocal(replyTo) ? 'yourself' : replyTo.senderName }}
+                    </p>
+                    <p class="truncate text-[#4E6B70]">{{ replyTo.content }}</p>
+                  </div>
+                  <button
+                    type="button"
+                    class="harbor-ghost-action shrink-0 rounded-full p-1 text-[#27595D]"
+                    aria-label="Cancel reply"
+                    @click="replyTo = null"
+                  >
+                    <X class="size-4" />
+                  </button>
+                </div>
+              </motion.div>
+            </AnimatePresence>
             <form class="flex items-end gap-2" @submit.prevent="emit('send')">
               <textarea
                 ref="composer"
@@ -277,6 +403,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 aria-label="Message"
                 class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-[#D8E7E3] bg-white px-3 py-2.5 text-sm text-[#102F35] focus-visible:border-[#D8E7E3] focus-visible:outline-none focus-visible:ring-0"
                 @keydown.enter.exact.prevent="emit('send')"
+                @keydown.esc="replyTo = null"
               />
               <EmojiPickerButton
                 v-model="content"
