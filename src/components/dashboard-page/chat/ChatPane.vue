@@ -357,6 +357,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 :key="message.sequence"
                 :message="message"
                 :grouped="isGroupedWithPrevious(index)"
+                :first="index === 0"
                 :show-sender="selectedIsGroup"
                 :local="isLocal(message)"
                 :animate-in="shouldAnimate(message)"

@@ -22,6 +22,8 @@ const props = defineProps<{
   grouped: boolean;
   /** Group chats name the sender of incoming messages. */
   showSender: boolean;
+  /** The first visible message opens its reaction picker below, so the list edge cannot clip it. */
+  first?: boolean;
   animateIn: boolean;
   highlighted: boolean;
   reactionPickerOpen: boolean;
@@ -60,8 +62,8 @@ const initial = computed(() =>
     :initial="initial"
     :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
     :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: 'easeOut' }"
-    class="flex flex-col"
-    :class="[local ? 'items-end' : 'items-start', grouped ? 'mt-0.5' : 'mt-3 first:mt-0']"
+    class="relative flex flex-col"
+    :class="[local ? 'items-end' : 'items-start', grouped ? 'mt-0.5' : 'mt-3 first:mt-0', { 'mb-2': reactions.length }]"
   >
     <SwipeableRow
       :id="`message-${message.sequence}`"
@@ -175,55 +177,76 @@ const initial = computed(() =>
         </ContextMenuContent>
       </ContextMenu>
     </SwipeableRow>
+    <!-- The picker floats over the list so opening it never shifts the messages around it. -->
     <AnimatePresence>
       <motion.div
         v-if="reactionPickerOpen"
         data-reaction-picker
-        :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.85, y: -6 }"
+        :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.8, y: first ? -8 : 8 }"
         :animate="{ opacity: 1, scale: 1, y: 0 }"
-        :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.9, y: -4 }"
-        :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 30 }"
-        class="mt-1.5 flex items-center gap-0.5 rounded-full border border-[#D8E7E3] bg-white p-1 shadow-[0_12px_30px_rgba(16,47,53,0.16)]"
+        :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.85, y: first ? -6 : 6 }"
+        :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 560, damping: 32 }"
+        class="absolute z-20 flex items-center gap-0.5 rounded-full border border-[#E4ECE9] bg-white p-1 shadow-[0_12px_30px_rgba(16,47,53,0.18)]"
+        :class="[
+          first ? 'top-full mt-1.5' : 'bottom-full mb-1.5',
+          local ? 'right-0 origin-bottom-right' : 'left-0 origin-bottom-left',
+        ]"
         role="group"
         :aria-label="`React to ${local ? 'your' : `${message.senderName}'s`} message`"
       >
-        <button
-          v-for="emoji in QUICK_REACTIONS"
+        <motion.button
+          v-for="(emoji, index) in QUICK_REACTIONS"
           :key="emoji"
           type="button"
-          class="flex size-9 items-center justify-center rounded-full text-lg transition-transform active:scale-90 [@media(hover:hover)]:hover:scale-110 [@media(hover:hover)]:hover:bg-[#E6F4F1]"
+          :initial="prefersReducedMotion ? false : { opacity: 0, y: 6, scale: 0.6 }"
+          :animate="{ opacity: 1, y: 0, scale: 1 }"
+          :transition="
+            prefersReducedMotion
+              ? { duration: 0 }
+              : { type: 'spring', stiffness: 600, damping: 26, delay: index * 0.025 }
+          "
+          class="flex size-9 items-center justify-center rounded-full text-lg active:scale-90 [@media(hover:hover)]:hover:scale-110 [@media(hover:hover)]:hover:bg-[#E6F4F1]"
           :aria-label="`React with ${emoji}`"
           @click="emit('react', emoji)"
         >
           {{ emoji }}
-        </button>
+        </motion.button>
       </motion.div>
     </AnimatePresence>
-    <div v-if="reactions.length" class="mt-1 flex flex-wrap gap-1" :class="local ? 'justify-end' : 'justify-start'">
-      <AnimatePresence>
-        <motion.button
-          v-for="reaction in reactions"
-          :key="reaction.emoji"
-          type="button"
-          data-reaction-chip
-          :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.6 }"
-          :animate="{ opacity: 1, scale: 1 }"
-          :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.6 }"
-          :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 28 }"
-          class="inline-flex min-h-7 items-center gap-1 rounded-full border px-2 text-xs font-semibold"
-          :class="
-            reaction.reactedByMe
-              ? 'border-[#9BCFC7] bg-[#E6F4F1] text-[#102F35]'
-              : 'border-transparent bg-[#EEF2F1] text-[#4E6B70]'
-          "
-          :aria-pressed="reaction.reactedByMe"
-          :aria-label="`${reaction.emoji} ${reaction.count}${reaction.reactedByMe ? ', including you' : ''}`"
-          @click="emit('react', reaction.emoji)"
-        >
-          <span class="text-sm">{{ reaction.emoji }}</span
-          >{{ reaction.count }}
-        </motion.button>
-      </AnimatePresence>
-    </div>
+    <!-- Reactions tuck under the bubble's edge; the row grows and shrinks so later messages slide, not jump. -->
+    <AnimatePresence>
+      <motion.div
+        v-if="reactions.length"
+        data-reaction-row
+        :initial="prefersReducedMotion ? false : { height: 0, opacity: 0 }"
+        :animate="{ height: 'auto', opacity: 1 }"
+        :exit="prefersReducedMotion ? undefined : { height: 0, opacity: 0 }"
+        :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }"
+        class="relative z-10 -mt-1.5 flex max-w-[82%] flex-wrap gap-1 px-2 sm:max-w-[68%]"
+        :class="local ? 'justify-end' : 'justify-start'"
+      >
+        <AnimatePresence>
+          <motion.button
+            v-for="reaction in reactions"
+            :key="reaction.emoji"
+            type="button"
+            data-reaction-chip
+            layout
+            :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.5 }"
+            :animate="{ opacity: 1, scale: 1 }"
+            :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.5 }"
+            :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 28 }"
+            class="inline-flex h-6 items-center gap-1 rounded-full px-1.5 text-[0.6875rem] font-semibold tabular-nums shadow-[0_1px_3px_rgba(16,47,53,0.12)] ring-2 ring-white"
+            :class="reaction.reactedByMe ? 'bg-[#E6F4F1] text-[#102F35]' : 'bg-[#F1F4F3] text-[#4E6B70]'"
+            :aria-pressed="reaction.reactedByMe"
+            :aria-label="`${reaction.emoji} ${reaction.count}${reaction.reactedByMe ? ', including you' : ''}`"
+            @click="emit('react', reaction.emoji)"
+          >
+            <span class="text-[0.8125rem] leading-none">{{ reaction.emoji }}</span>
+            <span v-if="reaction.count > 1">{{ reaction.count }}</span>
+          </motion.button>
+        </AnimatePresence>
+      </motion.div>
+    </AnimatePresence>
   </motion.li>
 </template>

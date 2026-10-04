@@ -124,6 +124,29 @@ describe('ChatPane', () => {
     expect(wrapper.findAll('[data-message-bubble]')[0]!.classes()).toContain('harbor-message-lifted');
   });
 
+  it('floats the reaction picker over the list and tucks reactions under the bubble', async () => {
+    const solo: ConversationMessage = {
+      ...message,
+      sequence: 9,
+      reactions: [{ emoji: '🎉', count: 1, reactedByMe: false }],
+    };
+    const wrapper = mountPane({ conversation, messages: [reply, solo] });
+    const [first, second] = wrapper.findAllComponents({ name: 'ChatMessage' });
+
+    await second!.vm.$emit('open-reactions');
+    expect(wrapper.get('[data-reaction-picker]').classes()).toEqual(
+      expect.arrayContaining(['absolute', 'bottom-full']),
+    );
+
+    await first!.vm.$emit('open-reactions');
+    expect(wrapper.get('[data-reaction-picker]').classes()).toContain('top-full');
+
+    const chips = wrapper.findAll('[data-reaction-chip]');
+    expect(chips[0]!.text()).toBe('👍2');
+    expect(chips[1]!.text()).toBe('🎉');
+    expect(wrapper.findAll('[data-message-sequence]')[1]!.classes()).toContain('mb-2');
+  });
+
   it('opens one reaction picker at a time and closes it on an outside press', async () => {
     const wrapper = mountPane({ conversation, messages: [message, reply] }, { attachTo: document.body });
     const [first, second] = wrapper.findAllComponents({ name: 'ChatMessage' });
