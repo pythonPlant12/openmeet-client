@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
-import { Camera, Check, Copy, LogOut, Phone, Search, Settings, Trash2, UserMinus, UserPlus } from 'lucide-vue-next';
+import {
+  Camera,
+  Check,
+  Copy,
+  LogOut,
+  Phone,
+  Search,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  UserMinus,
+  UserPlus,
+  UserRound,
+} from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
 
@@ -31,6 +44,7 @@ import {
   type GroupAccessPolicy,
   type GroupInfo,
   type GroupMember,
+  type GroupMemberRole,
   SocialApiError,
   type UserSearchResult,
   socialApi,
@@ -234,6 +248,10 @@ function canOpenProfile(member: GroupMember) {
   return member.id === props.currentUserId || props.friends.some((friend) => friend.id === member.id);
 }
 
+function canChangeMemberRole(member: GroupMember) {
+  return isCreator.value && member.role !== 'creator' && member.id !== props.currentUserId;
+}
+
 async function copyGroupId() {
   if (!props.info) return;
   await navigator.clipboard.writeText(props.info.groupCode);
@@ -395,6 +413,22 @@ async function removeMember(member: GroupMember) {
   await removeSelectedMembers();
 }
 
+async function updateMemberRole(member: GroupMember, role: GroupMemberRole) {
+  if (!canChangeMemberRole(member) || member.role === role) return;
+  const groupId = props.group.id;
+  const mutationToken = props.beginMutation(groupId);
+  if (!mutationToken) return;
+  try {
+    await socialApi.updateGroupMemberRole(props.accessToken, groupId, member.id, role);
+    toast({ title: `${member.name} is now ${role === 'admin' ? 'an admin' : 'a participant'}.`, variant: 'success' });
+    emit('refresh');
+  } catch (error) {
+    showError('Could not update participant role.', error);
+  } finally {
+    props.endMutation(groupId, mutationToken);
+  }
+}
+
 async function leaveGroup() {
   if (quitConfirmation.value.toLocaleLowerCase() !== 'quit' || isLeaving.value || isCreator.value) return;
   const groupId = props.group.id;
@@ -554,13 +588,16 @@ defineExpose({
                         ? 'hover:bg-[#F6FAF7]'
                         : 'cursor-default'
                   "
-                  :disabled="!isSelectionMode && !canOpenProfile(member)"
                   :title="
                     !isSelectionMode && !canOpenProfile(member)
                       ? 'Profile details are available to accepted friends only.'
                       : undefined
                   "
-                  @click="isSelectionMode ? selectMember(member) : emit('open-profile', member.id, member.name)"
+                  @click="
+                    isSelectionMode
+                      ? selectMember(member)
+                      : canOpenProfile(member) && emit('open-profile', member.id, member.name)
+                  "
                 >
                   <span
                     class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
@@ -574,23 +611,46 @@ defineExpose({
                 class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
               >
                 <ContextMenuItem
+                  v-if="canOpenProfile(member)"
                   class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  :disabled="!canCallMember(member)"
-                  :title="canCallMember(member) ? undefined : 'Calls require an accepted friendship.'"
+                  @select="emit('open-profile', member.id, member.name)"
+                >
+                  <UserRound class="size-4" />See profile
+                </ContextMenuItem>
+                <ContextMenuItem
+                  v-if="canCallMember(member)"
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                   @select="emit('call-member', member)"
                 >
                   <Phone class="size-4" /> Call
                 </ContextMenuItem>
                 <ContextMenuItem
+                  v-if="isSelectableMember(member)"
                   class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                  :disabled="!isSelectableMember(member) || mutationBusy"
+                  :disabled="mutationBusy"
                   @select="removeMember(member)"
                 >
                   <UserMinus class="size-4" /> Remove from group
                 </ContextMenuItem>
                 <ContextMenuItem
+                  v-if="canChangeMemberRole(member) && member.role === 'member'"
                   class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  :disabled="!isSelectableMember(member)"
+                  :disabled="mutationBusy"
+                  @select="updateMemberRole(member, 'admin')"
+                >
+                  <ShieldCheck class="size-4" />Make admin
+                </ContextMenuItem>
+                <ContextMenuItem
+                  v-if="canChangeMemberRole(member) && member.role === 'admin'"
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                  :disabled="mutationBusy"
+                  @select="updateMemberRole(member, 'member')"
+                >
+                  <UserRound class="size-4" />Make participant
+                </ContextMenuItem>
+                <ContextMenuItem
+                  v-if="isSelectableMember(member)"
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                   @select="selectMember(member)"
                 >
                   Select

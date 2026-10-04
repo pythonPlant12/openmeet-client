@@ -302,6 +302,13 @@ describe('socialApi', () => {
     ['accepts a friend', () => socialApi.acceptFriend('token', 'request-id'), '/friends/request-id/accept', 'POST'],
     ['declines a friend', () => socialApi.declineFriend('token', 'request-id'), '/friends/request-id', 'DELETE'],
     ['deletes a meeting', () => socialApi.deleteMeeting('token', 'meeting-id'), '/meetings/meeting-id', 'DELETE'],
+    ['removes a profile avatar', () => socialApi.removeCurrentUserAvatar('token'), '/me/profile/avatar', 'DELETE'],
+    [
+      'removes a group avatar',
+      () => socialApi.removeGroupAvatar('token', 'group-id'),
+      '/conversations/groups/group-id/avatar',
+      'DELETE',
+    ],
     ['leaves a group', () => socialApi.leaveGroup('token', 'group-id'), '/conversations/groups/group-id/leave', 'POST'],
     [
       'hides a direct conversation',

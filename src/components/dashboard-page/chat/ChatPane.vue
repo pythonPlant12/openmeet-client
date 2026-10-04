@@ -16,6 +16,8 @@ const props = defineProps<{
   selectedIsGroup: boolean;
   groupAvatarUrl?: string;
   friendAvatarUrls: Record<string, string>;
+  isFriendAvatarLoading: (userId: string) => boolean;
+  isGroupAvatarLoading: (groupId: string) => boolean;
   messages: ConversationMessage[];
   loading: boolean;
   loadingOlder: boolean;
@@ -125,9 +127,16 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 :src="friendAvatarUrls[selectedFriend.id]"
                 alt=""
                 class="size-full object-cover"
+              /><LoadingRipple
+                v-else-if="isFriendAvatarLoading(selectedFriend.id)"
+                class="size-4 text-[#0B7A75]"
               /><span v-else class="text-xs font-semibold">{{ initials(selectedFriend.name) }}</span></span
             ><span class="min-w-0"
-              ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
+              ><span class="flex items-center gap-2"
+                ><span id="conversation-title" class="truncate font-semibold">{{ selectedTitle }}</span
+                ><span v-if="selectedFriend.nickname" class="shrink-0 text-xs font-medium text-[#61777B]"
+                  >#{{ selectedFriend.nickname }}</span
+                ></span
               ><span class="block truncate text-xs text-[#61777B]">{{
                 isDraft ? 'Draft direct chat' : 'Direct conversation'
               }}</span></span
@@ -139,9 +148,9 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
             @click="emit('group-info')"
           >
             <span class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#102F35] text-white"
-              ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><UsersRound
-                v-else
-                class="size-4" /></span
+              ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><LoadingRipple
+                v-else-if="conversation && isGroupAvatarLoading(conversation.id)"
+                class="size-4 text-white" /><UsersRound v-else class="size-4" /></span
             ><span class="min-w-0"
               ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
               ><span class="block truncate text-xs text-[#61777B]">Group conversation</span></span
@@ -229,8 +238,9 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                     class="mb-1 flex items-center gap-2 text-xs"
                     :class="isLocal(message) ? 'text-white/80' : 'text-[#61777B]'"
                   >
-                    <span class="font-semibold">{{ isLocal(message) ? 'You' : message.senderName }}</span
-                    ><time :datetime="message.createdAt">{{ formatTime(message.createdAt) }}</time>
+                    <span class="font-semibold">{{ isLocal(message) ? 'You' : message.senderName }}</span>
+                    <span v-if="!isLocal(message) && message.senderNickname">#{{ message.senderNickname }}</span>
+                    <time :datetime="message.createdAt">{{ formatTime(message.createdAt) }}</time>
                   </div>
                   <p class="whitespace-pre-wrap break-words leading-5">{{ message.content }}</p>
                 </article></motion.li

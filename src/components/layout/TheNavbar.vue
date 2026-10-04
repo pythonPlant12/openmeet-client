@@ -75,10 +75,7 @@ let avatarObjectUrl: string | null = null;
 let avatarRequest = 0;
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
-const isDashboardPage = computed(() => route.path === '/dashboard');
-const hasContentSizedMobileMenu = computed(
-  () => isAuthenticated.value && (isMeetingPage.value || isDashboardPage.value),
-);
+const hasContentSizedMobileMenu = computed(() => isAuthenticated.value);
 const activeMobileMenuIsContentSized = computed(() =>
   isClosingMobileMenu.value ? closingMobileMenuIsContentSized.value : hasContentSizedMobileMenu.value,
 );

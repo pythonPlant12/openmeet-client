@@ -21,6 +21,7 @@ const props = defineProps<{
   activeContextMenuId: string | null;
   expanded: boolean;
   friendAvatarUrls: Record<string, string>;
+  isAvatarLoading: (userId: string) => boolean;
   friends: Friend[];
   incomingRequests: FriendRequest[];
   isAdding: boolean;
@@ -141,8 +142,18 @@ onBeforeUnmount(clearLongPress);
               v-model="query"
               type="search"
               placeholder="Search friends and people"
-              class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] focus-visible:ring-0"
-          /></label>
+              class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 pr-9 text-xs text-[#102F35] focus-visible:ring-0" /><button
+              v-if="query"
+              type="button"
+              class="harbor-ghost-action absolute right-1.5 top-1/2 rounded-md p-1 text-[#61777B]"
+              aria-label="Clear friend search"
+              @click="
+                query = '';
+                input?.focus();
+              "
+            >
+              <X class="size-3.5" /></button
+          ></label>
           <p v-if="query.trim() && query.replace(/\s/g, '').length < 2" class="mt-2 text-xs text-[#61777B]">
             Keep typing to search people outside your friend list.
           </p>
@@ -165,7 +176,10 @@ onBeforeUnmount(clearLongPress);
                   :src="friendAvatarUrls[friend.id]"
                   alt=""
                   class="size-full object-cover"
-                /><template v-else>{{ initials(friend.name) }}</template></span
+                /><LoadingRipple v-else-if="isAvatarLoading(friend.id)" class="size-3.5 text-[#0B7A75]" /><template
+                  v-else
+                  >{{ initials(friend.name) }}</template
+                ></span
               ><span class="min-w-0 flex-1"
                 ><span class="block truncate text-xs font-semibold">{{ friend.name }}</span
                 ><span class="block truncate text-[11px] text-[#61777B]">{{ friend.email }}</span></span
@@ -238,7 +252,6 @@ onBeforeUnmount(clearLongPress);
                 type="button"
                 class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-2 text-left"
                 :disabled="isOpening !== null"
-                :class="{ 'border-2 border-[#0B7A75]': activeContextMenuId === `friend-${friend.id}` }"
                 @click="openFriend(friend)"
                 @contextmenu="emit('context-activate', `friend-${friend.id}`)"
                 @pointerdown="startLongPress($event, friend)"
@@ -252,11 +265,17 @@ onBeforeUnmount(clearLongPress);
                     v-if="friendAvatarUrls[friend.id]"
                     :src="friendAvatarUrls[friend.id]"
                     alt=""
-                    class="size-full object-cover" /><template v-else>{{ initials(friend.name) }}</template
+                    class="size-full object-cover" /><LoadingRipple
+                    v-else-if="isAvatarLoading(friend.id)"
+                    class="size-4 text-[#0B7A75]" /><template v-else>{{ initials(friend.name) }}</template
                   ><span
                     v-if="friend.isOnline"
                     class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]" /></span
-                ><span class="min-w-0 flex-1 truncate text-sm">{{ friend.name }}</span
+                ><span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
+                  ><span class="truncate">{{ friend.name }}</span
+                  ><span v-if="friend.nickname" class="shrink-0 text-xs text-[#61777B]"
+                    >#{{ friend.nickname }}</span
+                  ></span
                 ><LoadingRipple
                   v-if="isOpening === friend.id"
                   class="size-4 text-[#0B7A75]"

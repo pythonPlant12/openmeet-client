@@ -79,6 +79,8 @@ const conversations = ref<Conversation[]>([]);
 const friends = ref<Friend[]>([]);
 const friendAvatarUrls = ref<Record<string, string>>({});
 const groupAvatarUrls = ref<Record<string, string>>({});
+const loadingFriendAvatarIds = ref(new Set<string>());
+const loadingGroupAvatarIds = ref(new Set<string>());
 const incomingFriendRequests = ref<FriendRequest[]>([]);
 const directRequests = ref<DirectMessageRequest[]>([]);
 const searchQuery = ref('');
@@ -237,6 +239,14 @@ function endGroupMutation(groupId: string, token: GroupMutationToken) {
 
 function isGroupMutationBusy(groupId: string) {
   return activeGroupMutations.has(groupId);
+}
+
+function isFriendAvatarLoading(userId: string) {
+  return loadingFriendAvatarIds.value.has(userId);
+}
+
+function isGroupAvatarLoading(groupId: string) {
+  return loadingGroupAvatarIds.value.has(groupId);
 }
 
 function conversationName(conversation: Conversation) {
@@ -456,6 +466,7 @@ function excludeUnsentDirectDrafts(conversationData: Conversation[]) {
 
 async function syncFriendAvatars(nextFriends: Friend[], token: string) {
   const request = ++friendAvatarRequest;
+  loadingFriendAvatarIds.value = new Set(nextFriends.filter((friend) => !!friend.avatarUrl).map((friend) => friend.id));
   const entries = await Promise.all(
     nextFriends.map(async (friend) => {
       if (!friend.avatarUrl) return null;
@@ -485,6 +496,7 @@ async function syncFriendAvatars(nextFriends: Friend[], token: string) {
     installed = true;
   } finally {
     if (!installed) createdUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    if (request === friendAvatarRequest && !isUnmounted) loadingFriendAvatarIds.value = new Set();
   }
 }
 
@@ -493,6 +505,11 @@ async function syncGroupAvatars(nextConversations: Conversation[], token: string
   const groups = nextConversations.filter(
     (conversation): conversation is Conversation & { avatarUrl: string } =>
       conversation.kind === 'group' && !!conversation.avatarUrl,
+  );
+  loadingGroupAvatarIds.value = new Set(
+    groups
+      .filter((group) => groupAvatarSources[group.id] !== group.avatarUrl || !groupAvatarUrls.value[group.id])
+      .map((group) => group.id),
   );
   const entries = await Promise.all(
     groups.map(async (group) => {
@@ -535,6 +552,7 @@ async function syncGroupAvatars(nextConversations: Conversation[], token: string
     installed = true;
   } finally {
     if (!installed) createdUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    if (request === groupAvatarRequest && !isUnmounted) loadingGroupAvatarIds.value = new Set();
   }
 }
 
@@ -1013,6 +1031,15 @@ function openConversationDetails(conversation: Conversation) {
   openContactProfile(friend.id, friend.name);
 }
 
+async function openConversationManagement(conversation: Conversation, action: 'add-members' | 'remove-group') {
+  if (conversation.kind !== 'group') return;
+  selectConversation(conversation);
+  await nextTick();
+  await loadGroupProfile(conversation);
+  if (selectedConversation.value?.id !== conversation.id) return;
+  await openGroupManagement(action);
+}
+
 function removeConversationFromWorkspace(conversationId: string) {
   invalidateConversationRefresh();
   groupAvatarRequest += 1;
@@ -1223,7 +1250,7 @@ async function createGroup() {
     setCreateGroupDialogOpen(false, true);
   } catch (error) {
     console.error('[Dashboard] Failed to create group:', error);
-    feedbackError.value = 'Could not create group.';
+    feedbackError.value = error instanceof SocialApiError ? error.message : 'Could not create group.';
   } finally {
     if (!isUnmounted) isCreatingGroup.value = false;
   }
@@ -1420,6 +1447,8 @@ async function startConversationCall(conversation: Conversation) {
           :context-menu-key="contextMenuKey"
           :conversation-name="conversationName"
           :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
+          :is-friend-avatar-loading="isFriendAvatarLoading"
+          :is-group-avatar-loading="isGroupAvatarLoading"
           :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
           :direct-requests="directRequests"
           :expanded="expandedSidebarPanel !== 'friends'"
@@ -1441,6 +1470,8 @@ async function startConversationCall(conversation: Conversation) {
             (conversation) =>
               conversation.kind === 'direct' ? hideDirectConversation(conversation) : leaveGroup(conversation)
           "
+          @add-members="openConversationManagement($event, 'add-members')"
+          @remove-group="openConversationManagement($event, 'remove-group')"
           @context-open="handleContextMenuOpen"
           @context-activate="activateContextMenu"
           @respond-direct-request="respondToDirectRequest"
@@ -1451,6 +1482,7 @@ async function startConversationCall(conversation: Conversation) {
           :context-menu-key="contextMenuKey"
           :expanded="expandedSidebarPanel !== 'messages'"
           :friend-avatar-urls="friendAvatarUrls"
+          :is-avatar-loading="isFriendAvatarLoading"
           :friends="isPeopleSearchActive ? filteredFriends : visibleFriends"
           :incoming-requests="incomingFriendRequests"
           :is-adding="isAddingFriend"
@@ -1485,6 +1517,8 @@ async function startConversationCall(conversation: Conversation) {
         :selected-is-group="selectedIsGroup"
         :group-avatar-url="selectedGroupAvatarUrl"
         :friend-avatar-urls="friendAvatarUrls"
+        :is-friend-avatar-loading="isFriendAvatarLoading"
+        :is-group-avatar-loading="isGroupAvatarLoading"
         :messages="messages"
         :loading="isLoadingMessages"
         :loading-older="isLoadingOlderMessages"
@@ -1579,7 +1613,12 @@ async function startConversationCall(conversation: Conversation) {
       :members="groupMembers"
       :friends="friends"
       :avatar-url="selectedGroupAvatarUrl"
+      :avatar-loading="isGroupAvatarLoading(selectedConversation?.id ?? '')"
       :current-user-id="currentUser?.id"
+      :access-token="accessToken ?? undefined"
+      :mutation-busy="isGroupMutationBusy(selectedConversation?.id ?? '')"
+      :begin-mutation="beginGroupMutation"
+      :end-mutation="endGroupMutation"
       :access-label="groupAccessPolicyLabel"
       :format-date="formatProfileDate"
       @update:open="setGroupProfileDialogOpen"
@@ -1587,6 +1626,7 @@ async function startConversationCall(conversation: Conversation) {
       @add-members="openGroupManagement('add-members')"
       @quit-group="openGroupManagement('quit-group')"
       @remove-group="openGroupManagement('remove-group')"
+      @refresh="refreshSelectedGroup"
     />
     <ContactProfileDialog
       :open="isContactProfileDialogOpen"
@@ -1599,6 +1639,7 @@ async function startConversationCall(conversation: Conversation) {
       :opening="isOpeningDirect"
       :call-active="isCallLaunchActive"
       :avatar-urls="friendAvatarUrls"
+      :avatar-loading="isFriendAvatarLoading(contactProfile?.id ?? '')"
       :format-date="formatProfileDate"
       @update:open="setContactProfileDialogOpen"
       @update:confirmation-open="setContactRemoveConfirmationOpen"

@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Trash2,
+  UserPlus,
   UsersRound,
   X,
 } from 'lucide-vue-next';
@@ -48,6 +49,8 @@ const props = defineProps<{
   unreadCount: (conversation: Conversation) => number;
   conversationName: (conversation: Conversation) => string;
   directAvatarUrl: (conversation: Conversation) => string | undefined;
+  isFriendAvatarLoading: (userId: string) => boolean;
+  isGroupAvatarLoading: (groupId: string) => boolean;
   directInitials: (conversation: Conversation) => string;
   contextMenuKey: (id: string) => string;
 }>();
@@ -63,6 +66,8 @@ const emit = defineEmits<{
   (event: 'select', conversation: Conversation): void;
   (event: 'details', conversation: Conversation): void;
   (event: 'delete', conversation: Conversation): void;
+  (event: 'add-members', conversation: Conversation): void;
+  (event: 'remove-group', conversation: Conversation): void;
   (event: 'context-open', id: string, open: boolean): void;
   (event: 'context-activate', id: string): void;
   (event: 'respond-direct-request', request: DirectMessageRequest, accept: boolean): void;
@@ -97,6 +102,10 @@ function selectConversation(conversation: Conversation) {
     return;
   }
   emit('select', conversation);
+}
+
+function canManageGroup(conversation: Conversation) {
+  return conversation.kind === 'group' && (conversation.role === 'creator' || conversation.role === 'admin');
 }
 
 onBeforeUnmount(clearLongPress);
@@ -179,8 +188,18 @@ onBeforeUnmount(clearLongPress);
           v-model="query"
           type="search"
           placeholder="Search conversations"
-          class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0"
-      /></label>
+          class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 pr-9 text-[#102F35] placeholder:text-[#809697] focus-visible:border-[#D8E7E3] focus-visible:ring-0 focus-visible:ring-offset-0" /><button
+          v-if="query"
+          type="button"
+          class="harbor-ghost-action absolute right-1.5 top-1/2 rounded-md p-1 text-[#61777B]"
+          aria-label="Clear conversation search"
+          @click="
+            query = '';
+            searchInput?.focus();
+          "
+        >
+          <X class="size-4" /></button
+      ></label>
     </div>
   </div>
   <div
@@ -230,10 +249,7 @@ onBeforeUnmount(clearLongPress);
             ><button
               type="button"
               class="harbor-ghost-action flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition-[background-color,border-color,border-width] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-              :class="[
-                selectedConversationId === conversation.id ? 'bg-[#E6F4F1] !text-[#102F35]' : '',
-                activeContextMenuId === `conversation-${conversation.id}` ? 'border-2 border-[#0B7A75]' : '',
-              ]"
+              :class="[selectedConversationId === conversation.id ? 'bg-[#E6F4F1] !text-[#102F35]' : '']"
               :aria-current="selectedConversationId === conversation.id ? 'page' : undefined"
               @click="selectConversation(conversation)"
               @contextmenu="emit('context-activate', `conversation-${conversation.id}`)"
@@ -250,11 +266,17 @@ onBeforeUnmount(clearLongPress);
                   :src="groupAvatarUrls[conversation.id]"
                   alt=""
                   class="size-full object-cover"
+                /><LoadingRipple
+                  v-else-if="conversation.kind === 'group' && isGroupAvatarLoading(conversation.id)"
+                  class="size-4 text-white"
                 /><UsersRound v-else-if="conversation.kind === 'group'" class="size-4" /><img
                   v-else-if="directAvatarUrl(conversation)"
                   :src="directAvatarUrl(conversation)"
                   alt=""
                   class="size-full object-cover"
+                /><LoadingRipple
+                  v-else-if="conversation.otherUserId && isFriendAvatarLoading(conversation.otherUserId)"
+                  class="size-4 text-[#0B7A75]"
                 /><span v-else class="text-xs font-semibold">{{ directInitials(conversation) }}</span></span
               ><span class="min-w-0 flex-1"
                 ><span class="flex items-center gap-2"
@@ -284,7 +306,18 @@ onBeforeUnmount(clearLongPress);
                 v-else
                 class="size-4"
               />{{ conversation.kind === 'direct' ? 'See profile' : 'Group info' }}</ContextMenuItem
+            ><template v-if="canManageGroup(conversation)"
+              ><ContextMenuItem
+                class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                @select="emit('add-members', conversation)"
+                ><UserPlus class="size-4" />Add participants</ContextMenuItem
+              ><ContextMenuItem
+                class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                @select="emit('remove-group', conversation)"
+                ><Trash2 class="size-4" />Delete group</ContextMenuItem
+              ></template
             ><ContextMenuItem
+              v-if="conversation.kind === 'direct' || conversation.role !== 'creator'"
               class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
               @select="emit('delete', conversation)"
               ><Trash2 v-if="conversation.kind === 'direct'" class="size-4" /><LogOut v-else class="size-4" />{{

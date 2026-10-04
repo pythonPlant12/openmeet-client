@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ArrowLeft, Camera } from 'lucide-vue-next';
+import { ArrowLeft, Camera, Eye, Trash2 } from 'lucide-vue-next';
 import { motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingRipple } from '@/components/ui/loading';
@@ -22,6 +30,8 @@ const nickname = ref('');
 const email = ref('');
 const statusMessage = ref('');
 const avatarUrl = ref<string | null>(null);
+const avatarInput = ref<HTMLInputElement | null>(null);
+const isAvatarPreviewOpen = ref(false);
 const isLoadingProfile = ref(false);
 const isSaving = ref(false);
 const profileError = ref('');
@@ -159,6 +169,27 @@ async function handleAvatarChange(event: Event) {
   }
 }
 
+async function removeAvatar() {
+  if (!accessToken.value || isSaving.value || !avatarUrl.value) return;
+  isSaving.value = true;
+  profileError.value = '';
+  try {
+    await socialApi.removeCurrentUserAvatar(accessToken.value);
+    if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
+    avatarObjectUrl = null;
+    avatarUrl.value = null;
+    isAvatarPreviewOpen.value = false;
+    window.dispatchEvent(new Event('openmeet:profile-updated'));
+    toast({ title: 'Avatar removed', variant: 'success' });
+  } catch (error) {
+    console.error('[Account] Failed to remove avatar:', error);
+    profileError.value = error instanceof Error ? error.message : t('account.profileUnavailable');
+    toast({ title: 'Could not remove avatar', description: profileError.value, variant: 'destructive' });
+  } finally {
+    isSaving.value = false;
+  }
+}
+
 onBeforeUnmount(() => {
   if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
 });
@@ -195,23 +226,55 @@ onBeforeUnmount(() => {
         <section class="relative overflow-hidden border-b border-[#D8E7E3] bg-[#EAF7F4] px-6 py-8 sm:px-10 sm:py-10">
           <div class="absolute right-0 top-0 size-48 -translate-y-1/2 translate-x-1/3 rounded-full bg-[#D8E7E3]/70" />
           <div class="relative flex flex-col gap-6 sm:flex-row sm:items-center">
-            <label
-              class="relative block size-28 shrink-0 cursor-pointer overflow-hidden rounded-[2rem] bg-[#0B7A75] text-3xl font-semibold text-white shadow-[0_16px_32px_rgba(11,122,117,0.2)]"
-            >
-              <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
-              <span v-else class="flex size-full items-center justify-center">{{ initials }}</span>
-              <span
-                class="absolute inset-0 flex items-center justify-center bg-[#102F35]/60 opacity-0 transition-opacity hover:opacity-100"
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <button
+                  type="button"
+                  class="harbor-ghost-action relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-[2rem] bg-[#0B7A75] p-0 text-3xl font-semibold text-white shadow-[0_16px_32px_rgba(11,122,117,0.2)]"
+                  aria-label="Manage profile avatar"
+                >
+                  <img v-if="avatarUrl" :src="avatarUrl" alt="Your profile avatar" class="size-full object-cover" />
+                  <LoadingRipple v-else-if="isLoadingProfile" class="size-7 text-white" />
+                  <span v-else>{{ initials }}</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                :side-offset="10"
+                class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
               >
-                <Camera class="size-5" />
-              </span>
-              <input
-                class="sr-only"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                @change="handleAvatarChange"
-              />
-            </label>
+                <DropdownMenuItem
+                  v-if="avatarUrl"
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                  @select="isAvatarPreviewOpen = true"
+                >
+                  <Eye class="size-4" />View
+                </DropdownMenuItem>
+                <DropdownMenuSeparator v-if="avatarUrl" class="mx-1 my-2 bg-[#E5EFEC]" />
+                <DropdownMenuItem
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                  :disabled="isSaving"
+                  @select="avatarInput?.click()"
+                >
+                  <Camera class="size-4" />Change avatar
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  v-if="avatarUrl"
+                  class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                  :disabled="isSaving"
+                  @select="removeAvatar"
+                >
+                  <Trash2 class="size-4" />Remove avatar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <input
+              ref="avatarInput"
+              class="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              @change="handleAvatarChange"
+            />
             <div class="min-w-0">
               <h1 class="truncate text-4xl font-semibold tracking-[-0.05em] text-[#102F35] sm:text-5xl">
                 {{ name || nickname || email }}
@@ -281,5 +344,19 @@ onBeforeUnmount(() => {
         </section>
       </div>
     </motion.section>
+    <Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
+      ><HarborDialogContent
+        overlay-class="bg-[#102F35]/50 backdrop-blur-lg"
+        hide-close
+        class="w-auto max-w-[min(88dvw,42rem)] border-0 bg-transparent p-0 shadow-none"
+        ><DialogTitle class="sr-only">Your profile avatar</DialogTitle
+        ><img
+          v-if="avatarUrl"
+          :src="avatarUrl"
+          alt="Your profile avatar"
+          class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-full object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
+        />
+      </HarborDialogContent>
+    </Dialog>
   </main>
 </template>

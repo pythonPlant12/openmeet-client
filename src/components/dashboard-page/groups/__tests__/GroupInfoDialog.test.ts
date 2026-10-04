@@ -16,7 +16,7 @@ const groupInfo = {
   canJoin: false,
 };
 
-function mountDialog() {
+function mountDialog(props: Record<string, unknown> = {}) {
   return mount(GroupInfoDialog, {
     props: {
       open: true,
@@ -28,9 +28,15 @@ function mountDialog() {
         { id: 'member-1', name: 'Member', role: 'member', joinedAt: '2026-08-17T12:00:00Z' },
       ],
       friends: [{ id: 'friend-1', name: 'Friend', email: 'friend@example.com', isOnline: true }],
+      avatarLoading: false,
       currentUserId: 'current-user',
+      accessToken: 'token',
+      mutationBusy: false,
+      beginMutation: () => Symbol('group-1'),
+      endMutation: () => undefined,
       accessLabel: () => 'Password protected',
       formatDate: () => '17 Aug 2026',
+      ...props,
     },
     global: {
       stubs: {
@@ -52,5 +58,15 @@ describe('GroupInfoDialog', () => {
     await wrapper.get('[title="Profile details are available to accepted friends only."]').trigger('click');
 
     expect(wrapper.emitted('profile')).toEqual([['friend-1', 'Friend']]);
+  });
+
+  it('only offers icon changes to group managers', () => {
+    expect(mountDialog().find('[aria-label="Manage Harbor group icon"]').exists()).toBe(false);
+
+    expect(
+      mountDialog({ info: { ...groupInfo, role: 'admin' } })
+        .find('[aria-label="Manage Harbor group icon"]')
+        .exists(),
+    ).toBe(true);
   });
 });

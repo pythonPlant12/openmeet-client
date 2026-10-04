@@ -28,6 +28,7 @@ describe('ContactProfileDialog', () => {
         opening: null,
         callActive: false,
         avatarUrls: { 'friend-1': '/avatars/alex.jpg' },
+        avatarLoading: false,
         formatDate: () => '17 Aug 2026',
       },
       global: {

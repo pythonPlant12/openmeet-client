@@ -24,6 +24,7 @@ const message: ConversationMessage = {
   conversationId: conversation.id,
   senderId: 'friend-1',
   senderName: 'Friend',
+  senderNickname: 'friend',
   content: 'Hello',
   createdAt: '2026-10-02T12:00:00Z',
 };
@@ -40,6 +41,8 @@ function mountPane(props: Record<string, unknown> = {}) {
       selectedTitle: 'Conversation',
       selectedIsGroup: false,
       friendAvatarUrls: {},
+      isFriendAvatarLoading: () => false,
+      isGroupAvatarLoading: () => false,
       messages: [],
       loading: false,
       loadingOlder: false,
@@ -75,6 +78,12 @@ describe('ChatPane', () => {
 
     expect(wrapper.text()).toContain('Hello');
     expect(wrapper.find('[data-loading]').exists()).toBe(false);
+  });
+
+  it('shows remote sender nicknames', () => {
+    const wrapper = mountPane({ conversation, messages: [message] });
+
+    expect(wrapper.text()).toContain('#friend');
   });
 
   it('smoothly scrolls to the newest message when requested', async () => {

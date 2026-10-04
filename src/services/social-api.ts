@@ -13,6 +13,7 @@ function expireSession() {
 export interface Friend {
   id: string;
   name: string;
+  nickname?: string;
   email: string;
   avatarUrl?: string | null;
   isOnline: boolean;
@@ -175,6 +176,7 @@ export interface ConversationMessage {
   conversationId: string;
   senderId: string;
   senderName: string;
+  senderNickname?: string;
   content: string;
   createdAt: string;
 }
@@ -314,6 +316,10 @@ export const socialApi = {
     const body = new FormData();
     body.append('avatar', avatar);
     return request<ContactProfile>('/me/profile/avatar', accessToken, { method: 'POST', body });
+  },
+
+  removeCurrentUserAvatar(accessToken: string) {
+    return request<void>('/me/profile/avatar', accessToken, { method: 'DELETE' });
   },
 
   listFriends(accessToken: string) {
@@ -475,6 +481,10 @@ export const socialApi = {
     const body = new FormData();
     body.append('avatar', avatar);
     return request<Conversation>(`/conversations/groups/${groupId}/avatar`, accessToken, { method: 'POST', body });
+  },
+
+  removeGroupAvatar(accessToken: string, groupId: string) {
+    return request<void>(`/conversations/groups/${groupId}/avatar`, accessToken, { method: 'DELETE' });
   },
 
   addGroupMember(accessToken: string, groupId: string, userId: string) {
