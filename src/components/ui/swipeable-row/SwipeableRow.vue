@@ -38,6 +38,10 @@ const emit = defineEmits<{ (event: 'full-swipe-leading'): void; (event: 'full-sw
 const AXIS_LOCK_DISTANCE = 8;
 const RUBBER_BAND = 0.25;
 const WHEEL_SETTLE_DELAY = 160;
+// Trackpad scrolling drifts sideways a little; a wheel swipe starts only once sideways motion clearly
+// dominates and has built up past a dead zone, so vertical scrolling never nudges rows.
+const WHEEL_DOMINANCE = 2;
+const WHEEL_DEAD_ZONE = 24;
 // Slightly underdamped, so rows settle with a small, quick bounce.
 const SETTLE_SPRING = { type: 'spring', stiffness: 520, damping: 32, mass: 0.9 } as const;
 // Bouncier return after a full swipe runs its action, so the row visibly springs back into place.
@@ -54,6 +58,8 @@ let gesture: { pointerId: number; x: number; y: number; offset: number; axis: 'x
 let suppressClick = false;
 let wheelSettleTimer: number | undefined;
 let offsetAnimation: { stop: () => void } | null = null;
+let wheelIntent = 0;
+let wheelIntentTimer: number | undefined;
 // Recent horizontal velocity in px/s, handed to the spring so a flick keeps its momentum.
 let velocity = 0;
 let lastSample: { x: number; time: number } | null = null;
@@ -132,6 +138,7 @@ function close() {
 
 function settle() {
   isDragging.value = false;
+  wheelIntent = 0;
   if (isFullSwipeArmed.value || isTrailingFullSwipeArmed.value) {
     const side = isFullSwipeArmed.value ? 'full-swipe-leading' : 'full-swipe-trailing';
     springTo(0, FULL_SWIPE_RETURN_SPRING);
@@ -203,7 +210,18 @@ function onClickCapture(event: MouseEvent) {
 }
 
 function onWheel(event: WheelEvent) {
-  if (props.disabled || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+  if (props.disabled) return;
+  const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY) * WHEEL_DOMINANCE;
+  if (!isDragging.value) {
+    if (!horizontal) {
+      wheelIntent = 0;
+      return;
+    }
+    wheelIntent += event.deltaX;
+    window.clearTimeout(wheelIntentTimer);
+    wheelIntentTimer = window.setTimeout(() => (wheelIntent = 0), WHEEL_SETTLE_DELAY);
+    if (Math.abs(wheelIntent) < WHEEL_DEAD_ZONE) return;
+  }
   event.preventDefault();
   stopOffsetAnimation();
   isDragging.value = true;
@@ -233,6 +251,7 @@ watch(openSide, (side) => {
 onBeforeUnmount(() => {
   stopOffsetAnimation();
   window.clearTimeout(wheelSettleTimer);
+  window.clearTimeout(wheelIntentTimer);
   document.removeEventListener('pointerdown', onDocumentPointerDown, true);
   if (activeSwipeRowId.value === props.id) activeSwipeRowId.value = null;
 });

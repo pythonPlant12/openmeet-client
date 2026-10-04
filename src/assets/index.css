@@ -548,9 +548,9 @@
   }
 }
 
-/* Chat canvas: white with a faint, tiled light-green line pattern that reads as texture, not decoration. */
+/* Chat canvas: the dashboard's off-white with a faint, tiled light-green line pattern as texture. */
 .harbor-chat-canvas {
-  background-color: #ffffff;
+  background-color: #fbfcf8;
   background-image: url('./chat-pattern.svg');
   background-size: 240px 240px;
   background-repeat: repeat;

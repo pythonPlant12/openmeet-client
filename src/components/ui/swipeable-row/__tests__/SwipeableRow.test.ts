@@ -266,6 +266,23 @@ describe('SwipeableRow', () => {
     vi.useRealTimers();
   });
 
+  it('ignores vertical trackpad scrolling that drifts slightly sideways', async () => {
+    vi.useFakeTimers();
+    const wrapper = mountRow();
+    const root = wrapper.get('[data-swipeable-row]').element;
+    const wheel = (deltaX: number, deltaY: number) =>
+      new WheelEvent('wheel', { deltaX, deltaY, bubbles: true, cancelable: true });
+
+    const scroll = wheel(-6, 40);
+    root.dispatchEvent(scroll);
+    root.dispatchEvent(wheel(-8, 10));
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(scroll.defaultPrevented).toBe(false);
+    expect(contentOffset(wrapper)).toBe('translate3d(0px, 0, 0)');
+    vi.useRealTimers();
+  });
+
   it('closes when another row opens', async () => {
     const first = mountRow();
     const second = mountRow({ id: 'row-2' });
