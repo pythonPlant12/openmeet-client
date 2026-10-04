@@ -49,7 +49,7 @@ const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
 const reactionPickerSequence = ref<number | null>(null);
 const highlightedSequence = ref<number | null>(null);
-const edgeSwipeOffset = ref(0);
+let edgeSwipeDistance = 0;
 let highlightTimer: number | undefined;
 let edgeSwipe: { pointerId: number; startX: number; startY: number; axis: 'x' | 'y' | null } | null = null;
 // Mobile back gesture: a right swipe anywhere in the chat goes back, except on messages that can be
@@ -191,15 +191,15 @@ function onEdgePointerMove(event: PointerEvent) {
   }
   if (edgeSwipe.axis !== 'x') return;
   event.stopPropagation();
-  edgeSwipeOffset.value = Math.max(0, dx);
+  edgeSwipeDistance = Math.max(0, dx);
 }
 
 function onEdgePointerEnd(event: PointerEvent) {
   if (!edgeSwipe || event.pointerId !== edgeSwipe.pointerId) return;
-  const shouldGoBack = edgeSwipe.axis === 'x' && edgeSwipeOffset.value >= EDGE_SWIPE_BACK_DISTANCE;
+  const shouldGoBack = edgeSwipe.axis === 'x' && edgeSwipeDistance >= EDGE_SWIPE_BACK_DISTANCE;
   edgeSwipe = null;
-  edgeSwipeOffset.value = 0;
-  // The back action reuses the same slide transition as the header's back arrow.
+  edgeSwipeDistance = 0;
+  // The pane stays still during the swipe, so going back plays exactly the back arrow's transition.
   if (shouldGoBack) emit('back');
 }
 
@@ -214,7 +214,6 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
   <section
     data-chat-pane
     class="flex h-full min-h-0 min-w-0 flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-    :style="edgeSwipeOffset ? { transform: `translateX(${edgeSwipeOffset}px)`, transition: 'none' } : undefined"
     @pointerdown.capture="onEdgePointerDown"
     @pointermove.capture="onEdgePointerMove"
     @pointerup.capture="onEdgePointerEnd"
@@ -308,7 +307,7 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
         <div v-if="conversation" class="flex min-h-0 flex-1 flex-col">
           <div
             ref="pane"
-            class="min-h-0 flex-1 overflow-y-auto bg-[#F7F9F8] px-4 py-5 sm:px-6"
+            class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
             aria-label="Message history"
             @scroll.passive="pane && pane.scrollTop < 80 && emit('scroll-top')"
           >
