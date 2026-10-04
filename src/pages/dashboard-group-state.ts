@@ -6,6 +6,28 @@ const ROLE_ORDER: Record<string, number> = { creator: 0, admin: 1, member: 2 };
 
 export type GroupMutationToken = symbol;
 
+export const GROUP_ACCESS_POLICIES: GroupAccessPolicy[] = ['open', 'password', 'friendsOnly', 'friendsOfFriends'];
+
+const GROUP_ACCESS_POLICY_LABELS: Record<GroupAccessPolicy, string> = {
+  open: 'Open access',
+  password: 'Password protected',
+  friendsOnly: 'Friends-only',
+  friendsOfFriends: 'Friends of friends',
+};
+
+export function groupAccessPolicyLabel(policy: GroupAccessPolicy | null | undefined) {
+  return GROUP_ACCESS_POLICY_LABELS[policy ?? 'open'];
+}
+
+export function canAddOutsideFriends(policy: GroupAccessPolicy | null | undefined) {
+  return policy !== 'friendsOnly';
+}
+
+export function groupAddActionLabel(policy: GroupAccessPolicy | null | undefined) {
+  if (policy === 'password') return 'Invite people';
+  return canAddOutsideFriends(policy) ? 'Add people' : 'Add friends';
+}
+
 export function sortGroupMembers(members: GroupMember[]) {
   return [...members].sort(
     (left, right) =>

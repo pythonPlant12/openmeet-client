@@ -16,6 +16,9 @@ defineProps<{
   groupInfo: GroupInfo | null;
   groupLoading: boolean;
   groupMembers: GroupMember[];
+  groupMemberAvatarUrls: Record<string, string>;
+  groupMembersHasMore: boolean;
+  groupMembersLoadingMore: boolean;
   groupMutationBusy: (groupId: string) => boolean;
   beginMutation: (groupId: string) => GroupMutationToken | null;
   endMutation: (groupId: string, token: GroupMutationToken) => void;
@@ -30,12 +33,15 @@ const groupDetailsPanel = ref<{
   openAddMembers: () => void;
   openQuitGroup: () => void;
   openRemoveGroup: () => void;
+  openSettings: () => void;
 } | null>(null);
 const emit = defineEmits<{
   (event: 'call'): void;
   (event: 'call-member', member: GroupMember): void;
+  (event: 'account'): void;
   (event: 'open-profile', id: string, name: string): void;
   (event: 'refresh-group'): void;
+  (event: 'load-more-members'): void;
   (event: 'group-removed', id: string): void;
 }>();
 function initials(name?: string) {
@@ -53,6 +59,7 @@ defineExpose({
   openAddMembers: () => groupDetailsPanel.value?.openAddMembers(),
   openQuitGroup: () => groupDetailsPanel.value?.openQuitGroup(),
   openRemoveGroup: () => groupDetailsPanel.value?.openRemoveGroup(),
+  openSettings: () => groupDetailsPanel.value?.openSettings(),
 });
 </script>
 <template>
@@ -78,12 +85,16 @@ defineExpose({
       :info="groupInfo"
       :loading="groupLoading"
       :members="groupMembers"
+      :member-avatar-urls="groupMemberAvatarUrls"
+      :members-has-more="groupMembersHasMore"
+      :members-loading-more="groupMembersLoadingMore"
       :mutation-busy="groupMutationBusy(selectedConversation.id)"
       :begin-mutation="beginMutation"
       :end-mutation="endMutation"
       @call-member="emit('call-member', $event)"
       @open-profile="(id, name) => emit('open-profile', id, name)"
       @refresh="emit('refresh-group')"
+      @load-more-members="emit('load-more-members')"
       @removed="emit('group-removed', $event)"
     />
     <div v-else-if="selectedConversation || pendingFriend" class="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
@@ -110,7 +121,12 @@ defineExpose({
       Create group conversations, review direct-message requests, or select an accepted friend.
     </div>
     <div class="mt-auto border-t border-[#E5EFEC] p-4">
-      <div class="flex items-center gap-3 rounded-xl bg-white p-3">
+      <button
+        type="button"
+        class="harbor-ghost-action flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left"
+        aria-label="Open account settings"
+        @click="emit('account')"
+      >
         <span
           class="flex size-9 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
           >{{ initials(currentUser?.name) }}</span
@@ -118,7 +134,7 @@ defineExpose({
           ><strong class="block truncate text-sm">{{ currentUser?.name }}</strong
           ><span class="block truncate text-xs text-[#61777B]">{{ currentUser?.email }}</span></span
         >
-      </div>
+      </button>
     </div>
   </aside>
 </template>

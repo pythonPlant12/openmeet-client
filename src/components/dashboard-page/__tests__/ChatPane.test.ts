@@ -15,6 +15,7 @@ const conversation: Conversation = {
   otherUserId: 'friend-1',
   messageCount: 1,
   unreadCount: 0,
+  markedUnread: false,
   createdAt: '2026-10-02T12:00:00Z',
   updatedAt: '2026-10-02T12:00:00Z',
 };
@@ -24,6 +25,7 @@ const message: ConversationMessage = {
   conversationId: conversation.id,
   senderId: 'friend-1',
   senderName: 'Friend',
+  senderNickname: 'friend',
   content: 'Hello',
   createdAt: '2026-10-02T12:00:00Z',
 };
@@ -40,6 +42,8 @@ function mountPane(props: Record<string, unknown> = {}) {
       selectedTitle: 'Conversation',
       selectedIsGroup: false,
       friendAvatarUrls: {},
+      isFriendAvatarLoading: () => false,
+      isGroupAvatarLoading: () => false,
       messages: [],
       loading: false,
       loadingOlder: false,
@@ -70,11 +74,26 @@ describe('ChatPane', () => {
     expect(mountPane().text()).not.toContain('Choose a conversation');
   });
 
+  it('lets the blocked-notifications notice be dismissed', async () => {
+    const wrapper = mountPane({ conversation, messages: [message], notificationWarning: true });
+
+    expect(wrapper.text()).toContain('Notifications are blocked');
+    await wrapper.get('[aria-label="Dismiss notification notice"]').trigger('click');
+
+    expect(wrapper.emitted('dismiss-notifications')).toHaveLength(1);
+  });
+
   it('keeps rendered history visible during a message refresh', () => {
     const wrapper = mountPane({ conversation, loading: true, messages: [message] });
 
     expect(wrapper.text()).toContain('Hello');
     expect(wrapper.find('[data-loading]').exists()).toBe(false);
+  });
+
+  it('shows remote sender nicknames', () => {
+    const wrapper = mountPane({ conversation, messages: [message] });
+
+    expect(wrapper.text()).toContain('@friend');
   });
 
   it('smoothly scrolls to the newest message when requested', async () => {

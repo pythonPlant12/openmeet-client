@@ -124,9 +124,22 @@ describe('socialApi', () => {
 
     await expect(socialApi.loadAvatar('token', '/social/users/user-id/avatar')).resolves.toBeInstanceOf(Blob);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8081/social/users/user-id/avatar',
+      'http://localhost:8081/social/users/user-id/avatar?size=thumb',
       expect.objectContaining({ headers: { Authorization: 'Bearer token' } }),
     );
+  });
+
+  it('requests thumbnails by default and full avatars only on demand', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('avatar', { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await socialApi.loadAvatar('token', '/social/users/user-id/avatar?v=abc');
+    await socialApi.loadAvatar('token', '/social/users/user-id/avatar?v=abc', 'full');
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost:8081/social/users/user-id/avatar?v=abc&size=thumb',
+      'http://localhost:8081/social/users/user-id/avatar?v=abc',
+    ]);
   });
 
   it('does not load private avatars with a stale in-memory token', async () => {
@@ -181,13 +194,61 @@ describe('socialApi', () => {
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     ]);
     expect(fetchMock.mock.calls[3]).toEqual([
-      'http://localhost:8081/social/conversations/groups/group-id/members',
+      'http://localhost:8081/social/conversations/groups/group-id/members?offset=0',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     ]);
     expect(fetchMock.mock.calls[4]).toEqual([
       'http://localhost:8081/social/conversations/groups/group-id/members/user-id',
       expect.objectContaining({ method: 'DELETE' }),
     ]);
+  });
+
+  it('sends friend requests by user ID', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await socialApi.addFriendById('token', 'user-id');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8081/social/friends',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ userId: 'user-id' }) }),
+    );
+  });
+
+  it('uses paged group candidate and invitation contracts', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ members: [], nextOffset: null }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ results: [], nextOffset: 50 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'group-id' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await socialApi.listGroupMembers('token', 'group-id', 50);
+    await socialApi.searchGroupCandidates('token', 'group-id', 'ada lovelace', 50);
+    await socialApi.inviteToGroup('token', 'group-id', 'user-id');
+    await socialApi.listGroupInvitations('token');
+    await socialApi.acceptGroupInvitation('token', 'invitation-id', 'password1');
+    await socialApi.declineGroupInvitation('token', 'invitation-id');
+
+    const base = 'http://localhost:8081/social/conversations/groups';
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      `${base}/group-id/members?offset=50`,
+      `${base}/group-id/candidates?query=ada+lovelace&offset=50`,
+      `${base}/group-id/invitations`,
+      `${base}/invitations`,
+      `${base}/invitations/invitation-id/accept`,
+      `${base}/invitations/invitation-id/decline`,
+    ]);
+    expect(fetchMock.mock.calls[2]?.[1]).toEqual(
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ userId: 'user-id' }) }),
+    );
+    expect(fetchMock.mock.calls[4]?.[1]).toEqual(
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ password: 'password1' }) }),
+    );
+    expect(fetchMock.mock.calls[5]?.[1]).toEqual(expect.objectContaining({ method: 'POST' }));
   });
 
   it('uses fixed 50-message cursor pages', async () => {
@@ -302,6 +363,13 @@ describe('socialApi', () => {
     ['accepts a friend', () => socialApi.acceptFriend('token', 'request-id'), '/friends/request-id/accept', 'POST'],
     ['declines a friend', () => socialApi.declineFriend('token', 'request-id'), '/friends/request-id', 'DELETE'],
     ['deletes a meeting', () => socialApi.deleteMeeting('token', 'meeting-id'), '/meetings/meeting-id', 'DELETE'],
+    ['removes a profile avatar', () => socialApi.removeCurrentUserAvatar('token'), '/me/profile/avatar', 'DELETE'],
+    [
+      'removes a group avatar',
+      () => socialApi.removeGroupAvatar('token', 'group-id'),
+      '/conversations/groups/group-id/avatar',
+      'DELETE',
+    ],
     ['leaves a group', () => socialApi.leaveGroup('token', 'group-id'), '/conversations/groups/group-id/leave', 'POST'],
     [
       'hides a direct conversation',

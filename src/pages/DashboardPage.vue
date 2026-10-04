@@ -9,12 +9,14 @@ import ConversationsSidebar from '@/components/dashboard-page/conversations/Conv
 import DetailsPane from '@/components/dashboard-page/details/DetailsPane.vue';
 import ContactProfileDialog from '@/components/dashboard-page/friends/ContactProfileDialog.vue';
 import FriendsSidebar from '@/components/dashboard-page/friends/FriendsSidebar.vue';
+import AcceptGroupInvitationDialog from '@/components/dashboard-page/groups/AcceptGroupInvitationDialog.vue';
 import CreateGroupDialog from '@/components/dashboard-page/groups/CreateGroupDialog.vue';
 import GroupInfoDialog from '@/components/dashboard-page/groups/GroupInfoDialog.vue';
 import JoinGroupDialog from '@/components/dashboard-page/groups/JoinGroupDialog.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/composables/useAuth';
+import { useAvatarCache } from '@/composables/useAvatarCache';
 import {
   type ConversationActivity,
   sortConversationsByActivity,
@@ -24,6 +26,7 @@ import {
   type GroupMutationToken,
   type SidebarPanel,
   beginGroupMutation as acquireGroupMutation,
+  groupAccessPolicyLabel,
   endGroupMutation as releaseGroupMutation,
   shouldApplyDashboardRequest,
   sidebarPanelAfterDrag,
@@ -38,6 +41,7 @@ import {
   type FriendRequest,
   type GroupAccessPolicy,
   type GroupInfo,
+  type GroupInvitation,
   type GroupMember,
   SocialApiError,
   type UserSearchResult,
@@ -48,6 +52,7 @@ import { cookieUtils } from '@/utils';
 const router = useRouter();
 const { accessToken, currentUser, isAuthenticated, isCheckingSession } = useAuth();
 const SIDEBAR_PANEL_STORAGE_KEY = 'openmeet.dashboard.sidebar-panel';
+const NOTIFICATION_WARNING_DISMISSED_KEY = 'openmeet.dashboard.notification-warning-dismissed';
 const MESSAGE_PAGE_SIZE = 50;
 
 function parseSidebarPanel(value: string | null): SidebarPanel | null {
@@ -65,6 +70,23 @@ function restoreSidebarPanel() {
   }
 }
 
+function readDismissedNotificationPermission() {
+  try {
+    return localStorage.getItem(NOTIFICATION_WARNING_DISMISSED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function dismissNotificationWarning() {
+  dismissedNotificationPermission.value = notificationPermission.value;
+  try {
+    localStorage.setItem(NOTIFICATION_WARNING_DISMISSED_KEY, notificationPermission.value);
+  } catch {
+    // Without storage the warning stays dismissed for this visit only.
+  }
+}
+
 function persistSidebarPanel(panel: SidebarPanel | null) {
   const value = panel ?? 'none';
   try {
@@ -79,8 +101,12 @@ const conversations = ref<Conversation[]>([]);
 const friends = ref<Friend[]>([]);
 const friendAvatarUrls = ref<Record<string, string>>({});
 const groupAvatarUrls = ref<Record<string, string>>({});
+const loadingFriendAvatarIds = ref(new Set<string>());
+const loadingGroupAvatarIds = ref(new Set<string>());
 const incomingFriendRequests = ref<FriendRequest[]>([]);
 const directRequests = ref<DirectMessageRequest[]>([]);
+const groupInvitations = ref<GroupInvitation[]>([]);
+const activeGroupInvitation = ref<GroupInvitation | null>(null);
 const searchQuery = ref('');
 const isConversationSearchOpen = ref(false);
 const peopleSearchQuery = ref('');
@@ -113,6 +139,19 @@ const isContactProfileLoading = ref(false);
 const contactProfileError = ref('');
 const groupInfo = ref<GroupInfo | null>(null);
 const groupMembers = ref<GroupMember[]>([]);
+const groupMembersNextOffset = ref<number | null>(null);
+const isLoadingMoreGroupMembers = ref(false);
+const memberAvatarCache = useAvatarCache((path) => socialApi.loadAvatar(accessToken.value ?? '', path));
+// Friends' avatars are already loaded, so only other participants need a separate fetch.
+const groupMemberAvatarUrls = computed(() =>
+  Object.fromEntries(
+    groupMembers.value.flatMap((member) => {
+      const url =
+        friendAvatarUrls.value[member.id] ?? (member.avatarUrl ? memberAvatarCache.urls.value[member.avatarUrl] : '');
+      return url ? [[member.id, url]] : [];
+    }),
+  ),
+);
 const activeGroupMutations = reactive(new Map<string, GroupMutationToken>());
 const isGroupProfileLoading = ref(false);
 const groupProfileError = ref('');
@@ -129,6 +168,7 @@ const detailsPane = ref<{
   openAddMembers: () => void;
   openQuitGroup: () => void;
   openRemoveGroup: () => void;
+  openSettings: () => void;
 } | null>(null);
 const conversationActivity = ref<Record<string, ConversationActivity>>({});
 const animatedMessageSequences = ref(new Set<number>());
@@ -149,6 +189,8 @@ const joinGroupError = ref('');
 const feedbackError = ref('');
 const feedbackMessage = ref('');
 const notificationPermission = ref(getSystemNotificationPermission());
+// Stores the permission state the user dismissed, so the warning returns if that state changes.
+const dismissedNotificationPermission = ref(readDismissedNotificationPermission());
 let hasStartedDashboard = false;
 let friendSearchRequest = 0;
 let peopleSearchTimer: number | undefined;
@@ -173,7 +215,9 @@ let panelWheelTimer: number | undefined;
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const isDesktop = useMediaQuery('(min-width: 1024px)');
 const showNotificationPermissionWarning = computed(
-  () => notificationPermission.value === 'default' || notificationPermission.value === 'denied',
+  () =>
+    (notificationPermission.value === 'default' || notificationPermission.value === 'denied') &&
+    dismissedNotificationPermission.value !== notificationPermission.value,
 );
 const canRequestNotificationPermission = computed(() => notificationPermission.value === 'default');
 
@@ -220,11 +264,6 @@ const contactProfileFriend = computed(() =>
     ? friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId)
     : null,
 );
-const isDraftDirectConversation = computed(
-  () =>
-    selectedConversation.value?.kind === 'direct' &&
-    !conversations.value.some((conversation) => conversation.id === selectedConversation.value?.id),
-);
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
 
 function beginGroupMutation(groupId: string) {
@@ -239,9 +278,26 @@ function isGroupMutationBusy(groupId: string) {
   return activeGroupMutations.has(groupId);
 }
 
+function isFriendAvatarLoading(userId: string) {
+  return loadingFriendAvatarIds.value.has(userId);
+}
+
+function isGroupAvatarLoading(groupId: string) {
+  return loadingGroupAvatarIds.value.has(groupId);
+}
+
 function conversationName(conversation: Conversation) {
   if (conversation.kind === 'group') return conversation.title?.trim() || 'Untitled group';
   return friendById.value.get(conversation.otherUserId ?? '')?.name || 'Direct conversation';
+}
+
+function conversationIdentifier(conversation: Conversation) {
+  if (conversation.kind === 'group') {
+    return conversation.groupCode ? `#${conversation.groupCode}` : conversationName(conversation);
+  }
+
+  const nickname = friendById.value.get(conversation.otherUserId ?? '')?.nickname;
+  return nickname ? `@${nickname}` : conversationName(conversation);
 }
 
 function userInitials(name?: string | null) {
@@ -262,10 +318,6 @@ function formatProfileDate(value: string | null) {
   if (Number.isNaN(date.getTime())) return 'Unavailable';
 
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
-}
-
-function groupAccessPolicyLabel(policy: GroupAccessPolicy | null | undefined) {
-  return policy === 'password' ? 'Password protected' : policy === 'friendsOnly' ? 'Friends-only' : 'Open access';
 }
 
 function clearFeedback() {
@@ -310,7 +362,7 @@ function updateConversationActivity(message: ConversationMessage) {
 
 function markConversationRead(conversationId: string) {
   conversations.value = conversations.value.map((conversation) =>
-    conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation,
+    conversation.id === conversationId ? { ...conversation, unreadCount: 0, markedUnread: false } : conversation,
   );
   const activity = conversationActivity.value[conversationId];
   if (!activity?.unreadCount) return;
@@ -456,6 +508,7 @@ function excludeUnsentDirectDrafts(conversationData: Conversation[]) {
 
 async function syncFriendAvatars(nextFriends: Friend[], token: string) {
   const request = ++friendAvatarRequest;
+  loadingFriendAvatarIds.value = new Set(nextFriends.filter((friend) => !!friend.avatarUrl).map((friend) => friend.id));
   const entries = await Promise.all(
     nextFriends.map(async (friend) => {
       if (!friend.avatarUrl) return null;
@@ -485,6 +538,7 @@ async function syncFriendAvatars(nextFriends: Friend[], token: string) {
     installed = true;
   } finally {
     if (!installed) createdUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    if (request === friendAvatarRequest && !isUnmounted) loadingFriendAvatarIds.value = new Set();
   }
 }
 
@@ -493,6 +547,11 @@ async function syncGroupAvatars(nextConversations: Conversation[], token: string
   const groups = nextConversations.filter(
     (conversation): conversation is Conversation & { avatarUrl: string } =>
       conversation.kind === 'group' && !!conversation.avatarUrl,
+  );
+  loadingGroupAvatarIds.value = new Set(
+    groups
+      .filter((group) => groupAvatarSources[group.id] !== group.avatarUrl || !groupAvatarUrls.value[group.id])
+      .map((group) => group.id),
   );
   const entries = await Promise.all(
     groups.map(async (group) => {
@@ -535,6 +594,7 @@ async function syncGroupAvatars(nextConversations: Conversation[], token: string
     installed = true;
   } finally {
     if (!installed) createdUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    if (request === groupAvatarRequest && !isUnmounted) loadingGroupAvatarIds.value = new Set();
   }
 }
 
@@ -556,10 +616,11 @@ async function loadWorkspace() {
   const conversationRequest = ++conversationRefreshRequest;
 
   try {
-    const [friendData, conversationData, requestData] = await Promise.all([
+    const [friendData, conversationData, requestData, invitationData] = await Promise.all([
       socialApi.listFriends(token),
       socialApi.listConversations(token),
       socialApi.listDirectRequests(token),
+      loadGroupInvitations(token),
     ]);
     let applied = false;
     if (shouldApplyDashboardRequest(friendRequest, friendRefreshRequest, isUnmounted)) {
@@ -575,6 +636,7 @@ async function loadWorkspace() {
       );
       void syncGroupAvatars(conversationData, token);
       directRequests.value = requestData;
+      if (invitationData) groupInvitations.value = invitationData;
       applied = true;
     }
     if (applied) clearFeedback();
@@ -635,15 +697,17 @@ async function refreshConversationWorkspace() {
       conversationRefreshPending = false;
       const request = ++conversationRefreshRequest;
       try {
-        const [conversationData, requestData] = await Promise.all([
+        const [conversationData, requestData, invitationData] = await Promise.all([
           socialApi.listConversations(token),
           socialApi.listDirectRequests(token),
+          loadGroupInvitations(token),
         ]);
         if (!shouldApplyDashboardRequest(request, conversationRefreshRequest, isUnmounted)) continue;
         const nextConversations = excludeUnsentDirectDrafts(conversationData);
         conversations.value = sortConversationsByActivity(nextConversations, conversationActivity.value);
         void syncGroupAvatars(conversationData, token);
         directRequests.value = requestData;
+        if (invitationData) groupInvitations.value = invitationData;
 
         if (selectedConversation.value) {
           const selectedId = selectedConversation.value.id;
@@ -759,9 +823,34 @@ watch(selectedConversation, (conversation, previousConversation) => {
     groupProfilePromise = null;
     groupInfo.value = null;
     groupMembers.value = [];
+    groupMembersNextOffset.value = null;
     groupProfileError.value = '';
     isGroupProfileLoading.value = false;
   }
+});
+
+// Profiles open from group participant lists too, so the avatar may belong to a non-friend or to the current user.
+const contactProfileAvatarUrls = computed<Record<string, string>>(() => {
+  const profile = contactProfile.value;
+  if (!profile) return {};
+  const url =
+    friendAvatarUrls.value[profile.id] ?? (profile.avatarUrl ? memberAvatarCache.urls.value[profile.avatarUrl] : '');
+  return url ? { [profile.id]: url } : {};
+});
+const isContactProfileAvatarLoading = computed(() => {
+  const profile = contactProfile.value;
+  if (!profile) return false;
+  return isFriendAvatarLoading(profile.id) || (!!profile.avatarUrl && memberAvatarCache.isLoading(profile.avatarUrl));
+});
+
+watch(contactProfile, (profile) => {
+  if (profile?.avatarUrl && !friendAvatarUrls.value[profile.id]) void memberAvatarCache.ensure([profile.avatarUrl]);
+});
+
+watch(groupMembers, (members) => {
+  void memberAvatarCache.ensure(
+    members.flatMap((member) => (member.avatarUrl && !friendAvatarUrls.value[member.id] ? [member.avatarUrl] : [])),
+  );
 });
 
 function selectConversation(conversation: Conversation) {
@@ -789,24 +878,25 @@ function setGroupProfileDialogOpen(open: boolean) {
   isGroupProfileDialogOpen.value = open;
 }
 
-async function openGroupManagement(action: 'add-members' | 'quit-group' | 'remove-group') {
-  setGroupProfileDialogOpen(false);
-  await nextTick();
-
+// Management dialogs stack above Group info, so cancelling one returns to it. Group info closes only
+// when the action removes the group (see handleGroupRemoved).
+function openGroupManagement(action: 'add-members' | 'quit-group' | 'remove-group' | 'settings') {
   if (action === 'add-members') detailsPane.value?.openAddMembers();
   else if (action === 'quit-group') detailsPane.value?.openQuitGroup();
+  else if (action === 'settings') detailsPane.value?.openSettings();
   else detailsPane.value?.openRemoveGroup();
 }
 
 function profileFallback(userId: string, name: string): ContactProfile {
+  const member = groupMembers.value.find(({ id }) => id === userId);
   return {
     id: userId,
     name,
-    nickname: '',
+    nickname: member?.nickname ?? '',
     email: 'Profile details unavailable',
-    avatarUrl: null,
+    avatarUrl: member?.avatarUrl ?? null,
     status: 'offline',
-    statusMessage: 'Live profile details are only available to accepted friends.',
+    statusMessage: '',
     createdAt: '',
     lastSeenAt: null,
     isOnline: false,
@@ -857,16 +947,22 @@ function loadGroupProfile(conversation?: Conversation) {
   if (groupProfilePromise?.groupId === group.id) return groupProfilePromise.promise;
 
   const request = ++groupProfileRequest;
-  groupInfo.value = null;
-  groupMembers.value = [];
+  // Refreshing the open group keeps its details on screen; clearing them would flash a spinner and
+  // resize the Group info dialog.
+  if (groupInfo.value?.id !== group.id) {
+    groupInfo.value = null;
+    groupMembers.value = [];
+    groupMembersNextOffset.value = null;
+    isGroupProfileLoading.value = true;
+  }
   groupProfileError.value = '';
-  isGroupProfileLoading.value = true;
 
   const promise = Promise.all([socialApi.getGroupInfo(token, group.id), socialApi.listGroupMembers(token, group.id)])
-    .then(([info, members]) => {
+    .then(([info, page]) => {
       if (!shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) return;
       groupInfo.value = info;
-      groupMembers.value = members;
+      groupMembers.value = page.members;
+      groupMembersNextOffset.value = page.nextOffset;
       void syncSelectedGroupAvatar(info);
     })
     .catch((error) => {
@@ -892,6 +988,28 @@ function openGroupProfile(conversation?: Conversation) {
   if (selectedConversation.value?.id !== group.id) selectConversation(group);
   else if (!groupInfo.value && !isGroupProfileLoading.value) loadGroupProfile(group);
   isGroupProfileDialogOpen.value = true;
+}
+
+async function loadMoreGroupMembers() {
+  const token = accessToken.value;
+  const group = selectedConversation.value;
+  const offset = groupMembersNextOffset.value;
+  if (!token || group?.kind !== 'group' || offset === null || isLoadingMoreGroupMembers.value) return;
+
+  const request = groupProfileRequest;
+  isLoadingMoreGroupMembers.value = true;
+  try {
+    const page = await socialApi.listGroupMembers(token, group.id, offset);
+    if (!shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) return;
+    const knownIds = new Set(groupMembers.value.map(({ id }) => id));
+    groupMembers.value = [...groupMembers.value, ...page.members.filter(({ id }) => !knownIds.has(id))];
+    groupMembersNextOffset.value = page.nextOffset;
+  } catch (error) {
+    console.error('[Dashboard] Failed to load more group members:', error);
+    toast({ title: 'Could not load more participants.', variant: 'destructive' });
+  } finally {
+    isLoadingMoreGroupMembers.value = false;
+  }
 }
 
 async function refreshSelectedGroup() {
@@ -965,6 +1083,9 @@ function handleSocialNotifications(event: Event) {
   ) {
     void refreshFriends();
   }
+  if (notifications.some((notification) => notification.kind === 'groupInvitation')) {
+    void refreshConversationWorkspace();
+  }
 }
 
 function handleFriendsUpdated() {
@@ -1011,6 +1132,15 @@ function openConversationDetails(conversation: Conversation) {
     return;
   }
   openContactProfile(friend.id, friend.name);
+}
+
+async function openConversationManagement(conversation: Conversation, action: 'add-members' | 'remove-group') {
+  if (conversation.kind !== 'group') return;
+  selectConversation(conversation);
+  await nextTick();
+  await loadGroupProfile(conversation);
+  if (selectedConversation.value?.id !== conversation.id) return;
+  openGroupManagement(action);
 }
 
 function removeConversationFromWorkspace(conversationId: string) {
@@ -1179,6 +1309,45 @@ async function removeProfileFriend() {
   await refreshFriends();
 }
 
+// Invitations are secondary to the conversation list, so a failure here must not block it.
+function loadGroupInvitations(token: string) {
+  return socialApi.listGroupInvitations(token).catch((error) => {
+    console.error('[Dashboard] Failed to load group invitations:', error);
+    return null;
+  });
+}
+
+function handleGroupInvitationAccepted(invitationId: string, conversation: Conversation) {
+  groupInvitations.value = groupInvitations.value.filter((invitation) => invitation.id !== invitationId);
+  activeGroupInvitation.value = null;
+  addConversation(conversation);
+  selectConversation(conversation);
+  toast({ title: `You joined ${conversation.title ?? 'the group'}.`, variant: 'success' });
+}
+
+async function declineGroupInvitation(invitation: GroupInvitation) {
+  const token = accessToken.value;
+  if (!token) return;
+  try {
+    await socialApi.declineGroupInvitation(token, invitation.id);
+    groupInvitations.value = groupInvitations.value.filter((item) => item.id !== invitation.id);
+  } catch (error) {
+    console.error('[Dashboard] Failed to decline group invitation:', error);
+    toast({ title: 'Could not decline the invitation.', variant: 'destructive' });
+  }
+}
+
+// Opening a section's search also expands that section, so results are visible right away.
+function setConversationSearchOpen(open: boolean) {
+  isConversationSearchOpen.value = open;
+  if (open) expandedSidebarPanel.value = 'messages';
+}
+
+function setPeopleSearchOpen(open: boolean) {
+  isPeopleSearchOpen.value = open;
+  if (open) expandedSidebarPanel.value = 'friends';
+}
+
 async function respondToDirectRequest(request: DirectMessageRequest, accept: boolean) {
   const token = accessToken.value;
   if (!token) return;
@@ -1223,7 +1392,7 @@ async function createGroup() {
     setCreateGroupDialogOpen(false, true);
   } catch (error) {
     console.error('[Dashboard] Failed to create group:', error);
-    feedbackError.value = 'Could not create group.';
+    feedbackError.value = error instanceof SocialApiError ? error.message : 'Could not create group.';
   } finally {
     if (!isUnmounted) isCreatingGroup.value = false;
   }
@@ -1338,10 +1507,80 @@ async function startSelectedConversationCall() {
 async function startContactProfileCall() {
   const friend = contactProfileFriend.value;
   if (!friend) return;
+  setContactProfileDialogOpen(false);
+  await startFriendCall(friend);
+}
+
+async function startFriendCall(friend: Friend) {
+  if (isCallLaunchActive.value) return;
   const conversation = await openFriendConversation(friend);
   if (!conversation) return;
-  setContactProfileDialogOpen(false);
   await startConversationCall(conversation);
+}
+
+// Swipe actions: read state updates optimistically and rolls back if the server rejects it.
+async function toggleConversationRead(conversation: Conversation) {
+  const token = accessToken.value;
+  if (!token) return;
+  const wasUnread = unreadCount(conversation) > 0 || conversation.markedUnread;
+  const previous = conversations.value.find(({ id }) => id === conversation.id);
+  const previousActivity = conversationActivity.value[conversation.id];
+  if (wasUnread) markConversationRead(conversation.id);
+  else setConversationMarkedUnread(conversation.id, true);
+  try {
+    if (wasUnread) await socialApi.markConversationRead(token, conversation.id);
+    else await socialApi.markConversationUnread(token, conversation.id);
+  } catch (error) {
+    console.error('[Dashboard] Failed to update read state:', error);
+    if (previous) conversations.value = conversations.value.map((item) => (item.id === previous.id ? previous : item));
+    if (previousActivity)
+      conversationActivity.value = { ...conversationActivity.value, [conversation.id]: previousActivity };
+    toast({ title: 'Could not update read state.', variant: 'destructive' });
+  }
+}
+
+function setConversationMarkedUnread(conversationId: string, markedUnread: boolean) {
+  conversations.value = conversations.value.map((conversation) =>
+    conversation.id === conversationId ? { ...conversation, markedUnread } : conversation,
+  );
+}
+
+// Participants may not be friends yet; opening a chat with them sends a message request.
+function openMemberChat(member: GroupMember) {
+  const friend = friends.value.find(({ id }) => id === member.id) ?? {
+    id: member.id,
+    name: member.name,
+    nickname: member.nickname,
+    email: '',
+    avatarUrl: member.avatarUrl,
+    isOnline: false,
+  };
+  void openFriendConversation(friend);
+}
+
+async function changeMemberFriendship(member: GroupMember, change: 'add' | 'remove') {
+  const token = accessToken.value;
+  if (!token) return false;
+  if (change === 'remove') {
+    const friend = friends.value.find(({ id }) => id === member.id);
+    if (!friend) return false;
+    const removed = await removeFriend(friend);
+    if (!removed) toast({ title: `Could not remove ${member.name} from your friends.`, variant: 'destructive' });
+    return removed;
+  }
+  try {
+    await socialApi.addFriendById(token, member.id);
+    toast({ title: `Friend request sent to ${member.name}.`, variant: 'success' });
+    return true;
+  } catch (error) {
+    console.error('[Dashboard] Failed to send friend request:', error);
+    toast({
+      title: 'Could not send friend request.',
+      description: error instanceof SocialApiError ? error.message : undefined,
+      variant: 'destructive',
+    });
+    return false;
+  }
 }
 
 async function startMemberCall(member: GroupMember) {
@@ -1419,9 +1658,13 @@ async function startConversationCall(conversation: Conversation) {
           :conversations="filteredConversations"
           :context-menu-key="contextMenuKey"
           :conversation-name="conversationName"
+          :conversation-identifier="conversationIdentifier"
           :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
+          :is-friend-avatar-loading="isFriendAvatarLoading"
+          :is-group-avatar-loading="isGroupAvatarLoading"
           :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
           :direct-requests="directRequests"
+          :group-invitations="groupInvitations"
           :expanded="expandedSidebarPanel !== 'friends'"
           :group-avatar-urls="groupAvatarUrls"
           :is-loading="isLoading"
@@ -1429,7 +1672,7 @@ async function startConversationCall(conversation: Conversation) {
           :search-open="isConversationSearchOpen"
           :selected-conversation-id="selectedConversation?.id"
           :unread-count="unreadCount"
-          @update:search-open="isConversationSearchOpen = $event"
+          @update:search-open="setConversationSearchOpen"
           @create-group="setCreateGroupDialogOpen(true)"
           @join-group="isJoinGroupDialogOpen = true"
           @drag-end="(event, info) => handlePanelHeaderDragEnd('messages', event, info)"
@@ -1441,9 +1684,14 @@ async function startConversationCall(conversation: Conversation) {
             (conversation) =>
               conversation.kind === 'direct' ? hideDirectConversation(conversation) : leaveGroup(conversation)
           "
+          @add-members="openConversationManagement($event, 'add-members')"
+          @remove-group="openConversationManagement($event, 'remove-group')"
           @context-open="handleContextMenuOpen"
           @context-activate="activateContextMenu"
           @respond-direct-request="respondToDirectRequest"
+          @accept-group-invitation="activeGroupInvitation = $event"
+          @decline-group-invitation="declineGroupInvitation"
+          @toggle-read="toggleConversationRead"
         />
         <FriendsSidebar
           v-model:query="peopleSearchQuery"
@@ -1451,6 +1699,7 @@ async function startConversationCall(conversation: Conversation) {
           :context-menu-key="contextMenuKey"
           :expanded="expandedSidebarPanel !== 'messages'"
           :friend-avatar-urls="friendAvatarUrls"
+          :is-avatar-loading="isFriendAvatarLoading"
           :friends="isPeopleSearchActive ? filteredFriends : visibleFriends"
           :incoming-requests="incomingFriendRequests"
           :is-adding="isAddingFriend"
@@ -1462,12 +1711,13 @@ async function startConversationCall(conversation: Conversation) {
           :people-search-active="isPeopleSearchActive"
           :results="newPeopleSearchResults"
           :search-open="isPeopleSearchOpen"
-          @update:search-open="isPeopleSearchOpen = $event"
+          @update:search-open="setPeopleSearchOpen"
           @drag-end="(event, info) => handlePanelHeaderDragEnd('friends', event, info)"
           @wheel="handlePanelHeaderWheel('friends', $event)"
           @toggle="toggleSidebarPanel('friends')"
           @open="openFriendConversation"
           @profile="(friend) => openContactProfile(friend.id, friend.name)"
+          @call="startFriendCall"
           @remove="removeFriend"
           @add="addFriend"
           @respond="respondToFriendRequest"
@@ -1485,6 +1735,8 @@ async function startConversationCall(conversation: Conversation) {
         :selected-is-group="selectedIsGroup"
         :group-avatar-url="selectedGroupAvatarUrl"
         :friend-avatar-urls="friendAvatarUrls"
+        :is-friend-avatar-loading="isFriendAvatarLoading"
+        :is-group-avatar-loading="isGroupAvatarLoading"
         :messages="messages"
         :loading="isLoadingMessages"
         :loading-older="isLoadingOlderMessages"
@@ -1494,7 +1746,6 @@ async function startConversationCall(conversation: Conversation) {
         :can-request-notification-permission="canRequestNotificationPermission"
         :is-desktop="isDesktop"
         :prefers-reduced-motion="prefersReducedMotion"
-        :is-draft="isDraftDirectConversation"
         :should-animate="shouldAnimateMessage"
         :is-local="isLocalMessage"
         :format-time="formatMessageTime"
@@ -1508,6 +1759,7 @@ async function startConversationCall(conversation: Conversation) {
         @scroll-top="handleMessageScroll"
         @send="sendMessage"
         @request-notifications="requestNotificationPermission"
+        @dismiss-notifications="dismissNotificationWarning"
       />
       <DetailsPane
         ref="detailsPane"
@@ -1519,6 +1771,9 @@ async function startConversationCall(conversation: Conversation) {
         :group-info="groupInfo"
         :group-loading="isGroupProfileLoading"
         :group-members="groupMembers"
+        :group-member-avatar-urls="groupMemberAvatarUrls"
+        :group-members-has-more="groupMembersNextOffset !== null"
+        :group-members-loading-more="isLoadingMoreGroupMembers"
         :group-mutation-busy="isGroupMutationBusy"
         :begin-mutation="beginGroupMutation"
         :end-mutation="endGroupMutation"
@@ -1530,8 +1785,10 @@ async function startConversationCall(conversation: Conversation) {
         :call-active="isCallLaunchActive"
         @call="startSelectedConversationCall"
         @call-member="startMemberCall"
+        @account="router.push('/account')"
         @open-profile="openContactProfile"
         @refresh-group="refreshSelectedGroup"
+        @load-more-members="loadMoreGroupMembers"
         @group-removed="handleGroupRemoved"
       />
     </motion.div>
@@ -1576,8 +1833,17 @@ async function startConversationCall(conversation: Conversation) {
       :error="groupProfileError"
       :info="groupInfo"
       :members="groupMembers"
+      :member-avatar-urls="groupMemberAvatarUrls"
+      :members-has-more="groupMembersNextOffset !== null"
+      :members-loading-more="isLoadingMoreGroupMembers"
+      :friends="friends"
       :avatar-url="selectedGroupAvatarUrl"
+      :avatar-loading="isGroupAvatarLoading(selectedConversation?.id ?? '')"
       :current-user-id="currentUser?.id"
+      :access-token="accessToken ?? undefined"
+      :mutation-busy="isGroupMutationBusy(selectedConversation?.id ?? '')"
+      :begin-mutation="beginGroupMutation"
+      :end-mutation="endGroupMutation"
       :access-label="groupAccessPolicyLabel"
       :format-date="formatProfileDate"
       @update:open="setGroupProfileDialogOpen"
@@ -1585,6 +1851,18 @@ async function startConversationCall(conversation: Conversation) {
       @add-members="openGroupManagement('add-members')"
       @quit-group="openGroupManagement('quit-group')"
       @remove-group="openGroupManagement('remove-group')"
+      @group-settings="openGroupManagement('settings')"
+      @refresh="refreshSelectedGroup"
+      :change-friendship="changeMemberFriendship"
+      @load-more-members="loadMoreGroupMembers"
+      @chat-member="openMemberChat"
+    />
+    <AcceptGroupInvitationDialog
+      :open="activeGroupInvitation !== null"
+      :invitation="activeGroupInvitation"
+      :access-token="accessToken ?? undefined"
+      @update:open="!$event && (activeGroupInvitation = null)"
+      @accepted="handleGroupInvitationAccepted"
     />
     <ContactProfileDialog
       :open="isContactProfileDialogOpen"
@@ -1596,7 +1874,8 @@ async function startConversationCall(conversation: Conversation) {
       :removing-id="isRemovingFriend"
       :opening="isOpeningDirect"
       :call-active="isCallLaunchActive"
-      :avatar-urls="friendAvatarUrls"
+      :avatar-urls="contactProfileAvatarUrls"
+      :avatar-loading="isContactProfileAvatarLoading"
       :format-date="formatProfileDate"
       @update:open="setContactProfileDialogOpen"
       @update:confirmation-open="setContactRemoveConfirmationOpen"

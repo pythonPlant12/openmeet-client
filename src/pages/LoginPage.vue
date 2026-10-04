@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlertCircle, ArrowLeft, ArrowRight, Video } from 'lucide-vue-next';
+import { AlertCircle, ArrowLeft, ArrowRight, Eye, EyeOff, Video } from 'lucide-vue-next';
 import { nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
@@ -23,6 +23,7 @@ const { isAuthenticating, isCheckingSession, hasLoginError, errorMessage, send }
 
 const email = ref('');
 const password = ref('');
+const isPasswordVisible = ref(false);
 const emailInput = ref<{ focus: () => void } | null>(null);
 
 watch(
@@ -123,16 +124,28 @@ const goToRegister = () => {
             <div class="flex items-center justify-between gap-4">
               <Label for="password" class="text-[#27595D]">{{ t('auth.password') }}</Label>
             </div>
-            <Input
-              id="password"
-              v-model="password"
-              type="password"
-              autocomplete="current-password"
-              :placeholder="t('auth.login.passwordPlaceholder')"
-              required
-              :disabled="isAuthenticating"
-              class="h-12 rounded-xl border-[#D8E7E3] bg-white px-4 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
-            />
+            <div class="relative">
+              <Input
+                id="password"
+                v-model="password"
+                :type="isPasswordVisible ? 'text' : 'password'"
+                autocomplete="current-password"
+                :placeholder="t('auth.login.passwordPlaceholder')"
+                required
+                :disabled="isAuthenticating"
+                class="h-12 rounded-xl border-[#D8E7E3] bg-white px-4 pr-12 text-[#102F35] shadow-none placeholder:text-[#8AA0A2] focus-visible:ring-[#0B7A75]"
+              />
+              <button
+                type="button"
+                class="harbor-ghost-action absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#27595D]"
+                :aria-label="isPasswordVisible ? 'Hide password' : 'Show password'"
+                :disabled="isAuthenticating"
+                @click="isPasswordVisible = !isPasswordVisible"
+              >
+                <EyeOff v-if="isPasswordVisible" class="size-4" />
+                <Eye v-else class="size-4" />
+              </button>
+            </div>
           </div>
 
           <div

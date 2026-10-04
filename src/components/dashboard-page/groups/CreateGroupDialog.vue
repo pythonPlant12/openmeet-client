@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Search } from 'lucide-vue-next';
+import { Search, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed } from 'vue';
 
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { GROUP_ACCESS_POLICIES, groupAccessPolicyLabel } from '@/pages/dashboard-group-state';
 import type { Friend, GroupAccessPolicy } from '@/services/social-api';
 
 const props = defineProps<{
@@ -77,7 +78,7 @@ const candidates = computed(() => {
         <fieldset class="space-y-2" :disabled="creating">
           <legend class="text-sm font-medium">Access policy</legend>
           <label
-            v-for="item in ['open', 'password', 'friendsOnly'] as GroupAccessPolicy[]"
+            v-for="item in GROUP_ACCESS_POLICIES"
             :key="item"
             class="flex cursor-pointer items-center gap-3 rounded-xl border border-[#D8E7E3] bg-white px-3 py-3 has-[:checked]:border-[#0B7A75] has-[:checked]:bg-[#EAF7F4]"
             ><input
@@ -87,9 +88,7 @@ const candidates = computed(() => {
               :checked="policy === item"
               class="size-4 accent-[#0B7A75]"
               @change="emit('update:policy', item)"
-            /><span class="text-sm font-medium">{{
-              item === 'open' ? 'Open' : item === 'password' ? 'Password' : 'Friends-only'
-            }}</span></label
+            /><span class="text-sm font-medium">{{ groupAccessPolicyLabel(item) }}</span></label
           >
         </fieldset>
         <AnimatePresence
@@ -121,9 +120,16 @@ const candidates = computed(() => {
               :model-value="memberSearch"
               type="search"
               placeholder="Filter accepted friends"
-              class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 focus-visible:ring-0"
-              @update:model-value="emit('update:memberSearch', $event)"
-          /></label>
+              class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 pr-9 focus-visible:ring-0"
+              @update:model-value="emit('update:memberSearch', $event)" /><button
+              v-if="memberSearch"
+              type="button"
+              class="harbor-ghost-action absolute right-1.5 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-[#61777B]"
+              aria-label="Clear friend filter"
+              @click="emit('update:memberSearch', '')"
+            >
+              <X class="size-3.5" /></button
+          ></label>
           <div class="max-h-44 overflow-y-auto rounded-2xl border border-[#D8E7E3] bg-white">
             <p v-if="!candidates.length" class="p-4 text-center text-sm text-[#61777B]">No accepted friends match.</p>
             <label

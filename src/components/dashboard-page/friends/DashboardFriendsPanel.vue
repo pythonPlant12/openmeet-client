@@ -193,7 +193,12 @@ function userInitials(name: string) {
             />
           </span>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-semibold">{{ friend.name }}</p>
+            <p class="flex items-center gap-1.5 truncate text-sm font-semibold">
+              <span class="truncate">{{ friend.name }}</span>
+              <span v-if="friend.nickname" class="shrink-0 text-xs font-medium text-[#61777B]"
+                >@{{ friend.nickname }}</span
+              >
+            </p>
             <p class="truncate text-xs text-[#809697]">
               {{ friend.isOnline ? t('dashboard.online') : t('dashboard.offline') }}
             </p>

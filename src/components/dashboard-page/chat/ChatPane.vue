@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, MessageCircleMore, Phone, UsersRound } from 'lucide-vue-next';
+import { ArrowLeft, MessageCircleMore, Phone, UsersRound, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, nextTick, ref, watch } from 'vue';
 
@@ -16,6 +16,8 @@ const props = defineProps<{
   selectedIsGroup: boolean;
   groupAvatarUrl?: string;
   friendAvatarUrls: Record<string, string>;
+  isFriendAvatarLoading: (userId: string) => boolean;
+  isGroupAvatarLoading: (groupId: string) => boolean;
   messages: ConversationMessage[];
   loading: boolean;
   loadingOlder: boolean;
@@ -25,7 +27,6 @@ const props = defineProps<{
   canRequestNotificationPermission: boolean;
   isDesktop: boolean;
   prefersReducedMotion: boolean;
-  isDraft: boolean;
   shouldAnimate: (message: ConversationMessage) => boolean;
   isLocal: (message: ConversationMessage) => boolean;
   formatTime: (value: string) => string;
@@ -38,6 +39,7 @@ const emit = defineEmits<{
   (event: 'scroll-top'): void;
   (event: 'send'): void;
   (event: 'request-notifications'): void;
+  (event: 'dismiss-notifications'): void;
 }>();
 const content = defineModel<string>('content', { required: true });
 const pane = ref<HTMLElement | null>(null);
@@ -45,6 +47,12 @@ const composer = ref<HTMLTextAreaElement | null>(null);
 let pendingBottomScroll: ScrollBehavior | null = null;
 const initial = computed(() => (props.prefersReducedMotion ? false : { opacity: 0, y: 8, scale: 0.99 }));
 const exit = computed(() => (props.prefersReducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.99 }));
+const directConversationLabel = computed(() =>
+  props.selectedFriend?.nickname ? `@${props.selectedFriend.nickname}` : props.selectedTitle,
+);
+const groupConversationLabel = computed(() =>
+  props.conversation?.groupCode ? `#${props.conversation.groupCode}` : props.selectedTitle,
+);
 function initials(name?: string | null) {
   return (
     name
@@ -125,12 +133,13 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                 :src="friendAvatarUrls[selectedFriend.id]"
                 alt=""
                 class="size-full object-cover"
+              /><LoadingRipple
+                v-else-if="isFriendAvatarLoading(selectedFriend.id)"
+                class="size-4 text-[#0B7A75]"
               /><span v-else class="text-xs font-semibold">{{ initials(selectedFriend.name) }}</span></span
             ><span class="min-w-0"
               ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
-              ><span class="block truncate text-xs text-[#61777B]">{{
-                isDraft ? 'Draft direct chat' : 'Direct conversation'
-              }}</span></span
+              ><span class="block truncate text-xs text-[#61777B]">{{ directConversationLabel }}</span></span
             ></button
           ><button
             v-else-if="selectedIsGroup"
@@ -139,12 +148,12 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
             @click="emit('group-info')"
           >
             <span class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#102F35] text-white"
-              ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><UsersRound
-                v-else
-                class="size-4" /></span
+              ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><LoadingRipple
+                v-else-if="conversation && isGroupAvatarLoading(conversation.id)"
+                class="size-4 text-white" /><UsersRound v-else class="size-4" /></span
             ><span class="min-w-0"
               ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
-              ><span class="block truncate text-xs text-[#61777B]">Group conversation</span></span
+              ><span class="block truncate text-xs text-[#61777B]">{{ groupConversationLabel }}</span></span
             >
           </button>
           <div v-else class="flex min-w-0 flex-1 items-center gap-3">
@@ -184,14 +193,25 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                     : 'Notifications are blocked. Enable them in your browser settings.'
                 }}
               </p>
-              <Button
-                v-if="canRequestNotificationPermission"
-                variant="ghost"
-                size="sm"
-                class="harbor-ghost-action h-8 shrink-0 rounded-lg px-2 font-bold text-[#0B7A75]"
-                @click="emit('request-notifications')"
-                >Enable</Button
-              >
+              <div class="flex shrink-0 items-center gap-1">
+                <Button
+                  v-if="canRequestNotificationPermission"
+                  variant="ghost"
+                  size="sm"
+                  class="harbor-ghost-action h-8 rounded-lg px-2 font-bold text-[#0B7A75]"
+                  @click="emit('request-notifications')"
+                  >Enable</Button
+                >
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="harbor-ghost-action size-8 rounded-lg text-[#27595D]"
+                  aria-label="Dismiss notification notice"
+                  title="Dismiss"
+                  @click="emit('dismiss-notifications')"
+                  ><X class="size-4"
+                /></Button>
+              </div>
             </div>
             <div v-if="loadingOlder" class="flex justify-center pb-4">
               <LoadingRipple class="size-5 text-[#0B7A75]" />
@@ -229,8 +249,9 @@ defineExpose({ scrollToBottom, getScrollState, restoreScroll, focusComposer });
                     class="mb-1 flex items-center gap-2 text-xs"
                     :class="isLocal(message) ? 'text-white/80' : 'text-[#61777B]'"
                   >
-                    <span class="font-semibold">{{ isLocal(message) ? 'You' : message.senderName }}</span
-                    ><time :datetime="message.createdAt">{{ formatTime(message.createdAt) }}</time>
+                    <span class="font-semibold">{{ isLocal(message) ? 'You' : message.senderName }}</span>
+                    <span v-if="!isLocal(message) && message.senderNickname">@{{ message.senderNickname }}</span>
+                    <time :datetime="message.createdAt">{{ formatTime(message.createdAt) }}</time>
                   </div>
                   <p class="whitespace-pre-wrap break-words leading-5">{{ message.content }}</p>
                 </article></motion.li

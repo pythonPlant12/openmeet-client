@@ -3,31 +3,38 @@
 @tailwind utilities;
 
 @layer base {
+  html.authenticated-viewport,
+  body.authenticated-viewport {
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   :root {
-    --background: 0 0% 12%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 18%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 18%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 154 94% 40%;
+    --background: 75 40% 98%;
+    --foreground: 190 54% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 190 54% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 190 54% 14%;
+    --primary: 177 83% 26%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 28%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 28%;
-    --muted-foreground: 220 13% 69%;
-    --accent: 154 94% 40%;
-    --accent-foreground: 0 0% 100%;
+    --secondary: 167 39% 93%;
+    --secondary-foreground: 190 54% 14%;
+    --muted: 164 28% 96%;
+    --muted-foreground: 190 12% 43%;
+    --accent: 167 39% 93%;
+    --accent-foreground: 190 54% 14%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 154 94% 40% / 0.29;
-    --input: 0 0% 28%;
-    --ring: 154 94% 40%;
-    --chart-1: 154 94% 40%;
-    --chart-2: 154 80% 50%;
-    --chart-3: 154 70% 60%;
-    --chart-4: 154 60% 70%;
-    --chart-5: 154 50% 80%;
+    --border: 164 28% 88%;
+    --input: 164 28% 88%;
+    --ring: 177 83% 26%;
+    --chart-1: 177 83% 26%;
+    --chart-2: 177 66% 35%;
+    --chart-3: 177 53% 45%;
+    --chart-4: 174 42% 55%;
+    --chart-5: 168 39% 67%;
     --radius: 0.75rem;
   }
 }
@@ -40,6 +47,36 @@
   body {
     background-color: #fbfcf8;
     color: #102f35;
+  }
+
+  /* Search fields use a Harbor clear button; the native WebKit one would duplicate it. */
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+  }
+
+  /* Avatars and icons are not drag sources: a native image drag would hijack swipes and drags. */
+  img {
+    -webkit-user-drag: none;
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    body {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    input,
+    textarea,
+    select,
+    [contenteditable='true'] {
+      -webkit-touch-callout: default;
+      -webkit-user-select: text;
+      user-select: text;
+    }
   }
 
   @media (max-width: 639px) {

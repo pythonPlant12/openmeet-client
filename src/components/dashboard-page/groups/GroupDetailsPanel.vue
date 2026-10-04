@@ -1,6 +1,20 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
-import { Camera, LogOut, Phone, Search, Settings, Trash2, UserMinus, UserPlus } from 'lucide-vue-next';
+import {
+  Camera,
+  Check,
+  Copy,
+  LogOut,
+  Phone,
+  Search,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  UserMinus,
+  UserPlus,
+  UserRound,
+  X,
+} from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
 
@@ -24,15 +38,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
-import { type GroupMutationToken, buildGroupSettingsRequest, sortGroupMembers } from '@/pages/dashboard-group-state';
+import {
+  GROUP_ACCESS_POLICIES,
+  type GroupMutationToken,
+  buildGroupSettingsRequest,
+  groupAccessPolicyLabel,
+  groupAddActionLabel,
+  sortGroupMembers,
+} from '@/pages/dashboard-group-state';
 import {
   type Conversation,
   type Friend,
   type GroupAccessPolicy,
+  type GroupCandidate,
   type GroupInfo,
   type GroupMember,
+  type GroupMemberRole,
   SocialApiError,
-  type UserSearchResult,
   socialApi,
 } from '@/services/social-api';
 
@@ -50,6 +72,9 @@ const props = defineProps<{
   info: GroupInfo | null;
   loading: boolean;
   members: GroupMember[];
+  memberAvatarUrls: Record<string, string>;
+  membersHasMore: boolean;
+  membersLoadingMore: boolean;
   mutationBusy: boolean;
   beginMutation: (groupId: string) => GroupMutationToken | null;
   endMutation: (groupId: string, token: GroupMutationToken) => void;
@@ -60,6 +85,7 @@ const emit = defineEmits<{
   (event: 'refresh'): void;
   (event: 'removed', groupId: string): void;
   (event: 'call-member', member: GroupMember): void;
+  (event: 'load-more-members'): void;
 }>();
 
 const attrs = useAttrs();
@@ -74,8 +100,10 @@ const settingsPassword = ref('');
 const isAddMembersOpen = ref(false);
 const isAddingMembers = ref(false);
 const memberSearch = ref('');
-const registeredResults = ref<UserSearchResult[]>([]);
+const registeredResults = ref<GroupCandidate[]>([]);
+const registeredNextOffset = ref<number | null>(null);
 const isSearchingPeople = ref(false);
+const isLoadingMorePeople = ref(false);
 const selectedCandidateIds = ref<string[]>([]);
 const selectedMemberIds = ref<string[]>([]);
 const isSelectionMode = ref(false);
@@ -86,6 +114,7 @@ const isLeaving = ref(false);
 const isDeleteOpen = ref(false);
 const deleteConfirmation = ref('');
 const isDeleting = ref(false);
+const copiedGroupId = ref(false);
 let searchRequest = 0;
 let searchTimer: number | undefined;
 let settingsDialogSession = 0;
@@ -97,6 +126,25 @@ const sortedMembers = computed(() => sortGroupMembers(props.members));
 const currentRole = computed(() => props.info?.role ?? props.group.role);
 const canManage = computed(() => currentRole.value === 'creator' || currentRole.value === 'admin');
 const isCreator = computed(() => currentRole.value === 'creator');
+const groupPolicy = computed(() => props.info?.accessPolicy ?? props.group.accessPolicy);
+const usesInvitations = computed(() => groupPolicy.value === 'password');
+const addActionLabel = computed(() => groupAddActionLabel(groupPolicy.value));
+const candidateSectionLabel = computed(() =>
+  groupPolicy.value === 'friendsOfFriends'
+    ? 'Friends of members'
+    : groupPolicy.value === 'friendsOnly'
+      ? 'Friends of every member'
+      : 'Registered people',
+);
+const addMembersDescription = computed(() =>
+  usesInvitations.value
+    ? 'Invited people join after they enter the group password.'
+    : groupPolicy.value === 'friendsOfFriends'
+      ? 'Select friends or search people who are friends with a member.'
+      : groupPolicy.value === 'friendsOnly'
+        ? 'Select friends who are friends with every member.'
+        : 'Select accepted friends or search registered people.',
+);
 const memberIdSet = computed(() => new Set(props.members.map(({ id }) => id)));
 const normalizedMemberSearch = computed(() => memberSearch.value.trim().toLocaleLowerCase());
 const friendCandidates = computed(() =>
@@ -160,6 +208,7 @@ watch(memberSearch, (query, _, onCleanup) => {
   const normalized = query.trim();
   const request = ++searchRequest;
   registeredResults.value = [];
+  registeredNextOffset.value = null;
   if (normalized.replace(/\s/g, '').length < 2 || !isAddMembersOpen.value) {
     isSearchingPeople.value = false;
     return;
@@ -168,8 +217,11 @@ watch(memberSearch, (query, _, onCleanup) => {
   isSearchingPeople.value = true;
   searchTimer = window.setTimeout(async () => {
     try {
-      const results = await socialApi.searchUsers(props.accessToken, normalized);
-      if (request === searchRequest) registeredResults.value = results;
+      const page = await socialApi.searchGroupCandidates(props.accessToken, props.group.id, normalized);
+      if (request === searchRequest) {
+        registeredResults.value = page.results;
+        registeredNextOffset.value = page.nextOffset;
+      }
     } catch (error) {
       console.error('[GroupDetailsPanel] Failed to search people:', error);
       if (request === searchRequest) toast({ title: 'Could not search registered people.', variant: 'destructive' });
@@ -186,8 +238,28 @@ watch(isAddMembersOpen, (open) => {
   window.clearTimeout(searchTimer);
   memberSearch.value = '';
   registeredResults.value = [];
+  registeredNextOffset.value = null;
   selectedCandidateIds.value = [];
 });
+
+async function loadMorePeople() {
+  const offset = registeredNextOffset.value;
+  const query = memberSearch.value.trim();
+  if (offset === null || isLoadingMorePeople.value) return;
+  const request = searchRequest;
+  isLoadingMorePeople.value = true;
+  try {
+    const page = await socialApi.searchGroupCandidates(props.accessToken, props.group.id, query, offset);
+    if (request !== searchRequest) return;
+    const knownIds = new Set(registeredResults.value.map(({ id }) => id));
+    registeredResults.value = [...registeredResults.value, ...page.results.filter(({ id }) => !knownIds.has(id))];
+    registeredNextOffset.value = page.nextOffset;
+  } catch (error) {
+    showError('Could not load more people.', error);
+  } finally {
+    isLoadingMorePeople.value = false;
+  }
+}
 
 onBeforeUnmount(() => {
   searchRequest += 1;
@@ -213,9 +285,7 @@ function initials(name?: string | null) {
   );
 }
 
-function accessLabel(policy?: GroupAccessPolicy | null) {
-  return policy === 'password' ? 'Password protected' : policy === 'friendsOnly' ? 'Friends-only' : 'Open access';
-}
+const accessLabel = groupAccessPolicyLabel;
 
 function toggleId(ids: string[], id: string) {
   return ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id];
@@ -227,6 +297,21 @@ function isSelectableMember(member: GroupMember, currentUserId = props.currentUs
 
 function canCallMember(member: GroupMember) {
   return member.id !== props.currentUserId && props.friends.some((friend) => friend.id === member.id);
+}
+
+function canOpenProfile(member: GroupMember) {
+  return member.id === props.currentUserId || props.friends.some((friend) => friend.id === member.id);
+}
+
+function canChangeMemberRole(member: GroupMember) {
+  return isCreator.value && member.role !== 'creator' && member.id !== props.currentUserId;
+}
+
+async function copyGroupId() {
+  if (!props.info) return;
+  await navigator.clipboard.writeText(props.info.groupCode);
+  copiedGroupId.value = true;
+  window.setTimeout(() => (copiedGroupId.value = false), 2_000);
 }
 
 function selectMember(member: GroupMember) {
@@ -314,8 +399,13 @@ async function addSelectedMembers() {
   const dialogSession = addMembersDialogSession;
   isAddingMembers.value = true;
   try {
+    const invite = usesInvitations.value;
     const results = await Promise.allSettled(
-      candidateIds.map((userId) => socialApi.addGroupMember(props.accessToken, groupId, userId)),
+      candidateIds.map((userId) =>
+        invite
+          ? socialApi.inviteToGroup(props.accessToken, groupId, userId)
+          : socialApi.addGroupMember(props.accessToken, groupId, userId),
+      ),
     );
     const addedIds = candidateIds.filter((_, index) => results[index]?.status === 'fulfilled');
     const failed = results.filter((result) => result.status === 'rejected');
@@ -323,13 +413,15 @@ async function addSelectedMembers() {
     if (!failed.length) {
       if (dialogSession === addMembersDialogSession) setAddMembersOpen(false, true);
       toast({
-        title: `${addedIds.length} ${addedIds.length === 1 ? 'participant' : 'participants'} added`,
+        title: invite
+          ? `${addedIds.length} ${addedIds.length === 1 ? 'invitation' : 'invitations'} sent`
+          : `${addedIds.length} ${addedIds.length === 1 ? 'participant' : 'participants'} added`,
         variant: 'success',
       });
     } else {
       failed.forEach((result) => console.error('[GroupDetailsPanel] Could not add participant:', result.reason));
       toast({
-        title: `${addedIds.length} added, ${failed.length} failed`,
+        title: `${addedIds.length} ${invite ? 'invited' : 'added'}, ${failed.length} failed`,
         description: 'Failed participants remain selected. Try again.',
         variant: 'destructive',
       });
@@ -383,6 +475,22 @@ async function removeMember(member: GroupMember) {
   await removeSelectedMembers();
 }
 
+async function updateMemberRole(member: GroupMember, role: GroupMemberRole) {
+  if (!canChangeMemberRole(member) || member.role === role) return;
+  const groupId = props.group.id;
+  const mutationToken = props.beginMutation(groupId);
+  if (!mutationToken) return;
+  try {
+    await socialApi.updateGroupMemberRole(props.accessToken, groupId, member.id, role);
+    toast({ title: `${member.name} is now ${role === 'admin' ? 'an admin' : 'a participant'}.`, variant: 'success' });
+    emit('refresh');
+  } catch (error) {
+    showError('Could not update participant role.', error);
+  } finally {
+    props.endMutation(groupId, mutationToken);
+  }
+}
+
 async function leaveGroup() {
   if (quitConfirmation.value.toLocaleLowerCase() !== 'quit' || isLeaving.value || isCreator.value) return;
   const groupId = props.group.id;
@@ -427,6 +535,7 @@ defineExpose({
   openAddMembers: () => setAddMembersOpen(true),
   openQuitGroup: () => setQuitOpen(true),
   openRemoveGroup: () => setDeleteOpen(true),
+  openSettings: () => setSettingsOpen(true),
 });
 </script>
 
@@ -445,6 +554,31 @@ defineExpose({
     </div>
     <template v-else-if="info">
       <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1">
+        <section class="grid grid-cols-3 gap-2 py-4 text-sm">
+          <div class="rounded-xl border border-[#D8E7E3] bg-white p-3">
+            <span class="block text-xs text-[#61777B]">Access</span
+            ><strong class="mt-1 block text-xs leading-4">{{ accessLabel(info.accessPolicy) }}</strong>
+          </div>
+          <div class="rounded-xl border border-[#D8E7E3] bg-white p-3">
+            <span class="block text-xs text-[#61777B]">Created</span
+            ><strong class="mt-1 block text-xs leading-4">{{ new Date(info.createdAt).toLocaleDateString() }}</strong>
+          </div>
+          <div class="min-w-0 rounded-xl border border-[#D8E7E3] bg-white p-3">
+            <span class="block text-xs text-[#61777B]">Group ID</span>
+            <div class="mt-1 flex items-center gap-1">
+              <code class="min-w-0 flex-1 truncate text-xs font-semibold">#{{ info.groupCode }}</code
+              ><button
+                type="button"
+                class="harbor-ghost-action shrink-0 rounded-md p-1 text-[#0B7A75]"
+                :aria-label="copiedGroupId ? 'Group ID copied' : 'Copy group ID'"
+                :title="copiedGroupId ? 'Copied' : 'Copy group ID'"
+                @click="copyGroupId"
+              >
+                <Check v-if="copiedGroupId" class="size-3.5" /><Copy v-else class="size-3.5" />
+              </button>
+            </div>
+          </div>
+        </section>
         <section
           :class="isSelectionMode ? 'grid-cols-3' : 'grid-cols-2'"
           class="grid gap-2 pb-4"
@@ -479,11 +613,11 @@ defineExpose({
             variant="ghost"
             class="harbor-ghost-action h-auto min-h-20 flex-col gap-2 rounded-2xl bg-[#EDF8F5] px-2 py-3 text-[#102F35]"
             :disabled="!canManage || mutationBusy"
-            :title="canManage ? 'Add friends' : 'Only group admins can add friends'"
+            :title="canManage ? addActionLabel : 'Only group admins can add people'"
             @click="setAddMembersOpen(true)"
           >
             <UserPlus class="size-5" />
-            <span class="text-center text-[11px] leading-4">Add friends</span>
+            <span class="text-center text-[11px] leading-4">{{ addActionLabel }}</span>
           </Button>
           <Button
             variant="ghost"
@@ -510,38 +644,85 @@ defineExpose({
                 <button
                   type="button"
                   class="flex w-full items-center gap-3 border-b border-[#E5EFEC] px-3 py-3 text-left transition-colors last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B7A75]"
-                  :class="selectedMemberIds.includes(member.id) ? 'bg-[#E6F4F1]' : 'hover:bg-[#F6FAF7]'"
-                  @click="isSelectionMode ? selectMember(member) : emit('open-profile', member.id, member.name)"
+                  :class="
+                    selectedMemberIds.includes(member.id)
+                      ? 'bg-[#E6F4F1]'
+                      : isSelectionMode || canOpenProfile(member)
+                        ? 'hover:bg-[#F6FAF7]'
+                        : 'cursor-default'
+                  "
+                  :title="
+                    !isSelectionMode && !canOpenProfile(member)
+                      ? 'Profile details are available to accepted friends only.'
+                      : undefined
+                  "
+                  @click="
+                    isSelectionMode
+                      ? selectMember(member)
+                      : canOpenProfile(member) && emit('open-profile', member.id, member.name)
+                  "
                 >
                   <span
-                    class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                    class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
                   >
-                    {{ initials(member.name) }}
+                    <img
+                      v-if="memberAvatarUrls[member.id]"
+                      :src="memberAvatarUrls[member.id]"
+                      alt=""
+                      class="size-full object-cover"
+                    />
+                    <template v-else>{{ initials(member.name) }}</template>
                   </span>
-                  <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ member.name }}</span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-semibold">{{ member.name }}</span>
+                    <span class="block truncate text-xs text-[#61777B]">@{{ member.nickname }}</span>
+                  </span>
                 </button>
               </ContextMenuTrigger>
               <ContextMenuContent
                 class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
               >
                 <ContextMenuItem
+                  v-if="canOpenProfile(member)"
                   class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  :disabled="!canCallMember(member)"
-                  :title="canCallMember(member) ? undefined : 'Calls require an accepted friendship.'"
+                  @select="emit('open-profile', member.id, member.name)"
+                >
+                  <UserRound class="size-4" />See profile
+                </ContextMenuItem>
+                <ContextMenuItem
+                  v-if="canCallMember(member)"
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                   @select="emit('call-member', member)"
                 >
                   <Phone class="size-4" /> Call
                 </ContextMenuItem>
                 <ContextMenuItem
+                  v-if="isSelectableMember(member)"
                   class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                  :disabled="!isSelectableMember(member) || mutationBusy"
+                  :disabled="mutationBusy"
                   @select="removeMember(member)"
                 >
                   <UserMinus class="size-4" /> Remove from group
                 </ContextMenuItem>
                 <ContextMenuItem
+                  v-if="canChangeMemberRole(member) && member.role === 'member'"
                   class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  :disabled="!isSelectableMember(member)"
+                  :disabled="mutationBusy"
+                  @select="updateMemberRole(member, 'admin')"
+                >
+                  <ShieldCheck class="size-4" />Make admin
+                </ContextMenuItem>
+                <ContextMenuItem
+                  v-if="canChangeMemberRole(member) && member.role === 'admin'"
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                  :disabled="mutationBusy"
+                  @select="updateMemberRole(member, 'member')"
+                >
+                  <UserRound class="size-4" />Make participant
+                </ContextMenuItem>
+                <ContextMenuItem
+                  v-if="isSelectableMember(member)"
+                  class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                   @select="selectMember(member)"
                 >
                   Select
@@ -549,6 +730,16 @@ defineExpose({
               </ContextMenuContent>
             </ContextMenu>
           </div>
+          <Button
+            v-if="membersHasMore"
+            variant="ghost"
+            class="harbor-ghost-action mt-2 w-full rounded-full text-[#0B7A75]"
+            :disabled="membersLoadingMore"
+            @click="emit('load-more-members')"
+          >
+            <LoadingRipple v-if="membersLoadingMore" size="sm" />
+            {{ membersLoadingMore ? 'Loading participants...' : 'Load more participants' }}
+          </Button>
         </section>
 
         <section class="mt-5 space-y-2 border-t border-[#E5EFEC] pt-5">
@@ -626,7 +817,7 @@ defineExpose({
         <fieldset class="space-y-2">
           <legend class="text-sm font-medium">Accessibility</legend>
           <label
-            v-for="policy in ['open', 'password', 'friendsOnly'] as GroupAccessPolicy[]"
+            v-for="policy in GROUP_ACCESS_POLICIES"
             :key="policy"
             class="flex cursor-pointer items-center gap-3 rounded-xl border border-[#D8E7E3] bg-white px-3 py-3 has-[:checked]:border-[#0B7A75] has-[:checked]:bg-[#EAF7F4]"
             ><input
@@ -678,19 +869,24 @@ defineExpose({
       overlay-class="bg-[#102F35]/30 backdrop-blur-md"
     >
       <DialogHeader
-        ><DialogTitle>Add participants</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
-          >Select accepted friends or search registered people.</DialogDescription
-        ></DialogHeader
+        ><DialogTitle>{{ addActionLabel }}</DialogTitle
+        ><DialogDescription class="text-[#61777B]">{{ addMembersDescription }}</DialogDescription></DialogHeader
       >
       <label class="relative"
         ><span class="sr-only">Search people</span
         ><Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" /><Input
           v-model="memberSearch"
           type="search"
-          placeholder="Search friends and registered people"
-          class="h-11 rounded-xl border-[#D8E7E3] bg-white pl-10 focus-visible:ring-0"
-      /></label>
+          placeholder="Search by name, nickname, or email"
+          class="h-11 rounded-xl border-[#D8E7E3] bg-white pl-10 pr-10 focus-visible:ring-0" /><button
+          v-if="memberSearch"
+          type="button"
+          class="harbor-ghost-action absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-[#61777B]"
+          aria-label="Clear people search"
+          @click="memberSearch = ''"
+        >
+          <X class="size-4" /></button
+      ></label>
       <div class="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-[#D8E7E3] bg-white">
         <p
           v-if="!friendCandidates.length && !registeredCandidates.length && !isSearchingPeople"
@@ -726,7 +922,7 @@ defineExpose({
           ><p
             class="sticky top-0 bg-[#F0F7F5] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]"
           >
-            Registered people
+            {{ candidateSectionLabel }}
           </p>
           <label
             v-for="person in registeredCandidates"
@@ -739,9 +935,19 @@ defineExpose({
               @change="selectedCandidateIds = toggleId(selectedCandidateIds, person.id)"
             /><span class="min-w-0 flex-1"
               ><span class="block truncate text-sm font-semibold">{{ person.name }}</span
-              ><span class="block truncate text-xs text-[#61777B]">{{ person.email }}</span></span
+              ><span class="block truncate text-xs text-[#61777B]">@{{ person.nickname }}</span></span
             ></label
-          ></template
+          >
+          <Button
+            v-if="registeredNextOffset !== null"
+            variant="ghost"
+            class="harbor-ghost-action m-2 w-[calc(100%-1rem)] rounded-full text-[#0B7A75]"
+            :disabled="isLoadingMorePeople"
+            @click="loadMorePeople"
+          >
+            <LoadingRipple v-if="isLoadingMorePeople" size="sm" />
+            {{ isLoadingMorePeople ? 'Loading people...' : 'Load more people' }}
+          </Button></template
         >
       </div>
       <DialogFooter
@@ -751,7 +957,13 @@ defineExpose({
           class="harbor-primary-action rounded-full bg-[#0B7A75] mb-2 text-white"
           :disabled="!selectedCandidateIds.length || isAddingMembers"
           @click="addSelectedMembers"
-          >{{ isAddingMembers ? 'Adding...' : `Add ${selectedCandidateIds.length || ''}` }}</Button
+          >{{
+            isAddingMembers
+              ? usesInvitations
+                ? 'Inviting...'
+                : 'Adding...'
+              : `${usesInvitations ? 'Invite' : 'Add'} ${selectedCandidateIds.length || ''}`
+          }}</Button
         ></DialogFooter
       >
     </HarborDialogContent>

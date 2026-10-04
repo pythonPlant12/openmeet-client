@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMachine } from '@xstate/vue';
-import { onMounted, onUnmounted, provide, watch } from 'vue';
+import { computed, onMounted, onUnmounted, provide, watch } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
 import TheNavbar from '@/components/layout/TheNavbar.vue';
@@ -32,6 +32,12 @@ const authActor = useMachine(authMachine, {
 });
 
 const webrtcActor = useMachine(webrtcMachine);
+const isAuthenticated = computed(() => authActor.snapshot.value.value === 'authenticated');
+
+function setAuthenticatedViewportLock(locked: boolean) {
+  document.documentElement.classList.toggle('authenticated-viewport', locked);
+  document.body.classList.toggle('authenticated-viewport', locked);
+}
 
 provide('authActor', authActor);
 provide('webrtcActor', webrtcActor);
@@ -299,6 +305,13 @@ function notificationCopy(notification: UserNotification) {
       description: `${notification.actorName} sent you a friend request.`,
     };
   }
+  if (notification.kind === 'groupInvitation') {
+    const groupTitle = typeof notification.data.groupTitle === 'string' ? notification.data.groupTitle : 'a group';
+    return {
+      title: 'Group invitation',
+      description: `${notification.actorName} invited you to join ${groupTitle}.`,
+    };
+  }
   if (notification.kind === 'friendRemoved') {
     return {
       title: 'Friend removed',
@@ -440,6 +453,8 @@ watch(
   { immediate: true },
 );
 
+watch(isAuthenticated, setAuthenticatedViewportLock, { immediate: true });
+
 onMounted(() => {
   window.addEventListener('openmeet:session-expired', handleSessionExpired);
   window.addEventListener('openmeet:access-token-refreshed', handleAccessTokenRefreshed);
@@ -447,6 +462,7 @@ onMounted(() => {
   window.addEventListener('openmeet:incoming-call-resolved', handleIncomingCallResolved);
 });
 onUnmounted(() => {
+  setAuthenticatedViewportLock(false);
   stopAuthenticatedPolling();
   window.removeEventListener('openmeet:session-expired', handleSessionExpired);
   window.removeEventListener('openmeet:access-token-refreshed', handleAccessTokenRefreshed);
@@ -456,7 +472,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#FBFCF8]">
+  <div :class="isAuthenticated ? 'h-[100dvh] overflow-hidden bg-[#FBFCF8]' : 'min-h-screen bg-[#FBFCF8]'">
     <TheNavbar />
     <Toaster />
 

@@ -12,10 +12,10 @@ import {
 import type { GroupMember } from '@/services/social-api';
 
 const members: GroupMember[] = [
-  { id: 'member-b', name: 'Zed', role: 'member', joinedAt: '' },
-  { id: 'admin', name: 'Ada', role: 'admin', joinedAt: '' },
-  { id: 'creator', name: 'Creator', role: 'creator', joinedAt: '' },
-  { id: 'member-a', name: 'Alice', role: 'member', joinedAt: '' },
+  { id: 'member-b', name: 'Zed', nickname: 'member_b', avatarUrl: null, role: 'member', joinedAt: '' },
+  { id: 'admin', name: 'Ada', nickname: 'admin', avatarUrl: null, role: 'admin', joinedAt: '' },
+  { id: 'creator', name: 'Creator', nickname: 'creator', avatarUrl: null, role: 'creator', joinedAt: '' },
+  { id: 'member-a', name: 'Alice', nickname: 'member_a', avatarUrl: null, role: 'member', joinedAt: '' },
 ];
 
 describe('dashboard group state', () => {

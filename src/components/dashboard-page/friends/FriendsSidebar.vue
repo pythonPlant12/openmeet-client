@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, CircleUserRound, Search, UserMinus, X } from 'lucide-vue-next';
+import { Check, CircleUserRound, Phone, Search, UserMinus, X } from 'lucide-vue-next';
 import { motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -15,12 +15,14 @@ import {
 } from '@/components/ui/context-menu';
 import { Input } from '@/components/ui/input';
 import { LoadingRipple } from '@/components/ui/loading';
+import { SwipeableRow } from '@/components/ui/swipeable-row';
 import type { Friend, FriendRequest, UserSearchResult } from '@/services/social-api';
 
 const props = defineProps<{
   activeContextMenuId: string | null;
   expanded: boolean;
   friendAvatarUrls: Record<string, string>;
+  isAvatarLoading: (userId: string) => boolean;
   friends: Friend[];
   incomingRequests: FriendRequest[];
   isAdding: boolean;
@@ -42,6 +44,7 @@ const emit = defineEmits<{
   (event: 'toggle'): void;
   (event: 'open', friend: Friend): void;
   (event: 'profile', friend: Friend): void;
+  (event: 'call', friend: Friend): void;
   (event: 'remove', friend: Friend): void;
   (event: 'add', result: UserSearchResult): void;
   (event: 'respond', request: FriendRequest, accept: boolean): void;
@@ -49,6 +52,7 @@ const emit = defineEmits<{
   (event: 'context-activate', id: string): void;
 }>();
 const query = defineModel<string>('query', { required: true });
+const SWIPE_ACTION_WIDTH = 80;
 const input = ref<HTMLInputElement | null>(null);
 let longPressTimer: number | undefined;
 let suppressClick = false;
@@ -141,8 +145,18 @@ onBeforeUnmount(clearLongPress);
               v-model="query"
               type="search"
               placeholder="Search friends and people"
-              class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 text-xs text-[#102F35] focus-visible:ring-0"
-          /></label>
+              class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 pr-9 text-xs text-[#102F35] focus-visible:ring-0" /><button
+              v-if="query"
+              type="button"
+              class="harbor-ghost-action absolute right-1.5 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-[#61777B]"
+              aria-label="Clear friend search"
+              @click="
+                query = '';
+                input?.focus();
+              "
+            >
+              <X class="size-3.5" /></button
+          ></label>
           <p v-if="query.trim() && query.replace(/\s/g, '').length < 2" class="mt-2 text-xs text-[#61777B]">
             Keep typing to search people outside your friend list.
           </p>
@@ -165,7 +179,10 @@ onBeforeUnmount(clearLongPress);
                   :src="friendAvatarUrls[friend.id]"
                   alt=""
                   class="size-full object-cover"
-                /><template v-else>{{ initials(friend.name) }}</template></span
+                /><LoadingRipple v-else-if="isAvatarLoading(friend.id)" class="size-3.5 text-[#0B7A75]" /><template
+                  v-else
+                  >{{ initials(friend.name) }}</template
+                ></span
               ><span class="min-w-0 flex-1"
                 ><span class="block truncate text-xs font-semibold">{{ friend.name }}</span
                 ><span class="block truncate text-[11px] text-[#61777B]">{{ friend.email }}</span></span
@@ -228,54 +245,102 @@ onBeforeUnmount(clearLongPress);
           </div>
         </div>
         <div v-if="!peopleSearchActive && friends.length" class="mt-2 space-y-1 px-2">
-          <ContextMenu
+          <SwipeableRow
             v-for="friend in friends"
-            :key="contextMenuKey(`friend-${friend.id}`)"
-            :press-open-delay="500"
-            @update:open="emit('context-open', `friend-${friend.id}`, $event)"
-            ><ContextMenuTrigger as-child
-              ><button
+            :id="`friend-${friend.id}`"
+            :key="friend.id"
+            class="rounded-xl"
+            :leading-width="SWIPE_ACTION_WIDTH"
+            :trailing-width="SWIPE_ACTION_WIDTH"
+            full-swipe-leading
+            @full-swipe-leading="emit('call', friend)"
+          >
+            <template #leading="{ armed, close }">
+              <button
                 type="button"
-                class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-2 text-left"
-                :disabled="isOpening !== null"
-                :class="{ 'border-2 border-[#0B7A75]': activeContextMenuId === `friend-${friend.id}` }"
-                @click="openFriend(friend)"
-                @contextmenu="emit('context-activate', `friend-${friend.id}`)"
-                @pointerdown="startLongPress($event, friend)"
-                @pointermove="clearLongPress"
-                @pointerup="clearLongPress"
-                @pointercancel="clearLongPress"
+                data-swipe-action
+                class="flex h-full w-full items-center justify-start text-white transition-colors"
+                :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
+                :aria-label="`Call ${friend.name}`"
+                @click="
+                  close();
+                  emit('call', friend);
+                "
               >
-                <span
-                  class="relative flex size-8 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                  ><img
-                    v-if="friendAvatarUrls[friend.id]"
-                    :src="friendAvatarUrls[friend.id]"
-                    alt=""
-                    class="size-full object-cover" /><template v-else>{{ initials(friend.name) }}</template
-                  ><span
-                    v-if="friend.isOnline"
-                    class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]" /></span
-                ><span class="min-w-0 flex-1 truncate text-sm">{{ friend.name }}</span
-                ><LoadingRipple
-                  v-if="isOpening === friend.id"
-                  class="size-4 text-[#0B7A75]"
-                /></button></ContextMenuTrigger
-            ><ContextMenuContent
-              class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35]"
-              ><ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">{{
-                friend.name
-              }}</ContextMenuLabel
-              ><ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" /><ContextMenuItem
-                class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                @select="emit('profile', friend)"
-                ><CircleUserRound class="size-4" />View profile</ContextMenuItem
-              ><ContextMenuItem
-                class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                @select="emit('remove', friend)"
-                ><UserMinus class="size-4" />Remove friend</ContextMenuItem
-              ></ContextMenuContent
-            ></ContextMenu
+                <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  ><Phone class="size-4" />Call</span
+                >
+              </button>
+            </template>
+            <template #trailing="{ close }">
+              <button
+                type="button"
+                data-swipe-action
+                class="flex h-full w-full items-center justify-end bg-[#E6F4F1] text-[#102F35]"
+                :aria-label="`View ${friend.name}'s profile`"
+                @click="
+                  close();
+                  emit('profile', friend);
+                "
+              >
+                <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  ><CircleUserRound class="size-4" />Profile</span
+                >
+              </button>
+            </template>
+            <ContextMenu
+              :key="contextMenuKey(`friend-${friend.id}`)"
+              :press-open-delay="500"
+              @update:open="emit('context-open', `friend-${friend.id}`, $event)"
+              ><ContextMenuTrigger as-child
+                ><button
+                  type="button"
+                  class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-2 text-left"
+                  :disabled="isOpening !== null"
+                  @click="openFriend(friend)"
+                  @contextmenu="emit('context-activate', `friend-${friend.id}`)"
+                  @pointerdown="startLongPress($event, friend)"
+                  @pointermove="clearLongPress"
+                  @pointerup="clearLongPress"
+                  @pointercancel="clearLongPress"
+                >
+                  <span
+                    class="relative flex size-8 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                    ><img
+                      v-if="friendAvatarUrls[friend.id]"
+                      :src="friendAvatarUrls[friend.id]"
+                      alt=""
+                      class="size-full object-cover" /><LoadingRipple
+                      v-else-if="isAvatarLoading(friend.id)"
+                      class="size-4 text-[#0B7A75]" /><template v-else>{{ initials(friend.name) }}</template
+                    ><span
+                      v-if="friend.isOnline"
+                      class="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#FBFCF8] bg-[#2DA58F]" /></span
+                  ><span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
+                    ><span class="truncate">{{ friend.name }}</span
+                    ><span v-if="friend.nickname" class="shrink-0 text-xs text-[#61777B]"
+                      >@{{ friend.nickname }}</span
+                    ></span
+                  ><LoadingRipple
+                    v-if="isOpening === friend.id"
+                    class="size-4 text-[#0B7A75]"
+                  /></button></ContextMenuTrigger
+              ><ContextMenuContent
+                class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35]"
+                ><ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">{{
+                  friend.name
+                }}</ContextMenuLabel
+                ><ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" /><ContextMenuItem
+                  class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
+                  @select="emit('profile', friend)"
+                  ><CircleUserRound class="size-4" />View profile</ContextMenuItem
+                ><ContextMenuItem
+                  class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                  @select="emit('remove', friend)"
+                  ><UserMinus class="size-4" />Remove friend</ContextMenuItem
+                ></ContextMenuContent
+              ></ContextMenu
+            ></SwipeableRow
           >
         </div>
         <div v-else-if="isLoading || isRefreshing" class="flex h-16 items-center justify-center">
