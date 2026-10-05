@@ -82,6 +82,12 @@ const nickname = ref<string | null>(null);
 const ownStatus = ref<UserStatus | null>(null);
 const ownStatusOption = computed(() => userStatusOption(ownStatus.value));
 const isMobileStatusOpen = ref(false);
+const mobileStatusRef = ref<HTMLElement | null>(null);
+// The expanded status picker collapses (with its usual animation) on any press outside it.
+const closeMobileStatusOnOutsidePress = (event: PointerEvent) => {
+  if (!isMobileStatusOpen.value || mobileStatusRef.value?.contains(event.target as Node)) return;
+  isMobileStatusOpen.value = false;
+};
 const isNicknameCopied = ref(false);
 let nicknameCopiedTimer: number | undefined;
 const isMeetingChatOpen = ref(false);
@@ -521,6 +527,7 @@ const updateNavLayout = () => {
 onMounted(() => {
   window.addEventListener('openmeet:profile-updated', handleProfileUpdated);
   window.addEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
+  document.addEventListener('pointerdown', closeMobileStatusOnOutsidePress, true);
   void loadAvatar();
   if (!navContentRef.value) return;
   if (!('ResizeObserver' in window)) {
@@ -533,6 +540,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  document.removeEventListener('pointerdown', closeMobileStatusOnOutsidePress, true);
   cancelMobileMenuExpansion();
   cancelMobileMenuContentExit();
   cancelMobileMenuCollapse();
@@ -930,7 +938,7 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                       </span>
                       <ChevronRight class="pointer-events-none size-4 text-[#61777B]" />
                     </div>
-                    <div v-if="ownStatus" data-mobile-status class="mt-2 px-1">
+                    <div v-if="ownStatus" ref="mobileStatusRef" data-mobile-status class="mt-2 px-1">
                       <button
                         type="button"
                         data-mobile-status-toggle

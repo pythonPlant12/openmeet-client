@@ -635,6 +635,16 @@ describe('TheNavbar', () => {
     await flushPromises();
     expect(social.updateCurrentUserStatus).toHaveBeenCalledWith('token', 'away');
     expect(toggle.attributes('aria-expanded')).toBe('false');
+
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    // A press inside the picker keeps it open; a press anywhere else collapses it.
+    toggle.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(toggle.attributes('aria-expanded')).toBe('false');
   });
 
   it('rolls the status back when saving fails', async () => {

@@ -161,6 +161,13 @@ const groupProfileError = ref('');
 const messages = ref<ConversationMessage[]>([]);
 const messageContent = ref('');
 const messageReplyTo = ref<ConversationMessage | null>(null);
+// A quote belongs to its conversation; switching chats by any route drops it so it cannot be sent elsewhere.
+watch(
+  () => selectedConversation.value?.id,
+  (id, previousId) => {
+    if (id !== previousId) messageReplyTo.value = null;
+  },
+);
 const nextMessageBefore = ref<number | null>(null);
 const chatPane = ref<{
   focusComposer: () => void;
@@ -534,12 +541,18 @@ async function toggleMessageReaction(message: ConversationMessage, emoji: string
   setMessageReactions(message.sequence, toggledReactions(previous, emoji));
   try {
     const reactions = await socialApi.toggleMessageReaction(token, conversationId, message.sequence, emoji);
-    if (selectedConversation.value?.id === conversationId && reactionRequestByMessage.get(message.sequence) === request) {
+    if (
+      selectedConversation.value?.id === conversationId &&
+      reactionRequestByMessage.get(message.sequence) === request
+    ) {
       setMessageReactions(message.sequence, reactions);
     }
   } catch (error) {
     console.error('[Dashboard] Failed to update reaction:', error);
-    if (selectedConversation.value?.id === conversationId && reactionRequestByMessage.get(message.sequence) === request) {
+    if (
+      selectedConversation.value?.id === conversationId &&
+      reactionRequestByMessage.get(message.sequence) === request
+    ) {
       setMessageReactions(message.sequence, previous);
     }
     toast({ title: 'Could not update the reaction.', variant: 'destructive' });
@@ -912,7 +925,6 @@ watch(groupMembers, (members) => {
 });
 
 function selectConversation(conversation: Conversation) {
-  if (selectedConversation.value?.id !== conversation.id) messageReplyTo.value = null;
   pendingDirectFriend.value = null;
   selectedConversation.value = conversation;
   markConversationRead(conversation.id);
