@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core';
-import { Check, Copy, Search, UserPlus } from 'lucide-vue-next';
+import { Check, Search, UserPlus } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,6 @@ import MeetingAccessPicker from './MeetingAccessPicker.vue';
 
 const props = defineProps<{
   roomId: string;
-  /** Link people open to join; conversation calls share their own route. */
-  meetingLink: string;
   access: MeetingRoomAccess | null;
 }>();
 const open = defineModel<boolean>('open', { required: true });
@@ -39,7 +37,6 @@ const isSearching = ref(false);
 const searchError = ref('');
 const invitingId = ref<string | null>(null);
 const invitedIds = ref(new Set<string>());
-const copied = ref(false);
 let searchRequest = 0;
 
 const isHost = computed(() => !!props.access?.managed && props.access.isOwner);
@@ -128,17 +125,6 @@ async function saveAccess() {
   }
 }
 
-async function copyLink() {
-  try {
-    await navigator.clipboard.writeText(props.meetingLink);
-    copied.value = true;
-    window.setTimeout(() => (copied.value = false), 2_000);
-  } catch (error) {
-    console.error('[MeetingInviteDialog] Failed to copy link:', error);
-    toast({ title: 'Could not copy the link.', variant: 'destructive' });
-  }
-}
-
 function initials(name: string) {
   return (
     name
@@ -170,7 +156,7 @@ watch(policy, (current) => {
   <Dialog v-model:open="open">
     <HarborDialogContent
       overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] overflow-y-auto rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] sm:p-6"
+      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-1.5rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.5rem] border-[#D8E7E3] bg-[#FBFCF8] p-4 text-[#102F35] sm:rounded-[1.75rem] sm:p-6"
       data-meeting-invite
     >
       <DialogHeader>
@@ -183,20 +169,8 @@ watch(policy, (current) => {
         </DialogDescription>
       </DialogHeader>
 
-      <div class="space-y-5">
-        <div class="flex items-center gap-2 rounded-xl border border-[#D8E7E3] bg-white py-1.5 pl-3 pr-1.5">
-          <span class="min-w-0 flex-1 truncate font-mono text-xs text-[#4E6B70]">{{ meetingLink }}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            class="harbor-ghost-action shrink-0 rounded-lg font-semibold text-[#0B7A75]"
-            @click="copyLink"
-          >
-            <Check v-if="copied" class="size-4" /><Copy v-else class="size-4" />{{ copied ? 'Copied' : 'Copy link' }}
-          </Button>
-        </div>
-
-        <section v-if="isHost" class="space-y-3 rounded-2xl border border-[#E5EFEC] bg-white p-3.5" data-host-access>
+      <div class="space-y-4">
+        <section v-if="isHost" class="space-y-3 rounded-2xl border border-[#E5EFEC] bg-white p-3" data-host-access>
           <MeetingAccessPicker
             v-model:policy="draftPolicy"
             v-model:password="draftPassword"
@@ -224,7 +198,7 @@ watch(policy, (current) => {
               maxlength="80"
               :placeholder="searchPlaceholder"
               aria-label="Search people to invite"
-              class="h-11 rounded-xl border-[#D8E7E3] bg-white pl-9 focus-visible:ring-0"
+              class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 text-sm focus-visible:ring-0"
             />
           </div>
           <div class="min-h-24 rounded-2xl border border-[#E5EFEC] bg-white" data-invite-candidates>
@@ -233,11 +207,11 @@ watch(policy, (current) => {
             </div>
             <p v-else-if="searchError" class="px-4 py-6 text-center text-sm text-[#9D4636]">{{ searchError }}</p>
             <p v-else-if="!candidates.length" class="px-4 py-6 text-center text-sm text-[#61777B]">{{ emptyText }}</p>
-            <ul v-else class="max-h-72 overflow-y-auto">
+            <ul v-else class="max-h-[40dvh] overflow-y-auto sm:max-h-72">
               <li
                 v-for="candidate in candidates"
                 :key="candidate.id"
-                class="flex items-center gap-3 px-3.5 py-2.5 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[#EEF3F1]"
+                class="flex items-center gap-2.5 px-3 py-2 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[#EEF3F1]"
               >
                 <span
                   class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
@@ -265,7 +239,7 @@ watch(policy, (current) => {
                 <Button
                   v-else
                   size="sm"
-                  class="harbor-primary-action shrink-0 rounded-full bg-[#0B7A75] px-3.5 text-white"
+                  class="harbor-primary-action h-8 shrink-0 rounded-full bg-[#0B7A75] px-3 text-xs text-white"
                   :disabled="invitingId !== null"
                   :data-invite="candidate.id"
                   @click="invite(candidate)"

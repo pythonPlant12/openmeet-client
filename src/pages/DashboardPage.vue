@@ -1790,6 +1790,7 @@ function handleCallsWheel(event: WheelEvent) {
 function openCallDetails(meeting: MeetingSession) {
   callDetailsMeeting.value = meeting;
   isCallDetailsOpen.value = true;
+  void markCallRead(meeting);
 }
 
 function openCallParticipantProfile(person: MeetingPerson) {
@@ -1868,7 +1869,6 @@ watch(
 // Sidebar badges: the server counts unread conversations, friend requests and missed calls.
 const badges = ref<BadgeCounts>({ messages: 0, friends: 0, calls: 0 });
 let badgeRequest = 0;
-let isMarkingCallsSeen = false;
 
 async function loadBadges() {
   const token = accessToken.value;
@@ -1883,18 +1883,21 @@ async function loadBadges() {
 }
 const refreshBadges = useDebounceFn(loadBadges, 400);
 
-async function markCallsSeen() {
+// Opening a missed call or swiping it left marks it read, which clears its dot and badge count.
+async function markCallRead(meeting: MeetingSession) {
   const token = accessToken.value;
-  if (!token || isMarkingCallsSeen) return;
-  isMarkingCallsSeen = true;
+  if (!token || !meeting.unread) return;
+  callHistory.setUnread(meeting.id, false);
+  badgeRequest += 1;
+  badges.value = { ...badges.value, calls: Math.max(badges.value.calls - 1, 0) };
   try {
-    const counts = await socialApi.markCallsSeen(token);
-    badgeRequest += 1;
-    if (!isUnmounted) badges.value = counts;
+    await socialApi.markMeetingRead(token, meeting.id);
   } catch (error) {
-    console.error('[Dashboard] Failed to mark calls seen:', error);
+    console.error('[Dashboard] Failed to mark call read:', error);
+    callHistory.setUnread(meeting.id, true);
+    toast({ title: 'Could not mark the call read.', variant: 'destructive' });
   } finally {
-    isMarkingCallsSeen = false;
+    void refreshBadges();
   }
 }
 
@@ -1910,13 +1913,6 @@ watch(
   ],
   () => void refreshBadges(),
   { immediate: true },
-);
-// Opening the calls list shows the missed calls, so they no longer count.
-watch(
-  () => callsPanel.value !== 'collapsed' && badges.value.calls > 0,
-  (shouldMark) => {
-    if (shouldMark) void markCallsSeen();
-  },
 );
 watch(callsPanel, (panel) => {
   if (panel !== 'collapsed' && callHistory.hasLoaded.value) void callHistory.load({ quiet: true });
@@ -2076,6 +2072,7 @@ async function startConversationCall(conversation: Conversation) {
           @accept="respondToRingingCall(true)"
           @decline="respondToRingingCall(false)"
           @load-more="callHistory.loadMore"
+          @read="markCallRead"
         />
       </aside>
       <ChatPane

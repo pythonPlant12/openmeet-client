@@ -5,7 +5,8 @@ import type { VideoQuality } from '@/services/video-quality';
 
 // Quality choices shared by the camera and screen share menus.
 defineProps<{
-  label: string;
+  /** Heading above the choices; submenus that already name them leave it out. */
+  label?: string;
   quality: VideoQuality;
   disabled?: boolean;
   /** Height auto mode sends right now, shown beside Auto. */
@@ -19,7 +20,7 @@ function select(value: unknown) {
 </script>
 
 <template>
-  <DropdownMenuLabel class="px-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#8A9C9E]">
+  <DropdownMenuLabel v-if="label" class="px-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#8A9C9E]">
     {{ label }}
   </DropdownMenuLabel>
   <DropdownMenuRadioGroup :model-value="quality" @update:model-value="select">

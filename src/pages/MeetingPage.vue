@@ -539,7 +539,6 @@ const inviteMode = computed<'enabled' | 'signedOut' | 'hidden'>(() => {
   if (isConversationCall.value) return 'hidden';
   return isAuthenticated.value ? 'enabled' : 'signedOut';
 });
-const meetingLink = computed(() => `${window.location.origin}/room/${meetingId.value}`);
 
 async function loadMeetingAccess() {
   try {
@@ -935,7 +934,6 @@ const handleReconnect = () => {
       v-if="inviteMode === 'enabled'"
       v-model:open="isInviteOpen"
       :room-id="meetingId"
-      :meeting-link="meetingLink"
       :access="meetingAccess"
       @access-updated="meetingAccess = $event"
     />

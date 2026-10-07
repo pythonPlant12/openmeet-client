@@ -34,7 +34,7 @@ const hostAccess: MeetingRoomAccess = {
 
 function mountDialog(access: MeetingRoomAccess = hostAccess) {
   return mount(MeetingInviteDialog, {
-    props: { open: false, roomId: 'room-1', meetingLink: 'https://openmeets.eu/room/room-1', access },
+    props: { open: false, roomId: 'room-1', access },
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en: {} }, missingWarn: false })],
       stubs: {
@@ -85,7 +85,7 @@ describe('MeetingInviteDialog', () => {
     await wrapper.setProps({ open: true });
     await flushPromises();
 
-    await wrapper.get('[data-access-option="password"]').setValue(true);
+    await wrapper.get('[data-access-select]').setValue('password');
     await wrapper.get('#meeting-access-password').setValue('secret');
     await wrapper.get('[data-host-access] button').trigger('click');
     await flushPromises();

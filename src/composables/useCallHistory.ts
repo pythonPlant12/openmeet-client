@@ -72,6 +72,11 @@ export function useCallHistory(accessToken: Ref<string | null | undefined>) {
     }
   }
 
+  /** Updates a call's dot right away; the server confirms it in the background. */
+  function setUnread(meetingId: string, unread: boolean) {
+    meetings.value = meetings.value.map((meeting) => (meeting.id === meetingId ? { ...meeting, unread } : meeting));
+  }
+
   useIntervalFn(() => {
     if (hasLiveMeeting.value) void load({ quiet: true });
   }, LIVE_REFRESH_MS);
@@ -87,5 +92,6 @@ export function useCallHistory(accessToken: Ref<string | null | undefined>) {
     loadAvatars,
     load,
     loadMore,
+    setUnread,
   };
 }

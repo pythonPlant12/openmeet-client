@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Info, Phone, PhoneOff, UserRound, Video } from 'lucide-vue-next';
+import { CheckCheck, Info, Phone, PhoneMissed, PhoneOff, UserRound, Video } from 'lucide-vue-next';
 import { motion } from 'motion-v';
 import { computed } from 'vue';
 
@@ -14,7 +14,7 @@ import type { MeetingPerson, MeetingSession } from '@/services/social-api';
 
 const props = defineProps<{
   panel: CallsPanel;
-  /** Calls missed since the list was last opened. */
+  /** Missed calls not read yet. */
   badge: number;
   meetings: MeetingSession[];
   isLoading: boolean;
@@ -36,6 +36,7 @@ const emit = defineEmits<{
   (event: 'toggle'): void;
   (event: 'open', meeting: MeetingSession): void;
   (event: 'call', meeting: MeetingSession): void;
+  (event: 'read', meeting: MeetingSession): void;
   (event: 'accept'): void;
   (event: 'decline'): void;
   (event: 'load-more'): void;
@@ -196,7 +197,9 @@ function initials(name: string) {
               :leading-width="SWIPE_ACTION_WIDTH"
               :trailing-width="SWIPE_ACTION_WIDTH"
               full-swipe-leading
+              :full-swipe-trailing="meeting.unread"
               @full-swipe-leading="emit('call', meeting)"
+              @full-swipe-trailing="emit('read', meeting)"
             >
               <template #leading="{ armed, close }">
                 <button
@@ -215,8 +218,27 @@ function initials(name: string) {
                   >
                 </button>
               </template>
-              <template #trailing="{ close }">
+              <!-- Swiping an unread missed call left marks it read; read calls offer their details. -->
+              <template #trailing="{ armed, close }">
                 <button
+                  v-if="meeting.unread"
+                  type="button"
+                  data-swipe-action
+                  data-call-read-action
+                  class="flex h-full w-full items-center justify-end text-white transition-colors"
+                  :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
+                  aria-label="Mark call read"
+                  @click="
+                    close();
+                    emit('read', meeting);
+                  "
+                >
+                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                    ><CheckCheck class="size-4" />Read</span
+                  >
+                </button>
+                <button
+                  v-else
                   type="button"
                   data-swipe-action
                   class="flex h-full w-full items-center justify-end bg-[#E6F4F1] text-[#102F35]"
@@ -267,7 +289,14 @@ function initials(name: string) {
                       >Live</span
                     >
                   </span>
-                  <span class="mt-0.5 flex items-center gap-1 truncate text-[11px] text-[#61777B]"
+                  <span
+                    v-if="meeting.missed"
+                    data-call-missed
+                    class="mt-0.5 flex items-center gap-1 truncate text-[11px] font-semibold text-[#C4513D]"
+                    ><PhoneMissed class="size-3 shrink-0" aria-hidden="true" />Missed ·
+                    {{ formatTime(meeting.startedAt) }}</span
+                  >
+                  <span v-else class="mt-0.5 flex items-center gap-1 truncate text-[11px] text-[#61777B]"
                     ><component :is="meetingType(meeting).icon" class="size-3 shrink-0" aria-hidden="true" />{{
                       formatTime(meeting.startedAt)
                     }}
@@ -275,6 +304,13 @@ function initials(name: string) {
                   >
                 </span>
                 <LoadingRipple v-if="callingId === meeting.id" class="size-4 text-[#0B7A75]" />
+                <span
+                  v-else-if="meeting.unread"
+                  data-call-unread
+                  class="size-2.5 shrink-0 rounded-full bg-[#0B7A75]"
+                  role="img"
+                  aria-label="Unread"
+                />
               </button>
             </SwipeableRow>
           </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, Lock, Mic, MicOff, ShieldAlert, User, Video, VideoOff } from 'lucide-vue-next';
+import { Lock, Mic, MicOff, ShieldAlert, User, Video, VideoOff } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -19,6 +19,7 @@ import { useMediaDevices } from '@/composables/useMediaDevices';
 import type { GroupAccessPolicy, MeetingRoomAccess, MeetingRoomSettings } from '@/services/social-api';
 
 import MeetingAccessPicker from './MeetingAccessPicker.vue';
+import MeetingSelect from './MeetingSelect.vue';
 
 interface Props {
   open: boolean;
@@ -400,43 +401,31 @@ onUnmounted(() => {
           <!-- Microphone Select -->
           <div class="space-y-1.5">
             <Label class="text-xs text-[#4E6B70]">{{ t('meeting.join.microphone') }}</Label>
-            <div class="relative">
-              <select
-                v-model="selectedAudioDeviceId"
-                :disabled="audioDevices.length === 0"
-                class="w-full h-9 px-3 pr-8 text-sm bg-white border border-[#D8E7E3] rounded-md appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0B7A75] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option v-if="audioDevices.length === 0" value="">{{ t('meeting.join.noMicrophones') }}</option>
-                <option v-for="device in audioDevices" :key="device.deviceId" :value="device.deviceId">
-                  {{
-                    device.label || t('meeting.join.microphoneFallback', { number: audioDevices.indexOf(device) + 1 })
-                  }}
-                </option>
-              </select>
-              <ChevronDown
-                class="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-[#4E6B70] pointer-events-none"
-              />
-            </div>
+            <MeetingSelect
+              v-model="selectedAudioDeviceId"
+              :options="
+                audioDevices.map((device, index) => ({
+                  value: device.deviceId,
+                  label: device.label || t('meeting.join.microphoneFallback', { number: index + 1 }),
+                }))
+              "
+              :placeholder="t('meeting.join.noMicrophones')"
+            />
           </div>
 
           <!-- Camera Select -->
           <div class="space-y-1.5">
             <Label class="text-xs text-[#4E6B70]">{{ t('meeting.join.camera') }}</Label>
-            <div class="relative">
-              <select
-                v-model="selectedVideoDeviceId"
-                :disabled="videoDevices.length === 0"
-                class="w-full h-9 px-3 pr-8 text-sm bg-white border border-[#D8E7E3] rounded-md appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0B7A75] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option v-if="videoDevices.length === 0" value="">{{ t('meeting.join.noCameras') }}</option>
-                <option v-for="device in videoDevices" :key="device.deviceId" :value="device.deviceId">
-                  {{ device.label || t('meeting.join.cameraFallback', { number: videoDevices.indexOf(device) + 1 }) }}
-                </option>
-              </select>
-              <ChevronDown
-                class="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-[#4E6B70] pointer-events-none"
-              />
-            </div>
+            <MeetingSelect
+              v-model="selectedVideoDeviceId"
+              :options="
+                videoDevices.map((device, index) => ({
+                  value: device.deviceId,
+                  label: device.label || t('meeting.join.cameraFallback', { number: index + 1 }),
+                }))
+              "
+              :placeholder="t('meeting.join.noCameras')"
+            />
           </div>
         </div>
 

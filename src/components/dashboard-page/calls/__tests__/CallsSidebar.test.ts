@@ -17,6 +17,8 @@ const meetings: MeetingSession[] = [
     startedAt: '2026-10-07T10:00:00Z',
     endedAt: '2026-10-07T10:20:00Z',
     participantCount: 2,
+    missed: false,
+    unread: false,
     participants: [
       {
         userId: 'bob',
@@ -57,6 +59,8 @@ function mountSidebar(props: Partial<InstanceType<typeof CallsSidebar>['$props']
   });
 }
 
+const missedCall: MeetingSession = { ...meetings[0]!, id: 'meeting-2', missed: true, unread: true };
+
 describe('CallsSidebar', () => {
   it('shows only its header while collapsed and toggles from it', async () => {
     const wrapper = mountSidebar();
@@ -84,6 +88,31 @@ describe('CallsSidebar', () => {
 
     await wrapper.get('[data-call-item]').trigger('click');
     expect(wrapper.emitted('open')?.[0]).toEqual([meetings[0]]);
+  });
+
+  it('marks unread missed calls with a dot and a missed label', () => {
+    const wrapper = mountSidebar({ panel: 'middle', meetings: [missedCall, meetings[0]!] });
+    const [missed, answered] = wrapper.findAll('[data-call-item]');
+
+    expect(missed!.find('[data-call-unread]').exists()).toBe(true);
+    expect(missed!.get('[data-call-missed]').text()).toContain('Missed');
+    expect(answered!.find('[data-call-unread]').exists()).toBe(false);
+    expect(answered!.find('[data-call-missed]').exists()).toBe(false);
+  });
+
+  it('drops the dot once a missed call is read', () => {
+    const wrapper = mountSidebar({ panel: 'middle', meetings: [{ ...missedCall, unread: false }] });
+    expect(wrapper.find('[data-call-unread]').exists()).toBe(false);
+    expect(wrapper.find('[data-call-missed]').exists()).toBe(true);
+  });
+
+  it('marks a missed call read from the left swipe, and offers details for read calls', async () => {
+    const wrapper = mountSidebar({ panel: 'middle', meetings: [missedCall, meetings[0]!] });
+
+    await wrapper.get('[data-call-read-action]').trigger('click');
+    expect(wrapper.emitted('read')?.[0]).toEqual([missedCall]);
+    expect(wrapper.findAll('[data-call-read-action]')).toHaveLength(1);
+    expect(wrapper.find('[aria-label="Call details"]').exists()).toBe(true);
   });
 
   it('calls again from the swipe action', async () => {

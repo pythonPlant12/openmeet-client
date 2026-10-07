@@ -136,6 +136,10 @@ export interface MeetingSession {
   participantCount: number;
   /** History lists name a few other people; the detail lists everyone, including you. */
   participants: MeetingPerson[];
+  /** A call that rang for you and that you never answered. */
+  missed: boolean;
+  /** A missed call you have not opened or marked read yet. */
+  unread: boolean;
 }
 
 /** Sidebar badge counts, computed by the server from unread, pending and missed items. */
@@ -144,7 +148,7 @@ export interface BadgeCounts {
   messages: number;
   /** Incoming friend requests. */
   friends: number;
-  /** Calls missed since the user last opened their calls. */
+  /** Missed calls the user has not read yet. */
   calls: number;
 }
 
@@ -645,8 +649,8 @@ export const socialApi = {
     return request<BadgeCounts>('/badges', accessToken);
   },
 
-  markCallsSeen(accessToken: string) {
-    return request<BadgeCounts>('/badges/calls/seen', accessToken, { method: 'POST' });
+  markMeetingRead(accessToken: string, meetingId: string) {
+    return request<void>(`/meeting-sessions/${encodeURIComponent(meetingId)}/read`, accessToken, { method: 'POST' });
   },
 
   getMeetingSession(accessToken: string, meetingId: string) {
