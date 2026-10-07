@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Copy, CornerUpLeft, Reply, SmilePlus } from 'lucide-vue-next';
+import { Copy, CornerUpLeft, Download, FileText, Reply, SmilePlus } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, ref } from 'vue';
 
@@ -10,6 +10,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { LoadingRipple } from '@/components/ui/loading';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import type { ConversationMessage } from '@/services/social-api';
 
@@ -30,6 +31,10 @@ const props = defineProps<{
   reactionPickerOpen: boolean;
   prefersReducedMotion: boolean;
   formatTime: (value: string) => string;
+  attachmentUrls: Record<string, string>;
+  isAttachmentLoading: (path: string) => boolean;
+  hasAttachmentError: (path: string) => boolean;
+  loadAttachment: (path: string) => void;
 }>();
 const emit = defineEmits<{
   (event: 'reply'): void;
@@ -54,6 +59,7 @@ const isMenuOpen = ref(false);
 const isSwiping = ref(false);
 // A message is lifted while it is swiped or is the target of a reaction picker or its own menu.
 const isLifted = computed(() => isSwiping.value || props.reactionPickerOpen || isMenuOpen.value);
+const attachments = computed(() => props.message.attachments ?? []);
 const initial = computed(() =>
   props.animateIn && !props.prefersReducedMotion
     ? props.local
@@ -61,6 +67,19 @@ const initial = computed(() =>
       : { opacity: 0, x: -10, y: 14, scale: 0.92 }
     : false,
 );
+
+function isImage(contentType: string) {
+  return contentType.startsWith('image/');
+}
+
+function isVideo(contentType: string) {
+  return contentType.startsWith('video/');
+}
+
+function formatFileSize(byteSize: number) {
+  if (byteSize < 1024 * 1024) return `${Math.max(1, Math.round(byteSize / 1024))} KB`;
+  return `${(byteSize / (1024 * 1024)).toFixed(byteSize >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
 </script>
 
 <template>
@@ -147,7 +166,66 @@ const initial = computed(() =>
                 >
                 <span class="line-clamp-2 block leading-snug">{{ message.replyTo.content }}</span>
               </button>
-              <MessageContent :content="message.content" :local="local" />
+              <div
+                v-if="attachments.length"
+                class="mb-1.5 grid gap-1.5"
+                :class="attachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2'"
+              >
+                <template v-for="attachment in attachments" :key="attachment.id">
+                  <a
+                    v-if="isImage(attachment.contentType) && attachmentUrls[attachment.url]"
+                    :href="attachmentUrls[attachment.url]"
+                    :download="attachment.fileName"
+                    class="block overflow-hidden rounded-xl bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                  >
+                    <img
+                      :src="attachmentUrls[attachment.url]"
+                      :alt="attachment.fileName"
+                      class="max-h-72 w-full object-cover"
+                    />
+                  </a>
+                  <video
+                    v-else-if="isVideo(attachment.contentType) && attachmentUrls[attachment.url]"
+                    :src="attachmentUrls[attachment.url]"
+                    controls
+                    playsinline
+                    preload="metadata"
+                    class="max-h-72 w-full rounded-xl bg-[#102F35]"
+                  />
+                  <a
+                    v-else-if="attachmentUrls[attachment.url]"
+                    :href="attachmentUrls[attachment.url]"
+                    :download="attachment.fileName"
+                    class="flex min-h-20 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
+                    :class="
+                      local
+                        ? 'bg-white/15 [@media(hover:hover)]:hover:bg-white/20'
+                        : 'bg-[#EDF8F5] [@media(hover:hover)]:hover:bg-[#E6F4F1]'
+                    "
+                  >
+                    <FileText class="size-5 shrink-0" />
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-xs font-semibold">{{ attachment.fileName }}</span>
+                      <span class="block text-[0.6875rem] opacity-75">{{ formatFileSize(attachment.byteSize) }}</span>
+                    </span>
+                    <Download class="size-4 shrink-0" />
+                  </a>
+                  <button
+                    v-else
+                    type="button"
+                    class="flex min-h-20 items-center justify-center rounded-xl"
+                    :class="local ? 'bg-white/15' : 'bg-[#EDF8F5]'"
+                    :aria-label="`${hasAttachmentError(attachment.url) ? 'Retry' : 'Load'} ${attachment.fileName}`"
+                    @click="loadAttachment(attachment.url)"
+                  >
+                    <LoadingRipple v-if="isAttachmentLoading(attachment.url)" class="size-5" />
+                    <span v-else class="flex items-center gap-2 px-2 text-xs font-semibold">
+                      <FileText class="size-5" />{{ hasAttachmentError(attachment.url) ? 'Retry' : 'Load' }}
+                    </span>
+                  </button>
+                </template>
+              </div>
+              <MessageContent v-if="message.content" :content="message.content" :local="local" />
               <time
                 :datetime="message.createdAt"
                 class="mt-0.5 block text-right text-[0.6875rem] tabular-nums"

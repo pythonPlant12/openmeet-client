@@ -223,6 +223,22 @@ describe('socialApi', () => {
     ]);
   });
 
+  it('sends media with a shared caption in one multipart request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const image = new File(['image'], 'board.png', { type: 'image/png' });
+
+    await socialApi.createConversationMessageWithAttachments('token', 'chat-1', 'Sprint board', [image], 7);
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:8081/social/conversations/chat-1/messages/attachments');
+    expect(request).toEqual(expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
+    const form = request.body as FormData;
+    expect(form.get('content')).toBe('Sprint board');
+    expect(form.get('replyToSequence')).toBe('7');
+    expect(form.get('file')).toBe(image);
+  });
+
   it('sends friend requests by user ID', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);

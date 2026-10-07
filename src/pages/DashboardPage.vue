@@ -17,6 +17,7 @@ import GroupInfoDialog from '@/components/dashboard-page/groups/GroupInfoDialog.
 import JoinGroupDialog from '@/components/dashboard-page/groups/JoinGroupDialog.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
+import { useAttachmentCache } from '@/composables/useAttachmentCache';
 import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useCallHistory } from '@/composables/useCallHistory';
@@ -172,7 +173,14 @@ const isGroupProfileLoading = ref(false);
 const groupProfileError = ref('');
 const messages = ref<ConversationMessage[]>([]);
 const messageContent = ref('');
+const messageAttachments = ref<File[]>([]);
 const messageReplyTo = ref<ConversationMessage | null>(null);
+const messageAttachmentCache = useAttachmentCache(
+  () => currentUser.value?.id,
+  (path) => socialApi.loadConversationAttachment(accessToken.value ?? '', path),
+);
+const messageAttachmentUrls = computed(() => messageAttachmentCache.urls.value);
+const MAX_AUTO_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 // A quote belongs to its conversation; switching chats by any route drops it so it cannot be sent elsewhere.
 watch(
   () => selectedConversation.value?.id,
@@ -180,6 +188,26 @@ watch(
     if (id !== previousId) messageReplyTo.value = null;
   },
 );
+
+watch(messages, (nextMessages) => {
+  let remaining = MAX_AUTO_ATTACHMENT_BYTES;
+  const paths = nextMessages
+    .slice()
+    .reverse()
+    .flatMap((message) => message.attachments ?? [])
+    .filter((attachment) => {
+      if (!attachment.contentType.startsWith('image/') && !attachment.contentType.startsWith('video/')) return false;
+      if (attachment.byteSize > remaining) return false;
+      remaining -= attachment.byteSize;
+      return true;
+    })
+    .map((attachment) => attachment.url);
+  void messageAttachmentCache.ensure(paths);
+});
+
+function loadMessageAttachment(path: string) {
+  void messageAttachmentCache.ensure([path]);
+}
 const nextMessageBefore = ref<number | null>(null);
 const chatPane = ref<{
   focusComposer: () => void;
@@ -519,18 +547,35 @@ async function sendMessage() {
   const conversationId = selectedConversation.value?.id;
   const token = accessToken.value;
   const content = messageContent.value.trim();
-  if (!conversationId || !token || !content || isLoadingMessages.value || isSendingMessage.value) return;
+  const attachments = messageAttachments.value;
+  if (
+    !conversationId ||
+    !token ||
+    (!content && !attachments.length) ||
+    isLoadingMessages.value ||
+    isSendingMessage.value
+  )
+    return;
 
   clearFeedback();
   isSendingMessage.value = true;
   try {
     const replyToSequence = messageReplyTo.value?.sequence;
-    const message = await socialApi.createConversationMessage(token, conversationId, content, replyToSequence);
+    const message = attachments.length
+      ? await socialApi.createConversationMessageWithAttachments(
+          token,
+          conversationId,
+          content,
+          attachments,
+          replyToSequence,
+        )
+      : await socialApi.createConversationMessage(token, conversationId, content, replyToSequence);
     if (selectedConversation.value?.id !== conversationId) return;
 
     appendMessage(message);
     if (selectedConversation.value?.id === conversationId) addConversation(selectedConversation.value);
     messageContent.value = '';
+    messageAttachments.value = [];
     messageReplyTo.value = null;
     await nextTick();
     chatPane.value?.scrollToBottom('smooth');
@@ -887,6 +932,7 @@ watch(selectedConversation, (conversation, previousConversation) => {
   messages.value = [];
   animatedMessageSequences.value = new Set();
   messageContent.value = '';
+  messageAttachments.value = [];
   nextMessageBefore.value = null;
   isLoadingMessages.value = false;
   isLoadingOlderMessages.value = false;
@@ -2078,6 +2124,7 @@ async function startConversationCall(conversation: Conversation) {
       <ChatPane
         ref="chatPane"
         v-model:content="messageContent"
+        v-model:attachments="messageAttachments"
         v-model:reply-to="messageReplyTo"
         :conversation="selectedConversation"
         :pending-friend="pendingDirectFriend"
@@ -2100,6 +2147,10 @@ async function startConversationCall(conversation: Conversation) {
         :should-animate="shouldAnimateMessage"
         :is-local="isLocalMessage"
         :format-time="formatMessageTime"
+        :attachment-urls="messageAttachmentUrls"
+        :is-attachment-loading="messageAttachmentCache.isLoading"
+        :has-attachment-error="messageAttachmentCache.hasError"
+        :load-attachment="loadMessageAttachment"
         @back="
           selectedConversation = null;
           pendingDirectFriend = null;

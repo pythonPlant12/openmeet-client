@@ -31,6 +31,10 @@ const props = defineProps<{
   shouldAnimate: (message: ConversationMessage) => boolean;
   isLocal: (message: ConversationMessage) => boolean;
   formatTime: (value: string) => string;
+  attachmentUrls?: Record<string, string>;
+  isAttachmentLoading?: (path: string) => boolean;
+  hasAttachmentError?: (path: string) => boolean;
+  loadAttachment?: (path: string) => void;
 }>();
 const emit = defineEmits<{
   (event: 'back'): void;
@@ -45,6 +49,7 @@ const emit = defineEmits<{
 }>();
 const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
+const attachments = defineModel<File[]>('attachments', { default: () => [] });
 const thread = ref<InstanceType<typeof ChatThread> | null>(null);
 let edgeSwipeDistance = 0;
 let edgeSwipe: { pointerId: number; startX: number; startY: number; axis: 'x' | 'y' | null } | null = null;
@@ -219,6 +224,7 @@ defineExpose({
           ref="thread"
           v-model:content="content"
           v-model:reply-to="replyTo"
+          v-model:attachments="attachments"
           :thread-key="conversation.id"
           :messages="messages"
           :loading="loading"
@@ -229,6 +235,10 @@ defineExpose({
           :should-animate="shouldAnimate"
           :is-local="isLocal"
           :format-time="formatTime"
+          :attachment-urls="attachmentUrls"
+          :is-attachment-loading="isAttachmentLoading"
+          :has-attachment-error="hasAttachmentError"
+          :load-attachment="loadAttachment"
           footer-note="Messages stored by OpenMeet"
           @scroll-top="emit('scroll-top')"
           @send="emit('send')"

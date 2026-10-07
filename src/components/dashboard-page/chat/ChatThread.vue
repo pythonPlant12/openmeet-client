@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { ArrowDown, Reply, X } from 'lucide-vue-next';
+import { ArrowDown, FileText, Image, Paperclip, Reply, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import ChatMessage from '@/components/dashboard-page/chat/ChatMessage.vue';
 import EmojiPickerButton from '@/components/dashboard-page/chat/EmojiPickerButton.vue';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import type { ConversationMessage } from '@/services/social-api';
@@ -24,6 +30,11 @@ const props = withDefaults(
     shouldAnimate: (message: ConversationMessage) => boolean;
     isLocal: (message: ConversationMessage) => boolean;
     formatTime: (value: string) => string;
+    attachmentUrls?: Record<string, string>;
+    isAttachmentLoading?: (path: string) => boolean;
+    hasAttachmentError?: (path: string) => boolean;
+    loadAttachment?: (path: string) => void;
+    attachmentsEnabled?: boolean;
     emptyText?: string;
     footerNote?: string;
     placeholder?: string;
@@ -37,6 +48,11 @@ const props = withDefaults(
     footerNote: undefined,
     placeholder: 'Write a message',
     sendLabel: 'Send',
+    attachmentUrls: () => ({}),
+    isAttachmentLoading: () => false,
+    hasAttachmentError: () => false,
+    loadAttachment: () => undefined,
+    attachmentsEnabled: true,
   },
 );
 const emit = defineEmits<{
@@ -46,6 +62,7 @@ const emit = defineEmits<{
 }>();
 const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
+const attachments = defineModel<File[]>('attachments', { default: () => [] });
 const reactionPickerSequence = ref<number | null>(null);
 const highlightedSequence = ref<number | null>(null);
 let highlightTimer: number | undefined;
@@ -54,7 +71,81 @@ const MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000;
 const pane = ref<HTMLElement | null>(null);
 const list = ref<HTMLElement | null>(null);
 const composer = ref<HTMLTextAreaElement | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+const mediaInput = ref<HTMLInputElement | null>(null);
+const previewUrls = new Map<File, string>();
 let pendingBottomScroll: ScrollBehavior | null = null;
+
+const MAX_ATTACHMENTS = 10;
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const MAX_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
+
+function chooseAttachments(kind: 'file' | 'media') {
+  if (props.sending) return;
+  (kind === 'file' ? fileInput.value : mediaInput.value)?.click();
+}
+
+function addAttachments(event: Event) {
+  if (props.sending) return;
+  const input = event.target as HTMLInputElement;
+  const selected = [...(input.files ?? [])];
+  input.value = '';
+  let totalSize = attachments.value.reduce((sum, attachment) => sum + attachment.size, 0);
+  let rejectedForSize = false;
+  let rejectedForTotal = false;
+  const allowed = selected.filter((file) => {
+    if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) {
+      rejectedForSize = true;
+      return false;
+    }
+    if (totalSize + file.size > MAX_ATTACHMENT_TOTAL_BYTES) {
+      rejectedForTotal = true;
+      return false;
+    }
+    totalSize += file.size;
+    return true;
+  });
+  if (rejectedForSize) {
+    toast({ title: 'Each attachment must be between 1 byte and 25 MB.', variant: 'destructive' });
+  }
+  if (rejectedForTotal)
+    toast({ title: 'Attachments in one message must total 25 MB or less.', variant: 'destructive' });
+  const available = MAX_ATTACHMENTS - attachments.value.length;
+  if (allowed.length > available) {
+    toast({ title: `You can send up to ${MAX_ATTACHMENTS} attachments at once.`, variant: 'destructive' });
+  }
+  if (available > 0) attachments.value = [...attachments.value, ...allowed.slice(0, available)];
+}
+
+function removeAttachment(file: File) {
+  if (props.sending) return;
+  attachments.value = attachments.value.filter((attachment) => attachment !== file);
+  const previewUrl = previewUrls.get(file);
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrls.delete(file);
+}
+
+function previewUrl(file: File) {
+  let url = previewUrls.get(file);
+  if (!url) {
+    url = URL.createObjectURL(file);
+    previewUrls.set(file, url);
+  }
+  return url;
+}
+
+function isVisualAttachment(file: File) {
+  return file.type.startsWith('image/') || file.type.startsWith('video/');
+}
+
+function isVideoAttachment(file: File) {
+  return file.type.startsWith('video/');
+}
+
+function formatFileSize(byteSize: number) {
+  if (byteSize < 1024 * 1024) return `${Math.max(1, Math.round(byteSize / 1024))} KB`;
+  return `${(byteSize / (1024 * 1024)).toFixed(byteSize >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
 
 function scrollToBottom(behavior: ScrollBehavior = 'auto') {
   pendingBottomScroll = props.prefersReducedMotion ? 'auto' : behavior;
@@ -247,6 +338,15 @@ watch(
   },
 );
 
+watch(attachments, (nextAttachments) => {
+  for (const [file, url] of previewUrls) {
+    if (!nextAttachments.includes(file)) {
+      URL.revokeObjectURL(url);
+      previewUrls.delete(file);
+    }
+  }
+});
+
 function isGroupedWithPrevious(index: number) {
   const message = props.messages[index];
   const previous = props.messages[index - 1];
@@ -263,6 +363,7 @@ onBeforeUnmount(() => {
   if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
   paneResizeObserver?.disconnect();
   listResizeObserver?.disconnect();
+  previewUrls.forEach((url) => URL.revokeObjectURL(url));
   window.visualViewport?.removeEventListener('resize', keepPlaceAfterResize);
   document.removeEventListener('pointerdown', closeReactionPickerOnOutsidePress, true);
 });
@@ -303,6 +404,10 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             :reaction-picker-open="reactionPickerSequence === message.sequence"
             :prefers-reduced-motion="prefersReducedMotion"
             :format-time="formatTime"
+            :attachment-urls="attachmentUrls"
+            :is-attachment-loading="isAttachmentLoading"
+            :has-attachment-error="hasAttachmentError"
+            :load-attachment="loadAttachment"
             @reply="startReply(message)"
             @react="(emoji) => react(message, emoji)"
             @open-reactions="reactionPickerSequence = message.sequence"
@@ -363,23 +468,121 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           </div>
         </motion.div>
       </AnimatePresence>
+      <AnimatePresence v-if="attachmentsEnabled">
+        <motion.div
+          v-if="attachments.length"
+          :initial="prefersReducedMotion ? false : { opacity: 0, y: 8, height: 0 }"
+          :animate="{ opacity: 1, y: 0, height: 'auto' }"
+          :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 8, height: 0 }"
+          :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 32 }"
+          class="overflow-hidden"
+        >
+          <div class="mb-2 flex gap-2 overflow-x-auto rounded-2xl bg-[#EDF8F5] p-2">
+            <article
+              v-for="attachment in attachments"
+              :key="`${attachment.name}-${attachment.lastModified}-${attachment.size}`"
+              class="relative flex w-32 shrink-0 flex-col overflow-hidden rounded-xl border border-[#D8E7E3] bg-white text-[#102F35]"
+            >
+              <img
+                v-if="attachment.type.startsWith('image/')"
+                :src="previewUrl(attachment)"
+                :alt="attachment.name"
+                class="aspect-[4/3] w-full object-cover"
+              />
+              <video
+                v-else-if="isVideoAttachment(attachment)"
+                :src="previewUrl(attachment)"
+                muted
+                playsinline
+                preload="metadata"
+                class="aspect-[4/3] w-full bg-[#102F35] object-cover"
+              />
+              <div v-else class="flex aspect-[4/3] items-center justify-center bg-[#F3F5F4] text-[#0B7A75]">
+                <FileText class="size-7" />
+              </div>
+              <div class="min-w-0 px-2 py-1.5">
+                <p class="truncate text-xs font-semibold">{{ attachment.name }}</p>
+                <p class="text-[0.6875rem] text-[#61777B]">{{ formatFileSize(attachment.size) }}</p>
+              </div>
+              <button
+                type="button"
+                class="harbor-ghost-action absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-[#102F35]/75 text-white [@media(hover:hover)]:hover:bg-[#102F35]"
+                :aria-label="`Remove ${attachment.name}`"
+                :disabled="sending"
+                @click="removeAttachment(attachment)"
+              >
+                <X class="size-3.5" />
+              </button>
+              <span v-if="isVisualAttachment(attachment)" class="sr-only">Media attachment</span>
+            </article>
+          </div>
+        </motion.div>
+      </AnimatePresence>
       <form class="flex items-end gap-2" @submit.prevent="emit('send')">
+        <input ref="fileInput" type="file" multiple class="sr-only" @change="addAttachments" />
+        <input
+          ref="mediaInput"
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          class="sr-only"
+          @change="addAttachments"
+        />
+        <DropdownMenu v-if="attachmentsEnabled">
+          <DropdownMenuTrigger as-child>
+            <button
+              type="button"
+              class="harbor-ghost-action flex size-11 shrink-0 items-center justify-center rounded-xl text-[#0B7A75]"
+              aria-label="Add an attachment"
+              title="Add an attachment"
+              :disabled="sending"
+            >
+              <Paperclip class="size-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            side="top"
+            class="harbor-action-menu min-w-44 rounded-2xl border-[#D8E7E3] bg-white p-1.5 text-[#102F35]"
+          >
+            <DropdownMenuItem
+              class="harbor-context-menu-item min-h-10 cursor-pointer rounded-xl px-3 py-2 font-semibold"
+              :disabled="sending"
+              @select="chooseAttachments('file')"
+            >
+              <FileText class="size-4" />Attach file
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              class="harbor-context-menu-item min-h-10 cursor-pointer rounded-xl px-3 py-2 font-semibold"
+              :disabled="sending"
+              @select="chooseAttachments('media')"
+            >
+              <Image class="size-4" />Send media
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <textarea
           ref="composer"
           v-model="content"
           rows="1"
           maxlength="2000"
           :placeholder="placeholder"
+          :disabled="sending"
           aria-label="Message"
           class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-transparent bg-[#F3F5F4] px-3 py-2.5 text-sm text-[#102F35] placeholder:text-[#8A9C9E] focus-visible:border-[#D8E7E3] focus-visible:bg-white focus-visible:outline-none focus-visible:ring-0"
           @keydown.enter.exact.prevent="emit('send')"
           @keydown.esc="replyTo = null"
         />
-        <EmojiPickerButton v-model="content" :composer="composer" :prefers-reduced-motion="prefersReducedMotion" />
+        <EmojiPickerButton
+          v-model="content"
+          :composer="composer"
+          :prefers-reduced-motion="prefersReducedMotion"
+          :disabled="sending"
+        />
         <Button
           type="submit"
           class="harbor-primary-action h-11 rounded-xl bg-[#0B7A75] px-4 text-white"
-          :disabled="!content.trim() || loading || sending"
+          :disabled="(!content.trim() && (!attachmentsEnabled || !attachments.length)) || loading || sending"
           >{{ sending ? 'Sending...' : sendLabel }}</Button
         >
       </form>

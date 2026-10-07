@@ -324,6 +324,14 @@ export interface MessageReaction {
   reactedByMe: boolean;
 }
 
+export interface ConversationMessageAttachment {
+  id: string;
+  fileName: string;
+  contentType: string;
+  byteSize: number;
+  url: string;
+}
+
 export interface ConversationMessage {
   sequence: number;
   conversationId: string;
@@ -334,6 +342,7 @@ export interface ConversationMessage {
   createdAt: string;
   replyTo?: MessageReplyPreview | null;
   reactions?: MessageReaction[];
+  attachments?: ConversationMessageAttachment[];
 }
 
 export interface ConversationMessagesResponse {
@@ -464,6 +473,18 @@ export const socialApi = {
     );
     if (!response.ok) {
       throw new SocialApiError((await response.text()) || 'Could not load avatar', response.status);
+    }
+    return response.blob();
+  },
+
+  async loadConversationAttachment(_accessToken: string, path: string) {
+    const response = await sendAuthorizedRequest((accessToken) =>
+      fetch(this.resolveMediaUrl(path)!, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }),
+    );
+    if (!response.ok) {
+      throw new SocialApiError((await response.text()) || 'Could not load attachment', response.status);
     }
     return response.blob();
   },
@@ -852,6 +873,23 @@ export const socialApi = {
     return request<ConversationMessage>(`/conversations/${conversationId}/messages`, accessToken, {
       method: 'POST',
       body: JSON.stringify(replyToSequence === undefined ? { content } : { content, replyToSequence }),
+    });
+  },
+
+  createConversationMessageWithAttachments(
+    accessToken: string,
+    conversationId: string,
+    content: string,
+    attachments: File[],
+    replyToSequence?: number,
+  ) {
+    const body = new FormData();
+    body.append('content', content);
+    if (replyToSequence !== undefined) body.append('replyToSequence', String(replyToSequence));
+    attachments.forEach((attachment) => body.append('file', attachment));
+    return request<ConversationMessage>(`/conversations/${conversationId}/messages/attachments`, accessToken, {
+      method: 'POST',
+      body,
     });
   },
 

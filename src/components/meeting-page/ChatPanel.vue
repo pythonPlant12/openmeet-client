@@ -66,6 +66,7 @@ const threadMessages = computed<ConversationMessage[]>(() =>
       count: reaction.participantIds.length,
       reactedByMe: !!props.localParticipantId && reaction.participantIds.includes(props.localParticipantId),
     })),
+    attachments: [],
   })),
 );
 
@@ -173,6 +174,7 @@ watch(
         :footer-note="t('meeting.chat.footer')"
         :placeholder="t('meeting.chat.placeholder')"
         :send-label="t('meeting.chat.sendShort')"
+        :attachments-enabled="false"
         @send="handleSend"
         @react="handleReact"
       />
