@@ -17,6 +17,7 @@ test.describe('action menus', () => {
     const unique = Date.now();
     await page.goto('/register');
     await page.getByLabel('Your name').fill('Menu Tester');
+    await page.getByLabel('Nickname').fill(`menu_${unique}`);
     await page.getByLabel('Email address').fill(`menu-${unique}@example.com`);
     await page.getByLabel('Password', { exact: true }).fill('menu-password');
     await page.getByLabel('Confirm password').fill('menu-password');

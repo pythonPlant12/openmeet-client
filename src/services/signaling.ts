@@ -36,6 +36,12 @@ export type SignalingMessage =
 
 type MessageHandler = (message: SignalingMessage) => void;
 
+// 'lost' fires when an open session drops unexpectedly, 'restored' once a reconnect re-authenticates, and
+// 'abandoned' when every reconnect attempt failed. The server forgets a participant whose socket closes,
+// so listeners must rejoin the room on 'restored'.
+export type ConnectionChange = 'lost' | 'restored' | 'abandoned';
+type ConnectionHandler = (change: ConnectionChange) => void;
+
 export class SignalingService {
   private ws: WebSocket | null = null;
   private messageHandlers: Map<string, MessageHandler[]> = new Map();
@@ -43,6 +49,7 @@ export class SignalingService {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private intentionalDisconnect = false;
+  private connectionHandlers: ConnectionHandler[] = [];
 
   constructor(private serverUrl: string) {}
 
@@ -61,7 +68,6 @@ export class SignalingService {
 
       this.ws.onopen = () => {
         console.log('[SignalingService] WebSocket connected');
-        this.reconnectAttempts = 0;
         this.intentionalDisconnect = false;
         this.send({
           type: 'authenticate',
@@ -84,6 +90,8 @@ export class SignalingService {
               throw new Error('Unsupported signaling protocol');
             }
             identityDecided = true;
+            // Only an authenticated session counts as recovered; a socket that opens and is refused keeps retrying.
+            this.reconnectAttempts = 0;
             window.clearTimeout(authenticationTimer);
             resolve();
           } else if (!identityDecided && message.type === 'error') {
@@ -128,6 +136,7 @@ export class SignalingService {
       this.ws = null;
     }
     this.messageHandlers.clear();
+    this.connectionHandlers = [];
   }
 
   send(message: SignalingMessage): void {
@@ -195,6 +204,17 @@ export class SignalingService {
     });
   }
 
+  onConnectionChange(handler: ConnectionHandler): () => void {
+    this.connectionHandlers.push(handler);
+    return () => {
+      this.connectionHandlers = this.connectionHandlers.filter((entry) => entry !== handler);
+    };
+  }
+
+  private notifyConnectionChange(change: ConnectionChange): void {
+    this.connectionHandlers.forEach((handler) => handler(change));
+  }
+
   // Event handlers
   on(messageType: string, handler: MessageHandler): void {
     if (!this.messageHandlers.has(messageType)) {
@@ -232,17 +252,25 @@ export class SignalingService {
       return;
     }
 
+    // The first failure after a working session is the moment the session was lost.
+    if (this.reconnectAttempts === 0) this.notifyConnectionChange('lost');
+
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       console.log(`[SignalingService] Reconnecting (attempt ${this.reconnectAttempts})...`);
 
       setTimeout(() => {
-        this.connect().catch((error) => {
-          console.error('[SignalingService] Reconnect failed:', error);
-        });
+        this.connect()
+          .then(() => this.notifyConnectionChange('restored'))
+          .catch((error) => {
+            console.error('[SignalingService] Reconnect failed:', error);
+            // A refused or timed-out authentication stops retrying, so the session is gone for good.
+            if (this.intentionalDisconnect) this.notifyConnectionChange('abandoned');
+          });
       }, this.reconnectDelay * this.reconnectAttempts);
     } else {
       console.error('[SignalingService] Max reconnect attempts reached');
+      this.notifyConnectionChange('abandoned');
     }
   }
 
