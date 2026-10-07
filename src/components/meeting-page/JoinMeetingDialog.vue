@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, Mic, MicOff, User, Video, VideoOff } from 'lucide-vue-next';
+import { ChevronDown, Lock, Mic, MicOff, ShieldAlert, User, Video, VideoOff } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -16,20 +16,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useMediaDevices } from '@/composables/useMediaDevices';
+import type { GroupAccessPolicy, MeetingRoomAccess, MeetingRoomSettings } from '@/services/social-api';
+
+import MeetingAccessPicker from './MeetingAccessPicker.vue';
 
 interface Props {
   open: boolean;
   meetingId: string;
   initialName?: string;
   showNameInput?: boolean;
+  /** Access rules of the room; null while loading and for conversation calls. */
+  access?: MeetingRoomAccess | null;
+  /** Why the last join attempt was refused, such as a wrong password. */
+  accessError?: string;
+  joining?: boolean;
 }
 
-interface JoinSettings {
+export interface JoinSettings {
   name: string;
   audioEnabled: boolean;
   videoEnabled: boolean;
   audioDeviceId: string | null;
   videoDeviceId: string | null;
+  /** The password a password-protected room asked for. */
+  password?: string;
+  /** New access settings the host chose; omitted when unchanged. */
+  accessSettings?: MeetingRoomSettings;
 }
 
 interface Emits {
@@ -40,6 +52,9 @@ interface Emits {
 const props = withDefaults(defineProps<Props>(), {
   initialName: '',
   showNameInput: true,
+  access: null,
+  accessError: '',
+  joining: false,
 });
 const emit = defineEmits<Emits>();
 const { t } = useI18n();
@@ -72,8 +87,30 @@ const {
   // checkPermissions,
 } = useMediaDevices();
 
+// Room access: the host chooses who may join; everyone else may need the password.
+const accessPolicy = ref<GroupAccessPolicy>(props.access?.accessPolicy ?? 'open');
+const accessPassword = ref('');
+const joinPassword = ref('');
+watch(
+  () => props.access?.accessPolicy,
+  (policy) => {
+    if (policy) accessPolicy.value = policy;
+  },
+);
+const isHost = computed(() => !!props.access?.managed && props.access.isOwner);
+const isRefused = computed(() => !!props.access && !props.access.canJoin && !props.access.requiresPassword);
+const needsNewAccessPassword = computed(
+  () => isHost.value && accessPolicy.value === 'password' && props.access?.accessPolicy !== 'password',
+);
+const accessReady = computed(() => {
+  if (isRefused.value) return false;
+  if (props.access?.requiresPassword) return joinPassword.value.length > 0;
+  if (accessPolicy.value === 'password' && accessPassword.value) return accessPassword.value.length >= 4;
+  return !needsNewAccessPassword.value;
+});
+
 const canJoin = computed(() => {
-  return participantName.value.trim().length >= 2 && hasAllPermissions.value;
+  return participantName.value.trim().length >= 2 && hasAllPermissions.value && accessReady.value && !props.joining;
 });
 
 // Start/stop preview based on video toggle
@@ -147,15 +184,28 @@ const handleJoin = () => {
     return;
   }
 
-  sessionStorage.setItem('participantName', name);
-  stopPreview();
+  if (!accessReady.value) return;
 
+  sessionStorage.setItem('participantName', name);
+  // The preview keeps running while the parent checks access, so a refused join keeps the dialog usable.
+
+  const accessChanged =
+    isHost.value && (accessPolicy.value !== props.access?.accessPolicy || accessPassword.value.length > 0);
   emit('join', {
     name,
     audioEnabled: audioEnabled.value,
     videoEnabled: videoEnabled.value,
     audioDeviceId: selectedAudioDeviceId.value || null,
     videoDeviceId: selectedVideoDeviceId.value || null,
+    ...(props.access?.requiresPassword ? { password: joinPassword.value } : {}),
+    ...(accessChanged
+      ? {
+          accessSettings: {
+            accessPolicy: accessPolicy.value,
+            ...(accessPolicy.value === 'password' && accessPassword.value ? { password: accessPassword.value } : {}),
+          },
+        }
+      : {}),
   });
 };
 
@@ -390,6 +440,38 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- Room access -->
+        <MeetingAccessPicker
+          v-if="isHost"
+          v-model:policy="accessPolicy"
+          v-model:password="accessPassword"
+          :has-password="access?.accessPolicy === 'password'"
+          :disabled="joining"
+        />
+        <div v-else-if="access?.requiresPassword" class="space-y-1.5" data-meeting-password>
+          <Label for="meeting-password" class="flex items-center gap-1.5">
+            <Lock class="size-3.5 text-[#0B7A75]" />{{ t('meeting.join.passwordLabel') }}
+          </Label>
+          <Input
+            id="meeting-password"
+            v-model="joinPassword"
+            type="password"
+            autocomplete="off"
+            maxlength="256"
+            :placeholder="t('meeting.join.passwordPlaceholder')"
+            class="border-[#D8E7E3] bg-white text-[#102F35] placeholder:text-[#4E6B70]"
+            @keyup.enter="handleJoin"
+          />
+        </div>
+        <p
+          v-else-if="isRefused"
+          class="flex items-start gap-2 rounded-xl bg-[#FFF0EA] px-3 py-2.5 text-sm text-[#9D4636]"
+          data-meeting-refused
+        >
+          <ShieldAlert class="mt-0.5 size-4 shrink-0" />{{ access?.deniedReason }}
+        </p>
+        <p v-if="accessError" class="text-sm text-[#F2765F]" data-meeting-access-error>{{ accessError }}</p>
+
         <!-- Name input -->
         <div v-if="showNameInput" class="space-y-2">
           <Label for="participant-name">{{ t('meeting.join.yourName') }}</Label>
@@ -424,7 +506,8 @@ onUnmounted(() => {
             @click="handleJoin"
             :disabled="!canJoin"
           >
-            {{ t('meeting.join.title') }}
+            <LoadingRipple v-if="joining" size="sm" />
+            <template v-else>{{ t('meeting.join.title') }}</template>
           </Button>
         </div>
       </DialogFooter>

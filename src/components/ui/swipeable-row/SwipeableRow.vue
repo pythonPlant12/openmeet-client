@@ -21,6 +21,8 @@ const props = withDefaults(
     disabled?: boolean;
     /** Clip only sideways, so the content's vertical shadows are not cut off. */
     clipHorizontally?: boolean;
+    /** Farthest the content travels either way. Past the full-swipe distance it resists, then stops. */
+    maxDistance?: number;
   }>(),
   {
     leadingWidth: 0,
@@ -31,6 +33,7 @@ const props = withDefaults(
     momentary: false,
     disabled: false,
     clipHorizontally: false,
+    maxDistance: undefined,
   },
 );
 const emit = defineEmits<{ (event: 'full-swipe-leading'): void; (event: 'full-swipe-trailing'): void }>();
@@ -121,14 +124,17 @@ function trackVelocity(x: number) {
 
 function resist(next: number) {
   const width = root.value?.offsetWidth || Number.POSITIVE_INFINITY;
+  const maxDistance = props.maxDistance ?? Number.POSITIVE_INFINITY;
   if (next > 0) {
     if (!props.leadingWidth) return 0;
-    const limit = props.fullSwipeLeading ? width : props.leadingWidth;
-    return next <= limit ? next : limit + (next - limit) * RUBBER_BAND;
+    let limit = props.fullSwipeLeading ? width : props.leadingWidth;
+    if (props.maxDistance !== undefined) limit = Math.min(limit, fullSwipeThreshold(props.leadingWidth));
+    return Math.min(next <= limit ? next : limit + (next - limit) * RUBBER_BAND, maxDistance);
   }
   if (!props.trailingWidth) return 0;
-  const limit = props.fullSwipeTrailing ? -width : -props.trailingWidth;
-  return next >= limit ? next : limit + (next - limit) * RUBBER_BAND;
+  let limit = props.fullSwipeTrailing ? -width : -props.trailingWidth;
+  if (props.maxDistance !== undefined) limit = Math.max(limit, -fullSwipeThreshold(props.trailingWidth));
+  return Math.max(next >= limit ? next : limit + (next - limit) * RUBBER_BAND, -maxDistance);
 }
 
 function close() {

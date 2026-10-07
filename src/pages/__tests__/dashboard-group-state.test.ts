@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   beginGroupMutation,
   buildGroupSettingsRequest,
+  callsPanelAfterDrag,
   endGroupMutation,
   selectableGroupMemberIds,
   shouldApplyDashboardRequest,
@@ -77,6 +78,18 @@ describe('dashboard group state', () => {
     ['friends movement while messages are expanded', 'friends', 'messages', -60, 0, null],
   ] as const)('snaps %s', (_, panel, current, offset, velocity, expected) => {
     expect(sidebarPanelAfterDrag(panel, current, offset, velocity)).toBe(expected);
+  });
+
+  it.each([
+    ['collapsed', -60, 0, 'middle'],
+    ['middle', 0, -500, 'top'],
+    ['top', -60, 0, 'top'],
+    ['top', 60, 0, 'middle'],
+    ['middle', 0, 500, 'collapsed'],
+    ['collapsed', 60, 0, 'collapsed'],
+    ['middle', 20, 100, 'middle'],
+  ] as const)('moves the calls list from %s by %i/%i to %s', (current, offset, velocity, expected) => {
+    expect(callsPanelAfterDrag(current, offset, velocity)).toBe(expected);
   });
 
   it('keeps neutral drag state unchanged', () => {

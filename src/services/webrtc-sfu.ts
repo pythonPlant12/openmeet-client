@@ -2,11 +2,22 @@ import { i18n } from '@/i18n';
 
 import { resolveReachableTurnUrl } from './dev-networking';
 import { SignalingService } from './signaling';
+import {
+  CAMERA_LEVELS,
+  SCREEN_LEVELS,
+  SenderQualityController,
+  type VideoQuality,
+  captureConstraints,
+  maxLevelForAudience,
+} from './video-quality';
 
 export interface DeviceConstraints {
   audioDeviceId?: string | null;
   videoDeviceId?: string | null;
+  videoQuality?: VideoQuality;
 }
+
+export type { VideoQuality };
 
 export interface ConnectionQualityStats {
   quality: 'good' | 'poor';
@@ -108,12 +119,30 @@ export class WebRTCServiceSFU {
   private onRemoteTrackCallback: ((participantId: string, stream: MediaStream) => void) | null = null;
   private previousInboundPackets = new Map<string, InboundPacketSnapshot>();
   private pendingRemoteIceCandidates: RTCIceCandidateInit[] = [];
+  private videoQuality: VideoQuality = 'auto';
+  private readonly videoQualityController: SenderQualityController;
+  /** Called with the height the video currently sends, which auto quality changes over time. */
+  onVideoLevelChange: ((height: number) => void) | null = null;
 
   constructor(
     private signalingService: SignalingService,
     private iceServers: RTCIceServer[] = createDefaultIceServers(),
+    /** A screen share sends a captured screen with its own quality levels instead of the camera. */
+    private videoSource: 'camera' | 'screen' = 'camera',
   ) {
+    this.videoQualityController = new SenderQualityController(
+      videoSource === 'screen' ? SCREEN_LEVELS : CAMERA_LEVELS,
+      () => this.localSender('video', this.localStream?.getVideoTracks()[0]),
+      () => this.localStream?.getVideoTracks()[0],
+      (height) => this.onVideoLevelChange?.(height),
+    );
     this.setupSignalingHandlers();
+  }
+
+  /** Sends media captured elsewhere, such as a screen, instead of opening the camera and microphone. */
+  useLocalStream(stream: MediaStream, quality: VideoQuality): void {
+    this.localStream = stream;
+    this.videoQuality = quality;
   }
 
   private setupSignalingHandlers(): void {
@@ -158,12 +187,8 @@ export class WebRTCServiceSFU {
         autoGainControl: true,
       };
 
-      // Optimized for multi-party: 640x360 @ 15fps (~300-500 Kbps per stream)
-      const videoConstraints: MediaTrackConstraints = {
-        width: { ideal: 640, max: 640 },
-        height: { ideal: 360, max: 360 },
-        frameRate: { ideal: 15, max: 15 },
-      };
+      this.videoQuality = deviceConstraints?.videoQuality ?? 'auto';
+      const videoConstraints = captureConstraints(CAMERA_LEVELS, this.videoQuality);
 
       // Apply device ID constraints if provided
       if (deviceConstraints?.audioDeviceId) {
@@ -321,6 +346,8 @@ export class WebRTCServiceSFU {
 
     await this.peerConnection.setRemoteDescription(answerDescription);
     console.log('[WebRTCServiceSFU] Remote description set');
+    // Encodings exist once the offer is answered, so the chosen quality starts now.
+    void this.videoQualityController.setQuality(this.videoQuality);
     await this.flushPendingRemoteIceCandidates();
   }
 
@@ -396,6 +423,82 @@ export class WebRTCServiceSFU {
 
   getPeerConnection(): RTCPeerConnection | null {
     return this.peerConnection;
+  }
+
+  getVideoQuality(): VideoQuality {
+    return this.videoQuality;
+  }
+
+  /** Device currently feeding the local track of this kind. */
+  getActiveDeviceId(kind: 'audio' | 'video'): string | null {
+    const track = kind === 'audio' ? this.localStream?.getAudioTracks()[0] : this.localStream?.getVideoTracks()[0];
+    return track?.getSettings().deviceId ?? null;
+  }
+
+  /**
+   * Swaps the camera or microphone during a call. The outgoing RTP sender keeps its transceiver, so no
+   * renegotiation is needed and the other participants keep receiving on the same stream.
+   */
+  async switchDevice(kind: 'audio' | 'video', deviceId: string): Promise<void> {
+    const stream = this.localStream;
+    if (!stream) throw new Error(i18n.global.t('errors.mediaUnavailable'));
+    const previous = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+    if (previous?.getSettings().deviceId === deviceId) return;
+
+    let replacement: MediaStreamTrack;
+    try {
+      const constraints =
+        kind === 'audio'
+          ? {
+              audio: {
+                deviceId: { exact: deviceId },
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+            }
+          : { video: { ...captureConstraints(CAMERA_LEVELS, this.videoQuality), deviceId: { exact: deviceId } } };
+      replacement = (await navigator.mediaDevices.getUserMedia(constraints)).getTracks()[0]!;
+    } catch (error) {
+      console.error('[WebRTCServiceSFU] Failed to open device:', error);
+      throw new Error(i18n.global.t('errors.mediaAccess', { message: mediaErrorMessage(error) }));
+    }
+
+    // A muted microphone or a camera turned off stays that way on the new device.
+    replacement.enabled = previous?.enabled ?? true;
+    await this.localSender(kind, previous)?.replaceTrack(replacement);
+    if (previous) {
+      stream.removeTrack(previous);
+      previous.stop();
+    }
+    stream.addTrack(replacement);
+    if (kind === 'video') await this.videoQualityController.apply();
+    console.log('[WebRTCServiceSFU] Switched device:', { kind, deviceId });
+  }
+
+  /** Changes the outgoing camera quality; auto keeps adjusting it to the network. */
+  async setVideoQuality(quality: VideoQuality): Promise<void> {
+    this.videoQuality = quality;
+    await this.videoQualityController.setQuality(quality);
+    console.log('[WebRTCServiceSFU] Video quality set:', quality, `${this.videoQualityController.currentHeight()}p`);
+  }
+
+  /** Height the camera currently sends. */
+  getCameraHeight(): number {
+    return this.videoQualityController.currentHeight();
+  }
+
+  /** Each other person receives a copy through the SFU, so auto quality has a lower ceiling in bigger calls. */
+  setAudienceSize(otherPeople: number): void {
+    void this.videoQualityController.setMaxIndex(maxLevelForAudience(otherPeople, this.videoSource));
+  }
+
+  private localSender(kind: 'audio' | 'video', track: MediaStreamTrack | undefined) {
+    // Forwarded media arrives on receive-only transceivers, so only this participant's senders carry a track.
+    const senders = this.peerConnection?.getSenders() ?? [];
+    return (
+      senders.find((sender) => track && sender.track === track) ?? senders.find((sender) => sender.track?.kind === kind)
+    );
   }
 
   async getInboundAudioLevels(): Promise<Map<string, number>> {
@@ -511,6 +614,7 @@ export class WebRTCServiceSFU {
 
   cleanup(): void {
     console.log('[WebRTCServiceSFU] Cleaning up resources');
+    this.videoQualityController.stop();
 
     // Stop all local tracks
     this.localStream?.getTracks().forEach((track) => track.stop());

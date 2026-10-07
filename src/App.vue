@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { useMachine } from '@xstate/vue';
-import { computed, onMounted, onUnmounted, provide, watch } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
 import TheNavbar from '@/components/layout/TheNavbar.vue';
 import { Toaster } from '@/components/ui/toast';
 import { dismissToast, toast } from '@/components/ui/toast/store';
+import { type IncomingCall, incomingCallsKey } from '@/composables/useIncomingCalls';
 import { i18n } from '@/i18n';
 import { showSystemNotification } from '@/services/notifications';
 import {
@@ -62,7 +63,11 @@ let notificationRefreshPending = false;
 let incomingCallRetryTimer: number | undefined;
 let incomingCallRetryAttempts = 0;
 
+// Ringing calls, shown by the dashboard's Calls header.
+const incomingCalls = ref<IncomingCall[]>([]);
+
 function resolveIncomingCall(callId: string) {
+  incomingCalls.value = incomingCalls.value.filter((call) => call.id !== callId);
   window.dispatchEvent(new CustomEvent<string>('openmeet:incoming-call-resolved', { detail: callId }));
 }
 
@@ -130,7 +135,21 @@ async function declineCallSession(callId: string) {
   }
 }
 
+provide(incomingCallsKey, {
+  calls: incomingCalls,
+  accept: (incoming) => (incoming.kind === 'invitation' ? acceptCall(incoming.call) : acceptCallSession(incoming.call)),
+  decline: (incoming) =>
+    incoming.kind === 'invitation' ? declineCall(incoming.call.id) : declineCallSession(incoming.call.id),
+});
+
+// The desktop dashboard rings in its Calls header, so a toast there would repeat it.
+function ringsInWorkspace() {
+  return router.currentRoute.value.name === 'dashboard' && window.matchMedia('(min-width: 1024px)').matches;
+}
+
 function showIncomingCall(call: CallInvitation) {
+  scheduleCallExpiry(call.id, call.expiresAt);
+  if (ringsInWorkspace()) return;
   const description = call.caller
     ? i18n.global.t('dashboard.isCalling', { name: call.caller.name })
     : i18n.global.t('notifications.incomingCallBody');
@@ -142,10 +161,11 @@ function showIncomingCall(call: CallInvitation) {
     cancel: { label: i18n.global.t('dashboard.decline'), onClick: () => void declineCall(call.id) },
   });
   incomingCallToasts.set(call.id, toastId);
-  scheduleCallExpiry(call.id, call.expiresAt);
 }
 
 function showIncomingCallSession(call: CallSessionNotification) {
+  scheduleCallExpiry(call.id, call.expiresAt);
+  if (ringsInWorkspace()) return;
   const toastId = toast({
     title: i18n.global.t('notifications.incomingCallTitle'),
     description: i18n.global.t('notifications.incomingCallBody'),
@@ -154,7 +174,6 @@ function showIncomingCallSession(call: CallSessionNotification) {
     cancel: { label: i18n.global.t('dashboard.decline'), onClick: () => void declineCallSession(call.id) },
   });
   incomingCallToasts.set(call.id, toastId);
-  scheduleCallExpiry(call.id, call.expiresAt);
 }
 
 function scheduleCallExpiry(callId: string, expiresAt: string) {
@@ -278,6 +297,14 @@ async function pollIncomingCalls() {
       incomingCallExpiryTimers.delete(callId);
     }
 
+    incomingCalls.value = [
+      ...(calls ?? incomingCalls.value.filter((call) => call.kind === 'invitation').map((call) => call.call)).map(
+        (call): IncomingCall => ({ kind: 'invitation', id: call.id, call: call as CallInvitation }),
+      ),
+      ...(callSessions ?? incomingCalls.value.filter((call) => call.kind === 'session').map((call) => call.call)).map(
+        (call): IncomingCall => ({ kind: 'session', id: call.id, call: call as CallSessionNotification }),
+      ),
+    ];
     if (calls) {
       knownIncomingCallIds.clear();
       calls.forEach((call) => knownIncomingCallIds.add(call.id));
@@ -298,6 +325,15 @@ async function pollIncomingCalls() {
   }
 }
 
+function meetingInvitationRoute(notification: UserNotification) {
+  const roomId = notification.data.roomId;
+  return notification.kind === 'meetingInvitation' &&
+    typeof roomId === 'string' &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(roomId)
+    ? `/room/${roomId}`
+    : null;
+}
+
 function notificationCopy(notification: UserNotification) {
   if (notification.kind === 'friendRequest') {
     return {
@@ -310,6 +346,12 @@ function notificationCopy(notification: UserNotification) {
     return {
       title: 'Group invitation',
       description: `${notification.actorName} invited you to join ${groupTitle}.`,
+    };
+  }
+  if (notification.kind === 'meetingInvitation') {
+    return {
+      title: 'Meeting invitation',
+      description: `${notification.actorName} invited you to a meeting.`,
     };
   }
   if (notification.kind === 'friendRemoved') {
@@ -354,11 +396,17 @@ async function pollNotifications() {
       );
       for (const notification of received) {
         const { title, description } = notificationCopy(notification);
-        toast({ title, description, duration: 8_000 });
+        const meetingRoute = meetingInvitationRoute(notification);
+        toast({
+          title,
+          description,
+          duration: meetingRoute ? 30_000 : 8_000,
+          ...(meetingRoute ? { action: { label: 'Join', onClick: () => void router.push(meetingRoute) } } : {}),
+        });
         showSystemNotification(
           title,
           { body: description, icon: '/favicon.svg', tag: `openmeet-${notification.id}` },
-          () => router.push('/dashboard'),
+          () => router.push(meetingRoute ?? '/dashboard'),
         );
       }
     }
@@ -409,6 +457,7 @@ function stopAuthenticatedPolling() {
   knownIncomingCallIds.clear();
   knownIncomingCallSessionIds.clear();
   knownNotificationIds.clear();
+  incomingCalls.value = [];
   incomingCallRefreshPending = false;
   notificationRefreshPending = false;
   for (const notification of incomingCallNotifications.values()) notification.close();

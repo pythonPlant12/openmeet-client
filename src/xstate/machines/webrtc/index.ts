@@ -1,6 +1,7 @@
 import { assign, setup } from 'xstate';
 
 import { i18n } from '@/i18n';
+import type { SignalingChatReaction } from '@/services/signaling';
 import type { DeviceConstraints } from '@/services/webrtc-sfu';
 
 import { clearServices, getServices, getSignalingService, initMediaActor, joinRoomActor } from './actors';
@@ -16,11 +17,13 @@ const initialContext: SFUContext = {
   localParticipantId: null,
   localParticipantName: '',
   roomId: null,
+  roomPassword: null,
   connectionState: null,
   iceConnectionState: null,
   connectionQuality: 'good',
   connectionQualityReason: null,
   packetLossRatio: 0,
+  isReconnecting: false,
   streamOwnerMap: new Map(),
   chatMessages: [],
   hasLoadedChatHistory: false,
@@ -48,7 +51,8 @@ export const webrtcMachine = setup({
     }),
 
     setRoomId: assign({
-      roomId: (_, params: { roomId: string }) => params.roomId,
+      roomId: (_, params: { roomId: string; password?: string }) => params.roomId,
+      roomPassword: (_, params: { roomId: string; password?: string }) => params.password ?? null,
     }),
 
     setLocalParticipant: assign({
@@ -68,7 +72,10 @@ export const webrtcMachine = setup({
     }),
 
     addRemoteParticipant: assign({
-      participants: ({ context }, params: { participantId: string; participantName: string }) => {
+      participants: (
+        { context },
+        params: { participantId: string; participantName: string; screenShareOf?: string | null },
+      ) => {
         const newParticipants = new Map(context.participants);
         newParticipants.set(params.participantId, {
           id: params.participantId,
@@ -77,6 +84,7 @@ export const webrtcMachine = setup({
           isLocal: false,
           audioEnabled: true,
           videoEnabled: true,
+          screenShareOf: params.screenShareOf ?? null,
         });
         return newParticipants;
       },
@@ -181,15 +189,23 @@ export const webrtcMachine = setup({
         params.packetLossRatio,
     }),
 
+    setReconnecting: assign({
+      isReconnecting: (_, params: { reconnecting: boolean }) => params.reconnecting,
+    }),
+
     setError: assign({
       error: (_, params: { error: string }) => params.error,
     }),
 
     addChatMessage: assign({
-      chatMessages: (
-        { context },
-        params: { participantId: string; participantName: string; message: string; timestamp: number },
-      ) => [...context.chatMessages, params],
+      chatMessages: ({ context }, params: ChatMessage) => [...context.chatMessages, params],
+    }),
+
+    setChatReactions: assign({
+      chatMessages: ({ context }, params: { messageId: number; reactions: SignalingChatReaction[] }) =>
+        context.chatMessages.map((message) =>
+          message.id === params.messageId ? { ...message, reactions: params.reactions } : message,
+        ),
     }),
 
     setChatHistory: assign({
@@ -197,8 +213,12 @@ export const webrtcMachine = setup({
       hasLoadedChatHistory: true,
     }),
 
-    sendChatMessage: (_, params: { message: string }) => {
-      getSignalingService()?.sendChatMessage(params.message);
+    sendChatMessage: (_, params: { message: string; replyToId?: number }) => {
+      getSignalingService()?.sendChatMessage(params.message, params.replyToId);
+    },
+
+    sendChatReaction: (_, params: { messageId: number; emoji: string }) => {
+      getSignalingService()?.sendChatReaction(params.messageId, params.emoji);
     },
 
     toggleLocalAudio: assign({
@@ -272,11 +292,13 @@ export const webrtcMachine = setup({
       localParticipantId: null,
       localParticipantName: '',
       roomId: null,
+      roomPassword: null,
       connectionState: null,
       iceConnectionState: null,
       connectionQuality: 'good',
       connectionQualityReason: null,
       packetLossRatio: 0,
+      isReconnecting: false,
       streamOwnerMap: () => new Map<string, string>(),
       chatMessages: () => [] as ChatMessage[],
       hasLoadedChatHistory: false,
@@ -343,7 +365,7 @@ export const webrtcMachine = setup({
         JOIN_ROOM: {
           target: 'connected',
           actions: [
-            { type: 'setRoomId', params: ({ event }) => ({ roomId: event.roomId }) },
+            { type: 'setRoomId', params: ({ event }) => ({ roomId: event.roomId, password: event.password }) },
             { type: 'setParticipantName', params: ({ event }) => ({ name: event.participantName }) },
           ],
         },
@@ -363,6 +385,7 @@ export const webrtcMachine = setup({
         input: ({ context }) => ({
           roomId: context.roomId!,
           participantName: context.localParticipantName,
+          password: context.roomPassword,
           localStream: context.localStream!,
         }),
       },
@@ -370,6 +393,7 @@ export const webrtcMachine = setup({
       on: {
         SIGNALING_LOST: {
           actions: [
+            { type: 'setReconnecting', params: { reconnecting: true } },
             {
               type: 'setConnectionQuality',
               params: () => ({
@@ -398,7 +422,11 @@ export const webrtcMachine = setup({
           actions: [
             {
               type: 'addRemoteParticipant',
-              params: ({ event }) => ({ participantId: event.participantId, participantName: event.participantName }),
+              params: ({ event }) => ({
+                participantId: event.participantId,
+                participantName: event.participantName,
+                screenShareOf: event.screenShareOf,
+              }),
             },
           ],
         },
@@ -516,10 +544,13 @@ export const webrtcMachine = setup({
             {
               type: 'addChatMessage',
               params: ({ event }) => ({
+                id: event.id,
                 participantId: event.participantId,
                 participantName: event.participantName,
                 message: event.message,
                 timestamp: event.timestamp,
+                replyTo: event.replyTo ?? null,
+                reactions: event.reactions ?? [],
               }),
             },
           ],
@@ -532,11 +563,27 @@ export const webrtcMachine = setup({
             },
           ],
         },
+        CHAT_REACTIONS_CHANGED: {
+          actions: [
+            {
+              type: 'setChatReactions',
+              params: ({ event }) => ({ messageId: event.messageId, reactions: event.reactions }),
+            },
+          ],
+        },
         SEND_CHAT_MESSAGE: {
           actions: [
             {
               type: 'sendChatMessage',
-              params: ({ event }) => ({ message: event.message }),
+              params: ({ event }) => ({ message: event.message, replyToId: event.replyToId }),
+            },
+          ],
+        },
+        SEND_CHAT_REACTION: {
+          actions: [
+            {
+              type: 'sendChatReaction',
+              params: ({ event }) => ({ messageId: event.messageId, emoji: event.emoji }),
             },
           ],
         },
@@ -606,6 +653,7 @@ export const webrtcMachine = setup({
                 guard: ({ event }) => event.state === 'connected',
                 actions: [
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  { type: 'setReconnecting', params: { reconnecting: false } },
                   {
                     type: 'setConnectionQuality',
                     params: () => ({ quality: 'good', reason: null, packetLossRatio: 0 }),
@@ -616,6 +664,7 @@ export const webrtcMachine = setup({
                 guard: ({ event }) => event.state === 'disconnected',
                 actions: [
                   { type: 'setConnectionState', params: ({ event }) => ({ state: event.state }) },
+                  { type: 'setReconnecting', params: { reconnecting: true } },
                   {
                     type: 'setConnectionQuality',
                     params: () => ({

@@ -1,22 +1,31 @@
 <script setup lang="ts">
+import { useIntervalFn } from '@vueuse/core';
 import { AlertTriangle, ChevronDown, Users } from 'lucide-vue-next';
+import { AnimatePresence, motion } from 'motion-v';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
 import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
-import JoinMeetingDialog from '@/components/meeting-page/JoinMeetingDialog.vue';
+import JoinMeetingDialog, { type JoinSettings } from '@/components/meeting-page/JoinMeetingDialog.vue';
 import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
+import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
 import { useAuth } from '@/composables/useAuth';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
+import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
+import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
+import { layoutAfterTileClick } from '@/lib/meeting-layout';
+import { loadVideoQuality } from '@/lib/video-quality';
 import { showSystemNotification } from '@/services/notifications';
-import { socialApi } from '@/services/social-api';
+import { type MeetingRoomAccess, SocialApiError, type UserStatus, socialApi } from '@/services/social-api';
+import { getServices } from '@/xstate/machines/webrtc/actors';
+import type { Participant } from '@/xstate/machines/webrtc/types';
 
 // Lock viewport to prevent scrolling and zooming on mobile
 useFullscreenLock();
@@ -45,6 +54,7 @@ const {
   connectionQuality,
   connectionQualityReason,
   packetLossRatio,
+  isReconnecting,
   state,
   error: webrtcError,
   chatMessages,
@@ -55,12 +65,38 @@ const {
   toggleParticipantAudio,
   toggleParticipantVideo,
   sendChatMessage,
+  sendChatReaction,
   retry,
 } = useWebrtc();
 
 const { activeSpeakerId, resumeAudioAnalysis } = useActiveSpeaker(participantsArray);
-const participantCount = computed(() => participantsArray.value.length);
-const hasPoorConnection = computed(() => connectionQuality.value === 'poor' && state.value === 'inCall');
+const screenShare = useScreenShare();
+// Screen shares join as their own participants. Your own share is shown from the local capture, since the
+// SFU never sends it back, and every share is labeled with its presenter's name.
+const meetingParticipants = computed<Participant[]>(() => {
+  const byId = new Map(participantsArray.value.map((participant) => [participant.id, participant]));
+  return participantsArray.value.map((participant) => {
+    if (!participant.screenShareOf) return participant;
+    const presenter = byId.get(participant.screenShareOf);
+    const name = t('meeting.screenShare.label', { name: presenter?.name ?? participant.name });
+    const isOwn = participant.screenShareOf === localParticipantId.value;
+    return isOwn && screenShare.stream.value
+      ? { ...participant, name, isLocal: true, stream: screenShare.stream.value }
+      : { ...participant, name };
+  });
+});
+const participantCount = computed(
+  () => participantsArray.value.filter((participant) => !participant.screenShareOf).length,
+);
+// One banner at a time: joining, then reconnecting, then a poor-quality warning.
+const connectionBanner = computed<'joining' | 'reconnecting' | null>(() => {
+  if (state.value === 'joiningRoom') return 'joining';
+  if (isReconnecting.value && state.value === 'inCall') return 'reconnecting';
+  return null;
+});
+const hasPoorConnection = computed(
+  () => connectionQuality.value === 'poor' && state.value === 'inCall' && !connectionBanner.value,
+);
 const packetLossPercent = computed(() => Math.round((packetLossRatio.value || 0) * 100));
 const statusKeys: Record<string, string> = {
   idle: 'meeting.status.idle',
@@ -202,6 +238,88 @@ watch(
 
 const hasJoined = computed(() => !!participantName.value && state.value !== 'idle');
 
+// A new screen share from someone else takes the stage, unless the viewer pinned someone themselves.
+// When it ends, the layout goes back to how it was.
+const autoPinnedScreenId = ref<string | null>(null);
+watch(
+  () =>
+    meetingParticipants.value
+      .filter((participant) => participant.screenShareOf && !participant.isLocal)
+      .map((participant) => participant.id),
+  (screenIds, previousIds = []) => {
+    const added = screenIds.find((id) => !previousIds.includes(id));
+    if (added && (!pinnedParticipantId.value || pinnedParticipantId.value === autoPinnedScreenId.value)) {
+      viewMode.value = 'speaker';
+      pinnedParticipantId.value = added;
+      autoPinnedScreenId.value = added;
+    }
+    if (autoPinnedScreenId.value && !screenIds.includes(autoPinnedScreenId.value)) {
+      if (!pinnedParticipantId.value || pinnedParticipantId.value === autoPinnedScreenId.value) {
+        pinnedParticipantId.value = null;
+        viewMode.value = 'grid';
+      }
+      autoPinnedScreenId.value = null;
+    }
+  },
+);
+
+// Each other person gets their own copy of your video from the SFU, so auto quality aims lower as the
+// meeting grows.
+watch(
+  [participantCount, () => state.value],
+  ([count]) => {
+    const otherPeople = Math.max(count - 1, 0);
+    getServices().webrtcService?.setAudienceSize(otherPeople);
+    screenShare.setAudienceSize(otherPeople);
+  },
+  { immediate: true },
+);
+
+// A rejoin gives this tab a new participant ID, which the old screen share no longer belongs to.
+watch(localParticipantId, (current, previous) => {
+  if (previous && current !== previous) screenShare.stop();
+});
+
+async function handleStartScreenShare() {
+  if (!localParticipantId.value) return;
+  await screenShare.start({
+    roomId: sfuRoomId.value ?? meetingId.value,
+    presenterId: localParticipantId.value,
+    presenterName: participantName.value,
+    password: joinPassword,
+  });
+  // The share joins as a participant, so the audience size it starts with is set now.
+  screenShare.setAudienceSize(Math.max(participantCount.value - 1, 0));
+}
+
+// Statuses of registered participants, keyed by participant ID. The server records joins a moment
+// after they happen, so a roster change is followed by a short delay before asking again.
+const PARTICIPANT_STATUS_POLL_MS = 20_000;
+const PARTICIPANT_STATUS_SETTLE_MS = 1_500;
+const participantStatuses = ref<Record<string, UserStatus>>({});
+let participantStatusTimer: number | undefined;
+
+async function refreshParticipantStatuses() {
+  const roomId = sfuRoomId.value ?? meetingId.value;
+  if (!isAuthenticated.value || state.value !== 'inCall' || !roomId) return;
+  try {
+    const presence = await socialApi.listMeetingRoomPresence(accessToken.value ?? '', roomId);
+    participantStatuses.value = Object.fromEntries(presence.map((entry) => [entry.participantId, entry.status]));
+  } catch (error) {
+    // Not recorded yet right after joining; the next roster change or poll tries again.
+    if (!(error instanceof SocialApiError && error.status === 404)) {
+      console.error('[MeetingRoom] Failed to load participant statuses:', error);
+    }
+  }
+}
+
+useIntervalFn(() => void refreshParticipantStatuses(), PARTICIPANT_STATUS_POLL_MS);
+
+watch([() => participantsArray.value.map((participant) => participant.id).join(','), () => state.value], () => {
+  window.clearTimeout(participantStatusTimer);
+  participantStatusTimer = window.setTimeout(() => void refreshParticipantStatuses(), PARTICIPANT_STATUS_SETTLE_MS);
+});
+
 // Track if we need to send initial media state after joining
 const pendingInitialMediaState = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
 const hasRecordedMeeting = ref(false);
@@ -235,6 +353,16 @@ watch(
   (newState) => {
     if (newState === 'error' && webrtcError.value) {
       console.error('[MeetingRoom] WebRTC error:', webrtcError.value.message);
+
+      // The room refused the join (wrong password, access changed): ask again in the join dialog.
+      if (MEETING_ACCESS_ERRORS.includes(webrtcError.value.message)) {
+        accessError.value = webrtcError.value.message;
+        joinPassword = null;
+        void loadMeetingAccess();
+        showJoinDialog.value = true;
+        isJoining.value = false;
+        return;
+      }
 
       if (localParticipantId.value || connectionState.value || iceConnectionState.value) {
         showConnectionError.value = true;
@@ -275,7 +403,7 @@ watch(
       }
 
       if (shouldJoinRoom.value && pendingRoomId.value) {
-        joinRoom(pendingRoomId.value, participantName.value);
+        joinRoom(pendingRoomId.value, participantName.value, joinPassword ?? undefined);
         shouldJoinRoom.value = false;
       }
     }
@@ -338,6 +466,8 @@ const initializeMeeting = async () => {
     }
   }
 
+  if (!isConversationCall.value) void loadMeetingAccess();
+
   const storedName = sessionStorage.getItem('participantName');
 
   // Always show the join dialog for media settings
@@ -370,6 +500,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  screenShare.stop();
+  window.clearTimeout(participantStatusTimer);
   window.removeEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: false }));
   endCall();
@@ -379,16 +511,53 @@ function closeMeetingChat() {
   isChatOpen.value = false;
 }
 
-interface JoinSettings {
-  name: string;
-  audioEnabled: boolean;
-  videoEnabled: boolean;
-  audioDeviceId: string | null;
-  videoDeviceId: string | null;
+// Room access: who may join a hosted meeting, checked before media starts so a refusal keeps the dialog.
+const meetingAccess = ref<MeetingRoomAccess | null>(null);
+const accessError = ref('');
+const isJoining = ref(false);
+const isInviteOpen = ref(false);
+let joinPassword: string | null = null;
+const inviteMode = computed<'enabled' | 'signedOut' | 'hidden'>(() => {
+  if (isConversationCall.value) return 'hidden';
+  return isAuthenticated.value ? 'enabled' : 'signedOut';
+});
+const meetingLink = computed(() => `${window.location.origin}/room/${meetingId.value}`);
+
+async function loadMeetingAccess() {
+  try {
+    meetingAccess.value = await socialApi.getMeetingRoomAccess(meetingId.value);
+  } catch (error) {
+    // The server enforces access on join anyway; without the check the dialog simply asks nothing extra.
+    console.error('[MeetingRoom] Failed to load meeting access:', error);
+  }
+}
+
+async function prepareAccess(settings: JoinSettings) {
+  const token = accessToken.value ?? '';
+  if (settings.accessSettings && meetingAccess.value?.isOwner) {
+    meetingAccess.value = await socialApi.updateMeetingRoom(token, meetingId.value, settings.accessSettings);
+  }
+  if (settings.password !== undefined) {
+    await socialApi.checkMeetingRoomPassword(meetingId.value, settings.password);
+    joinPassword = settings.password;
+  }
 }
 
 const handleJoinMeeting = async (settings: JoinSettings) => {
   void resumeAudioAnalysis().catch(() => undefined);
+  accessError.value = '';
+  if (!isConversationCall.value && (settings.password !== undefined || settings.accessSettings)) {
+    isJoining.value = true;
+    try {
+      await prepareAccess(settings);
+    } catch (error) {
+      accessError.value = error instanceof SocialApiError ? error.message : t('meeting.join.accessFailed');
+      isJoining.value = false;
+      return;
+    }
+    isJoining.value = false;
+  }
+
   participantName.value = settings.name;
   showJoinDialog.value = false;
 
@@ -412,6 +581,7 @@ const handleJoinMeeting = async (settings: JoinSettings) => {
   initMedia(participantName.value, {
     audioDeviceId: settings.audioDeviceId,
     videoDeviceId: settings.videoDeviceId,
+    videoQuality: loadVideoQuality(),
   });
 };
 
@@ -470,21 +640,38 @@ const handleSetViewMode = (mode: 'grid' | 'speaker') => {
 };
 
 const handleTogglePin = (participantId: string) => {
-  if (viewMode.value !== 'speaker') return;
-  pinnedParticipantId.value = pinnedParticipantId.value === participantId ? null : participantId;
+  const layout = layoutAfterTileClick(
+    { viewMode: viewMode.value, pinnedParticipantId: pinnedParticipantId.value },
+    participantId,
+  );
+  viewMode.value = layout.viewMode;
+  pinnedParticipantId.value = layout.pinnedParticipantId;
 };
 
-const handleSendMessage = (message: string) => {
-  sendChatMessage(message);
+// A device switch swaps tracks without the browser's track events, so availability is read again.
+function refreshMediaAvailability() {
+  const stream = localStream.value;
+  audioAvailable.value = stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false;
+  videoAvailable.value = stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
+}
+
+const handleSendMessage = (message: string, replyToId?: number) => {
+  sendChatMessage(message, replyToId);
+};
+
+const handleChatReaction = (messageId: number, emoji: string) => {
+  sendChatReaction(messageId, emoji);
 };
 
 const handleEndCall = () => {
+  screenShare.stop();
   endCall();
   router.push(meetingExitRoute.value);
 };
 
 const handleGoHome = () => {
   showConnectionError.value = false;
+  screenShare.stop();
   endCall();
   router.push('/');
 };
@@ -518,11 +705,14 @@ const handleReconnect = () => {
       :meeting-id="meetingId"
       :initial-name="initialDialogName"
       :show-name-input="showNameInput"
+      :access="isConversationCall ? null : meetingAccess"
+      :access-error="accessError"
+      :joining="isJoining"
       @join="handleJoinMeeting"
       @cancel="handleCancelJoin"
     />
 
-    <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full bg-white text-[#102F35] flex flex-col">
+    <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-[#102F35] flex flex-col">
       <!-- Participant Count Badge -->
       <div
         class="fixed left-7 top-[calc(84px+0.75rem)] z-50 flex items-center gap-2 rounded-full bg-[#0B7A75] px-4 py-2 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
@@ -540,7 +730,7 @@ const handleReconnect = () => {
           :is-chat-open="isChatOpen"
           :is-muted="isMuted"
           :is-video-off="isVideoOff"
-          :participants="participantsArray"
+          :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
           :video-available="videoAvailable"
           :view-mode="viewMode"
@@ -552,6 +742,28 @@ const handleReconnect = () => {
           @toggle-video="handleToggleVideo"
         />
       </div>
+
+      <AnimatePresence>
+        <motion.div
+          v-if="connectionBanner"
+          :key="connectionBanner"
+          data-testid="connection-banner"
+          :data-banner="connectionBanner"
+          role="status"
+          :initial="{ opacity: 0, y: -8 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :exit="{ opacity: 0, y: -8 }"
+          class="fixed left-1/2 top-[calc(84px+0.75rem)] z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-full border px-4 py-2 text-sm font-semibold shadow-lg sm:top-[calc(84px+1.25rem)]"
+          :class="
+            connectionBanner === 'reconnecting'
+              ? 'border-[#F2B9AE] bg-[#FDE9E4] text-[#7A2E22]'
+              : 'border-[#D8E7E3] bg-white text-[#27595D]'
+          "
+        >
+          <LoadingRipple size="sm" :class="connectionBanner === 'reconnecting' ? 'text-[#D95E49]' : 'text-[#0B7A75]'" />
+          {{ t(connectionBanner === 'reconnecting' ? 'meeting.reconnecting' : 'meeting.joiningCall') }}
+        </motion.div>
+      </AnimatePresence>
 
       <button
         v-if="hasPoorConnection"
@@ -645,7 +857,7 @@ const handleReconnect = () => {
           :is-chat-open="isChatOpen"
           :is-muted="isMuted"
           :is-video-off="isVideoOff"
-          :participants="participantsArray"
+          :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
           :video-available="videoAvailable"
           :view-mode="viewMode"
@@ -658,8 +870,9 @@ const handleReconnect = () => {
         >
           <VideoGrid
             :active-speaker-id="activeSpeakerId"
-            :participants="participantsArray"
+            :participants="meetingParticipants"
             :pinned-participant-id="pinnedParticipantId"
+            :participant-statuses="participantStatuses"
             :view-mode="viewMode"
             @toggle-pin="handleTogglePin"
           />
@@ -674,22 +887,39 @@ const handleReconnect = () => {
           :is-chat-open="isChatOpen"
           :unread-count="unreadCount"
           :video-available="videoAvailable"
+          :invite-mode="inviteMode"
+          :can-present="screenShare.isSupported"
+          @start-screen-share="handleStartScreenShare"
+          @stop-screen-share="screenShare.stop()"
           @toggle-mute="handleToggleMute"
           @toggle-video="handleToggleVideo"
           @toggle-stats="handleToggleStats"
           @toggle-chat="handleToggleChat"
           @end-call="handleEndCall"
+          @invite="isInviteOpen = true"
+          @media-changed="refreshMediaAvailability"
         />
       </div>
 
       <!-- Chat Panel -->
       <ChatPanel
         v-model:open="isChatOpen"
+        :room-id="sfuRoomId ?? meetingId"
         :messages="chatMessages"
         :local-participant-id="localParticipantId"
         @send="handleSendMessage"
+        @react="handleChatReaction"
       />
     </div>
+
+    <MeetingInviteDialog
+      v-if="inviteMode === 'enabled'"
+      v-model:open="isInviteOpen"
+      :room-id="meetingId"
+      :meeting-link="meetingLink"
+      :access="meetingAccess"
+      @access-updated="meetingAccess = $event"
+    />
 
     <!-- Connection Error Dialog -->
     <ConnectionErrorDialog

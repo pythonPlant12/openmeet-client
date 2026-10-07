@@ -73,6 +73,25 @@ afterEach(() => {
 });
 
 describe('SwipeableRow', () => {
+  it('stops at the maximum distance in both directions', async () => {
+    const wrapper = mountRow({ fullSwipeTrailing: true, fullSwipeDistance: 56, maxDistance: 84 });
+    const root = wrapper.get('[data-swipeable-row]').element;
+
+    root.dispatchEvent(pointer('pointerdown', 0));
+    root.dispatchEvent(pointer('pointermove', 20));
+    root.dispatchEvent(pointer('pointermove', 400));
+    await wrapper.vm.$nextTick();
+    expect(contentOffset(wrapper)).toBe('translate3d(84px, 0, 0)');
+    root.dispatchEvent(pointer('pointermove', 80));
+    await wrapper.vm.$nextTick();
+    // Past the full-swipe distance the row resists: 56 + (80 - 56) * 0.25.
+    expect(contentOffset(wrapper)).toBe('translate3d(62px, 0, 0)');
+    root.dispatchEvent(pointer('pointermove', -400));
+    await wrapper.vm.$nextTick();
+    expect(contentOffset(wrapper)).toBe('translate3d(-84px, 0, 0)');
+    root.dispatchEvent(pointer('pointerup', -400));
+  });
+
   it('hides closed action panes completely, so no sliver shows at the row edges', () => {
     const wrapper = mountRow();
 

@@ -1,6 +1,8 @@
 import type { GroupAccessPolicy, GroupMember, UpdateGroupRequest } from '@/services/social-api';
 
 export type SidebarPanel = 'messages' | 'friends';
+/** The Calls list docks at the bottom of the sidebar: only its header, half the sidebar, or all of it. */
+export type CallsPanel = 'collapsed' | 'middle' | 'top';
 
 const ROLE_ORDER: Record<string, number> = { creator: 0, admin: 1, member: 2 };
 
@@ -87,5 +89,17 @@ export function sidebarPanelAfterDrag(
   if (panel === 'messages' && movedUp && current === 'messages') return null;
   if (panel === 'friends' && movedUp) return 'friends';
   if (panel === 'friends' && movedDown) return current === 'friends' ? null : 'messages';
+  return current;
+}
+
+const CALLS_PANEL_STOPS: CallsPanel[] = ['collapsed', 'middle', 'top'];
+
+/** Dragging the Calls header up raises the list one stop; dragging it down lowers it one stop. */
+export function callsPanelAfterDrag(current: CallsPanel, offsetY: number, velocityY: number): CallsPanel {
+  const movedUp = offsetY < -48 || velocityY < -400;
+  const movedDown = offsetY > 48 || velocityY > 400;
+  const index = CALLS_PANEL_STOPS.indexOf(current);
+  if (movedUp) return CALLS_PANEL_STOPS[Math.min(index + 1, CALLS_PANEL_STOPS.length - 1)]!;
+  if (movedDown) return CALLS_PANEL_STOPS[Math.max(index - 1, 0)]!;
   return current;
 }

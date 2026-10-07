@@ -1,3 +1,4 @@
+import type { SignalingChatMessage, SignalingChatReaction } from '@/services/signaling';
 import type { ConnectionQualityStats, DeviceConstraints } from '@/services/webrtc-sfu';
 
 export type ConnectionQuality = 'good' | 'poor';
@@ -9,14 +10,11 @@ export interface Participant {
   stream: MediaStream | null;
   audioEnabled: boolean;
   videoEnabled: boolean;
+  /** Set when this participant is someone's screen share rather than a person. */
+  screenShareOf?: string | null;
 }
 
-export interface ChatMessage {
-  participantId: string;
-  participantName: string;
-  message: string;
-  timestamp: number;
-}
+export type ChatMessage = SignalingChatMessage;
 
 export interface SFUContext {
   // Media
@@ -29,6 +27,8 @@ export interface SFUContext {
 
   // Room
   roomId: string | null;
+  /** Password of a password-protected room, kept so a reconnect can rejoin. */
+  roomPassword: string | null;
 
   // Connection state
   connectionState: RTCPeerConnectionState | null;
@@ -36,6 +36,8 @@ export interface SFUContext {
   connectionQuality: ConnectionQuality;
   connectionQualityReason: string | null;
   packetLossRatio: number;
+  /** The call dropped and is reconnecting: signaling was lost or the media connection disconnected. */
+  isReconnecting: boolean;
 
   // Internal tracking
   streamOwnerMap: Map<string, string>;
@@ -51,28 +53,24 @@ export interface SFUContext {
 // User-initiated events
 export type SFUUserEvents =
   | { type: 'INIT_MEDIA'; participantName?: string; deviceConstraints?: DeviceConstraints }
-  | { type: 'JOIN_ROOM'; roomId: string; participantName?: string }
+  | { type: 'JOIN_ROOM'; roomId: string; participantName?: string; password?: string }
   | { type: 'LEAVE_ROOM' }
   | { type: 'TOGGLE_AUDIO'; participantId: string; enabled: boolean }
   | { type: 'TOGGLE_VIDEO'; participantId: string; enabled: boolean }
-  | { type: 'SEND_CHAT_MESSAGE'; message: string }
+  | { type: 'SEND_CHAT_MESSAGE'; message: string; replyToId?: number }
+  | { type: 'SEND_CHAT_REACTION'; messageId: number; emoji: string }
   | { type: 'RETRY' };
 
 // Signaling events (from server via WebSocket)
 export type SFUSignalingEvents =
   | { type: 'JOINED'; participantId: string; participantName: string }
-  | { type: 'PARTICIPANT_JOINED'; participantId: string; participantName: string }
+  | { type: 'PARTICIPANT_JOINED'; participantId: string; participantName: string; screenShareOf?: string | null }
   | { type: 'PARTICIPANT_LEFT'; participantId: string }
   | { type: 'STREAM_OWNER'; streamId: string; participantId: string; participantName: string }
   | { type: 'MEDIA_STATE_CHANGED'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
-  | {
-      type: 'CHAT_MESSAGE_RECEIVED';
-      participantId: string;
-      participantName: string;
-      message: string;
-      timestamp: number;
-    }
+  | ({ type: 'CHAT_MESSAGE_RECEIVED' } & ChatMessage)
   | { type: 'CHAT_HISTORY_RECEIVED'; messages: ChatMessage[] }
+  | { type: 'CHAT_REACTIONS_CHANGED'; messageId: number; reactions: SignalingChatReaction[] }
   | { type: 'SERVER_ERROR'; message: string };
 
 // WebRTC events (from RTCPeerConnection)
@@ -104,5 +102,6 @@ export interface InitMediaInput {
 export interface JoinRoomInput {
   roomId: string;
   participantName: string;
+  password: string | null;
   localStream: MediaStream;
 }

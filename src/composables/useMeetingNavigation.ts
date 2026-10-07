@@ -1,5 +1,8 @@
 import { useRouter } from 'vue-router';
 
+import { hasStoredSession, socialApi } from '@/services/social-api';
+import { cookieUtils } from '@/utils';
+
 const MEETING_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 export function getMeetingId(reference: string): string | null {
@@ -31,8 +34,19 @@ export function getMeetingId(reference: string): string | null {
 export function useMeetingNavigation() {
   const router = useRouter();
 
-  const createMeeting = () => {
-    const meetingId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  // Signed-in users host their meeting: the server creates the room so they can choose who may join
+  // before entering. Guests, or a failed request, fall back to an open room with a local ID.
+  const createMeeting = async () => {
+    let meetingId: string | null = null;
+    if (hasStoredSession()) {
+      try {
+        meetingId = (await socialApi.createMeetingRoom(cookieUtils.get('accessToken') ?? '', { accessPolicy: 'open' }))
+          .roomId;
+      } catch (error) {
+        console.error('[useMeetingNavigation] Failed to create a hosted meeting:', error);
+      }
+    }
+    meetingId ??= globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     return router.push({ name: 'meeting', params: { id: meetingId } });
   };
 
