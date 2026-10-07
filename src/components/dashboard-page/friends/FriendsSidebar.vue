@@ -100,11 +100,11 @@ onBeforeUnmount(clearLongPress);
 </script>
 <template>
   <section
-    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] px-4 py-4 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
     :class="expanded ? 'flex-1 opacity-100' : 'basis-20 shrink-0 opacity-100'"
     aria-labelledby="friends-heading"
   >
-    <div class="flex items-center justify-between gap-2 px-2">
+    <div class="flex items-center justify-between gap-3">
       <motion.h2
         id="friends-heading"
         drag="y"
@@ -114,7 +114,7 @@ onBeforeUnmount(clearLongPress);
         role="button"
         tabindex="0"
         :aria-expanded="expanded"
-        class="-my-2 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+        class="-my-4 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
         @drag-end="(event, info) => emit('drag-end', event, info)"
         @click="emit('toggle')"
         @wheel.prevent="emit('wheel', $event)"
@@ -125,7 +125,7 @@ onBeforeUnmount(clearLongPress);
       ><Button
         size="icon"
         variant="ghost"
-        class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
+        class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
         :class="{ 'bg-[#E6F4F1] !text-[#102F35]': searchOpen }"
         :aria-expanded="searchOpen"
         aria-controls="people-search"
