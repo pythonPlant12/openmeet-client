@@ -85,15 +85,15 @@ function initials(name: string) {
   <section
     data-calls-panel
     :data-panel="panel"
-    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] transition-[flex-basis,flex-grow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-    :class="panel === 'top' ? 'flex-1' : panel === 'middle' ? 'shrink-0 basis-[45%]' : 'shrink-0 basis-auto'"
+    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    :class="panel === 'top' ? 'flex-1' : panel === 'middle' ? 'shrink-0 basis-[45%]' : 'shrink-0 basis-20'"
     aria-labelledby="calls-heading"
   >
     <div
       v-if="ringingName"
       data-incoming-call
       role="alert"
-      class="calls-ringing m-2 flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#0B7A75] to-[#2DA58F] py-2 pl-3 pr-2 text-white"
+      class="calls-ringing -mx-1 flex shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#0B7A75] to-[#2DA58F] py-2 pl-3 pr-2 text-white"
     >
       <h2 id="calls-heading" class="sr-only">Calls</h2>
       <!-- The banner takes the header's place, so pressing the caller still opens or closes the list. -->
@@ -139,7 +139,7 @@ function initials(name: string) {
         </button>
       </template>
     </div>
-    <div v-else class="flex items-center justify-between gap-2 p-3 px-5">
+    <div v-else class="flex min-h-8 items-center justify-between gap-2 px-2">
       <motion.h2
         id="calls-heading"
         drag="y"
@@ -149,7 +149,7 @@ function initials(name: string) {
         role="button"
         tabindex="0"
         :aria-expanded="expanded"
-        class="-my-3 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+        class="-my-2 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
         @drag-end="(event, info) => emit('drag-end', event, info)"
         @click="emit('toggle')"
         @wheel.prevent="emit('wheel', $event)"
@@ -159,8 +159,8 @@ function initials(name: string) {
       >
     </div>
     <div
-      class="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
-      :class="expanded ? 'opacity-100' : 'pointer-events-none hidden'"
+      class="mt-1 min-h-0 flex-1 overflow-y-auto transition-opacity duration-300 motion-reduce:transition-none"
+      :class="expanded ? 'opacity-100' : 'pointer-events-none h-0 flex-none opacity-0'"
       :aria-hidden="!expanded"
       data-calls-list
     >

@@ -300,7 +300,7 @@ const selectedGroupAvatarUrl = computed(() =>
 const hasSelectedConversation = computed(() => !!selectedConversation.value || !!pendingDirectFriend.value);
 const contactProfileFriend = computed(() =>
   contactProfile.value
-    ? friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId)
+    ? (friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId) ?? null)
     : null,
 );
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
