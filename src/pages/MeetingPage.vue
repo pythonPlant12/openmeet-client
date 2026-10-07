@@ -16,6 +16,7 @@ import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
 import { useAuth } from '@/composables/useAuth';
+import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
@@ -297,6 +298,17 @@ async function handleStartScreenShare() {
 const PARTICIPANT_STATUS_POLL_MS = 20_000;
 const PARTICIPANT_STATUS_SETTLE_MS = 1_500;
 const participantStatuses = ref<Record<string, UserStatus>>({});
+// Avatar paths of registered participants; the cache turns them into images, since avatars need the token.
+const participantAvatarPaths = ref<Record<string, string>>({});
+const avatarCache = useAvatarCache((path) => socialApi.loadAvatar(accessToken.value ?? '', path));
+const participantAvatars = computed(() =>
+  Object.fromEntries(
+    Object.entries(participantAvatarPaths.value).flatMap(([participantId, path]) => {
+      const url = avatarCache.urls.value[path];
+      return url ? [[participantId, url]] : [];
+    }),
+  ),
+);
 let participantStatusTimer: number | undefined;
 
 async function refreshParticipantStatuses() {
@@ -304,7 +316,13 @@ async function refreshParticipantStatuses() {
   if (!isAuthenticated.value || state.value !== 'inCall' || !roomId) return;
   try {
     const presence = await socialApi.listMeetingRoomPresence(accessToken.value ?? '', roomId);
-    participantStatuses.value = Object.fromEntries(presence.map((entry) => [entry.participantId, entry.status]));
+    participantStatuses.value = Object.fromEntries(
+      presence.flatMap((entry) => (entry.status ? [[entry.participantId, entry.status]] : [])),
+    );
+    participantAvatarPaths.value = Object.fromEntries(
+      presence.flatMap((entry) => (entry.avatarUrl ? [[entry.participantId, entry.avatarUrl]] : [])),
+    );
+    void avatarCache.ensure(Object.values(participantAvatarPaths.value));
   } catch (error) {
     // Not recorded yet right after joining; the next roster change or poll tries again.
     if (!(error instanceof SocialApiError && error.status === 404)) {
@@ -873,6 +891,7 @@ const handleReconnect = () => {
             :participants="meetingParticipants"
             :pinned-participant-id="pinnedParticipantId"
             :participant-statuses="participantStatuses"
+            :participant-avatars="participantAvatars"
             :view-mode="viewMode"
             @toggle-pin="handleTogglePin"
           />

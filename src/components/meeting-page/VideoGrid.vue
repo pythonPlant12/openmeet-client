@@ -16,6 +16,8 @@ const props = defineProps<{
   viewMode: MeetingViewMode;
   /** Statuses of registered participants, by participant ID. Guests have none. */
   participantStatuses?: Record<string, UserStatus>;
+  /** Avatar image URLs of registered participants, keyed by participant ID. */
+  participantAvatars?: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -62,6 +64,7 @@ const secondaryParticipants = computed(() =>
               :key="participant.id"
               :participant="participant"
               :status="participantStatuses?.[participant.id]"
+              :avatar-url="participantAvatars?.[participant.id]"
               :speaking="participants.length > 1 && activeSpeakerId === participant.id"
               size="grid"
               @click="emit('togglePin', participant.id)"
@@ -76,6 +79,7 @@ const secondaryParticipants = computed(() =>
                 v-if="speakerParticipant"
                 :participant="speakerParticipant"
                 :status="participantStatuses?.[speakerParticipant.id]"
+                :avatar-url="participantAvatars?.[speakerParticipant.id]"
                 :speaking="participants.length > 1 && activeSpeakerId === speakerParticipant.id"
                 size="full"
                 :is-expanded="pinnedParticipantId === speakerParticipant.id"
@@ -88,6 +92,7 @@ const secondaryParticipants = computed(() =>
                 :key="participant.id"
                 :participant="participant"
                 :status="participantStatuses?.[participant.id]"
+                :avatar-url="participantAvatars?.[participant.id]"
                 :speaking="participants.length > 1 && activeSpeakerId === participant.id"
                 size="sidebar"
                 :is-expanded="pinnedParticipantId === participant.id"
@@ -102,6 +107,7 @@ const secondaryParticipants = computed(() =>
                 v-if="speakerParticipant"
                 :participant="speakerParticipant"
                 :status="participantStatuses?.[speakerParticipant.id]"
+                :avatar-url="participantAvatars?.[speakerParticipant.id]"
                 :speaking="participants.length > 1 && activeSpeakerId === speakerParticipant.id"
                 size="full"
                 :is-expanded="pinnedParticipantId === speakerParticipant.id"
@@ -117,6 +123,7 @@ const secondaryParticipants = computed(() =>
                 :key="participant.id"
                 :participant="participant"
                 :status="participantStatuses?.[participant.id]"
+                :avatar-url="participantAvatars?.[participant.id]"
                 :speaking="participants.length > 1 && activeSpeakerId === participant.id"
                 size="mobile"
                 :is-expanded="pinnedParticipantId === participant.id"

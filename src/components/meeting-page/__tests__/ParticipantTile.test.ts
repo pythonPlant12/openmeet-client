@@ -16,8 +16,8 @@ const participant = {
 
 function mountTile(
   status: UserStatus | null,
-  size: 'grid' | 'sidebar' = 'grid',
-  extra: { speaking?: boolean; participant?: typeof participant } = {},
+  size: 'grid' | 'sidebar' | 'full' = 'grid',
+  extra: { speaking?: boolean; participant?: typeof participant; avatarUrl?: string } = {},
 ) {
   const i18n = createI18n({
     legacy: false,
@@ -26,31 +26,57 @@ function mountTile(
     missingWarn: false,
   });
   return mount(ParticipantTile, {
-    props: { participant: extra.participant ?? participant, status, size, speaking: extra.speaking },
+    props: {
+      participant: extra.participant ?? participant,
+      status,
+      size,
+      speaking: extra.speaking,
+      avatarUrl: extra.avatarUrl,
+    },
     global: { plugins: [i18n] },
   });
 }
 
 describe('ParticipantTile status', () => {
-  it('shows the status of a registered participant in the name tag', () => {
-    const tag = mountTile('doNotDisturb').get('[data-participant-name-tag]');
+  it('spells out the status of a registered participant on the pinned tile', () => {
+    const tag = mountTile('doNotDisturb', 'full').get('[data-participant-name-tag]');
 
     expect(tag.get('[data-participant-status]').attributes('data-status')).toBe('doNotDisturb');
     expect(tag.text()).toContain('Do not disturb');
   });
 
   it('shows "appear offline" as plain offline to others', () => {
-    expect(mountTile('offline').get('[data-participant-name-tag]').text()).toContain('Offline');
+    expect(mountTile('offline', 'full').get('[data-participant-name-tag]').text()).toContain('Offline');
   });
 
   it('shows no status for guests', () => {
     expect(mountTile(null).find('[data-participant-status]').exists()).toBe(false);
   });
 
-  it('keeps only the dot on small tiles', () => {
-    const tag = mountTile('away', 'sidebar').get('[data-participant-name-tag]');
-    expect(tag.find('[data-participant-status]').exists()).toBe(true);
-    expect(tag.text()).toBe('Ada LovelaceStatus: Away');
+  it('keeps only the dot on grid and small tiles', () => {
+    for (const size of ['grid', 'sidebar'] as const) {
+      const tag = mountTile('away', size).get('[data-participant-name-tag]');
+      expect(tag.find('[data-participant-status]').exists()).toBe(true);
+      expect(tag.text()).toBe('ALAda LovelaceStatus: Away');
+    }
+  });
+
+  it('starts the name tag with a mini avatar, falling back to initials', () => {
+    const withImage = mountTile(null, 'grid', { avatarUrl: 'blob:ada' }).get('[data-participant-mini-avatar]');
+    expect(withImage.get('img').attributes('src')).toBe('blob:ada');
+
+    const withInitials = mountTile(null).get('[data-participant-mini-avatar]');
+    expect(withInitials.find('img').exists()).toBe(false);
+    expect(withInitials.text()).toBe('AL');
+  });
+
+  it('keeps the name tag in the bottom-left corner, tighter on small tiles', () => {
+    expect(mountTile(null).get('[data-participant-name-tag]').classes()).toEqual(
+      expect.arrayContaining(['bottom-2', 'left-2', 'text-xs']),
+    );
+    expect(mountTile(null, 'sidebar').get('[data-participant-name-tag]').classes()).toEqual(
+      expect.arrayContaining(['bottom-1.5', 'left-1.5', 'text-[11px]']),
+    );
   });
 });
 

@@ -12,6 +12,8 @@ interface Props {
   participant: Participant;
   /** Only registered participants have a status; guests show none. */
   status?: UserStatus | null;
+  /** Image for the name tag's mini avatar; initials show without one. */
+  avatarUrl?: string;
   /** The participant is the active speaker. */
   speaking?: boolean;
   size?: 'full' | 'sidebar' | 'mobile' | 'grid';
@@ -92,6 +94,8 @@ const statusLabel = computed(() =>
   props.status === 'offline' ? t('meeting.participant.offline') : (statusOption.value?.label ?? ''),
 );
 const isCompact = computed(() => props.size === 'sidebar' || props.size === 'mobile');
+// Only the large pinned tile has room to spell the status out; the others show its dot.
+const showsStatusLabel = computed(() => !!statusOption.value && props.size === 'full');
 
 // Screens are never cropped or mirrored, so their text stays whole and readable.
 const isScreen = computed(() => !!props.participant.screenShareOf);
@@ -220,25 +224,41 @@ onMounted(async () => {
       <span v-else class="sr-only">{{ t('meeting.participant.connecting') }}</span>
     </div>
 
-    <!-- Name Badge -->
+    <!-- Name tag: kept small and tucked into the corner so it covers little of the video. -->
     <div
       data-participant-name-tag
       :class="[
-        'absolute bottom-3 left-3 flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-full bg-[#102F35]/80 py-1 text-white backdrop-blur',
-        statusOption ? 'pl-2 pr-3' : 'px-3',
+        'absolute flex items-center rounded-full bg-[#102F35]/75 text-white backdrop-blur',
+        isCompact
+          ? 'bottom-1.5 left-1.5 max-w-[calc(100%-0.75rem)] gap-1 py-0.5 pl-0.5 pr-2 text-[11px]'
+          : 'bottom-2 left-2 max-w-[calc(100%-1rem)] gap-1.5 py-0.5 pl-0.5 pr-2.5 text-xs',
       ]"
     >
-      <span
-        v-if="statusOption"
-        data-participant-status
-        :data-status="status"
-        class="size-2.5 shrink-0 rounded-full ring-2 ring-[#102F35]/60"
-        :class="statusOption.dotClass"
-        aria-hidden="true"
-      />
-      <span class="truncate">{{ participant.name }}</span>
+      <span class="relative shrink-0">
+        <span
+          data-participant-mini-avatar
+          :class="[
+            'flex items-center justify-center overflow-hidden rounded-full bg-[#0B7A75] font-semibold text-white',
+            isCompact ? 'size-4 text-[7px]' : 'size-5 text-[8px]',
+          ]"
+          aria-hidden="true"
+        >
+          <MonitorUp v-if="isScreen" class="size-3" />
+          <img v-else-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
+          <template v-else>{{ initials }}</template>
+        </span>
+        <span
+          v-if="statusOption"
+          data-participant-status
+          :data-status="status"
+          class="absolute -bottom-px -right-px size-2 rounded-full ring-[1.5px] ring-[#102F35]"
+          :class="statusOption.dotClass"
+          aria-hidden="true"
+        />
+      </span>
+      <span class="truncate font-medium">{{ participant.name }}</span>
       <span v-if="participant.isLocal" class="shrink-0 text-[#66D0C8]">{{ t('meeting.you') }}</span>
-      <span v-if="statusOption && !isCompact" class="shrink-0 border-l border-white/25 pl-1.5 text-xs text-white/80">{{
+      <span v-if="showsStatusLabel" class="shrink-0 border-l border-white/25 pl-1.5 text-white/80">{{
         statusLabel
       }}</span>
       <span v-if="statusOption" class="sr-only">{{ t('meeting.participant.status', { status: statusLabel }) }}</span>

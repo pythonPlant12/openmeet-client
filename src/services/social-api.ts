@@ -164,7 +164,9 @@ export interface MeetingRoomSummary {
 export interface MeetingParticipantPresence {
   participantId: string;
   userId: string;
-  status: UserStatus;
+  /** Null when the person does not share their status with meeting peers. */
+  status: UserStatus | null;
+  avatarUrl: string | null;
 }
 
 export interface MeetingRoomAccess {
