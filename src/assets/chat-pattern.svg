@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" fill="none" stroke="#9FD0C5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.32">
+  <!-- Chat bubbles -->
+  <path d="M26 30h30a8 8 0 0 1 8 8v14a8 8 0 0 1-8 8H40l-9 7v-7h-5a8 8 0 0 1-8-8V38a8 8 0 0 1 8-8z"/>
+  <path d="M158 140h26a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7h-4v6l-8-6h-14a7 7 0 0 1-7-7v-12a7 7 0 0 1 7-7z"/>
+  <path d="M120 54a14 14 0 1 1-5.2 27l-8.8 4 2.6-8.4A14 14 0 0 1 120 54z"/>
+  <!-- Dots in a bubble -->
+  <circle cx="34" cy="45" r="1.4" fill="#9FD0C5" stroke="none"/>
+  <circle cx="41" cy="45" r="1.4" fill="#9FD0C5" stroke="none"/>
+  <circle cx="48" cy="45" r="1.4" fill="#9FD0C5" stroke="none"/>
+  <!-- Sparkles -->
+  <path d="M196 34v12M190 40h12"/>
+  <path d="M64 176v8M60 180h8"/>
+  <path d="M214 214v6M211 217h6"/>
+  <!-- Small rings -->
+  <circle cx="186" cy="88" r="5"/>
+  <circle cx="34" cy="122" r="3"/>
+  <circle cx="110" cy="206" r="4"/>
+  <!-- Waves -->
+  <path d="M72 120c6-6 12 6 18 0s12 6 18 0"/>
+  <path d="M138 222c5-5 10 5 15 0s10 5 15 0"/>
+  <!-- Heart -->
+  <path d="M206 112c-3-4-9-2-9 2 0 4 9 9 9 9s9-5 9-9c0-4-6-6-9-2z"/>
+  <!-- Camera -->
+  <rect x="20" y="196" width="22" height="15" rx="4"/>
+  <path d="M42 201l7-4v13l-7-4"/>
+</svg>

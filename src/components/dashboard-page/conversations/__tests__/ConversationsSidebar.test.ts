@@ -38,6 +38,7 @@ function mountSidebar(props: Record<string, unknown> = {}) {
       conversationIdentifier: () => '@alex',
       directAvatarUrl: () => undefined,
       isDirectOnline: () => true,
+      directStatus: () => 'available',
       isFriendAvatarLoading: () => false,
       isGroupAvatarLoading: () => false,
       directInitials: () => 'A',

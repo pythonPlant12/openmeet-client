@@ -260,6 +260,12 @@ export const webrtcMachine = setup({
       clearServices();
     },
 
+    // A rejoin gets a new participant ID and the server re-announces everyone, so the old roster is dropped.
+    resetRoomMembers: assign({
+      localParticipantId: () => null,
+      participants: () => new Map(),
+      streamOwnerMap: () => new Map<string, string>(),
+    }),
     resetContext: assign({
       localStream: null,
       participants: () => new Map<string, Participant>(),
@@ -362,6 +368,21 @@ export const webrtcMachine = setup({
       },
       // Events handled at parent level (available in both child states)
       on: {
+        SIGNALING_LOST: {
+          actions: [
+            {
+              type: 'setConnectionQuality',
+              params: () => ({
+                quality: 'poor',
+                reason: i18n.global.t('errors.connectionInterrupted'),
+                packetLossRatio: 0,
+              }),
+            },
+          ],
+        },
+        SIGNALING_RESTORED: {
+          actions: ['resetRoomMembers'],
+        },
         JOINED: {
           actions: [{ type: 'setLocalParticipant', params: ({ event }) => ({ participantId: event.participantId }) }],
         },

@@ -153,6 +153,36 @@ describe('SwipeableRow', () => {
     expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-leading')).toBeUndefined();
   });
 
+  it('runs a trailing full swipe when enabled', async () => {
+    const wrapper = mountRow({ fullSwipeTrailing: true });
+
+    await swipe(wrapper, -400);
+
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-trailing')).toHaveLength(1);
+    expect(contentOffset(wrapper)).toBe('translate3d(0px, 0, 0)');
+  });
+
+  it('never rests open in momentary mode and honours a custom trigger distance', async () => {
+    const wrapper = mountRow({ momentary: true, fullSwipeDistance: 50, fullSwipeTrailing: true });
+
+    await swipe(wrapper, 40);
+    expect(contentOffset(wrapper)).toBe('translate3d(0px, 0, 0)');
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-leading')).toBeUndefined();
+
+    await swipe(wrapper, 60);
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-leading')).toHaveLength(1);
+
+    await swipe(wrapper, -60);
+    expect(wrapper.findComponent(SwipeableRow).emitted('full-swipe-trailing')).toHaveLength(1);
+  });
+
+  it('clips both axes by default and only sideways when asked', () => {
+    expect(mountRow().get('[data-swipeable-row]').classes()).toContain('overflow-hidden');
+    const sideways = mountRow({ id: 'row-2', clipHorizontally: true }).get('[data-swipeable-row]');
+    expect(sideways.classes()).toContain('harbor-clip-x');
+    expect(sideways.classes()).not.toContain('overflow-hidden');
+  });
+
   it('leaves vertical gestures to native scrolling', async () => {
     const wrapper = mountRow();
 
@@ -233,6 +263,23 @@ describe('SwipeableRow', () => {
     await vi.advanceTimersByTimeAsync(200);
 
     expect(contentOffset(wrapper)).toBe('translate3d(80px, 0, 0)');
+    vi.useRealTimers();
+  });
+
+  it('ignores vertical trackpad scrolling that drifts slightly sideways', async () => {
+    vi.useFakeTimers();
+    const wrapper = mountRow();
+    const root = wrapper.get('[data-swipeable-row]').element;
+    const wheel = (deltaX: number, deltaY: number) =>
+      new WheelEvent('wheel', { deltaX, deltaY, bubbles: true, cancelable: true });
+
+    const scroll = wheel(-6, 40);
+    root.dispatchEvent(scroll);
+    root.dispatchEvent(wheel(-8, 10));
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(scroll.defaultPrevented).toBe(false);
+    expect(contentOffset(wrapper)).toBe('translate3d(0px, 0, 0)');
     vi.useRealTimers();
   });
 

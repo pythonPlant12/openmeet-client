@@ -4,6 +4,7 @@ import process from 'node:process';
 declare global {
   interface Window {
     __openmeetPeerConnections?: RTCPeerConnection[];
+    __openmeetSockets?: WebSocket[];
   }
 }
 
@@ -16,7 +17,17 @@ interface RtpSummary {
   videoBytes: number;
 }
 
+// Browser-side network environments. Each one filters the app's own ICE servers, so the matrix exercises
+// the real STUN/TURN configuration instead of test-only credentials.
+type NetworkMode = 'host' | 'stun' | 'turn' | 'stun+turn';
+
+interface CandidatePath {
+  local: string | null;
+  remote: string | null;
+}
+
 interface MediaSnapshot {
+  candidatePath: CandidatePath;
   connectionState: RTCPeerConnectionState | null;
   iceConnectionState: RTCIceConnectionState | null;
   signalingState: RTCSignalingState | null;
@@ -140,6 +151,117 @@ test.describe('multi-participant media', () => {
     }
   });
 
+  const networkModes: { mode: NetworkMode; candidate: RegExp }[] = [
+    { mode: 'host', candidate: /^(host|srflx|prflx)\/[a-z]+$/ },
+    { mode: 'stun', candidate: /^(host|srflx|prflx|relay)\// },
+    { mode: 'turn', candidate: /^relay\/|\+turn-/ },
+    { mode: 'stun+turn', candidate: /^(host|srflx|prflx|relay)\// },
+  ];
+
+  for (const { mode, candidate } of networkModes) {
+    test(`keeps four participants connected over ${mode} networking`, async ({ browser, baseURL }) => {
+      test.setTimeout(240_000);
+
+      const session = await joinParticipants(browser, baseURL!, participantCount, `network-${mode}-e2e`, mode);
+
+      try {
+        await waitForParticipantCount(session.pages, participantCount);
+        await waitForAllConnections(session.pages);
+        await waitForHtmlVideoPlayback(session.pages, participantCount);
+
+        const snapshots = await collectSnapshots(session.pages);
+        // TURN-only rooms must relay through coturn; every other mode just needs a working selected pair.
+        expect(
+          snapshots.map((snapshot) => snapshot.candidatePath.local ?? ''),
+          'selected local candidate per participant',
+        ).toEqual(snapshots.map(() => expect.stringMatching(candidate)));
+        test.info().annotations.push({
+          type: 'candidate-paths',
+          description: snapshots
+            .map(
+              (snapshot, index) => `p${index + 1} ${snapshot.candidatePath.local} -> ${snapshot.candidatePath.remote}`,
+            )
+            .join(' | '),
+        });
+
+        // Problems reported in real rooms are not immediate, so media is re-checked across a longer window.
+        for (let round = 0; round < 4; round += 1) {
+          await expectMediaStillFlowing(session.pages, participantCount - 1);
+          await session.pages[0].waitForTimeout(10_000);
+        }
+        await expectNoConnectionErrorDialog(session.pages);
+      } finally {
+        test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+        await closeContexts(session.contexts);
+      }
+    });
+  }
+
+  test('keeps five participants streaming through a long session with a leave and a rejoin', async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(420_000);
+    const count = 5;
+    const session = await joinParticipants(browser, baseURL!, count, 'soak-e2e');
+
+    try {
+      await waitForParticipantCount(session.pages, count);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, count);
+
+      for (let round = 0; round < 6; round += 1) {
+        await expectMediaStillFlowing(session.pages, count - 1);
+        await session.pages[0].waitForTimeout(15_000);
+      }
+
+      // The second participant reloads mid-call, the way a dropped user rejoins.
+      await session.pages[1].reload({ waitUntil: 'domcontentloaded' });
+      await session.pages[1].locator('#participant-name').fill('User 2');
+      await expect(session.pages[1].getByRole('button', { name: 'Join Meeting' })).toBeEnabled({ timeout: 30_000 });
+      await session.pages[1].getByRole('button', { name: 'Join Meeting' }).click();
+
+      await waitForParticipantCount(session.pages, count);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, count);
+      for (let round = 0; round < 3; round += 1) {
+        await expectMediaStillFlowing(session.pages, count - 1);
+        await session.pages[0].waitForTimeout(10_000);
+      }
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
+  test('recovers a participant whose signaling socket drops mid-call', async ({ browser, baseURL }) => {
+    test.setTimeout(240_000);
+    const count = 3;
+    const session = await joinParticipants(browser, baseURL!, count, 'socket-drop-e2e');
+
+    try {
+      expect(session.pages).toHaveLength(count);
+      await waitForParticipantCount(session.pages, count);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, count);
+
+      // A network blip closes the signaling socket; the server drops that participant's peer connection.
+      await session.pages[1].evaluate(() => window.__openmeetSockets?.at(-1)?.close());
+
+      await waitForParticipantCount(session.pages, count);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, count);
+      await expectMediaStillFlowing(session.pages, count - 1);
+      await session.pages[0].waitForTimeout(35_000);
+      await expectMediaStillFlowing(session.pages, count - 1);
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
   test('removes an abruptly disconnected participant and keeps remaining media flowing', async ({
     browser,
     baseURL,
@@ -228,6 +350,7 @@ async function joinParticipants(
   baseURL: string,
   count: number,
   roomPrefix: string,
+  network: NetworkMode = 'stun+turn',
 ): Promise<ParticipantSession> {
   const roomUrl =
     process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
@@ -239,17 +362,41 @@ async function joinParticipants(
     const context = await browser.newContext({ permissions: ['camera', 'microphone'] });
     contexts.push(context);
 
-    await context.addInitScript(() => {
+    await context.addInitScript((mode: NetworkMode) => {
       window.__openmeetPeerConnections = [];
       const OriginalRTCPeerConnection = window.RTCPeerConnection;
+      const urlsOf = (server: RTCIceServer) => (Array.isArray(server.urls) ? server.urls : [server.urls]);
+      const keepServers = (servers: RTCIceServer[], scheme: RegExp) =>
+        servers
+          .map((server) => ({ ...server, urls: urlsOf(server).filter((url) => scheme.test(url)) }))
+          .filter((server) => server.urls.length > 0);
+
+      const configure = (config: RTCConfiguration = {}): RTCConfiguration => {
+        const servers = config.iceServers ?? [];
+        if (mode === 'host') return { ...config, iceServers: [] };
+        if (mode === 'stun') return { ...config, iceServers: keepServers(servers, /^stuns?:/i) };
+        if (mode === 'turn') {
+          return { ...config, iceServers: keepServers(servers, /^turns?:/i), iceTransportPolicy: 'relay' };
+        }
+        return config;
+      };
+
+      window.__openmeetSockets = [];
+      const OriginalWebSocket = window.WebSocket;
+      window.WebSocket = class TrackedWebSocket extends OriginalWebSocket {
+        constructor(...args: ConstructorParameters<typeof WebSocket>) {
+          super(...args);
+          window.__openmeetSockets?.push(this);
+        }
+      };
 
       window.RTCPeerConnection = class TrackedRTCPeerConnection extends OriginalRTCPeerConnection {
-        constructor(...args: ConstructorParameters<typeof RTCPeerConnection>) {
-          super(...args);
+        constructor(config?: RTCConfiguration) {
+          super(configure(config));
           window.__openmeetPeerConnections?.push(this);
         }
       };
-    });
+    }, network);
 
     const page = await context.newPage();
     page.on('console', (message) => recordBrowserDiagnostic(diagnostics, index + 1, message.type(), message.text()));
@@ -281,7 +428,7 @@ async function waitForAllConnections(pages: Page[]) {
     pages.map((page) =>
       page.waitForFunction(
         () => {
-          const pc = window.__openmeetPeerConnections?.[0];
+          const pc = window.__openmeetPeerConnections?.at(-1);
           return (
             pc?.connectionState === 'connected' &&
             pc.iceConnectionState === 'connected' &&
@@ -400,7 +547,7 @@ async function expectMediaStillFlowing(pages: Page[], expectedRemoteCount: numbe
 
 async function forceConnectionState(page: Page, state: RTCPeerConnectionState) {
   await page.evaluate((forcedState) => {
-    const pc = window.__openmeetPeerConnections?.[0];
+    const pc = window.__openmeetPeerConnections?.at(-1);
     if (!pc) {
       throw new Error('No tracked peer connection');
     }
@@ -429,10 +576,27 @@ async function collectMediaSnapshot(): Promise<MediaSnapshot> {
     videoBytes: 0,
   });
 
-  const pc = window.__openmeetPeerConnections?.[0] ?? null;
+  const pc = window.__openmeetPeerConnections?.at(-1) ?? null;
   const stats = pc ? await pc.getStats() : new Map<string, RTCStats>();
   const inbound = createRtpSummary();
   const outbound = createRtpSummary();
+  const candidates = new Map<string, string>();
+  let selectedPair: { localCandidateId?: string; remoteCandidateId?: string } | null = null;
+
+  stats.forEach((stat) => {
+    if (stat.type === 'local-candidate' || stat.type === 'remote-candidate') {
+      const candidate = stat as RTCStats & { candidateType?: string; protocol?: string; relayProtocol?: string };
+      // A relayed local candidate can surface as prflx when coturn's advertised address differs from the one
+      // the SFU sees, so relaying is marked from relayProtocol rather than the candidate type alone.
+      const relayed = candidate.relayProtocol ? `+turn-${candidate.relayProtocol}` : '';
+      candidates.set(stat.id, `${candidate.candidateType ?? 'unknown'}/${candidate.protocol ?? 'unknown'}${relayed}`);
+    }
+    if (stat.type === 'transport') {
+      const transport = stat as RTCStats & { selectedCandidatePairId?: string };
+      const pair = transport.selectedCandidatePairId ? stats.get(transport.selectedCandidatePairId) : null;
+      if (pair) selectedPair = pair as typeof selectedPair;
+    }
+  });
 
   stats.forEach((stat) => {
     if (stat.type !== 'inbound-rtp' && stat.type !== 'outbound-rtp') {
@@ -456,7 +620,12 @@ async function collectMediaSnapshot(): Promise<MediaSnapshot> {
     }
   });
 
+  const pair = selectedPair as { localCandidateId?: string; remoteCandidateId?: string } | null;
   return {
+    candidatePath: {
+      local: pair?.localCandidateId ? (candidates.get(pair.localCandidateId) ?? null) : null,
+      remote: pair?.remoteCandidateId ? (candidates.get(pair.remoteCandidateId) ?? null) : null,
+    },
     connectionState: pc?.connectionState ?? null,
     iceConnectionState: pc?.iceConnectionState ?? null,
     signalingState: pc?.signalingState ?? null,

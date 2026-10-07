@@ -547,3 +547,67 @@
     opacity: 1;
   }
 }
+
+/* Chat canvas: the dashboard's off-white with a faint, tiled light-green line pattern as texture. */
+.harbor-chat-canvas {
+  background-color: #fbfcf8;
+  background-image: url('./chat-pattern.svg');
+  background-size: 240px 240px;
+  background-repeat: repeat;
+}
+
+/* Horizontal-only clipping: hidden as a fallback, and clip on one axis where supported so the other stays visible. */
+.harbor-clip-x {
+  overflow: hidden;
+}
+
+@supports (overflow-x: clip) {
+  .harbor-clip-x {
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+}
+
+/* Message depth: a soft resting shadow, deeper while selected, and a neutral bounce for quotes. */
+.harbor-message-resting {
+  box-shadow:
+    0 1px 2px rgba(16, 47, 53, 0.06),
+    0 3px 10px rgba(16, 47, 53, 0.05);
+}
+
+.harbor-message-lifted {
+  box-shadow:
+    0 3px 8px rgba(16, 47, 53, 0.08),
+    0 14px 34px rgba(16, 47, 53, 0.16);
+}
+
+@keyframes harbor-message-flash {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      0 1px 2px rgba(16, 47, 53, 0.06),
+      0 3px 10px rgba(16, 47, 53, 0.05);
+  }
+  35% {
+    transform: scale(1.035);
+    box-shadow:
+      0 4px 10px rgba(16, 47, 53, 0.1),
+      0 18px 40px rgba(16, 47, 53, 0.2);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 1px 2px rgba(16, 47, 53, 0.06),
+      0 3px 10px rgba(16, 47, 53, 0.05);
+  }
+}
+
+.harbor-message-flash {
+  animation: harbor-message-flash 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .harbor-message-flash {
+    animation: none;
+  }
+}

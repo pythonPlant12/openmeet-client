@@ -10,8 +10,22 @@ const auth = vi.hoisted(() => ({ authenticated: false }));
 const social = vi.hoisted(() => ({
   getCurrentUserProfile: vi.fn(),
   loadAvatar: vi.fn(),
+  updateCurrentUserStatus: vi.fn(),
 }));
 let resizeObserverCallback: ResizeObserverCallback;
+
+// The drawer fits its content: capsule height minus the stretched scroll area plus the content's natural height.
+function mockDrawerLayout(
+  wrapper: { get: (selector: string) => { element: Element } },
+  sizes: { capsule: number; scrollArea: number; content: number },
+) {
+  const define = (element: Element, property: string, value: number) =>
+    Object.defineProperty(element, property, { configurable: true, value });
+  const content = wrapper.get('[data-mobile-account-actions]').element;
+  define(wrapper.get('.harbor-nav-capsule').element, 'offsetHeight', sizes.capsule);
+  define(content.parentElement!, 'clientHeight', sizes.scrollArea);
+  define(content, 'offsetHeight', sizes.content);
+}
 
 vi.mock('@vueuse/core', async () => {
   const { ref, toValue } = await import('vue');
@@ -137,8 +151,11 @@ async function mountNavbar(path = '/') {
         Button: { template: '<button><slot /></button>' },
         DropdownMenu: { template: '<div><slot /></div>' },
         DropdownMenuContent: { template: '<div><slot /></div>' },
-        DropdownMenuItem: { template: '<div><slot /></div>' },
+        DropdownMenuItem: { template: '<div @click="$emit(\'select\', $event)"><slot /></div>' },
         DropdownMenuSeparator: { template: '<div />' },
+        DropdownMenuSub: { template: '<div><slot /></div>' },
+        DropdownMenuSubContent: { template: '<div><slot /></div>' },
+        DropdownMenuSubTrigger: { template: '<div><slot /></div>' },
         DropdownMenuTrigger: { template: '<div><slot /></div>' },
         LoadingRipple: { template: '<span />' },
       },
@@ -163,6 +180,7 @@ beforeEach(() => {
       }
 
       observe() {}
+      unobserve() {}
       disconnect() {}
     },
   );
@@ -426,14 +444,12 @@ describe('TheNavbar', () => {
     const mobile = await mountNavbar('/room/meeting-id');
     await mobile.wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
-    Object.defineProperty(mobile.wrapper.get('.harbor-nav-capsule').element, 'scrollHeight', {
-      configurable: true,
-      value: 264,
-    });
+    mockDrawerLayout(mobile.wrapper, { capsule: 450, scrollArea: 300, content: 180 });
     resizeObserverCallback([], {} as ResizeObserver);
     await vi.advanceTimersByTimeAsync(16);
 
-    expect(mobile.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
+    // No minimum height: the drawer shrinks to its content.
+    expect(mobile.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 330px');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.accountInformation');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('common.dashboard');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.friends');
@@ -444,14 +460,12 @@ describe('TheNavbar', () => {
     const dashboard = await mountNavbar('/dashboard');
     await dashboard.wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
-    Object.defineProperty(dashboard.wrapper.get('.harbor-nav-capsule').element, 'scrollHeight', {
-      configurable: true,
-      value: 308,
-    });
+    mockDrawerLayout(dashboard.wrapper, { capsule: 300, scrollArea: 150, content: 260 });
     resizeObserverCallback([], {} as ResizeObserver);
     await vi.advanceTimersByTimeAsync(16);
 
-    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
+    // And grows when its content needs more room, such as an expanded status picker.
+    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 410px');
 
     await dashboard.wrapper
       .get('[data-mobile-account-actions] button[aria-label="nav.accountInformation"]')
@@ -459,7 +473,7 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     expect(dashboard.router.currentRoute.value.path).toBe('/account');
-    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 450px');
+    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 410px');
   });
 
   it('expands the anonymous meeting drawer to the mobile viewport', async () => {
@@ -487,10 +501,7 @@ describe('TheNavbar', () => {
 
     await wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
-    Object.defineProperty(wrapper.get('.harbor-nav-capsule').element, 'scrollHeight', {
-      configurable: true,
-      value: 600,
-    });
+    mockDrawerLayout(wrapper, { capsule: 300, scrollArea: 150, content: 450 });
     resizeObserverCallback([], {} as ResizeObserver);
     await vi.advanceTimersByTimeAsync(16);
 
@@ -573,6 +584,80 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-copy-nickname]').text()).toContain('@ada_l');
+  });
+
+  it('changes the status from the desktop account menu and shows it on the avatar', async () => {
+    auth.authenticated = true;
+    social.getCurrentUserProfile
+      .mockResolvedValueOnce({ avatarUrl: null, nickname: 'ada_l', status: 'available' })
+      .mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'doNotDisturb' });
+    social.updateCurrentUserStatus.mockResolvedValue({ status: 'doNotDisturb' });
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Online');
+
+    await wrapper.get('[data-status-option="doNotDisturb"]').trigger('click');
+    await flushPromises();
+
+    expect(social.updateCurrentUserStatus).toHaveBeenCalledWith('token', 'doNotDisturb');
+    expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Do not disturb');
+  });
+
+  it('expands the mobile status picker on tap and collapses it after choosing', async () => {
+    vi.useFakeTimers();
+    media.desktop = false;
+    media.hover = false;
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
+    social.updateCurrentUserStatus.mockResolvedValue({ status: 'away' });
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+    await wrapper.get('button[aria-expanded="false"]').trigger('click');
+    await vi.advanceTimersByTimeAsync(300);
+
+    const toggle = wrapper.get('[data-mobile-status-toggle]');
+    expect(toggle.text()).toBe('nav.status');
+    const options = wrapper.get('[data-mobile-status-options]');
+    expect(options.findAll('[data-status-option]').map((option) => option.text())).toEqual([
+      'Online',
+      'Away',
+      'Do not disturb',
+      'Sleeping',
+      'Appear offline',
+    ]);
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+
+    await wrapper.get('[data-mobile-status-options] [data-status-option="away"]').trigger('click');
+    await flushPromises();
+    expect(social.updateCurrentUserStatus).toHaveBeenCalledWith('token', 'away');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    // A press inside the picker keeps it open; a press anywhere else collapses it.
+    toggle.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+  });
+
+  it('rolls the status back when saving fails', async () => {
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'away' });
+    social.updateCurrentUserStatus.mockRejectedValue(new Error('offline'));
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    await wrapper.get('[data-status-option="sleeping"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Away');
   });
 
   it('shows Login text for logged-out desktop users', async () => {

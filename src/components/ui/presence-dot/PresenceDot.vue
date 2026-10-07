@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { type PresenceSurface, showsPresenceIndicator } from '@/config/presence.config';
+import { computed } from 'vue';
 
-defineProps<{
+import { type PresenceSurface, showsPresenceIndicator } from '@/config/presence.config';
+import { userStatusOption } from '@/config/user-status.config';
+import type { UserStatus } from '@/services/social-api';
+
+const props = defineProps<{
   online: boolean;
   surface: PresenceSurface;
+  /** Colours the dot by status; an unknown status reads as plain online. */
+  status?: UserStatus | null;
 }>();
+
+const option = computed(() => userStatusOption(props.status));
 </script>
 
 <template>
@@ -13,7 +21,9 @@ defineProps<{
     v-if="online && showsPresenceIndicator(surface)"
     data-presence-dot
     role="img"
-    aria-label="Online"
-    class="pointer-events-none absolute bottom-0 right-0 rounded-full bg-[#2DA58F]"
+    :aria-label="option.label"
+    :title="option.label"
+    class="pointer-events-none absolute bottom-0 right-0 rounded-full"
+    :class="option.dotClass"
   />
 </template>

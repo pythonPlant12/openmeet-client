@@ -29,11 +29,11 @@ function insertEmoji(event: CustomEvent<{ unicode?: string }>) {
   const start = composer?.selectionStart ?? content.value.length;
   const end = composer?.selectionEnd ?? content.value.length;
   content.value = `${content.value.slice(0, start)}${emoji}${content.value.slice(end)}`;
-  isOpen.value = false;
 
+  // The picker stays open for several picks; touch devices skip focusing so the keyboard does not cover it.
   void nextTick(() => {
     const cursor = start + emoji.length;
-    composer?.focus();
+    if (window.matchMedia?.('(hover: hover)').matches) composer?.focus();
     composer?.setSelectionRange(cursor, cursor);
   });
 }

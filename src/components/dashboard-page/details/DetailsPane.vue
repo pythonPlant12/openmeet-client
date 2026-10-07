@@ -22,6 +22,7 @@ defineProps<{
   groupMutationBusy: (groupId: string) => boolean;
   beginMutation: (groupId: string) => GroupMutationToken | null;
   endMutation: (groupId: string, token: GroupMutationToken) => void;
+  changeFriendship: (member: GroupMember, change: 'add' | 'remove') => Promise<boolean>;
   friends: Friend[];
   pendingFriend: Friend | null;
   selectedConversation: Conversation | null;
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   (event: 'open-profile', id: string, name: string): void;
   (event: 'refresh-group'): void;
   (event: 'load-more-members'): void;
+  (event: 'chat-member', member: GroupMember): void;
   (event: 'group-removed', id: string): void;
 }>();
 function initials(name?: string) {
@@ -91,10 +93,12 @@ defineExpose({
       :mutation-busy="groupMutationBusy(selectedConversation.id)"
       :begin-mutation="beginMutation"
       :end-mutation="endMutation"
+      :change-friendship="changeFriendship"
       @call-member="emit('call-member', $event)"
       @open-profile="(id, name) => emit('open-profile', id, name)"
       @refresh="emit('refresh-group')"
       @load-more-members="emit('load-more-members')"
+      @chat-member="emit('chat-member', $event)"
       @removed="emit('group-removed', $event)"
     />
     <div v-else-if="selectedConversation || pendingFriend" class="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">

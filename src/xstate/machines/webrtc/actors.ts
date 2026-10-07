@@ -153,11 +153,9 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     sendBack({ type: 'REMOTE_TRACK_RECEIVED', streamId, stream });
   });
 
-  // Join room via signaling
-  signalingService.joinRoom(input.roomId, input.participantName);
-
-  // Create peer connection and setup connection state monitoring
-  const pc = webrtcService.createPeerConnection();
+  const signaling = signalingService;
+  const webrtc = webrtcService;
+  let pc: RTCPeerConnection;
   let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let hasRecentMediaActivity = false;
   let remoteVideoFrozen = false;
@@ -189,53 +187,104 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     }, DISCONNECT_GRACE_MS);
   };
 
-  pc.onconnectionstatechange = () => {
-    console.log('[webrtcMachine] Peer connection state:', pc.connectionState);
-    sendBack({ type: 'CONNECTION_STATE_CHANGED', state: pc.connectionState });
+  const watchPeerConnection = (connection: RTCPeerConnection) => {
+    connection.onconnectionstatechange = () => {
+      console.log('[webrtcMachine] Peer connection state:', connection.connectionState);
+      sendBack({ type: 'CONNECTION_STATE_CHANGED', state: connection.connectionState });
 
-    if (pc.connectionState === 'disconnected') {
-      disconnectedSince ??= Date.now();
-      scheduleDisconnectTimeout();
-    }
+      if (connection.connectionState === 'disconnected') {
+        disconnectedSince ??= Date.now();
+        scheduleDisconnectTimeout();
+      }
 
-    if (pc.connectionState === 'connected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-      disconnectedSince = null;
+      if (
+        connection.connectionState === 'connected' ||
+        connection.connectionState === 'failed' ||
+        connection.connectionState === 'closed'
+      ) {
+        disconnectedSince = null;
+        clearDisconnectTimer();
+      }
+    };
+
+    connection.oniceconnectionstatechange = () => {
+      console.log('[webrtcMachine] ICE connection state:', connection.iceConnectionState);
+      sendBack({ type: 'ICE_CONNECTION_STATE_CHANGED', state: connection.iceConnectionState });
+
+      if (connection.iceConnectionState === 'disconnected') {
+        disconnectedSince ??= Date.now();
+        scheduleDisconnectTimeout();
+      }
+
+      if (
+        connection.iceConnectionState === 'connected' ||
+        connection.iceConnectionState === 'completed' ||
+        connection.iceConnectionState === 'failed' ||
+        connection.iceConnectionState === 'closed'
+      ) {
+        disconnectedSince = null;
+        clearDisconnectTimer();
+      }
+    };
+
+    connection.onicegatheringstatechange = () => {
+      console.log('[webrtcMachine] ICE gathering state:', connection.iceGatheringState);
+    };
+
+    connection.onsignalingstatechange = () => {
+      console.log('[webrtcMachine] Signaling state:', connection.signalingState);
+    };
+  };
+
+  // The server owns one peer connection per signaling session, so every (re)join negotiates a fresh one.
+  const joinWithNewPeerConnection = () => {
+    signaling.joinRoom(input.roomId, input.participantName);
+    pc = webrtc.createPeerConnection();
+    watchPeerConnection(pc);
+
+    webrtc
+      .sendOffer()
+      .then(() => {
+        console.log('[webrtcMachine] Offer sent, waiting for answer...');
+      })
+      .catch((error) => {
+        sendBack({
+          type: 'SERVER_ERROR',
+          message: error instanceof Error ? error.message : i18n.global.t('errors.offerFailed'),
+        });
+      });
+  };
+
+  // A dropped socket means the server already removed this participant and closed its peer connection.
+  // The old connection is muted so its teardown does not end the call, then the room is rejoined once
+  // signaling is back.
+  const stopWatchingConnectionChanges = signaling.onConnectionChange((change) => {
+    if (change === 'lost') {
+      console.log('[webrtcMachine] Signaling lost; waiting to rejoin');
       clearDisconnectTimer();
-    }
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    console.log('[webrtcMachine] ICE connection state:', pc.iceConnectionState);
-    sendBack({ type: 'ICE_CONNECTION_STATE_CHANGED', state: pc.iceConnectionState });
-
-    if (pc.iceConnectionState === 'disconnected') {
-      disconnectedSince ??= Date.now();
-      scheduleDisconnectTimeout();
-    }
-
-    if (
-      pc.iceConnectionState === 'connected' ||
-      pc.iceConnectionState === 'completed' ||
-      pc.iceConnectionState === 'failed' ||
-      pc.iceConnectionState === 'closed'
-    ) {
       disconnectedSince = null;
-      clearDisconnectTimer();
+      pc.onconnectionstatechange = null;
+      pc.oniceconnectionstatechange = null;
+      sendBack({ type: 'SIGNALING_LOST' });
+      return;
     }
-  };
 
-  pc.onicegatheringstatechange = () => {
-    console.log('[webrtcMachine] ICE gathering state:', pc.iceGatheringState);
-  };
+    if (change === 'restored') {
+      console.log('[webrtcMachine] Signaling restored; rejoining room');
+      sendBack({ type: 'SIGNALING_RESTORED' });
+      joinWithNewPeerConnection();
+      return;
+    }
 
-  pc.onsignalingstatechange = () => {
-    console.log('[webrtcMachine] Signaling state:', pc.signalingState);
-  };
+    sendBack({ type: 'CONNECTION_TIMEOUT' });
+  });
+
+  joinWithNewPeerConnection();
 
   const qualityInterval = setInterval(() => {
     if (pc.connectionState === 'closed') return;
 
-    webrtcService
+    webrtc
       .getConnectionQualityStats()
       .then((stats) => {
         hasRecentMediaActivity = stats.hasRecentMediaActivity;
@@ -247,24 +296,12 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
       });
   }, 3000);
 
-  // Send offer to SFU
-  webrtcService
-    .sendOffer()
-    .then(() => {
-      console.log('[webrtcMachine] Offer sent, waiting for answer...');
-    })
-    .catch((error) => {
-      sendBack({
-        type: 'SERVER_ERROR',
-        message: error instanceof Error ? error.message : i18n.global.t('errors.offerFailed'),
-      });
-    });
-
   // Return cleanup function (optional)
   return () => {
     // Cleanup is handled by the machine's cleanup action
     clearDisconnectTimer();
     clearInterval(qualityInterval);
+    stopWatchingConnectionChanges();
     console.log('[webrtcMachine] joinRoomActor cleanup');
   };
 });

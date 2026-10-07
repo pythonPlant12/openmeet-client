@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type ConversationActivity,
   sortConversationsByActivity,
+  toggledReactions,
   upsertConversationByActivity,
 } from '@/pages/dashboard-chat-state';
 import type { Conversation } from '@/services/social-api';
@@ -45,5 +46,18 @@ describe('dashboard chat state', () => {
     };
 
     expect(upsertConversationByActivity([second], first, activity).map(({ id }) => id)).toEqual(['first', 'second']);
+  });
+});
+
+describe('toggledReactions', () => {
+  it('adds, joins, leaves, and removes reactions for the viewer', () => {
+    const added = toggledReactions([], '👍');
+    expect(added).toEqual([{ emoji: '👍', count: 1, reactedByMe: true }]);
+
+    const joined = toggledReactions([{ emoji: '❤️', count: 2, reactedByMe: false }], '❤️');
+    expect(joined).toEqual([{ emoji: '❤️', count: 3, reactedByMe: true }]);
+
+    expect(toggledReactions(joined, '❤️')).toEqual([{ emoji: '❤️', count: 2, reactedByMe: false }]);
+    expect(toggledReactions(added, '👍')).toEqual([]);
   });
 });

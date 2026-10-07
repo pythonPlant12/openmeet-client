@@ -29,6 +29,7 @@ describe('ContactProfileDialog', () => {
           createdAt: '',
           lastSeenAt: null,
           isOnline: false,
+          relationship: 'friend',
         },
         profileFriend: null,
         loading: true,
@@ -65,6 +66,7 @@ describe('ContactProfileDialog', () => {
           createdAt: '2026-08-17T12:00:00Z',
           lastSeenAt: null,
           isOnline: true,
+          relationship: 'friend',
         },
         profileFriend: { id: 'friend-1', name: 'Alex Smith', email: 'alex@example.com', isOnline: true },
         loading: false,
@@ -80,11 +82,92 @@ describe('ContactProfileDialog', () => {
     });
 
     expect(wrapper.find('[data-online-indicator]').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Available');
+    expect(wrapper.text()).toContain('Online');
     expect(wrapper.text()).toContain('Friend');
     expect(wrapper.text()).toContain('“Building OpenMeet”');
     expect(wrapper.text()).toContain('alex@example.com');
     expect(wrapper.find('[aria-label="Profile actions"]').text()).toContain('Start direct call');
+  });
+
+  it('shows only public details and an Add friend action to people who are not friends', async () => {
+    const wrapper = mount(ContactProfileDialog, {
+      props: {
+        open: true,
+        confirmationOpen: false,
+        profile: {
+          id: 'person-1',
+          name: 'Sam Lee',
+          nickname: 'sam',
+          email: '',
+          avatarUrl: null,
+          status: 'offline',
+          statusMessage: '',
+          createdAt: '2026-08-17T12:00:00Z',
+          lastSeenAt: null,
+          isOnline: false,
+          relationship: 'none',
+        },
+        profileFriend: null,
+        loading: false,
+        error: '',
+        removingId: null,
+        opening: null,
+        callActive: false,
+        avatarUrls: {},
+        avatarLoading: false,
+        formatDate: () => '17 Aug 2026',
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.text()).toContain('Status shared with friends');
+    expect(wrapper.text()).toContain('Shared with friends');
+    expect(wrapper.text()).not.toContain('Appear offline');
+    await wrapper.get('[data-add-friend]').trigger('click');
+    expect(wrapper.emitted('add-friend')).toHaveLength(1);
+  });
+
+  it('lets people change their own status from their profile', () => {
+    const wrapper = mount(ContactProfileDialog, {
+      props: {
+        open: true,
+        confirmationOpen: false,
+        profile: {
+          id: 'me',
+          name: 'Me',
+          nickname: 'me',
+          email: 'me@example.com',
+          avatarUrl: null,
+          status: 'sleeping',
+          statusMessage: '',
+          createdAt: '2026-08-17T12:00:00Z',
+          lastSeenAt: null,
+          isOnline: true,
+          relationship: 'owner',
+        },
+        profileFriend: null,
+        loading: false,
+        error: '',
+        removingId: null,
+        opening: null,
+        callActive: false,
+        avatarUrls: {},
+        avatarLoading: false,
+        formatDate: () => '17 Aug 2026',
+      },
+      global: {
+        stubs: {
+          ...stubs,
+          DropdownMenu: { template: '<div><slot /></div>' },
+          DropdownMenuTrigger: { template: '<div><slot /></div>' },
+          DropdownMenuContent: { template: '<div><slot /></div>' },
+          DropdownMenuItem: { template: '<button @click="$emit(\'select\')"><slot /></button>' },
+        },
+      },
+    });
+
+    expect(wrapper.get('[data-status-menu]').text()).toContain('Sleeping');
+    expect(wrapper.get('[data-online-indicator]').classes()).toContain('bg-[#6B7BC4]');
   });
 
   it('opens an image-only profile picture preview', async () => {
@@ -103,6 +186,7 @@ describe('ContactProfileDialog', () => {
           createdAt: '2026-08-17T12:00:00Z',
           lastSeenAt: null,
           isOnline: true,
+          relationship: 'friend',
         },
         profileFriend: null,
         loading: false,

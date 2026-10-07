@@ -12,14 +12,33 @@ import {
 import type { GroupMember } from '@/services/social-api';
 
 const members: GroupMember[] = [
-  { id: 'member-b', name: 'Zed', nickname: 'member_b', avatarUrl: null, isOnline: false, role: 'member', joinedAt: '' },
-  { id: 'admin', name: 'Ada', nickname: 'admin', avatarUrl: null, isOnline: false, role: 'admin', joinedAt: '' },
+  {
+    id: 'member-b',
+    name: 'Zed',
+    nickname: 'member_b',
+    avatarUrl: null,
+    isOnline: false,
+    status: null,
+    role: 'member',
+    joinedAt: '',
+  },
+  {
+    id: 'admin',
+    name: 'Ada',
+    nickname: 'admin',
+    avatarUrl: null,
+    isOnline: false,
+    status: null,
+    role: 'admin',
+    joinedAt: '',
+  },
   {
     id: 'creator',
     name: 'Creator',
     nickname: 'creator',
     avatarUrl: null,
     isOnline: false,
+    status: null,
     role: 'creator',
     joinedAt: '',
   },
@@ -29,6 +48,7 @@ const members: GroupMember[] = [
     nickname: 'member_a',
     avatarUrl: null,
     isOnline: false,
+    status: null,
     role: 'member',
     joinedAt: '',
   },

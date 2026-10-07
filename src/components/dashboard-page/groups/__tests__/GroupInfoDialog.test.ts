@@ -30,6 +30,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -39,6 +40,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
           nickname: 'member_1',
           avatarUrl: '/social/users/member-1/avatar',
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -72,7 +74,7 @@ function mountDialog(props: Record<string, unknown> = {}) {
 }
 
 describe('GroupInfoDialog', () => {
-  it('swipes right to chat and left to info plus the matching friend action', async () => {
+  it('swipes right to message friends only, and left to profile plus the friend action', async () => {
     const wrapper = mountDialog({
       members: [
         {
@@ -81,6 +83,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -90,6 +93,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'member_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -99,6 +103,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'me',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'creator',
           joinedAt: '',
         },
@@ -108,14 +113,15 @@ describe('GroupInfoDialog', () => {
     const trailingLabels = (row: typeof friendRow) =>
       row!.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text());
 
-    expect(friendRow!.get('[data-swipe-pane="leading"]').text()).toBe('Chat');
-    expect(trailingLabels(friendRow)).toEqual(['Info', 'Unfriend']);
-    expect(trailingLabels(memberRow)).toEqual(['Info', 'Add friend']);
+    expect(friendRow!.get('[data-swipe-pane="leading"]').text()).toBe('Message');
+    expect(memberRow!.find('[data-swipe-pane="leading"]').exists()).toBe(false);
     expect(selfRow!.find('[data-swipe-pane="leading"]').exists()).toBe(false);
-    expect(trailingLabels(selfRow)).toEqual(['Info']);
+    expect(trailingLabels(friendRow)).toEqual(['Profile']);
+    expect(trailingLabels(memberRow)).toEqual(['Profile', 'Add friend']);
+    expect(trailingLabels(selfRow)).toEqual(['Profile']);
 
-    await memberRow!.get('[data-swipe-pane="leading"] button').trigger('click');
-    expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'member-1' });
+    await friendRow!.get('[data-swipe-pane="leading"] button').trigger('click');
+    expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'friend-1' });
 
     await memberRow!.get('[data-swipe-pane="trailing"] button').trigger('click');
     const profileEvents = wrapper.emitted('profile') ?? [];
@@ -125,14 +131,25 @@ describe('GroupInfoDialog', () => {
   it('confirms before changing a friendship', async () => {
     const changeFriendship = vi.fn().mockResolvedValue(true);
     const wrapper = mountDialog({ changeFriendship });
-    const [friendRow] = wrapper.findAll('[data-swipeable-row]');
+    const [, memberRow] = wrapper.findAll('[data-swipeable-row]');
 
-    await friendRow!.findAll('[data-swipe-pane="trailing"] button')[1]!.trigger('click');
+    await memberRow!.findAll('[data-swipe-pane="trailing"] button')[1]!.trigger('click');
     expect(changeFriendship).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Remove Friend from your friends?');
+    expect(wrapper.text()).toContain('Send a friend request to Member?');
 
     await wrapper.get('[data-confirm-friend-change]').trigger('click');
-    expect(changeFriendship).toHaveBeenCalledWith(expect.objectContaining({ id: 'friend-1' }), 'remove');
+    expect(changeFriendship).toHaveBeenCalledWith(expect.objectContaining({ id: 'member-1' }), 'add');
+  });
+
+  it('lets group managers remove participants from the left swipe', () => {
+    const wrapper = mountDialog({ info: { ...groupInfo, role: 'admin' } });
+    const [friendRow, memberRow] = wrapper.findAll('[data-swipeable-row]');
+    const labels = (row: typeof friendRow) =>
+      row!.findAll('[data-swipe-pane="trailing"] button').map((button) => button.text());
+
+    expect(labels(friendRow)).toEqual(['Profile', 'Remove']);
+    expect(labels(memberRow)).toEqual(['Profile', 'Add friend', 'Remove']);
+    expect(wrapper.text()).not.toContain('Remove friend');
   });
 
   it('offers the security action only to group managers', async () => {
@@ -153,6 +170,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: true,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -162,6 +180,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'member_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '',
         },
@@ -182,6 +201,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -191,6 +211,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'member_1',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'member',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -200,6 +221,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'me',
           avatarUrl: null,
           isOnline: false,
+          status: null,
           role: 'creator',
           joinedAt: '2026-08-17T12:00:00Z',
         },
@@ -216,13 +238,17 @@ describe('GroupInfoDialog', () => {
     expect(badges[0]!.attributes('aria-label')).toBe('Your friend');
   });
 
-  it('only requests profiles for accepted friends', async () => {
+  it('opens every participant profile, including people who are not friends yet', async () => {
     const wrapper = mountDialog();
+    const [friendRow, memberRow] = wrapper.findAll('[title="Open profile"]');
 
-    await wrapper.get('[title="Open profile"]').trigger('click');
-    await wrapper.get('[title="Profile details are available to accepted friends only."]').trigger('click');
+    await friendRow!.trigger('click');
+    await memberRow!.trigger('click');
 
-    expect(wrapper.emitted('profile')).toEqual([['friend-1', 'Friend']]);
+    expect(wrapper.emitted('profile')).toEqual([
+      ['friend-1', 'Friend'],
+      ['member-1', 'Member'],
+    ]);
   });
 
   it('only offers icon changes to group managers', () => {

@@ -17,6 +17,7 @@ describe('DetailsPane', () => {
         groupMutationBusy: () => false,
         beginMutation: () => null,
         endMutation: () => undefined,
+        changeFriendship: async () => true,
         friends: [],
         pendingFriend: null,
         selectedConversation: null,

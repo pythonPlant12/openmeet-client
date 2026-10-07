@@ -20,6 +20,7 @@ import { useAvatarCache } from '@/composables/useAvatarCache';
 import {
   type ConversationActivity,
   sortConversationsByActivity,
+  toggledReactions,
   upsertConversationByActivity,
 } from '@/pages/dashboard-chat-state';
 import {
@@ -43,8 +44,10 @@ import {
   type GroupInfo,
   type GroupInvitation,
   type GroupMember,
+  type MessageReaction,
   SocialApiError,
   type UserSearchResult,
+  type UserStatus,
   socialApi,
 } from '@/services/social-api';
 import { cookieUtils } from '@/utils';
@@ -157,10 +160,19 @@ const isGroupProfileLoading = ref(false);
 const groupProfileError = ref('');
 const messages = ref<ConversationMessage[]>([]);
 const messageContent = ref('');
+const messageReplyTo = ref<ConversationMessage | null>(null);
+// A quote belongs to its conversation; switching chats by any route drops it so it cannot be sent elsewhere.
+watch(
+  () => selectedConversation.value?.id,
+  (id, previousId) => {
+    if (id !== previousId) messageReplyTo.value = null;
+  },
+);
 const nextMessageBefore = ref<number | null>(null);
 const chatPane = ref<{
   focusComposer: () => void;
   getScrollState: () => { height: number; top: number } | null;
+  isNearBottom: () => boolean;
   restoreScroll: (state: { height: number; top: number } | null) => void;
   scrollToBottom: (behavior?: ScrollBehavior) => void;
 } | null>(null);
@@ -206,6 +218,7 @@ let contactProfileRequest = 0;
 let groupProfileRequest = 0;
 let groupProfilePromise: { groupId: string; promise: Promise<void> } | null = null;
 let messageRequest = 0;
+const reactionRequestByMessage = new Map<number, number>();
 let joinGroupPreviewRequest = 0;
 let callLaunchRequest = 0;
 let isUnmounted = false;
@@ -242,6 +255,21 @@ const filteredFriends = computed(() => {
 });
 const isPeopleSearchActive = computed(() => isPeopleSearchOpen.value && !!peopleSearchQuery.value.trim());
 const newPeopleSearchResults = computed(() => peopleSearchResults.value.filter((result) => !isExistingFriend(result)));
+const peopleResultAvatarUrls = computed(() =>
+  Object.fromEntries(
+    newPeopleSearchResults.value.flatMap((result) => {
+      const url = result.avatarUrl ? memberAvatarCache.urls.value[result.avatarUrl] : undefined;
+      return url ? [[result.id, url]] : [];
+    }),
+  ),
+);
+// Statuses are only visible between friends, so the friends list is the live source for participants too.
+const groupMembersWithPresence = computed(() =>
+  groupMembers.value.map((member) => {
+    const friend = friendById.value.get(member.id);
+    return friend ? { ...member, isOnline: friend.isOnline, status: friend.status ?? member.status } : member;
+  }),
+);
 const visibleFriends = computed(() =>
   expandedSidebarPanel.value === 'friends' ? filteredFriends.value : filteredFriends.value.slice(0, 5),
 );
@@ -399,6 +427,7 @@ async function loadLatestMessages(conversationId: string) {
     if (request !== messageRequest || selectedConversation.value?.id !== conversationId) return;
 
     const previousMessages = messages.value;
+    const wasNearBottom = chatPane.value?.isNearBottom() ?? true;
     const previousSequences = new Set(previousMessages.map((message) => message.sequence));
     const latestMessages = response.messages.slice().reverse();
     const newMessages = latestMessages.filter((message) => !previousSequences.has(message.sequence));
@@ -415,7 +444,8 @@ async function loadLatestMessages(conversationId: string) {
     }
     nextMessageBefore.value = response.nextBefore;
     await nextTick();
-    chatPane.value?.scrollToBottom(previousMessages.length && newMessages.length ? 'smooth' : 'auto');
+    if (!previousMessages.length) chatPane.value?.scrollToBottom('auto');
+    else if (newMessages.length && wasNearBottom) chatPane.value?.scrollToBottom('smooth');
   } catch (error) {
     console.error('[Dashboard] Failed to load messages:', error);
     if (request === messageRequest && selectedConversation.value?.id === conversationId) {
@@ -482,12 +512,14 @@ async function sendMessage() {
   clearFeedback();
   isSendingMessage.value = true;
   try {
-    const message = await socialApi.createConversationMessage(token, conversationId, content);
+    const replyToSequence = messageReplyTo.value?.sequence;
+    const message = await socialApi.createConversationMessage(token, conversationId, content, replyToSequence);
     if (selectedConversation.value?.id !== conversationId) return;
 
     appendMessage(message);
     if (selectedConversation.value?.id === conversationId) addConversation(selectedConversation.value);
     messageContent.value = '';
+    messageReplyTo.value = null;
     await nextTick();
     chatPane.value?.scrollToBottom('smooth');
   } catch (error) {
@@ -496,6 +528,41 @@ async function sendMessage() {
   } finally {
     isSendingMessage.value = false;
   }
+}
+
+// Reactions update optimistically; the server's summary replaces the guess, and a failure restores it.
+async function toggleMessageReaction(message: ConversationMessage, emoji: string) {
+  const token = accessToken.value;
+  if (!token) return;
+  const conversationId = message.conversationId;
+  const request = (reactionRequestByMessage.get(message.sequence) ?? 0) + 1;
+  reactionRequestByMessage.set(message.sequence, request);
+  const previous = message.reactions ?? [];
+  setMessageReactions(message.sequence, toggledReactions(previous, emoji));
+  try {
+    const reactions = await socialApi.toggleMessageReaction(token, conversationId, message.sequence, emoji);
+    if (
+      selectedConversation.value?.id === conversationId &&
+      reactionRequestByMessage.get(message.sequence) === request
+    ) {
+      setMessageReactions(message.sequence, reactions);
+    }
+  } catch (error) {
+    console.error('[Dashboard] Failed to update reaction:', error);
+    if (
+      selectedConversation.value?.id === conversationId &&
+      reactionRequestByMessage.get(message.sequence) === request
+    ) {
+      setMessageReactions(message.sequence, previous);
+    }
+    toast({ title: 'Could not update the reaction.', variant: 'destructive' });
+  }
+}
+
+function setMessageReactions(sequence: number, reactions: MessageReaction[]) {
+  messages.value = messages.value.map((message) =>
+    message.sequence === sequence ? { ...message, reactions } : message,
+  );
 }
 
 function addConversation(conversation: Conversation) {
@@ -847,6 +914,10 @@ watch(contactProfile, (profile) => {
   if (profile?.avatarUrl && !friendAvatarUrls.value[profile.id]) void memberAvatarCache.ensure([profile.avatarUrl]);
 });
 
+watch(newPeopleSearchResults, (results) => {
+  void memberAvatarCache.ensure(results.flatMap((result) => (result.avatarUrl ? [result.avatarUrl] : [])));
+});
+
 watch(groupMembers, (members) => {
   void memberAvatarCache.ensure(
     members.flatMap((member) => (member.avatarUrl && !friendAvatarUrls.value[member.id] ? [member.avatarUrl] : [])),
@@ -889,17 +960,19 @@ function openGroupManagement(action: 'add-members' | 'quit-group' | 'remove-grou
 
 function profileFallback(userId: string, name: string): ContactProfile {
   const member = groupMembers.value.find(({ id }) => id === userId);
+  const isFriend = friendById.value.has(userId);
   return {
     id: userId,
     name,
     nickname: member?.nickname ?? '',
-    email: 'Profile details unavailable',
+    email: '',
     avatarUrl: member?.avatarUrl ?? null,
     status: 'offline',
     statusMessage: '',
     createdAt: '',
     lastSeenAt: null,
     isOnline: false,
+    relationship: userId === currentUser.value?.id ? 'owner' : isFriend ? 'friend' : 'none',
   };
 }
 
@@ -1240,7 +1313,7 @@ async function addFriend(result: UserSearchResult) {
   clearFeedback();
   isAddingFriend.value = true;
   try {
-    await socialApi.addFriend(token, result.email);
+    await socialApi.addFriendById(token, result.id);
     isPeopleSearchOpen.value = false;
     peopleSearchQuery.value = '';
     peopleSearchResults.value = [];
@@ -1583,6 +1656,42 @@ async function changeMemberFriendship(member: GroupMember, change: 'add' | 'remo
   }
 }
 
+async function addProfileFriend() {
+  const token = accessToken.value;
+  const profile = contactProfile.value;
+  if (!token || !profile) return;
+  try {
+    await socialApi.addFriendById(token, profile.id);
+    toast({ title: `Friend request sent to ${profile.name}.`, variant: 'success' });
+  } catch (error) {
+    console.error('[Dashboard] Failed to send friend request:', error);
+    toast({
+      title: 'Could not send friend request.',
+      description: error instanceof SocialApiError ? error.message : undefined,
+      variant: 'destructive',
+    });
+  }
+}
+
+async function updateOwnStatus(status: UserStatus) {
+  const token = accessToken.value;
+  if (!token) return;
+  try {
+    const profile = await socialApi.updateCurrentUserStatus(token, status);
+    if (contactProfile.value?.id === profile.id) {
+      contactProfile.value = {
+        ...profile,
+        isOnline: contactProfile.value.isOnline,
+        lastSeenAt: contactProfile.value.lastSeenAt,
+      };
+    }
+    window.dispatchEvent(new Event('openmeet:profile-updated'));
+  } catch (error) {
+    console.error('[Dashboard] Failed to update status:', error);
+    toast({ title: 'Could not update your status.', variant: 'destructive' });
+  }
+}
+
 async function startMemberCall(member: GroupMember) {
   const token = accessToken.value;
   const friend = friends.value.find((item) => item.id === member.id);
@@ -1661,6 +1770,7 @@ async function startConversationCall(conversation: Conversation) {
           :conversation-identifier="conversationIdentifier"
           :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
           :is-direct-online="(conversation) => friendById.get(conversation.otherUserId ?? '')?.isOnline ?? false"
+          :direct-status="(conversation) => friendById.get(conversation.otherUserId ?? '')?.status"
           :is-friend-avatar-loading="isFriendAvatarLoading"
           :is-group-avatar-loading="isGroupAvatarLoading"
           :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
@@ -1711,6 +1821,7 @@ async function startConversationCall(conversation: Conversation) {
           :is-searching="isSearchingUsers"
           :people-search-active="isPeopleSearchActive"
           :results="newPeopleSearchResults"
+          :result-avatar-urls="peopleResultAvatarUrls"
           :search-open="isPeopleSearchOpen"
           @update:search-open="setPeopleSearchOpen"
           @drag-end="(event, info) => handlePanelHeaderDragEnd('friends', event, info)"
@@ -1721,6 +1832,7 @@ async function startConversationCall(conversation: Conversation) {
           @call="startFriendCall"
           @remove="removeFriend"
           @add="addFriend"
+          @open-result="(result) => openContactProfile(result.id, result.name)"
           @respond="respondToFriendRequest"
           @context-open="handleContextMenuOpen"
           @context-activate="activateContextMenu"
@@ -1729,6 +1841,7 @@ async function startConversationCall(conversation: Conversation) {
       <ChatPane
         ref="chatPane"
         v-model:content="messageContent"
+        v-model:reply-to="messageReplyTo"
         :conversation="selectedConversation"
         :pending-friend="pendingDirectFriend"
         :selected-friend="selectedFriend"
@@ -1760,6 +1873,7 @@ async function startConversationCall(conversation: Conversation) {
         @scroll-top="handleMessageScroll"
         @send="sendMessage"
         @request-notifications="requestNotificationPermission"
+        @react="toggleMessageReaction"
         @dismiss-notifications="dismissNotificationWarning"
       />
       <DetailsPane
@@ -1771,7 +1885,8 @@ async function startConversationCall(conversation: Conversation) {
         :group-error="groupProfileError"
         :group-info="groupInfo"
         :group-loading="isGroupProfileLoading"
-        :group-members="groupMembers"
+        :group-members="groupMembersWithPresence"
+        :change-friendship="changeMemberFriendship"
         :group-member-avatar-urls="groupMemberAvatarUrls"
         :group-members-has-more="groupMembersNextOffset !== null"
         :group-members-loading-more="isLoadingMoreGroupMembers"
@@ -1790,6 +1905,7 @@ async function startConversationCall(conversation: Conversation) {
         @open-profile="openContactProfile"
         @refresh-group="refreshSelectedGroup"
         @load-more-members="loadMoreGroupMembers"
+        @chat-member="openMemberChat"
         @group-removed="handleGroupRemoved"
       />
     </motion.div>
@@ -1833,7 +1949,7 @@ async function startConversationCall(conversation: Conversation) {
       :loading="isGroupProfileLoading"
       :error="groupProfileError"
       :info="groupInfo"
-      :members="groupMembers"
+      :members="groupMembersWithPresence"
       :member-avatar-urls="groupMemberAvatarUrls"
       :members-has-more="groupMembersNextOffset !== null"
       :members-loading-more="isLoadingMoreGroupMembers"
@@ -1882,6 +1998,8 @@ async function startConversationCall(conversation: Conversation) {
       @update:confirmation-open="setContactRemoveConfirmationOpen"
       @call="startContactProfileCall"
       @remove="removeProfileFriend"
+      @add-friend="addProfileFriend"
+      @update-status="updateOwnStatus"
     />
   </main>
 </template>

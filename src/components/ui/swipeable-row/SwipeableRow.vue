@@ -13,15 +13,35 @@ const props = withDefaults(
     leadingWidth?: number;
     trailingWidth?: number;
     fullSwipeLeading?: boolean;
+    fullSwipeTrailing?: boolean;
+    /** Distance that arms a full swipe; defaults to half the row (at least two action widths). */
+    fullSwipeDistance?: number;
+    /** One-shot rows never rest open: a release either runs the full-swipe action or springs back. */
+    momentary?: boolean;
     disabled?: boolean;
+    /** Clip only sideways, so the content's vertical shadows are not cut off. */
+    clipHorizontally?: boolean;
   }>(),
-  { leadingWidth: 0, trailingWidth: 0, fullSwipeLeading: false, disabled: false },
+  {
+    leadingWidth: 0,
+    trailingWidth: 0,
+    fullSwipeLeading: false,
+    fullSwipeTrailing: false,
+    fullSwipeDistance: undefined,
+    momentary: false,
+    disabled: false,
+    clipHorizontally: false,
+  },
 );
-const emit = defineEmits<{ (event: 'full-swipe-leading'): void }>();
+const emit = defineEmits<{ (event: 'full-swipe-leading'): void; (event: 'full-swipe-trailing'): void }>();
 
 const AXIS_LOCK_DISTANCE = 8;
 const RUBBER_BAND = 0.25;
 const WHEEL_SETTLE_DELAY = 160;
+// Trackpad scrolling drifts sideways a little; a wheel swipe starts only once sideways motion clearly
+// dominates and has built up past a dead zone, so vertical scrolling never nudges rows.
+const WHEEL_DOMINANCE = 2;
+const WHEEL_DEAD_ZONE = 24;
 // Slightly underdamped, so rows settle with a small, quick bounce.
 const SETTLE_SPRING = { type: 'spring', stiffness: 520, damping: 32, mass: 0.9 } as const;
 // Bouncier return after a full swipe runs its action, so the row visibly springs back into place.
@@ -38,15 +58,22 @@ let gesture: { pointerId: number; x: number; y: number; offset: number; axis: 'x
 let suppressClick = false;
 let wheelSettleTimer: number | undefined;
 let offsetAnimation: { stop: () => void } | null = null;
+let wheelIntent = 0;
+let wheelIntentTimer: number | undefined;
 // Recent horizontal velocity in px/s, handed to the spring so a flick keeps its momentum.
 let velocity = 0;
 let lastSample: { x: number; time: number } | null = null;
 
 // Read the width on demand: a computed would cache a DOM measurement that changes on resize.
-function fullSwipeThreshold() {
-  return Math.max(props.leadingWidth * 2, (root.value?.offsetWidth || props.leadingWidth * 4) * 0.5);
+function fullSwipeThreshold(actionWidth: number) {
+  return props.fullSwipeDistance ?? Math.max(actionWidth * 2, (root.value?.offsetWidth || actionWidth * 4) * 0.5);
 }
-const isFullSwipeArmed = computed(() => props.fullSwipeLeading && offset.value >= fullSwipeThreshold());
+const isFullSwipeArmed = computed(
+  () => props.fullSwipeLeading && offset.value >= fullSwipeThreshold(props.leadingWidth),
+);
+const isTrailingFullSwipeArmed = computed(
+  () => props.fullSwipeTrailing && offset.value <= -fullSwipeThreshold(props.trailingWidth),
+);
 // The side a row rests on, not the live offset: spring overshoot past zero must not count as opening the other side.
 const openSide = computed(() => (isDragging.value ? null : restingSide.value));
 // Panes and content both read the same offset, so they always move together.
@@ -100,7 +127,7 @@ function resist(next: number) {
     return next <= limit ? next : limit + (next - limit) * RUBBER_BAND;
   }
   if (!props.trailingWidth) return 0;
-  const limit = -props.trailingWidth;
+  const limit = props.fullSwipeTrailing ? -width : -props.trailingWidth;
   return next >= limit ? next : limit + (next - limit) * RUBBER_BAND;
 }
 
@@ -111,12 +138,16 @@ function close() {
 
 function settle() {
   isDragging.value = false;
-  if (isFullSwipeArmed.value) {
+  wheelIntent = 0;
+  if (isFullSwipeArmed.value || isTrailingFullSwipeArmed.value) {
+    const side = isFullSwipeArmed.value ? 'full-swipe-leading' : 'full-swipe-trailing';
     springTo(0, FULL_SWIPE_RETURN_SPRING);
     if (activeSwipeRowId.value === props.id) activeSwipeRowId.value = null;
-    emit('full-swipe-leading');
+    if (side === 'full-swipe-leading') emit('full-swipe-leading');
+    else emit('full-swipe-trailing');
     return;
   }
+  if (props.momentary) return close();
   if (offset.value > props.leadingWidth / 2 && props.leadingWidth) springTo(props.leadingWidth);
   else if (offset.value < -props.trailingWidth / 2 && props.trailingWidth) springTo(-props.trailingWidth);
   else close();
@@ -179,7 +210,18 @@ function onClickCapture(event: MouseEvent) {
 }
 
 function onWheel(event: WheelEvent) {
-  if (props.disabled || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+  if (props.disabled) return;
+  const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY) * WHEEL_DOMINANCE;
+  if (!isDragging.value) {
+    if (!horizontal) {
+      wheelIntent = 0;
+      return;
+    }
+    wheelIntent += event.deltaX;
+    window.clearTimeout(wheelIntentTimer);
+    wheelIntentTimer = window.setTimeout(() => (wheelIntent = 0), WHEEL_SETTLE_DELAY);
+    if (Math.abs(wheelIntent) < WHEEL_DEAD_ZONE) return;
+  }
   event.preventDefault();
   stopOffsetAnimation();
   isDragging.value = true;
@@ -197,8 +239,8 @@ watch(activeSwipeRowId, (id) => {
   if (id !== props.id && restingSide.value && !isDragging.value) close();
 });
 
-watch(isFullSwipeArmed, (armed) => {
-  if (armed && isDragging.value) navigator.vibrate?.(10);
+watch([isFullSwipeArmed, isTrailingFullSwipeArmed], ([leading, trailing]) => {
+  if ((leading || trailing) && isDragging.value) navigator.vibrate?.(10);
 });
 
 watch(openSide, (side) => {
@@ -209,6 +251,7 @@ watch(openSide, (side) => {
 onBeforeUnmount(() => {
   stopOffsetAnimation();
   window.clearTimeout(wheelSettleTimer);
+  window.clearTimeout(wheelIntentTimer);
   document.removeEventListener('pointerdown', onDocumentPointerDown, true);
   if (activeSwipeRowId.value === props.id) activeSwipeRowId.value = null;
 });
@@ -220,8 +263,8 @@ defineExpose({ close });
   <div
     ref="root"
     data-swipeable-row
-    class="relative touch-pan-y overflow-hidden"
-    :class="{ 'select-none': isDragging }"
+    class="relative touch-pan-y"
+    :class="[clipHorizontally ? 'harbor-clip-x' : 'overflow-hidden', { 'select-none': isDragging }]"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerEnd"
@@ -252,7 +295,7 @@ defineExpose({ close });
       :inert="openSide !== 'trailing'"
       :aria-hidden="openSide !== 'trailing'"
     >
-      <slot name="trailing" :close="close" />
+      <slot name="trailing" :armed="isTrailingFullSwipeArmed" :close="close" />
     </div>
     <div data-swipe-content class="relative" :style="contentStyle">
       <slot />

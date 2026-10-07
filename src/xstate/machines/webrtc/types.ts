@@ -81,7 +81,9 @@ export type SFUWebRTCEvents =
   | { type: 'CONNECTION_STATE_CHANGED'; state: RTCPeerConnectionState }
   | { type: 'ICE_CONNECTION_STATE_CHANGED'; state: RTCIceConnectionState }
   | { type: 'CONNECTION_QUALITY_CHANGED'; stats: ConnectionQualityStats }
-  | { type: 'CONNECTION_TIMEOUT' };
+  | { type: 'CONNECTION_TIMEOUT' }
+  | { type: 'SIGNALING_LOST' }
+  | { type: 'SIGNALING_RESTORED' };
 
 // Internal machine events
 export type SFUInternalEvents =
