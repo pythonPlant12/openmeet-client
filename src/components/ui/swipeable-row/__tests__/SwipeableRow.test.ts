@@ -92,6 +92,27 @@ describe('SwipeableRow', () => {
     root.dispatchEvent(pointer('pointerup', -400));
   });
 
+  it('reports dragging as soon as a horizontal swipe starts, not when it ends', async () => {
+    const wrapper = mountRow();
+    const row = wrapper.findComponent(SwipeableRow);
+    const root = wrapper.get('[data-swipeable-row]').element;
+
+    root.dispatchEvent(pointer('pointerdown', 0));
+    root.dispatchEvent(pointer('pointermove', 20));
+    await wrapper.vm.$nextTick();
+    expect(row.emitted('dragging')).toEqual([[true]]);
+
+    root.dispatchEvent(pointer('pointerup', 20));
+    await wrapper.vm.$nextTick();
+    expect(row.emitted('dragging')).toEqual([[true], [false]]);
+  });
+
+  it('does not report dragging for vertical scrolls', async () => {
+    const wrapper = mountRow();
+    await swipe(wrapper, 0, 60);
+    expect(wrapper.findComponent(SwipeableRow).emitted('dragging')).toBeUndefined();
+  });
+
   it('hides closed action panes completely, so no sliver shows at the row edges', () => {
     const wrapper = mountRow();
 

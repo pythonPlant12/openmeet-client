@@ -4,6 +4,7 @@ import { motion } from 'motion-v';
 import { computed } from 'vue';
 
 import sidebarSectionControlUrl from '@/assets/sidebar-section-control.svg';
+import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Button } from '@/components/ui/button';
 import { LoadingRipple } from '@/components/ui/loading';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
@@ -13,6 +14,8 @@ import type { MeetingPerson, MeetingSession } from '@/services/social-api';
 
 const props = defineProps<{
   panel: CallsPanel;
+  /** Calls missed since the list was last opened. */
+  badge: number;
   meetings: MeetingSession[];
   isLoading: boolean;
   error: string;
@@ -155,8 +158,9 @@ function initials(name: string) {
         @wheel.prevent="emit('wheel', $event)"
         @keydown.enter.prevent="emit('toggle')"
         @keydown.space.prevent="emit('toggle')"
-        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Calls</span></motion.h2
-      >
+        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Calls</span
+        ><SectionBadge :count="badge" singular="missed call" plural="missed calls"
+      /></motion.h2>
     </div>
     <div
       class="mt-1 min-h-0 flex-1 overflow-y-auto transition-opacity duration-300 motion-reduce:transition-none"

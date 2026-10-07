@@ -9,6 +9,7 @@ function mountSidebar(props: Record<string, unknown> = {}) {
       query: 'sam',
       activeContextMenuId: null,
       expanded: true,
+      badge: 0,
       friendAvatarUrls: {},
       isAvatarLoading: () => false,
       friends: [],
@@ -31,6 +32,12 @@ function mountSidebar(props: Record<string, unknown> = {}) {
 }
 
 describe('FriendsSidebar', () => {
+  it('shows incoming friend requests beside the title, also while collapsed', () => {
+    expect(mountSidebar().find('[data-section-badge]').exists()).toBe(false);
+    const badge = mountSidebar({ badge: 1, expanded: false }).get('#friends-heading [data-section-badge]');
+    expect(badge.attributes('aria-label')).toBe('1 friend request');
+  });
+
   it('shows new people by nickname and opens their profile on click', async () => {
     const wrapper = mountSidebar();
     const result = wrapper.get('[data-people-result]');

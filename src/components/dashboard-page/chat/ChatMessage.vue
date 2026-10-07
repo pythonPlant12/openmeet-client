@@ -51,8 +51,9 @@ const myReactions = computed(
 // Only other people's messages can be quoted.
 const canReply = computed(() => !props.local);
 const isMenuOpen = ref(false);
-// A message is lifted while it is the target of a reaction picker or its own menu.
-const isLifted = computed(() => props.reactionPickerOpen || isMenuOpen.value);
+const isSwiping = ref(false);
+// A message is lifted while it is swiped or is the target of a reaction picker or its own menu.
+const isLifted = computed(() => isSwiping.value || props.reactionPickerOpen || isMenuOpen.value);
 const initial = computed(() =>
   props.animateIn && !props.prefersReducedMotion
     ? props.local
@@ -84,6 +85,7 @@ const initial = computed(() =>
       momentary
       @full-swipe-leading="emit('reply')"
       @full-swipe-trailing="emit('open-reactions')"
+      @dragging="isSwiping = $event"
     >
       <template v-if="canReply" #leading="{ armed }">
         <span class="flex flex-1 items-center justify-start pl-2" aria-hidden="true">

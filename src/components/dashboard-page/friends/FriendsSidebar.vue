@@ -4,6 +4,7 @@ import { motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import sidebarSectionControlUrl from '@/assets/sidebar-section-control.svg';
+import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -22,6 +23,8 @@ import type { Friend, FriendRequest, UserSearchResult } from '@/services/social-
 const props = defineProps<{
   activeContextMenuId: string | null;
   expanded: boolean;
+  /** Incoming friend requests. */
+  badge: number;
   friendAvatarUrls: Record<string, string>;
   isAvatarLoading: (userId: string) => boolean;
   friends: Friend[];
@@ -117,7 +120,8 @@ onBeforeUnmount(clearLongPress);
         @wheel.prevent="emit('wheel', $event)"
         @keydown.enter.prevent="emit('toggle')"
         @keydown.space.prevent="emit('toggle')"
-        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Friends</span></motion.h2
+        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Friends</span
+        ><SectionBadge :count="badge" singular="friend request" plural="friend requests" /></motion.h2
       ><Button
         size="icon"
         variant="ghost"

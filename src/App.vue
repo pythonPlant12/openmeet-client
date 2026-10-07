@@ -436,7 +436,10 @@ async function updatePresence() {
 }
 
 function handleSocialEvent(resource: SocialEventResource) {
-  if (resource === 'calls') void pollIncomingCalls();
+  if (resource === 'calls') {
+    void pollIncomingCalls();
+    window.dispatchEvent(new Event('openmeet:social-calls-updated'));
+  }
   if (resource === 'notifications') void pollNotifications();
   if (resource === 'friends') window.dispatchEvent(new Event('openmeet:social-friends-updated'));
   if (resource === 'conversations') window.dispatchEvent(new Event('openmeet:social-conversations-updated'));
@@ -447,6 +450,7 @@ function refreshSocialState() {
   void pollNotifications();
   window.dispatchEvent(new Event('openmeet:social-friends-updated'));
   window.dispatchEvent(new Event('openmeet:social-conversations-updated'));
+  window.dispatchEvent(new Event('openmeet:social-calls-updated'));
 }
 
 function stopAuthenticatedPolling() {

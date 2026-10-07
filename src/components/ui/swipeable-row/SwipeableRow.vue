@@ -36,7 +36,12 @@ const props = withDefaults(
     maxDistance: undefined,
   },
 );
-const emit = defineEmits<{ (event: 'full-swipe-leading'): void; (event: 'full-swipe-trailing'): void }>();
+const emit = defineEmits<{
+  (event: 'full-swipe-leading'): void;
+  (event: 'full-swipe-trailing'): void;
+  /** True once a horizontal swipe starts, false when the finger lifts. */
+  (event: 'dragging', dragging: boolean): void;
+}>();
 
 const AXIS_LOCK_DISTANCE = 8;
 const RUBBER_BAND = 0.25;
@@ -244,6 +249,8 @@ function onDocumentPointerDown(event: PointerEvent) {
 watch(activeSwipeRowId, (id) => {
   if (id !== props.id && restingSide.value && !isDragging.value) close();
 });
+
+watch(isDragging, (dragging) => emit('dragging', dragging));
 
 watch([isFullSwipeArmed, isTrailingFullSwipeArmed], ([leading, trailing]) => {
   if ((leading || trailing) && isDragging.value) navigator.vibrate?.(10);

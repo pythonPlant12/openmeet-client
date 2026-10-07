@@ -138,6 +138,16 @@ export interface MeetingSession {
   participants: MeetingPerson[];
 }
 
+/** Sidebar badge counts, computed by the server from unread, pending and missed items. */
+export interface BadgeCounts {
+  /** Conversations with unread messages, plus pending direct-message requests and group invitations. */
+  messages: number;
+  /** Incoming friend requests. */
+  friends: number;
+  /** Calls missed since the user last opened their calls. */
+  calls: number;
+}
+
 export interface MeetingSessionsPage {
   meetings: MeetingSession[];
   nextBefore: string | null;
@@ -627,6 +637,14 @@ export const socialApi = {
   listMeetingSessions(accessToken: string, before?: string) {
     const query = before ? `?${new URLSearchParams({ before }).toString()}` : '';
     return request<MeetingSessionsPage>(`/meeting-sessions${query}`, accessToken);
+  },
+
+  getBadges(accessToken: string) {
+    return request<BadgeCounts>('/badges', accessToken);
+  },
+
+  markCallsSeen(accessToken: string) {
+    return request<BadgeCounts>('/badges/calls/seen', accessToken, { method: 'POST' });
   },
 
   getMeetingSession(accessToken: string, meetingId: string) {

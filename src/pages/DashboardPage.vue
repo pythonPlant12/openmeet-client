@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useMediaQuery, useNow } from '@vueuse/core';
+import { useDebounceFn, useMediaQuery, useNow } from '@vueuse/core';
 import { motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -41,6 +41,7 @@ import {
 } from '@/pages/dashboard-group-state';
 import { getSystemNotificationPermission, requestSystemNotificationPermission } from '@/services/notifications';
 import {
+  type BadgeCounts,
   type ContactProfile,
   type Conversation,
   type ConversationMessage,
@@ -1190,10 +1191,16 @@ async function handleConversationsUpdated() {
   if (selectedConversation.value?.kind === 'group') await loadGroupProfile(selectedConversation.value);
 }
 
+function handleCallsUpdated() {
+  void refreshBadges();
+  if (callsPanel.value !== 'collapsed') void callHistory.load({ quiet: true });
+}
+
 onMounted(() => {
   window.addEventListener('openmeet:notifications-received', handleSocialNotifications);
   window.addEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
   window.addEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
+  window.addEventListener('openmeet:social-calls-updated', handleCallsUpdated);
 });
 
 onBeforeUnmount(() => {
@@ -1210,6 +1217,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('openmeet:notifications-received', handleSocialNotifications);
   window.removeEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
   window.removeEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
+  window.removeEventListener('openmeet:social-calls-updated', handleCallsUpdated);
   window.clearTimeout(panelWheelTimer);
 });
 
@@ -1856,6 +1864,60 @@ watch(
   },
   { immediate: true },
 );
+
+// Sidebar badges: the server counts unread conversations, friend requests and missed calls.
+const badges = ref<BadgeCounts>({ messages: 0, friends: 0, calls: 0 });
+let badgeRequest = 0;
+let isMarkingCallsSeen = false;
+
+async function loadBadges() {
+  const token = accessToken.value;
+  if (!token) return;
+  const request = ++badgeRequest;
+  try {
+    const counts = await socialApi.getBadges(token);
+    if (request === badgeRequest && !isUnmounted) badges.value = counts;
+  } catch (error) {
+    console.error('[Dashboard] Failed to load badges:', error);
+  }
+}
+const refreshBadges = useDebounceFn(loadBadges, 400);
+
+async function markCallsSeen() {
+  const token = accessToken.value;
+  if (!token || isMarkingCallsSeen) return;
+  isMarkingCallsSeen = true;
+  try {
+    const counts = await socialApi.markCallsSeen(token);
+    badgeRequest += 1;
+    if (!isUnmounted) badges.value = counts;
+  } catch (error) {
+    console.error('[Dashboard] Failed to mark calls seen:', error);
+  } finally {
+    isMarkingCallsSeen = false;
+  }
+}
+
+// Reading a chat, answering a request or a call ending changes these, so the counts are fetched again.
+watch(
+  () => [
+    accessToken.value,
+    conversations.value.map((conversation) => `${unreadCount(conversation)}:${conversation.markedUnread}`).join(),
+    incomingFriendRequests.value.length,
+    directRequests.value.length,
+    groupInvitations.value.length,
+    incomingCalls.calls.value.length,
+  ],
+  () => void refreshBadges(),
+  { immediate: true },
+);
+// Opening the calls list shows the missed calls, so they no longer count.
+watch(
+  () => callsPanel.value !== 'collapsed' && badges.value.calls > 0,
+  (shouldMark) => {
+    if (shouldMark) void markCallsSeen();
+  },
+);
 watch(callsPanel, (panel) => {
   if (panel !== 'collapsed' && callHistory.hasLoaded.value) void callHistory.load({ quiet: true });
 });
@@ -1930,6 +1992,7 @@ async function startConversationCall(conversation: Conversation) {
           :direct-requests="directRequests"
           :group-invitations="groupInvitations"
           :expanded="callsPanel !== 'top' && expandedSidebarPanel !== 'friends'"
+          :badge="badges.messages"
           :group-avatar-urls="groupAvatarUrls"
           :is-loading="isLoading"
           :is-refreshing="isRefreshingConversations"
@@ -1962,6 +2025,7 @@ async function startConversationCall(conversation: Conversation) {
           :active-context-menu-id="activeContextMenuId"
           :context-menu-key="contextMenuKey"
           :expanded="callsPanel !== 'top' && expandedSidebarPanel !== 'messages'"
+          :badge="badges.friends"
           :friend-avatar-urls="friendAvatarUrls"
           :is-avatar-loading="isFriendAvatarLoading"
           :friends="isPeopleSearchActive ? filteredFriends : visibleFriends"
@@ -1992,6 +2056,7 @@ async function startConversationCall(conversation: Conversation) {
         />
         <CallsSidebar
           :panel="callsPanel"
+          :badge="badges.calls"
           :meetings="callHistory.meetings.value"
           :is-loading="callHistory.isLoading.value"
           :error="callHistory.error.value"

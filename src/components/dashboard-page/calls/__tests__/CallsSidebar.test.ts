@@ -40,6 +40,7 @@ function mountSidebar(props: Partial<InstanceType<typeof CallsSidebar>['$props']
     },
     props: {
       panel: 'collapsed',
+      badge: 0,
       meetings,
       isLoading: false,
       error: '',
@@ -64,6 +65,15 @@ describe('CallsSidebar', () => {
 
     await wrapper.get('#calls-heading').trigger('click');
     expect(wrapper.emitted('toggle')).toHaveLength(1);
+  });
+
+  it('shows missed calls beside the title while collapsed', () => {
+    expect(mountSidebar().find('[data-section-badge]').exists()).toBe(false);
+
+    const badge = mountSidebar({ badge: 3 }).get('#calls-heading [data-section-badge]');
+    expect(badge.text()).toBe('3');
+    expect(badge.attributes('aria-label')).toBe('3 missed calls');
+    expect(mountSidebar({ badge: 150 }).get('[data-section-badge]').text()).toBe('99+');
   });
 
   it('lists calls when expanded and opens one on press', async () => {
