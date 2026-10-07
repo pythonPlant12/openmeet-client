@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { MonitorOff, MonitorUp } from 'lucide-vue-next';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
@@ -19,6 +23,9 @@ defineProps<{ disabled?: boolean }>();
 const emit = defineEmits<{ (event: 'start'): void; (event: 'stop'): void }>();
 const { t } = useI18n();
 const { session, isStarting, quality, sentHeight, setQuality } = useScreenShare();
+const qualityLabel = computed(() =>
+  quality.value === 'auto' ? `Auto${sentHeight.value ? ` · ${sentHeight.value}p` : ''}` : quality.value,
+);
 </script>
 
 <template>
@@ -67,12 +74,17 @@ const { session, isStarting, quality, sentHeight, setQuality } = useScreenShare(
           </span>
         </DropdownMenuItem>
         <DropdownMenuSeparator class="bg-[#D8E7E3]" />
-        <MeetingQualityOptions
-          label="Screen quality"
-          :quality="quality"
-          :sent-height="session ? sentHeight : null"
-          @select="setQuality"
-        />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger class="meeting-share-item cursor-pointer gap-2 rounded-xl py-2.5 font-semibold">
+            Screen quality
+            <span class="ml-auto truncate pl-2 text-xs font-normal text-[#61777B]">{{ qualityLabel }}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent
+            class="marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
+          >
+            <MeetingQualityOptions :quality="quality" :sent-height="session ? sentHeight : null" @select="setQuality" />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
     <span class="meeting-tooltip">{{
