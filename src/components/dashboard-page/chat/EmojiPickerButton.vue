@@ -8,7 +8,11 @@ import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { LoadingRipple } from '@/components/ui/loading';
 
-const props = defineProps<{ prefersReducedMotion: boolean; composer: HTMLTextAreaElement | null }>();
+const props = defineProps<{
+  prefersReducedMotion: boolean;
+  composer: HTMLTextAreaElement | null;
+  disabled?: boolean;
+}>();
 
 const content = defineModel<string>({ required: true });
 const control = ref<HTMLElement | null>(null);
@@ -74,6 +78,7 @@ async function ensurePicker() {
 }
 
 function toggle() {
+  if (props.disabled) return;
   isOpen.value = !isOpen.value;
   if (isOpen.value) void nextTick(ensurePicker);
 }
@@ -115,6 +120,7 @@ onBeforeUnmount(() => {
       aria-controls="emoji-picker"
       aria-label="Choose emoji"
       title="Choose emoji"
+      :disabled="disabled"
       @click="toggle"
     >
       <Smile class="size-5" />
