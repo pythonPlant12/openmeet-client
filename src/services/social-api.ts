@@ -110,6 +110,104 @@ export interface RecentMeeting {
   lastJoinedAt: string;
 }
 
+/** One person in a recorded meeting; reconnects are merged. Guests have no user ID. */
+export interface MeetingPerson {
+  userId: string | null;
+  name: string;
+  nickname: string | null;
+  avatarUrl: string | null;
+  joinedAt: string;
+  /** Null while the person is still in the meeting. */
+  leftAt: string | null;
+  isYou: boolean;
+}
+
+export interface MeetingSession {
+  id: string;
+  roomId: string;
+  /** Set for calls started from a conversation; their links use this ID. */
+  callSessionId: string | null;
+  conversationId: string | null;
+  /** Who could join a hosted meeting; null for conversation calls and meetings without a host. */
+  accessPolicy: GroupAccessPolicy | null;
+  startedAt: string;
+  /** Null while the meeting is live. */
+  endedAt: string | null;
+  participantCount: number;
+  /** History lists name a few other people; the detail lists everyone, including you. */
+  participants: MeetingPerson[];
+  /** A call that rang for you and that you never answered. */
+  missed: boolean;
+  /** A missed call you have not opened or marked read yet. */
+  unread: boolean;
+}
+
+/** Sidebar badge counts, computed by the server from unread, pending and missed items. */
+export interface BadgeCounts {
+  /** Conversations with unread messages, plus pending direct-message requests and group invitations. */
+  messages: number;
+  /** Incoming friend requests. */
+  friends: number;
+  /** Missed calls the user has not read yet. */
+  calls: number;
+}
+
+export interface MeetingSessionsPage {
+  meetings: MeetingSession[];
+  nextBefore: string | null;
+}
+
+export interface MeetingRoomSummary {
+  status: 'live' | 'ended';
+  startedAt: string;
+  endedAt: string | null;
+  participantCount: number;
+  liveParticipantCount: number;
+}
+
+export interface MeetingParticipantPresence {
+  participantId: string;
+  userId: string;
+  /** Null when the person does not share their status with meeting peers. */
+  status: UserStatus | null;
+  avatarUrl: string | null;
+}
+
+export interface MeetingRoomAccess {
+  roomId: string;
+  /** False for rooms without a host; they are open and have no settings. */
+  managed: boolean;
+  accessPolicy: GroupAccessPolicy;
+  isOwner: boolean;
+  canJoin: boolean;
+  requiresPassword: boolean;
+  ownerName: string | null;
+  deniedReason: string | null;
+}
+
+export interface MeetingRoomSettings {
+  accessPolicy: GroupAccessPolicy;
+  /** Required when switching to a password; omitted keeps the current password. */
+  password?: string;
+}
+
+export interface MeetingInvitationCandidate {
+  id: string;
+  name: string;
+  nickname: string;
+  avatarUrl: string | null;
+  isFriend: boolean;
+  invited: boolean;
+}
+
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  siteName: string | null;
+  hasImage: boolean;
+}
+
 export type AvatarSize = 'thumb' | 'full';
 export type ConversationKind = 'group' | 'direct';
 export type GroupAccessPolicy = 'open' | 'password' | 'friendsOnly' | 'friendsOfFriends';
@@ -311,6 +409,26 @@ async function sendAuthorizedRequest(send: (accessToken: string) => Promise<Resp
   return response;
 }
 
+async function readResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const message = (await response.text()) || `Request failed with status ${response.status}`;
+    throw new SocialApiError(message, response.status);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
+/** Endpoints guests may call too: signed-in users send their token, guests send none. */
+async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  if (hasStoredSession()) return request<T>(path, '', init);
+  return readResponse<T>(
+    await fetch(`${API_BASE_URL}/social${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+    }),
+  );
+}
+
 async function request<T>(path: string, _accessToken: string, init?: RequestInit): Promise<T> {
   const response = await sendAuthorizedRequest((accessToken) =>
     fetch(`${API_BASE_URL}/social${path}`, {
@@ -322,14 +440,12 @@ async function request<T>(path: string, _accessToken: string, init?: RequestInit
       },
     }),
   );
+  return readResponse<T>(response);
+}
 
-  if (!response.ok) {
-    const message = (await response.text()) || `Request failed with status ${response.status}`;
-    throw new SocialApiError(message, response.status);
-  }
-
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+/** Guests have no tokens; calling the API without one would end a session that never existed. */
+export function hasStoredSession() {
+  return !!(cookieUtils.get('accessToken') || cookieUtils.get('refreshToken'));
 }
 
 export const socialApi = {
@@ -482,6 +598,90 @@ export const socialApi = {
 
   deleteMeeting(accessToken: string, meetingId: string) {
     return request<void>(`/meetings/${meetingId}`, accessToken, { method: 'DELETE' });
+  },
+
+  createMeetingRoom(accessToken: string, settings: MeetingRoomSettings) {
+    return request<MeetingRoomAccess>('/meeting-rooms', accessToken, {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
+  },
+
+  getMeetingRoomAccess(roomId: string) {
+    return publicRequest<MeetingRoomAccess>(`/meeting-rooms/${encodeURIComponent(roomId)}`);
+  },
+
+  checkMeetingRoomPassword(roomId: string, password: string) {
+    return publicRequest<void>(`/meeting-rooms/${encodeURIComponent(roomId)}/password`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  updateMeetingRoom(accessToken: string, roomId: string, settings: MeetingRoomSettings) {
+    return request<MeetingRoomAccess>(`/meeting-rooms/${encodeURIComponent(roomId)}`, accessToken, {
+      method: 'PATCH',
+      body: JSON.stringify(settings),
+    });
+  },
+
+  listMeetingInvitationCandidates(accessToken: string, roomId: string, query = '') {
+    const params = new URLSearchParams({ query });
+    return request<MeetingInvitationCandidate[]>(
+      `/meeting-rooms/${encodeURIComponent(roomId)}/candidates?${params.toString()}`,
+      accessToken,
+    );
+  },
+
+  inviteToMeetingRoom(accessToken: string, roomId: string, userId: string) {
+    return request<void>(`/meeting-rooms/${encodeURIComponent(roomId)}/invitations`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+  },
+
+  listMeetingSessions(accessToken: string, before?: string) {
+    const query = before ? `?${new URLSearchParams({ before }).toString()}` : '';
+    return request<MeetingSessionsPage>(`/meeting-sessions${query}`, accessToken);
+  },
+
+  getBadges(accessToken: string) {
+    return request<BadgeCounts>('/badges', accessToken);
+  },
+
+  markMeetingRead(accessToken: string, meetingId: string) {
+    return request<void>(`/meeting-sessions/${encodeURIComponent(meetingId)}/read`, accessToken, { method: 'POST' });
+  },
+
+  getMeetingSession(accessToken: string, meetingId: string) {
+    return request<MeetingSession>(`/meeting-sessions/${encodeURIComponent(meetingId)}`, accessToken);
+  },
+
+  getMeetingRoomSummary(accessToken: string, roomRef: string) {
+    return request<MeetingRoomSummary>(`/meeting-sessions/rooms/${encodeURIComponent(roomRef)}/summary`, accessToken);
+  },
+
+  listMeetingRoomPresence(accessToken: string, roomId: string) {
+    return request<MeetingParticipantPresence[]>(
+      `/meeting-sessions/rooms/${encodeURIComponent(roomId)}/presence`,
+      accessToken,
+    );
+  },
+
+  getLinkPreview(accessToken: string, url: string) {
+    return request<LinkPreview>(`/link-previews?${new URLSearchParams({ url }).toString()}`, accessToken);
+  },
+
+  async loadLinkPreviewImage(_accessToken: string, url: string) {
+    const response = await sendAuthorizedRequest((accessToken) =>
+      fetch(`${API_BASE_URL}/social/link-previews/image?${new URLSearchParams({ url }).toString()}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }),
+    );
+    if (!response.ok) {
+      throw new SocialApiError((await response.text()) || 'Could not load preview image', response.status);
+    }
+    return response.blob();
   },
 
   listConversations(accessToken: string) {

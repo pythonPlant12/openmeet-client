@@ -1,5 +1,6 @@
 import { fromCallback, fromPromise } from 'xstate';
 
+import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { i18n } from '@/i18n';
 import { resolveReachableWebSocketUrl } from '@/services/dev-networking';
 import { SignalingService } from '@/services/signaling';
@@ -8,7 +9,9 @@ import { WebRTCServiceSFU } from '@/services/webrtc-sfu';
 import type { InitMediaInput, JoinRoomInput, SFUEvents } from './types';
 
 // SFU server URL
-const SFU_SERVER_URL = resolveReachableWebSocketUrl(import.meta.env.VITE_SFU_WSS_URL || 'wss://sfu.openmeets.eu/ws');
+export const SFU_SERVER_URL = resolveReachableWebSocketUrl(
+  import.meta.env.VITE_SFU_WSS_URL || 'wss://sfu.openmeets.eu/ws',
+);
 const DISCONNECT_GRACE_MS = 15000;
 const MAX_DISCONNECT_GRACE_MS = 45000;
 
@@ -88,6 +91,7 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
         type: 'PARTICIPANT_JOINED',
         participantId: message.participantId,
         participantName: message.participantName,
+        screenShareOf: message.screenShareOf ?? null,
       });
     }
   });
@@ -101,7 +105,12 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
   signalingService.on('error', (message) => {
     if (message.type === 'error') {
       console.error('[webrtcMachine] Meeting server error:', message.message);
-      sendBack({ type: 'SERVER_ERROR', message: i18n.global.t('errors.meetingServer') });
+      // Access refusals are shown as they are, so the page can ask for a password again.
+      const isAccessError = MEETING_ACCESS_ERRORS.includes(message.message);
+      sendBack({
+        type: 'SERVER_ERROR',
+        message: isAccessError ? message.message : i18n.global.t('errors.meetingServer'),
+      });
     }
   });
 
@@ -120,10 +129,13 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
     if (message.type === 'chatMessage') {
       sendBack({
         type: 'CHAT_MESSAGE_RECEIVED',
+        id: message.id,
         participantId: message.participantId,
         participantName: message.participantName,
         message: message.message,
         timestamp: message.timestamp,
+        replyTo: message.replyTo ?? null,
+        reactions: message.reactions ?? [],
       });
     }
   });
@@ -131,6 +143,12 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
   signalingService.on('chatHistory', (message) => {
     if (message.type === 'chatHistory') {
       sendBack({ type: 'CHAT_HISTORY_RECEIVED', messages: message.messages });
+    }
+  });
+
+  signalingService.on('chatReactionsChanged', (message) => {
+    if (message.type === 'chatReactionsChanged') {
+      sendBack({ type: 'CHAT_REACTIONS_CHANGED', messageId: message.messageId, reactions: message.reactions });
     }
   });
 
@@ -238,7 +256,7 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
 
   // The server owns one peer connection per signaling session, so every (re)join negotiates a fresh one.
   const joinWithNewPeerConnection = () => {
-    signaling.joinRoom(input.roomId, input.participantName);
+    signaling.joinRoom(input.roomId, input.participantName, input.password);
     pc = webrtc.createPeerConnection();
     watchPeerConnection(pc);
 

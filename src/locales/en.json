@@ -256,7 +256,8 @@
     "noFriends": "Your circle starts here",
     "noFriendsDescription": "Add someone by their registered email, then call them directly.",
     "online": "Online now",
-    "offline": "Offline",
+    "connecting": "Connecting video…",
+      "offline": "Offline",
     "callFriend": "Call {name}",
     "callError": "Could not start the call. Try again.",
     "callExpired": "That call is no longer available.",
@@ -294,6 +295,9 @@
     "fallbackUser": "User",
     "checkingAuth": "Checking authentication...",
     "settingUpMedia": "Setting up your camera and microphone...",
+    "screenShare": { "label": "{name}'s screen" },
+    "reconnecting": "Connection lost. Reconnecting…",
+    "joiningCall": "Joining the meeting…",
     "poorConnection": "Poor connection",
     "warning": "Warning",
     "mediaWarning": "Media may freeze or become choppy.",
@@ -345,6 +349,9 @@
       "nameRequired": "Please enter your name",
       "nameTooShort": "Name must be at least 2 characters",
       "nameTooLong": "Name must be less than 50 characters",
+      "accessFailed": "Could not check meeting access. Try again.",
+      "passwordLabel": "This meeting is password protected",
+      "passwordPlaceholder": "Meeting password",
       "permissionsValidation": "Camera and microphone permissions are required to join"
     },
     "controls": {
@@ -364,6 +371,15 @@
       "copyId": "Copy meeting ID",
       "shareWhatsApp": "Share on WhatsApp",
       "shareTelegram": "Share on Telegram",
+      "invitePeople": "Invite people",
+      "inviteSignIn": "Sign in to invite people",
+      "microphoneOptions": "Microphone options",
+      "presentScreen": "Present your screen",
+      "presenting": "You are presenting",
+      "startPresenting": "Present a screen, window, or tab",
+      "presentHint": "Your browser asks what to share",
+      "stopPresenting": "Stop presenting",
+      "cameraOptions": "Camera options",
       "shareText": "Join my video call: {link}",
       "shareTitle": "Join my video call"
     },
@@ -381,13 +397,18 @@
       "title": "Chat",
       "empty": "No messages yet.",
       "placeholder": "Type a message...",
-      "send": "Send message"
+      "send": "Send message",
+      "sendShort": "Send",
+      "subtitle": "Everyone in this meeting",
+      "footer": "Chat is cleared when the meeting ends"
     },
     "participant": {
       "focus": "Focus {name}",
       "unfocus": "Return {name} to the grid",
       "pin": "Pin {name} in speaker view",
-      "unpin": "Unpin {name}"
+      "unpin": "Unpin {name} and return to the grid",
+      "offline": "Offline",
+      "status": "Status: {status}"
     },
     "actions": {
       "open": "Open meeting actions",

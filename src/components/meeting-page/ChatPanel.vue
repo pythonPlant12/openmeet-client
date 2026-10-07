@@ -1,97 +1,130 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
-import { BellRing, Send } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { BellRing, MessageCircleMore } from 'lucide-vue-next';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import ChatThread from '@/components/dashboard-page/chat/ChatThread.vue';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   type SystemNotificationPermission,
   getSystemNotificationPermission,
   requestSystemNotificationPermission,
 } from '@/services/notifications';
-
-import SheetDescription from '../ui/sheet/SheetDescription.vue';
-
-export interface ChatMessage {
-  participantId: string;
-  participantName: string;
-  message: string;
-  timestamp: number;
-}
+import type { ConversationMessage } from '@/services/social-api';
+import type { ChatMessage } from '@/xstate/machines/webrtc/types';
 
 interface Props {
   open: boolean;
+  roomId: string;
   messages: ChatMessage[];
   localParticipantId: string | null;
 }
 
 interface Emits {
   (e: 'update:open', value: boolean): void;
-  (e: 'send', message: string): void;
+  (e: 'send', message: string, replyToId?: number): void;
+  (e: 'react', messageId: number, emoji: string): void;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 const { locale, t } = useI18n();
 
-const messageInput = ref('');
-const messagesContainerRef = ref<HTMLDivElement | null>(null);
+const content = ref('');
+const replyTo = ref<ConversationMessage | null>(null);
+const thread = ref<InstanceType<typeof ChatThread> | null>(null);
 const notificationPermission = ref<SystemNotificationPermission>(getSystemNotificationPermission());
 const isDesktop = useMediaQuery('(min-width: 640px)');
+const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const sheetSide = computed<'bottom' | 'right'>(() => (isDesktop.value ? 'right' : 'bottom'));
+// Messages already in the room when the chat opens appear at once; later ones animate in.
+const animateAfterId = ref(0);
+
+// Meeting chat lives in the room, so its messages are mapped onto the conversation message shape the
+// shared thread renders. Reactions are listed by participant, which decides which ones are yours.
+const threadMessages = computed<ConversationMessage[]>(() =>
+  props.messages.map((message) => ({
+    sequence: message.id,
+    conversationId: props.roomId,
+    senderId: message.participantId,
+    senderName: message.participantName,
+    content: message.message,
+    createdAt: new Date(message.timestamp).toISOString(),
+    replyTo: message.replyTo
+      ? {
+          sequence: message.replyTo.id,
+          senderId: message.replyTo.participantId,
+          senderName: message.replyTo.participantName,
+          senderNickname: '',
+          content: message.replyTo.message,
+        }
+      : null,
+    reactions: (message.reactions ?? []).map((reaction) => ({
+      emoji: reaction.emoji,
+      count: reaction.participantIds.length,
+      reactedByMe: !!props.localParticipantId && reaction.participantIds.includes(props.localParticipantId),
+    })),
+  })),
+);
+
+const latestId = () => props.messages[props.messages.length - 1]?.id ?? 0;
+const isLocal = (message: ConversationMessage) => message.senderId === props.localParticipantId;
+const shouldAnimate = (message: ConversationMessage) => message.sequence > animateAfterId.value;
 
 const enableNotifications = async () => {
   notificationPermission.value = await requestSystemNotificationPermission();
 };
 
-const formatTime = (timestamp: number): string => {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' });
-};
+const formatTime = (value: string): string =>
+  new Date(value).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' });
 
-const handleSend = () => {
-  const message = messageInput.value.trim();
-  if (message) {
-    emit('send', message);
-    messageInput.value = '';
-  }
-};
+function handleSend() {
+  const message = content.value.trim();
+  if (!message) return;
+  emit('send', message, replyTo.value?.sequence);
+  content.value = '';
+  replyTo.value = null;
+}
 
-const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    handleSend();
-  }
-};
+function handleReact(message: ConversationMessage, emoji: string) {
+  emit('react', message.sequence, emoji);
+}
 
-const scrollToBottom = () => {
-  setTimeout(() => {
-    if (messagesContainerRef.value) {
-      messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight + 1000;
-    }
-  }, 50);
+// A press outside the chat closes it. Focus moving away does not, and neither do presses on the chat
+// button (it toggles the chat itself) or on menus, toasts, and dialogs that float above the meeting.
+const KEEP_OPEN_TARGETS = '[data-chat-trigger], [role="menu"], [role="dialog"], [data-sonner-toaster]';
+const handleInteractOutside = (event: Event) => {
+  const original = (event as CustomEvent<{ originalEvent?: Event }>).detail?.originalEvent;
+  const target = original?.target instanceof Element ? original.target : null;
+  if (original?.type === 'focusin' || target?.closest(KEEP_OPEN_TARGETS)) event.preventDefault();
 };
-
-const preventOutsideDismiss = (event: Event) => event.preventDefault();
 const restoreChatTriggerFocus = (event: Event) => {
   event.preventDefault();
   window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-chat-trigger]')?.focus());
 };
 
-// Auto-scroll to bottom when new messages arrive
-watch(() => props.messages.length, scrollToBottom);
+// New messages follow the reader to the bottom unless they scrolled up to read; your own messages
+// always bring the view back down.
+watch(
+  () => props.messages.length,
+  (length, previousLength) => {
+    if (!props.open || length <= previousLength) return;
+    const isOwn = props.messages[length - 1]?.participantId === props.localParticipantId;
+    if (isOwn || thread.value?.isNearBottom()) thread.value?.scrollToBottom('smooth');
+  },
+);
 
-// Auto-scroll to bottom when chat is opened
 watch(
   () => props.open,
-  (isOpen) => {
-    if (isOpen) {
-      scrollToBottom();
-    }
+  async (isOpen) => {
+    if (!isOpen) return;
+    animateAfterId.value = latestId();
+    await nextTick();
+    thread.value?.scrollToBottom('auto');
   },
+  { immediate: true },
 );
 </script>
 
@@ -100,79 +133,49 @@ watch(
     <SheetContent
       :side="sheetSide"
       :show-overlay="false"
-      class="harbor-chat-panel marketing-font w-full h-[75vh] top-auto sm:bottom-20 sm:right-4 border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] rounded-xl flex flex-col p-0 sm:mb-4 data-[state=closed]:fade-out-0"
-      @interact-outside="preventOutsideDismiss"
+      class="harbor-chat-panel marketing-font top-auto flex h-[75vh] w-full flex-col gap-0 overflow-hidden rounded-xl border border-[#D8E7E3] bg-white p-0 text-[#102F35] data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"
+      @interact-outside="handleInteractOutside"
       @close-auto-focus="restoreChatTriggerFocus"
     >
-      <SheetHeader class="flex-row items-center justify-between space-y-0 border-b border-[#D8E7E3] p-4">
-        <SheetTitle class="text-[#102F35]">{{ t('meeting.chat.title') }}</SheetTitle>
+      <SheetHeader class="min-h-16 flex-row items-center gap-3 space-y-0 border-b border-[#E5EFEC] py-3 pl-4 pr-12">
+        <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]">
+          <MessageCircleMore class="size-4" />
+        </span>
+        <div class="min-w-0 flex-1 text-left">
+          <SheetTitle class="truncate text-base font-semibold text-[#102F35]">{{ t('meeting.chat.title') }}</SheetTitle>
+          <SheetDescription class="truncate text-xs text-[#61777B]">{{ t('meeting.chat.subtitle') }}</SheetDescription>
+        </div>
         <Button
           v-if="notificationPermission === 'default'"
           variant="ghost"
           size="sm"
-          class="rounded-full text-[#0B7A75] hover:bg-[#D8E7E3]"
+          class="harbor-ghost-action shrink-0 rounded-full text-[#0B7A75]"
+          :aria-label="t('notifications.enableChat')"
+          :title="t('notifications.enableChat')"
           @click="enableNotifications"
         >
           <BellRing class="size-4" />
-          {{ t('notifications.enableChat') }}
         </Button>
       </SheetHeader>
 
-      <!-- Messages -->
-      <div ref="messagesContainerRef" class="flex-1 overflow-y-auto p-4">
-        <div class="space-y-3">
-          <SheetDescription v-if="messages.length === 0" class="text-center text-[#4E6B70] text-sm py-8">
-            {{ t('meeting.chat.empty') }}
-          </SheetDescription>
-          <div
-            v-for="(msg, index) in messages"
-            :key="index"
-            :class="[
-              'rounded-lg p-3 max-w-[85%]',
-              msg.participantId === localParticipantId
-                ? 'bg-[#0B7A75] text-white ml-auto'
-                : 'bg-[#D8E7E3] text-[#102F35]',
-            ]"
-          >
-            <div
-              :class="[
-                'mb-1 text-xs font-medium',
-                msg.participantId === localParticipantId ? 'text-white/70' : 'text-[#4E6B70]',
-              ]"
-            >
-              {{ msg.participantName }}
-            </div>
-            <p class="text-sm break-words whitespace-pre-wrap">{{ msg.message }}</p>
-            <div
-              :class="['text-xs mt-1', msg.participantId === localParticipantId ? 'text-white/70' : 'text-[#4E6B70]']"
-            >
-              {{ formatTime(msg.timestamp) }}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Input -->
-      <div class="p-4 border-t border-[#D8E7E3]">
-        <div class="flex gap-2">
-          <Input
-            v-model="messageInput"
-            :placeholder="t('meeting.chat.placeholder')"
-            maxlength="2000"
-            @keydown="handleKeydown"
-            class="flex-1 border-[#D8E7E3] bg-white text-[#102F35] placeholder:text-[#4E6B70]"
-          />
-          <Button
-            size="icon"
-            @click="handleSend"
-            :disabled="!messageInput.trim()"
-            class="bg-[#0B7A75] text-white hover:bg-[#08645F]"
-            :aria-label="t('meeting.chat.send')"
-          >
-            <Send class="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <ChatThread
+        ref="thread"
+        v-model:content="content"
+        v-model:reply-to="replyTo"
+        :thread-key="roomId"
+        :messages="threadMessages"
+        show-sender
+        :prefers-reduced-motion="prefersReducedMotion"
+        :should-animate="shouldAnimate"
+        :is-local="isLocal"
+        :format-time="formatTime"
+        :empty-text="t('meeting.chat.empty')"
+        :footer-note="t('meeting.chat.footer')"
+        :placeholder="t('meeting.chat.placeholder')"
+        :send-label="t('meeting.chat.sendShort')"
+        @send="handleSend"
+        @react="handleReact"
+      />
     </SheetContent>
   </Sheet>
 </template>

@@ -5,17 +5,34 @@ import { cookieUtils } from '@/utils';
 const SIGNALING_PROTOCOL_VERSION = 2;
 const AUTHENTICATION_TIMEOUT_MS = 5_000;
 
+export interface SignalingChatReplyPreview {
+  id: number;
+  participantId: string;
+  participantName: string;
+  /** Short excerpt of the quoted message. */
+  message: string;
+}
+
+export interface SignalingChatReaction {
+  emoji: string;
+  participantIds: string[];
+}
+
 export interface SignalingChatMessage {
+  /** Room-scoped ID that replies and reactions refer to. */
+  id: number;
   participantId: string;
   participantName: string;
   message: string;
   timestamp: number;
+  replyTo?: SignalingChatReplyPreview | null;
+  reactions?: SignalingChatReaction[];
 }
 
 export type SignalingMessage =
   | { type: 'authenticate'; protocolVersion: number; accessToken: string | null }
   | { type: 'authenticated'; protocolVersion: number; authenticated: boolean }
-  | { type: 'join'; roomId: string; participantName: string }
+  | { type: 'join'; roomId: string; participantName: string; password?: string; screenShareOf?: string }
   | { type: 'joined'; participantId: string; participantName: string }
   | { type: 'offer'; targetId: string; sdp: string }
   | { type: 'answer'; targetId: string; sdp: string }
@@ -26,11 +43,13 @@ export type SignalingMessage =
       sdpMid: string | null;
       sdpMLineIndex: number | null;
     }
-  | { type: 'participantJoined'; participantId: string; participantName: string }
+  | { type: 'participantJoined'; participantId: string; participantName: string; screenShareOf?: string | null }
   | { type: 'participantLeft'; participantId: string }
   | { type: 'streamOwner'; streamId: string; participantId: string; participantName: string }
   | { type: 'mediaStateChanged'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
-  | ({ type: 'chatMessage' } & SignalingChatMessage)
+  | ({ type: 'chatMessage'; replyToId?: number } & SignalingChatMessage)
+  | { type: 'chatReaction'; messageId: number; emoji: string }
+  | { type: 'chatReactionsChanged'; messageId: number; reactions: SignalingChatReaction[] }
   | { type: 'chatHistory'; messages: SignalingChatMessage[] }
   | { type: 'error'; message: string };
 
@@ -150,11 +169,13 @@ export class SignalingService {
   }
 
   // Room management
-  joinRoom(roomId: string, participantName: string): void {
+  joinRoom(roomId: string, participantName: string, password?: string | null, screenShareOf?: string): void {
     this.send({
       type: 'join',
       roomId,
       participantName,
+      ...(password ? { password } : {}),
+      ...(screenShareOf ? { screenShareOf } : {}),
     });
   }
 
@@ -194,14 +215,20 @@ export class SignalingService {
     });
   }
 
-  sendChatMessage(message: string): void {
+  sendChatMessage(message: string, replyToId?: number): void {
     this.send({
       type: 'chatMessage',
-      participantId: '', // Server will fill this in
-      participantName: '', // Server will fill this in
+      id: 0, // Server assigns the ID, sender, and quote
+      participantId: '',
+      participantName: '',
       message,
       timestamp: Date.now(),
+      ...(replyToId === undefined ? {} : { replyToId }),
     });
+  }
+
+  sendChatReaction(messageId: number, emoji: string): void {
+    this.send({ type: 'chatReaction', messageId, emoji });
   }
 
   onConnectionChange(handler: ConnectionHandler): () => void {

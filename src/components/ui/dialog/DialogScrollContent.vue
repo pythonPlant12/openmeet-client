@@ -8,6 +8,9 @@ import { useI18n } from 'vue-i18n';
 
 import { cn } from '@/lib/utils';
 
+// The portal is the root, so attributes such as data-* go onto the content element itself.
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>();
 const emits = defineEmits<DialogContentEmits>();
 const { t } = useI18n();
@@ -29,7 +32,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
             props.class,
           )
         "
-        v-bind="forwarded"
+        v-bind="{ ...forwarded, ...$attrs }"
         @pointer-down-outside="
           (event) => {
             const originalEvent = event.detail.originalEvent;

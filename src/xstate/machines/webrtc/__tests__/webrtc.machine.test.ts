@@ -256,6 +256,7 @@ describe('WebRTC Machine', () => {
       type: 'CHAT_HISTORY_RECEIVED',
       messages: [
         {
+          id: 1,
           participantId: 'participant-2',
           participantName: 'Bob',
           message: 'Earlier message',
@@ -265,16 +266,47 @@ describe('WebRTC Machine', () => {
     });
     actor.send({
       type: 'CHAT_MESSAGE_RECEIVED',
+      id: 2,
       participantId: 'participant-2',
       participantName: 'Bob',
       message: 'Live message',
       timestamp: 2,
+      replyTo: { id: 1, participantId: 'participant-2', participantName: 'Bob', message: 'Earlier message' },
     });
 
     expect(actor.getSnapshot().context.chatMessages.map((message) => message.message)).toEqual([
       'Earlier message',
       'Live message',
     ]);
+    expect(actor.getSnapshot().context.chatMessages[1]?.replyTo?.id).toBe(1);
+    actor.stop();
+  });
+
+  it('replaces the reactions of the changed chat message only', async () => {
+    const actor = createTestActor();
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
+
+    actor.send({
+      type: 'CHAT_HISTORY_RECEIVED',
+      messages: [
+        { id: 1, participantId: 'participant-2', participantName: 'Bob', message: 'One', timestamp: 1 },
+        { id: 2, participantId: 'participant-2', participantName: 'Bob', message: 'Two', timestamp: 2 },
+      ],
+    });
+    actor.send({
+      type: 'CHAT_REACTIONS_CHANGED',
+      messageId: 2,
+      reactions: [{ emoji: '👍', participantIds: ['participant-1'] }],
+    });
+
+    const [first, second] = actor.getSnapshot().context.chatMessages;
+    expect(first?.reactions).toBeUndefined();
+    expect(second?.reactions).toEqual([{ emoji: '👍', participantIds: ['participant-1'] }]);
     actor.stop();
   });
 });

@@ -1,6 +1,8 @@
 import { computed, inject } from 'vue';
 
+import type { VideoQuality } from '@/services/video-quality';
 import type { DeviceConstraints } from '@/services/webrtc-sfu';
+import { getServices } from '@/xstate/machines/webrtc/actors';
 import type { ChatMessage, Participant } from '@/xstate/machines/webrtc/types';
 
 // Type for the full useMachine return object
@@ -55,6 +57,7 @@ export function useWebrtc() {
   const connectionQuality = computed(() => webrtcActor.snapshot.value.context.connectionQuality);
   const connectionQualityReason = computed(() => webrtcActor.snapshot.value.context.connectionQualityReason);
   const packetLossRatio = computed(() => webrtcActor.snapshot.value.context.packetLossRatio);
+  const isReconnecting = computed(() => webrtcActor.snapshot.value.context.isReconnecting as boolean);
   const error = computed(() =>
     webrtcActor.snapshot.value.context.error ? new Error(webrtcActor.snapshot.value.context.error) : null,
   );
@@ -71,8 +74,8 @@ export function useWebrtc() {
     webrtcActor.send({ type: 'INIT_MEDIA', participantName, deviceConstraints });
   };
 
-  const joinRoom = (roomIdToJoin: string, participantName?: string) => {
-    webrtcActor.send({ type: 'JOIN_ROOM', roomId: roomIdToJoin, participantName });
+  const joinRoom = (roomIdToJoin: string, participantName?: string, password?: string) => {
+    webrtcActor.send({ type: 'JOIN_ROOM', roomId: roomIdToJoin, participantName, password });
   };
 
   const leaveRoom = () => {
@@ -91,8 +94,25 @@ export function useWebrtc() {
     webrtcActor.send({ type: 'RETRY' });
   };
 
-  const sendChatMessage = (message: string) => {
-    webrtcActor.send({ type: 'SEND_CHAT_MESSAGE', message });
+  const sendChatMessage = (message: string, replyToId?: number) => {
+    webrtcActor.send({ type: 'SEND_CHAT_MESSAGE', message, replyToId });
+  };
+
+  // Device and quality changes act on the live media service directly; they change no machine state.
+  const switchDevice = async (kind: 'audio' | 'video', deviceId: string) => {
+    const { webrtcService } = getServices();
+    if (!webrtcService) throw new Error('Media is not ready');
+    await webrtcService.switchDevice(kind, deviceId);
+  };
+
+  const setVideoQuality = async (quality: VideoQuality) => {
+    await getServices().webrtcService?.setVideoQuality(quality);
+  };
+
+  const activeDeviceId = (kind: 'audio' | 'video') => getServices().webrtcService?.getActiveDeviceId(kind) ?? null;
+
+  const sendChatReaction = (messageId: number, emoji: string) => {
+    webrtcActor.send({ type: 'SEND_CHAT_REACTION', messageId, emoji });
   };
 
   return {
@@ -122,6 +142,7 @@ export function useWebrtc() {
     connectionQuality,
     connectionQualityReason,
     packetLossRatio,
+    isReconnecting,
     chatMessages,
     hasLoadedChatHistory,
 
@@ -132,6 +153,10 @@ export function useWebrtc() {
     toggleParticipantAudio,
     toggleParticipantVideo,
     sendChatMessage,
+    sendChatReaction,
+    switchDevice,
+    setVideoQuality,
+    activeDeviceId,
     retry,
 
     // Raw access (like useAuth exposes)

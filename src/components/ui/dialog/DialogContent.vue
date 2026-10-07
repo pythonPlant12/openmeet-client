@@ -8,6 +8,9 @@ import { useI18n } from 'vue-i18n';
 
 import { cn } from '@/lib/utils';
 
+// The portal is the root, so attributes such as data-* go onto the content element itself.
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<
   DialogContentProps & { class?: HTMLAttributes['class']; overlayClass?: HTMLAttributes['class']; hideClose?: boolean }
 >();
@@ -30,7 +33,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       "
     />
     <DialogContent
-      v-bind="forwarded"
+      v-bind="{ ...forwarded, ...$attrs }"
       :class="
         cn(
           'harbor-dialog-content fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg sm:rounded-lg',

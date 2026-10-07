@@ -1,17 +1,5 @@
 <script setup lang="ts">
-import {
-  Check,
-  Code,
-  Copy,
-  Link2,
-  MessageSquare,
-  Mic,
-  MicOff,
-  PhoneOff,
-  Share2,
-  Video,
-  VideoOff,
-} from 'lucide-vue-next';
+import { Check, Code, Copy, Link2, MessageSquare, PhoneOff, Share2, UserPlus } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -24,6 +12,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+import MeetingMediaControl from './MeetingMediaControl.vue';
+import MeetingScreenShareControl from './MeetingScreenShareControl.vue';
+
 interface Props {
   audioAvailable: boolean;
   showConnectionStatus: boolean;
@@ -33,6 +24,10 @@ interface Props {
   isChatOpen: boolean;
   unreadCount?: number;
   videoAvailable: boolean;
+  /** Inviting needs a session; conversation calls invite through their conversation instead. */
+  inviteMode?: 'enabled' | 'signedOut' | 'hidden';
+  /** Browsers without screen capture, such as most phones, get no present button. */
+  canPresent?: boolean;
 }
 
 interface Emits {
@@ -41,9 +36,14 @@ interface Emits {
   (e: 'toggle-video'): void;
   (e: 'toggle-chat'): void;
   (e: 'end-call'): void;
+  (e: 'invite'): void;
+  /** A microphone or camera switch replaced a local track. */
+  (e: 'media-changed'): void;
+  (e: 'start-screen-share'): void;
+  (e: 'stop-screen-share'): void;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { unreadCount: 0, inviteMode: 'hidden', canPresent: false });
 const emit = defineEmits<Emits>();
 const { t } = useI18n();
 
@@ -123,6 +123,23 @@ const shareOnTelegram = () => {
             side="top"
             class="marketing-font w-60 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
           >
+            <template v-if="inviteMode !== 'hidden'">
+              <DropdownMenuItem
+                data-invite-people
+                :disabled="inviteMode !== 'enabled'"
+                class="meeting-share-item cursor-pointer rounded-xl py-2.5 font-semibold text-[#0B7A75] focus:bg-[#E6F4F1] focus:text-[#102F35] data-[disabled]:cursor-not-allowed"
+                @select="emit('invite')"
+              >
+                <UserPlus class="mr-2 h-4 w-4" />
+                <span class="min-w-0">
+                  <span class="block">{{ t('meeting.controls.invitePeople') }}</span>
+                  <span v-if="inviteMode === 'signedOut'" class="block text-xs font-normal text-[#61777B]">{{
+                    t('meeting.controls.inviteSignIn')
+                  }}</span>
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator class="bg-[#D8E7E3]" />
+            </template>
             <DropdownMenuItem
               @click="copyMeetingLink"
               class="meeting-share-item cursor-pointer rounded-xl py-2.5 text-[#27595D] focus:bg-[#E6F4F1] focus:text-[#102F35]"
@@ -171,6 +188,12 @@ const shareOnTelegram = () => {
         <span class="meeting-tooltip">{{ t('meeting.tooltips.share') }}</span>
       </div>
 
+      <MeetingScreenShareControl
+        v-if="canPresent"
+        @start="emit('start-screen-share')"
+        @stop="emit('stop-screen-share')"
+      />
+
       <!-- Chat Button -->
       <div class="group relative">
         <Button
@@ -193,63 +216,21 @@ const shareOnTelegram = () => {
         <span class="meeting-tooltip">{{ t('meeting.tooltips.chat') }}</span>
       </div>
 
-      <!-- Microphone Button -->
-      <div class="group relative">
-        <Button
-          :variant="isMuted ? 'destructive' : 'secondary'"
-          size="icon"
-          :disabled="!audioAvailable"
-          @click="emit('toggle-mute')"
-          class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
-          :class="{
-            '!border-[#F2765F] !bg-[#F2765F] !text-white': isMuted,
-            'meeting-control-muted': isMuted,
-          }"
-          :aria-label="
-            t(
-              !audioAvailable
-                ? 'meeting.actions.audioUnavailable'
-                : isMuted
-                  ? 'meeting.controls.unmute'
-                  : 'meeting.controls.mute',
-            )
-          "
-        >
-          <MicOff v-if="isMuted" class="h-5 w-5" />
-          <Mic v-else class="h-5 w-5" />
-        </Button>
-        <span class="meeting-tooltip">{{ t(isMuted ? 'meeting.tooltips.unmute' : 'meeting.tooltips.mute') }}</span>
-      </div>
+      <MeetingMediaControl
+        kind="audio"
+        :off="isMuted"
+        :available="audioAvailable"
+        @toggle="emit('toggle-mute')"
+        @media-changed="emit('media-changed')"
+      />
 
-      <!-- Camera Button -->
-      <div class="group relative">
-        <Button
-          :variant="isVideoOff ? 'destructive' : 'secondary'"
-          size="icon"
-          :disabled="!videoAvailable"
-          @click="emit('toggle-video')"
-          class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
-          :class="{
-            '!border-[#F2765F] !bg-[#F2765F] !text-white': isVideoOff,
-            'meeting-control-muted': isVideoOff,
-          }"
-          :aria-label="
-            t(
-              !videoAvailable
-                ? 'meeting.actions.videoUnavailable'
-                : isVideoOff
-                  ? 'meeting.controls.turnCameraOn'
-                  : 'meeting.controls.turnCameraOff',
-            )
-          "
-        >
-          <VideoOff v-if="isVideoOff" class="h-5 w-5" />
-          <Video v-else class="h-5 w-5" />
-        </Button>
-        <span class="meeting-tooltip">{{
-          t(isVideoOff ? 'meeting.tooltips.cameraOn' : 'meeting.tooltips.cameraOff')
-        }}</span>
-      </div>
+      <MeetingMediaControl
+        kind="video"
+        :off="isVideoOff"
+        :available="videoAvailable"
+        @toggle="emit('toggle-video')"
+        @media-changed="emit('media-changed')"
+      />
 
       <!-- End Call Button -->
       <div class="group relative">

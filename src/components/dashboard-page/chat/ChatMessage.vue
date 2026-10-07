@@ -13,6 +13,7 @@ import {
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import type { ConversationMessage } from '@/services/social-api';
 
+import MessageContent from './MessageContent.vue';
 import { QUICK_REACTIONS } from './reactions';
 
 const props = defineProps<{
@@ -40,6 +41,8 @@ const emit = defineEmits<{
 
 // Swipes only need a short pull on a message; nothing rests open.
 const SWIPE_DISTANCE = 56;
+// A message never travels farther than this either way, however far the finger goes.
+const MAX_SWIPE_DISTANCE = 84;
 
 const reactions = computed(() => props.message.reactions ?? []);
 const myReactions = computed(
@@ -48,8 +51,9 @@ const myReactions = computed(
 // Only other people's messages can be quoted.
 const canReply = computed(() => !props.local);
 const isMenuOpen = ref(false);
-// A message is lifted while it is the target of a reaction picker or its own menu.
-const isLifted = computed(() => props.reactionPickerOpen || isMenuOpen.value);
+const isSwiping = ref(false);
+// A message is lifted while it is swiped or is the target of a reaction picker or its own menu.
+const isLifted = computed(() => isSwiping.value || props.reactionPickerOpen || isMenuOpen.value);
 const initial = computed(() =>
   props.animateIn && !props.prefersReducedMotion
     ? props.local
@@ -75,11 +79,13 @@ const initial = computed(() =>
       :leading-width="canReply ? SWIPE_DISTANCE : 0"
       :trailing-width="SWIPE_DISTANCE"
       :full-swipe-distance="SWIPE_DISTANCE"
+      :max-distance="MAX_SWIPE_DISTANCE"
       :full-swipe-leading="canReply"
       full-swipe-trailing
       momentary
       @full-swipe-leading="emit('reply')"
       @full-swipe-trailing="emit('open-reactions')"
+      @dragging="isSwiping = $event"
     >
       <template v-if="canReply" #leading="{ armed }">
         <span class="flex flex-1 items-center justify-start pl-2" aria-hidden="true">
@@ -141,7 +147,7 @@ const initial = computed(() =>
                 >
                 <span class="line-clamp-2 block leading-snug">{{ message.replyTo.content }}</span>
               </button>
-              <p class="whitespace-pre-wrap break-words leading-snug">{{ message.content }}</p>
+              <MessageContent :content="message.content" :local="local" />
               <time
                 :datetime="message.createdAt"
                 class="mt-0.5 block text-right text-[0.6875rem] tabular-nums"

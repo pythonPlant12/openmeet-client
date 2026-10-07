@@ -29,6 +29,7 @@ function mountSidebar(props: Record<string, unknown> = {}) {
       directRequests: [],
       groupInvitations: [],
       expanded: true,
+      badge: 0,
       groupAvatarUrls: {},
       isLoading: false,
       isRefreshing: false,
@@ -50,6 +51,12 @@ function mountSidebar(props: Record<string, unknown> = {}) {
 }
 
 describe('ConversationsSidebar', () => {
+  it('shows conversations that need attention beside the title, also while collapsed', () => {
+    expect(mountSidebar().find('[data-section-badge]').exists()).toBe(false);
+    const badge = mountSidebar({ badge: 2, expanded: false }).get('h1 [data-section-badge]');
+    expect(badge.text()).toBe('2');
+  });
+
   it('keeps listed conversations mounted during a background refresh', () => {
     const wrapper = mountSidebar({ isRefreshing: true });
 

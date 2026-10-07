@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import type { UserStatus } from '@/services/social-api';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 import ParticipantTile from './ParticipantTile.vue';
@@ -13,6 +14,10 @@ const props = defineProps<{
   participants: Participant[];
   pinnedParticipantId: string | null;
   viewMode: MeetingViewMode;
+  /** Statuses of registered participants, by participant ID. Guests have none. */
+  participantStatuses?: Record<string, UserStatus>;
+  /** Avatar image URLs of registered participants, keyed by participant ID. */
+  participantAvatars?: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -33,13 +38,13 @@ const secondaryParticipants = computed(() =>
 
 <template>
   <div
-    class="relative h-full w-full flex-1 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B7A75]"
+    class="relative h-full w-full flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B7A75]"
     data-testid="meeting-video-canvas"
     :data-view-mode="viewMode"
     tabindex="0"
     :aria-label="t('meeting.actions.videoCanvas')"
   >
-    <div v-if="hasParticipants" class="relative mt-3 h-[68vh] w-full bg-white md:h-[84vh]">
+    <div v-if="hasParticipants" class="relative mt-3 h-[68vh] w-full md:h-[84vh]">
       <Transition name="meeting-layout" mode="out-in">
         <div
           v-if="viewMode === 'grid'"
@@ -58,9 +63,11 @@ const secondaryParticipants = computed(() =>
               v-for="participant in participants"
               :key="participant.id"
               :participant="participant"
+              :status="participantStatuses?.[participant.id]"
+              :avatar-url="participantAvatars?.[participant.id]"
+              :speaking="participants.length > 1 && activeSpeakerId === participant.id"
               size="grid"
-              :interactive="false"
-              :show-expand-icon="false"
+              @click="emit('togglePin', participant.id)"
             />
           </div>
         </div>
@@ -71,6 +78,9 @@ const secondaryParticipants = computed(() =>
               <ParticipantTile
                 v-if="speakerParticipant"
                 :participant="speakerParticipant"
+                :status="participantStatuses?.[speakerParticipant.id]"
+                :avatar-url="participantAvatars?.[speakerParticipant.id]"
+                :speaking="participants.length > 1 && activeSpeakerId === speakerParticipant.id"
                 size="full"
                 :is-expanded="pinnedParticipantId === speakerParticipant.id"
                 @click="emit('togglePin', speakerParticipant.id)"
@@ -81,6 +91,9 @@ const secondaryParticipants = computed(() =>
                 v-for="participant in secondaryParticipants"
                 :key="participant.id"
                 :participant="participant"
+                :status="participantStatuses?.[participant.id]"
+                :avatar-url="participantAvatars?.[participant.id]"
+                :speaking="participants.length > 1 && activeSpeakerId === participant.id"
                 size="sidebar"
                 :is-expanded="pinnedParticipantId === participant.id"
                 @click="emit('togglePin', participant.id)"
@@ -93,6 +106,9 @@ const secondaryParticipants = computed(() =>
               <ParticipantTile
                 v-if="speakerParticipant"
                 :participant="speakerParticipant"
+                :status="participantStatuses?.[speakerParticipant.id]"
+                :avatar-url="participantAvatars?.[speakerParticipant.id]"
+                :speaking="participants.length > 1 && activeSpeakerId === speakerParticipant.id"
                 size="full"
                 :is-expanded="pinnedParticipantId === speakerParticipant.id"
                 @click="emit('togglePin', speakerParticipant.id)"
@@ -106,6 +122,9 @@ const secondaryParticipants = computed(() =>
                 v-for="participant in secondaryParticipants"
                 :key="participant.id"
                 :participant="participant"
+                :status="participantStatuses?.[participant.id]"
+                :avatar-url="participantAvatars?.[participant.id]"
+                :speaking="participants.length > 1 && activeSpeakerId === participant.id"
                 size="mobile"
                 :is-expanded="pinnedParticipantId === participant.id"
                 @click="emit('togglePin', participant.id)"

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { useMediaQuery } from '@vueuse/core';
+import { useDebounceFn, useMediaQuery, useNow } from '@vueuse/core';
 import { motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
+import CallDetailsDialog from '@/components/dashboard-page/calls/CallDetailsDialog.vue';
+import CallsSidebar from '@/components/dashboard-page/calls/CallsSidebar.vue';
 import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
 import DetailsPane from '@/components/dashboard-page/details/DetailsPane.vue';
@@ -17,6 +19,9 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
+import { useCallHistory } from '@/composables/useCallHistory';
+import { useIncomingCalls } from '@/composables/useIncomingCalls';
+import { callAgainTargets } from '@/lib/meetings';
 import {
   type ConversationActivity,
   sortConversationsByActivity,
@@ -24,9 +29,11 @@ import {
   upsertConversationByActivity,
 } from '@/pages/dashboard-chat-state';
 import {
+  type CallsPanel,
   type GroupMutationToken,
   type SidebarPanel,
   beginGroupMutation as acquireGroupMutation,
+  callsPanelAfterDrag,
   groupAccessPolicyLabel,
   endGroupMutation as releaseGroupMutation,
   shouldApplyDashboardRequest,
@@ -34,6 +41,7 @@ import {
 } from '@/pages/dashboard-group-state';
 import { getSystemNotificationPermission, requestSystemNotificationPermission } from '@/services/notifications';
 import {
+  type BadgeCounts,
   type ContactProfile,
   type Conversation,
   type ConversationMessage,
@@ -44,6 +52,8 @@ import {
   type GroupInfo,
   type GroupInvitation,
   type GroupMember,
+  type MeetingPerson,
+  type MeetingSession,
   type MessageReaction,
   SocialApiError,
   type UserSearchResult,
@@ -130,6 +140,8 @@ const isRespondingToFriendRequest = ref<string | null>(null);
 const isCreatingGroup = ref(false);
 const startingCallConversationId = ref<string | null>(null);
 const expandedSidebarPanel = ref<SidebarPanel | null>(restoreSidebarPanel());
+// Calls start collapsed at the bottom of the sidebar on every visit.
+const callsPanel = ref<CallsPanel>('collapsed');
 const activeContextMenuId = ref<string | null>(null);
 const contextMenuResets = ref<Record<string, number>>({});
 const isGroupDialogOpen = ref(false);
@@ -289,7 +301,7 @@ const selectedGroupAvatarUrl = computed(() =>
 const hasSelectedConversation = computed(() => !!selectedConversation.value || !!pendingDirectFriend.value);
 const contactProfileFriend = computed(() =>
   contactProfile.value
-    ? friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId)
+    ? (friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId) ?? null)
     : null,
 );
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
@@ -1126,6 +1138,10 @@ function handlePanelHeaderDragEnd(
   _event: PointerEvent,
   info: { offset: { y: number }; velocity: { y: number } },
 ) {
+  if (callsPanel.value === 'top') {
+    callsPanel.value = 'collapsed';
+    return;
+  }
   expandedSidebarPanel.value = sidebarPanelAfterDrag(panel, expandedSidebarPanel.value, info.offset.y, info.velocity.y);
 }
 
@@ -1142,6 +1158,11 @@ function handlePanelHeaderWheel(panel: 'messages' | 'friends', event: WheelEvent
 }
 
 function toggleSidebarPanel(panel: 'messages' | 'friends') {
+  if (callsPanel.value === 'top') {
+    callsPanel.value = 'collapsed';
+    expandedSidebarPanel.value = panel;
+    return;
+  }
   expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
 }
 
@@ -1170,10 +1191,16 @@ async function handleConversationsUpdated() {
   if (selectedConversation.value?.kind === 'group') await loadGroupProfile(selectedConversation.value);
 }
 
+function handleCallsUpdated() {
+  void refreshBadges();
+  if (callsPanel.value !== 'collapsed') void callHistory.load({ quiet: true });
+}
+
 onMounted(() => {
   window.addEventListener('openmeet:notifications-received', handleSocialNotifications);
   window.addEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
   window.addEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
+  window.addEventListener('openmeet:social-calls-updated', handleCallsUpdated);
 });
 
 onBeforeUnmount(() => {
@@ -1190,6 +1217,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('openmeet:notifications-received', handleSocialNotifications);
   window.removeEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
   window.removeEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
+  window.removeEventListener('openmeet:social-calls-updated', handleCallsUpdated);
   window.clearTimeout(panelWheelTimer);
 });
 
@@ -1714,6 +1742,189 @@ async function startMemberCall(member: GroupMember) {
   }
 }
 
+// Calls: history docked under the friends list, and calls ringing for the user.
+const callHistory = useCallHistory(accessToken);
+const incomingCalls = useIncomingCalls();
+const callsNow = useNow({ interval: 30_000 });
+const isAnsweringCall = ref(false);
+const callDetailsMeeting = ref<MeetingSession | null>(null);
+const isCallDetailsOpen = ref(false);
+const callingMeetingId = ref<string | null>(null);
+
+const ringingCall = computed(() => incomingCalls.calls.value[0] ?? null);
+const ringingName = computed(() => {
+  const ringing = ringingCall.value;
+  if (!ringing) return null;
+  if (ringing.kind === 'invitation') return ringing.call.caller?.name ?? 'Someone';
+  const conversation = conversations.value.find(({ id }) => id === ringing.call.conversationId);
+  if (conversation) return conversationName(conversation);
+  return friendById.value.get(ringing.call.initiatorId)?.name ?? 'Someone';
+});
+
+async function respondToRingingCall(accept: boolean) {
+  const ringing = ringingCall.value;
+  if (!ringing || isAnsweringCall.value) return;
+  isAnsweringCall.value = true;
+  try {
+    await (accept ? incomingCalls.accept(ringing) : incomingCalls.decline(ringing));
+  } finally {
+    isAnsweringCall.value = false;
+  }
+}
+
+function toggleCallsPanel() {
+  callsPanel.value = callsPanel.value === 'collapsed' ? 'middle' : 'collapsed';
+}
+
+function handleCallsDragEnd(_event: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }) {
+  callsPanel.value = callsPanelAfterDrag(callsPanel.value, info.offset.y, info.velocity.y);
+}
+
+function handleCallsWheel(event: WheelEvent) {
+  if (!event.deltaY || panelWheelLocked) return;
+  panelWheelLocked = true;
+  callsPanel.value = callsPanelAfterDrag(callsPanel.value, 0, Math.sign(event.deltaY) * 401);
+  panelWheelTimer = window.setTimeout(() => (panelWheelLocked = false), 250);
+}
+
+function openCallDetails(meeting: MeetingSession) {
+  callDetailsMeeting.value = meeting;
+  isCallDetailsOpen.value = true;
+  void markCallRead(meeting);
+}
+
+function openCallParticipantProfile(person: MeetingPerson) {
+  if (!person.userId) return;
+  isCallDetailsOpen.value = false;
+  openContactProfile(person.userId, person.name);
+}
+
+function joinLiveCall(meeting: MeetingSession) {
+  isCallDetailsOpen.value = false;
+  void router.push(
+    meeting.callSessionId && meeting.conversationId
+      ? { path: `/room/${meeting.callSessionId}`, query: { conversation: meeting.conversationId } }
+      : { path: `/room/${meeting.roomId}` },
+  );
+}
+
+// Calls the registered people of a past call again: through its conversation when it had one, a direct call
+// for a single friend, or a new hosted meeting that invites everyone else.
+async function callAgain(meeting: MeetingSession) {
+  const token = accessToken.value;
+  if (!token || callingMeetingId.value || isCallLaunchActive.value) return;
+  callingMeetingId.value = meeting.id;
+  try {
+    // History rows name only a few people; the detail lists everyone who joined.
+    const full = meeting.participants.some((person) => person.isYou)
+      ? meeting
+      : await socialApi.getMeetingSession(token, meeting.id);
+    const conversation = full.conversationId
+      ? conversations.value.find(({ id }) => id === full.conversationId)
+      : undefined;
+    if (conversation) {
+      await startConversationCall(conversation);
+      return;
+    }
+    const targets = callAgainTargets(full);
+    if (!targets.length) {
+      toast({ title: 'No one to call.', description: 'Only guests joined this call.', variant: 'destructive' });
+      return;
+    }
+    const friend = targets.length === 1 ? friendById.value.get(targets[0]!.userId) : undefined;
+    if (friend) {
+      await startFriendCall(friend);
+      return;
+    }
+    const room = await socialApi.createMeetingRoom(token, { accessPolicy: 'open' });
+    const invitations = await Promise.allSettled(
+      targets.map((target) => socialApi.inviteToMeetingRoom(token, room.roomId, target.userId)),
+    );
+    const failed = invitations.filter((result) => result.status === 'rejected').length;
+    if (failed) {
+      toast({
+        title:
+          failed === targets.length ? 'Could not invite anyone.' : `Could not invite ${failed} of ${targets.length}.`,
+        description: 'Share the meeting link from the call instead.',
+        variant: 'destructive',
+      });
+    }
+    await router.push({ name: 'meeting', params: { id: room.roomId } });
+  } catch (error) {
+    console.error('[Dashboard] Failed to call again:', error);
+    toast({ title: 'Could not start call.', variant: 'destructive' });
+  } finally {
+    callingMeetingId.value = null;
+  }
+}
+
+watch(
+  accessToken,
+  (token) => {
+    if (token && !callHistory.hasLoaded.value) void callHistory.load();
+  },
+  { immediate: true },
+);
+
+// Sidebar badges: the server counts unread conversations, friend requests and missed calls.
+const badges = ref<BadgeCounts>({ messages: 0, friends: 0, calls: 0 });
+let badgeRequest = 0;
+
+async function loadBadges() {
+  const token = accessToken.value;
+  if (!token) return;
+  const request = ++badgeRequest;
+  try {
+    const counts = await socialApi.getBadges(token);
+    if (request === badgeRequest && !isUnmounted) badges.value = counts;
+  } catch (error) {
+    console.error('[Dashboard] Failed to load badges:', error);
+  }
+}
+const refreshBadges = useDebounceFn(loadBadges, 400);
+
+// Opening a missed call or swiping it left marks it read, which clears its dot and badge count.
+async function markCallRead(meeting: MeetingSession) {
+  const token = accessToken.value;
+  if (!token || !meeting.unread) return;
+  callHistory.setUnread(meeting.id, false);
+  badgeRequest += 1;
+  badges.value = { ...badges.value, calls: Math.max(badges.value.calls - 1, 0) };
+  try {
+    await socialApi.markMeetingRead(token, meeting.id);
+  } catch (error) {
+    console.error('[Dashboard] Failed to mark call read:', error);
+    callHistory.setUnread(meeting.id, true);
+    toast({ title: 'Could not mark the call read.', variant: 'destructive' });
+  } finally {
+    void refreshBadges();
+  }
+}
+
+// Reading a chat, answering a request or a call ending changes these, so the counts are fetched again.
+watch(
+  () => [
+    accessToken.value,
+    conversations.value.map((conversation) => `${unreadCount(conversation)}:${conversation.markedUnread}`).join(),
+    incomingFriendRequests.value.length,
+    directRequests.value.length,
+    groupInvitations.value.length,
+    incomingCalls.calls.value.length,
+  ],
+  () => void refreshBadges(),
+  { immediate: true },
+);
+watch(callsPanel, (panel) => {
+  if (panel !== 'collapsed' && callHistory.hasLoaded.value) void callHistory.load({ quiet: true });
+});
+// A call that stops ringing was answered, declined or missed, so it may be in the history now.
+watch(
+  () => incomingCalls.calls.value.length,
+  (count, previous) => {
+    if (count < previous) window.setTimeout(() => void callHistory.load({ quiet: true }), 1_500);
+  },
+);
+
 async function startConversationCall(conversation: Conversation) {
   const token = accessToken.value;
   if (!token || startingCallConversationId.value) return;
@@ -1776,7 +1987,8 @@ async function startConversationCall(conversation: Conversation) {
           :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
           :direct-requests="directRequests"
           :group-invitations="groupInvitations"
-          :expanded="expandedSidebarPanel !== 'friends'"
+          :expanded="callsPanel !== 'top' && expandedSidebarPanel !== 'friends'"
+          :badge="badges.messages"
           :group-avatar-urls="groupAvatarUrls"
           :is-loading="isLoading"
           :is-refreshing="isRefreshingConversations"
@@ -1808,7 +2020,8 @@ async function startConversationCall(conversation: Conversation) {
           v-model:query="peopleSearchQuery"
           :active-context-menu-id="activeContextMenuId"
           :context-menu-key="contextMenuKey"
-          :expanded="expandedSidebarPanel !== 'messages'"
+          :expanded="callsPanel !== 'top' && expandedSidebarPanel !== 'messages'"
+          :badge="badges.friends"
           :friend-avatar-urls="friendAvatarUrls"
           :is-avatar-loading="isFriendAvatarLoading"
           :friends="isPeopleSearchActive ? filteredFriends : visibleFriends"
@@ -1836,6 +2049,30 @@ async function startConversationCall(conversation: Conversation) {
           @respond="respondToFriendRequest"
           @context-open="handleContextMenuOpen"
           @context-activate="activateContextMenu"
+        />
+        <CallsSidebar
+          :panel="callsPanel"
+          :badge="badges.calls"
+          :meetings="callHistory.meetings.value"
+          :is-loading="callHistory.isLoading.value"
+          :error="callHistory.error.value"
+          :has-more="callHistory.nextBefore.value !== null"
+          :is-loading-more="callHistory.isLoadingMore.value"
+          :now="callsNow.getTime()"
+          :avatar-for="callHistory.avatarFor"
+          :ringing-name="ringingName"
+          :ringing-more="Math.max(incomingCalls.calls.value.length - 1, 0)"
+          :is-answering="isAnsweringCall"
+          :calling-id="callingMeetingId"
+          @drag-end="handleCallsDragEnd"
+          @wheel="handleCallsWheel"
+          @toggle="toggleCallsPanel"
+          @open="openCallDetails"
+          @call="callAgain"
+          @accept="respondToRingingCall(true)"
+          @decline="respondToRingingCall(false)"
+          @load-more="callHistory.loadMore"
+          @read="markCallRead"
         />
       </aside>
       <ChatPane
@@ -1909,6 +2146,18 @@ async function startConversationCall(conversation: Conversation) {
         @group-removed="handleGroupRemoved"
       />
     </motion.div>
+    <CallDetailsDialog
+      v-model:open="isCallDetailsOpen"
+      :meeting="callDetailsMeeting"
+      :access-token="accessToken ?? ''"
+      :now="callsNow.getTime()"
+      :calling="callingMeetingId !== null"
+      :avatar-for="callHistory.avatarFor"
+      :load-avatars="callHistory.loadAvatars"
+      @call="callAgain"
+      @join="joinLiveCall"
+      @profile="openCallParticipantProfile"
+    />
     <CreateGroupDialog
       :open="isGroupDialogOpen"
       :title="groupTitle"

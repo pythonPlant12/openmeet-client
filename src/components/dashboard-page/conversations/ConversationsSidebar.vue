@@ -19,6 +19,7 @@ import { motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import sidebarSectionControlUrl from '@/assets/sidebar-section-control.svg';
+import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -46,6 +47,8 @@ const props = defineProps<{
   directRequests: DirectMessageRequest[];
   groupInvitations: GroupInvitation[];
   expanded: boolean;
+  /** Conversations with unread messages or pending requests. */
+  badge: number;
   groupAvatarUrls: Record<string, string>;
   isLoading: boolean;
   isRefreshing: boolean;
@@ -150,8 +153,9 @@ onBeforeUnmount(clearLongPress);
         @wheel.prevent="emit('wheel', $event)"
         @keydown.enter.prevent="emit('toggle')"
         @keydown.space.prevent="emit('toggle')"
-        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Messages</span></motion.h1
-      >
+        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Messages</span
+        ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention"
+      /></motion.h1>
       <div class="flex shrink-0 items-center gap-2">
         <Button
           size="icon"
