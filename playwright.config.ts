@@ -49,6 +49,8 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        /* PLAYWRIGHT_CHANNEL=chrome runs against installed Google Chrome, whose WebRTC defaults differ. */
+        channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
       },
     },
   ],
