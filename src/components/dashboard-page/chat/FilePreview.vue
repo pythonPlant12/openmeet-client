@@ -72,7 +72,7 @@ function handlePointerUp(event: PointerEvent) {
         </button>
       </header>
       <div
-        class="relative flex min-h-0 flex-1 items-center justify-center bg-[#102F35] p-4"
+        class="relative flex min-h-0 flex-1 items-center justify-center bg-transparent p-4"
         @pointerdown="handlePointerDown"
         @pointerup="handlePointerUp"
       >
