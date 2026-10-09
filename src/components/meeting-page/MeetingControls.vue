@@ -97,7 +97,7 @@ const shareOnTelegram = () => {
           size="icon"
           @click="emit('toggle-stats')"
           class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
-          :class="{ '!bg-[#0B7A75] !text-white': showConnectionStatus }"
+          :class="{ '!border-[#0B7A75]': showConnectionStatus }"
           :aria-label="t('meeting.controls.toggleStats')"
         >
           <Code class="h-5 w-5" />
@@ -112,7 +112,7 @@ const shareOnTelegram = () => {
             <Button
               variant="secondary"
               size="icon"
-              class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:bg-[#0B7A75] data-[state=open]:text-white sm:size-11"
+              class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:border-[#0B7A75] sm:size-11"
               :aria-label="t('meeting.controls.openShare')"
             >
               <Share2 class="h-4 w-4" />
@@ -201,7 +201,7 @@ const shareOnTelegram = () => {
           size="icon"
           @click="emit('toggle-chat')"
           class="meeting-control relative size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
-          :class="{ '!bg-[#0B7A75] !text-white': props.isChatOpen }"
+          :class="{ '!border-[#0B7A75]': props.isChatOpen }"
           :aria-label="chatAriaLabel"
           data-chat-trigger
         >

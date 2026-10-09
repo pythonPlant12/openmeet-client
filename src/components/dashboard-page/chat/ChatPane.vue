@@ -35,6 +35,7 @@ const props = defineProps<{
   isAttachmentLoading?: (path: string) => boolean;
   hasAttachmentError?: (path: string) => boolean;
   loadAttachment?: (path: string) => void;
+  unreadStartSequence?: number | null;
 }>();
 const emit = defineEmits<{
   (event: 'back'): void;
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   (event: 'group-info'): void;
   (event: 'call'): void;
   (event: 'scroll-top'): void;
+  (event: 'load-unread', sequence: number): void;
   (event: 'send'): void;
   (event: 'request-notifications'): void;
   (event: 'dismiss-notifications'): void;
@@ -57,8 +59,8 @@ let edgeSwipe: { pointerId: number; startX: number; startY: number; axis: 'x' | 
 // quoted, where the same swipe starts a reply. Fields stay excluded so text selection keeps working.
 const BACK_SWIPE_EXCLUDED = '[data-repliable="true"], textarea, input, button, a, [data-reaction-picker]';
 const EDGE_SWIPE_BACK_DISTANCE = 96;
-const initial = computed(() => (props.prefersReducedMotion ? false : { opacity: 0, y: 8, scale: 0.99 }));
-const exit = computed(() => (props.prefersReducedMotion ? undefined : { opacity: 0, y: -6, scale: 0.99 }));
+const initial = computed(() => (props.prefersReducedMotion ? false : { opacity: 0, x: 16 }));
+const exit = computed(() => (props.prefersReducedMotion ? undefined : { opacity: 0, x: -16 }));
 const directConversationLabel = computed(() =>
   props.selectedFriend?.nickname ? `@${props.selectedFriend.nickname}` : props.selectedTitle,
 );
@@ -123,6 +125,7 @@ defineExpose({
   isNearBottom: () => thread.value?.isNearBottom() ?? true,
   restoreScroll: (state: { height: number; top: number } | null) => thread.value?.restoreScroll(state),
   focusComposer: () => thread.value?.focusComposer(),
+  scrollToMessage: (sequence: number) => thread.value?.scrollToMessage(sequence) ?? false,
 });
 </script>
 <template>
@@ -145,7 +148,7 @@ defineExpose({
         v-if="conversation || pendingFriend"
         :key="conversation?.id ?? `pending-${pendingFriend?.id}`"
         :initial="initial"
-        :animate="{ opacity: 1, y: 0, scale: 1 }"
+        :animate="{ opacity: 1, x: 0 }"
         :exit="exit"
         :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' }"
         class="flex h-full min-h-0 flex-col"
@@ -239,8 +242,10 @@ defineExpose({
           :is-attachment-loading="isAttachmentLoading"
           :has-attachment-error="hasAttachmentError"
           :load-attachment="loadAttachment"
+          :unread-start-sequence="unreadStartSequence"
           footer-note="Messages stored by OpenMeet"
           @scroll-top="emit('scroll-top')"
+          @load-unread="(sequence) => emit('load-unread', sequence)"
           @send="emit('send')"
           @react="(message, emoji) => emit('react', message, emoji)"
         >

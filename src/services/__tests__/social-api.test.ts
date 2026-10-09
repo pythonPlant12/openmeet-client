@@ -288,7 +288,7 @@ describe('socialApi', () => {
   });
 
   it('uses fixed 50-message cursor pages', async () => {
-    const response = { messages: [], nextBefore: null };
+    const response = { messages: [], nextBefore: null, firstUnreadSequence: null };
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(JSON.stringify(response), { status: 200 }))

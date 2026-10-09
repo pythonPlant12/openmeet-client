@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/context-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
-import type { ConversationMessage } from '@/services/social-api';
+import type { ConversationMessage, ConversationMessageAttachment } from '@/services/social-api';
 
 import MessageContent from './MessageContent.vue';
 import { QUICK_REACTIONS } from './reactions';
@@ -29,6 +29,7 @@ const props = defineProps<{
   animateIn: boolean;
   highlighted: boolean;
   reactionPickerOpen: boolean;
+  replySelected: boolean;
   prefersReducedMotion: boolean;
   formatTime: (value: string) => string;
   attachmentUrls: Record<string, string>;
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   (event: 'open-reactions'): void;
   (event: 'copy'): void;
   (event: 'jump-to', sequence: number): void;
+  (event: 'preview', attachments: ConversationMessageAttachment[], index: number): void;
 }>();
 
 // Swipes only need a short pull on a message; nothing rests open.
@@ -56,10 +58,11 @@ const myReactions = computed(
 // Only other people's messages can be quoted.
 const canReply = computed(() => !props.local);
 const isMenuOpen = ref(false);
-const isSwiping = ref(false);
-// A message is lifted while it is swiped or is the target of a reaction picker or its own menu.
-const isLifted = computed(() => isSwiping.value || props.reactionPickerOpen || isMenuOpen.value);
+// A message lifts only for an open menu, reaction picker, or selected reply.
+const isLifted = computed(() => props.replySelected || props.reactionPickerOpen || isMenuOpen.value);
 const attachments = computed(() => props.message.attachments ?? []);
+const visibleAttachments = computed(() => attachments.value.slice(0, 4));
+const hiddenAttachmentCount = computed(() => Math.max(attachments.value.length - visibleAttachments.value.length, 0));
 const initial = computed(() =>
   props.animateIn && !props.prefersReducedMotion
     ? props.local
@@ -74,6 +77,15 @@ function isImage(contentType: string) {
 
 function isVideo(contentType: string) {
   return contentType.startsWith('video/');
+}
+
+function isPdf(contentType: string) {
+  return contentType === 'application/pdf';
+}
+
+function fileExtension(fileName: string) {
+  const extension = fileName.split('.').pop();
+  return extension && extension !== fileName ? extension.toUpperCase() : 'FILE';
 }
 
 function formatFileSize(byteSize: number) {
@@ -104,7 +116,6 @@ function formatFileSize(byteSize: number) {
       momentary
       @full-swipe-leading="emit('reply')"
       @full-swipe-trailing="emit('open-reactions')"
-      @dragging="isSwiping = $event"
     >
       <template v-if="canReply" #leading="{ armed }">
         <span class="flex flex-1 items-center justify-start pl-2" aria-hidden="true">
@@ -137,7 +148,7 @@ function formatFileSize(byteSize: number) {
                 local ? 'bg-[#0B7A75] text-white' : 'bg-white text-[#102F35]',
                 !grouped && (local ? 'rounded-br-md' : 'rounded-bl-md'),
                 isLifted ? 'harbor-message-lifted' : 'harbor-message-resting',
-                { 'harbor-message-flash': highlighted },
+                { 'harbor-message-flash': highlighted && !replySelected },
               ]"
             >
               <p v-if="showSender && !local && !grouped" class="mb-0.5 text-xs font-semibold text-[#0B7A75]">
@@ -169,21 +180,25 @@ function formatFileSize(byteSize: number) {
               <div
                 v-if="attachments.length"
                 class="mb-1.5 grid gap-1.5"
-                :class="attachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2'"
+                :class="visibleAttachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2'"
               >
-                <template v-for="attachment in attachments" :key="attachment.id">
-                  <a
+                <template v-for="(attachment, index) in visibleAttachments" :key="attachment.id">
+                  <button
                     v-if="isImage(attachment.contentType) && attachmentUrls[attachment.url]"
-                    :href="attachmentUrls[attachment.url]"
-                    :download="attachment.fileName"
-                    class="block overflow-hidden rounded-xl bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                    type="button"
+                    class="relative block overflow-hidden rounded-xl bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                    @click="emit('preview', attachments, index)"
                   >
                     <img
                       :src="attachmentUrls[attachment.url]"
                       :alt="attachment.fileName"
                       class="max-h-72 w-full object-cover"
-                    />
-                  </a>
+                    /><span
+                      v-if="index === 3 && hiddenAttachmentCount"
+                      class="absolute inset-0 flex items-center justify-center bg-[#102F35]/45 text-xl font-bold text-white backdrop-blur-sm"
+                      >+{{ hiddenAttachmentCount }}</span
+                    >
+                  </button>
                   <video
                     v-else-if="isVideo(attachment.contentType) && attachmentUrls[attachment.url]"
                     :src="attachmentUrls[attachment.url]"
@@ -192,6 +207,24 @@ function formatFileSize(byteSize: number) {
                     preload="metadata"
                     class="max-h-72 w-full rounded-xl bg-[#102F35]"
                   />
+                  <button
+                    v-else-if="isPdf(attachment.contentType) && attachmentUrls[attachment.url]"
+                    type="button"
+                    class="flex min-h-20 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
+                    :class="
+                      local
+                        ? 'bg-white/15 [@media(hover:hover)]:hover:bg-white/20'
+                        : 'bg-[#EDF8F5] [@media(hover:hover)]:hover:bg-[#E6F4F1]'
+                    "
+                    @click="emit('preview', attachments, index)"
+                  >
+                    <FileText class="size-5 shrink-0" />
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-xs font-semibold">{{ attachment.fileName }}</span>
+                      <span class="block text-[0.6875rem] opacity-75">{{ formatFileSize(attachment.byteSize) }}</span>
+                    </span>
+                    <Download class="size-4 shrink-0" />
+                  </button>
                   <a
                     v-else-if="attachmentUrls[attachment.url]"
                     :href="attachmentUrls[attachment.url]"
@@ -204,26 +237,44 @@ function formatFileSize(byteSize: number) {
                     "
                   >
                     <FileText class="size-5 shrink-0" />
-                    <span class="min-w-0 flex-1">
-                      <span class="block truncate text-xs font-semibold">{{ attachment.fileName }}</span>
-                      <span class="block text-[0.6875rem] opacity-75">{{ formatFileSize(attachment.byteSize) }}</span>
-                    </span>
+                    <span class="min-w-0 flex-1"
+                      ><span class="block truncate text-xs font-semibold">{{ attachment.fileName }}</span
+                      ><span class="block text-[0.6875rem] opacity-75"
+                        >{{ fileExtension(attachment.fileName) }} · {{ formatFileSize(attachment.byteSize) }}</span
+                      ></span
+                    >
                     <Download class="size-4 shrink-0" />
                   </a>
                   <button
                     v-else
                     type="button"
-                    class="flex min-h-20 items-center justify-center rounded-xl"
+                    class="flex min-h-20 items-center gap-2 rounded-xl px-2.5 py-2 text-left"
                     :class="local ? 'bg-white/15' : 'bg-[#EDF8F5]'"
-                    :aria-label="`${hasAttachmentError(attachment.url) ? 'Retry' : 'Load'} ${attachment.fileName}`"
+                    :aria-label="`Load ${attachment.fileName}`"
                     @click="loadAttachment(attachment.url)"
                   >
-                    <LoadingRipple v-if="isAttachmentLoading(attachment.url)" class="size-5" />
-                    <span v-else class="flex items-center gap-2 px-2 text-xs font-semibold">
-                      <FileText class="size-5" />{{ hasAttachmentError(attachment.url) ? 'Retry' : 'Load' }}
-                    </span>
+                    <LoadingRipple
+                      v-if="isPdf(attachment.contentType) && isAttachmentLoading(attachment.url)"
+                      class="size-5"
+                    />
+                    <FileText v-else class="size-5 shrink-0" />
+                    <span class="min-w-0 flex-1"
+                      ><span class="block truncate text-xs font-semibold">{{ attachment.fileName }}</span
+                      ><span class="block text-[0.6875rem] opacity-75"
+                        >{{ fileExtension(attachment.fileName) }} · {{ formatFileSize(attachment.byteSize) }}</span
+                      ></span
+                    >
                   </button>
                 </template>
+                <button
+                  v-if="hiddenAttachmentCount && !isImage(visibleAttachments[3]?.contentType ?? '')"
+                  type="button"
+                  class="flex min-h-20 items-center justify-center rounded-xl bg-[#102F35]/15 px-2 text-sm font-semibold"
+                  :class="local ? 'text-white' : 'text-[#102F35]'"
+                  @click="emit('preview', attachments, 4)"
+                >
+                  +{{ hiddenAttachmentCount }} more files
+                </button>
               </div>
               <MessageContent v-if="message.content" :content="message.content" :local="local" />
               <time

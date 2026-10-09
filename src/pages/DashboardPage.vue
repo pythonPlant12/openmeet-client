@@ -175,6 +175,7 @@ const messages = ref<ConversationMessage[]>([]);
 const messageContent = ref('');
 const messageAttachments = ref<File[]>([]);
 const messageReplyTo = ref<ConversationMessage | null>(null);
+const unreadStartSequence = ref<number | null>(null);
 const messageAttachmentCache = useAttachmentCache(
   () => currentUser.value?.id,
   (path) => socialApi.loadConversationAttachment(accessToken.value ?? '', path),
@@ -196,7 +197,12 @@ watch(messages, (nextMessages) => {
     .reverse()
     .flatMap((message) => message.attachments ?? [])
     .filter((attachment) => {
-      if (!attachment.contentType.startsWith('image/') && !attachment.contentType.startsWith('video/')) return false;
+      if (
+        !attachment.contentType.startsWith('image/') &&
+        !attachment.contentType.startsWith('video/') &&
+        attachment.contentType !== 'application/pdf'
+      )
+        return false;
       if (attachment.byteSize > remaining) return false;
       remaining -= attachment.byteSize;
       return true;
@@ -215,6 +221,7 @@ const chatPane = ref<{
   isNearBottom: () => boolean;
   restoreScroll: (state: { height: number; top: number } | null) => void;
   scrollToBottom: (behavior?: ScrollBehavior) => void;
+  scrollToMessage: (sequence: number) => boolean;
 } | null>(null);
 const detailsPane = ref<{
   openAddMembers: () => void;
@@ -474,6 +481,7 @@ async function loadLatestMessages(conversationId: string) {
     const mergedMessages = new Map(previousMessages.map((message) => [message.sequence, message]));
     latestMessages.forEach((message) => mergedMessages.set(message.sequence, message));
     messages.value = [...mergedMessages.values()].sort((left, right) => left.sequence - right.sequence);
+    if (!previousMessages.length) unreadStartSequence.value = response.firstUnreadSequence;
     if (previousMessages.length && newMessages.length) {
       animatedMessageSequences.value = new Set([
         ...animatedMessageSequences.value,
@@ -509,7 +517,7 @@ async function loadOlderMessages() {
     isLoadingMessages.value ||
     isLoadingOlderMessages.value
   ) {
-    return;
+    return false;
   }
 
   const request = ++messageRequest;
@@ -517,7 +525,7 @@ async function loadOlderMessages() {
   isLoadingOlderMessages.value = true;
   try {
     const response = await socialApi.listConversationMessages(token, conversationId, before, MESSAGE_PAGE_SIZE);
-    if (request !== messageRequest || selectedConversation.value?.id !== conversationId) return;
+    if (request !== messageRequest || selectedConversation.value?.id !== conversationId) return false;
 
     const existingSequences = new Set(messages.value.map((message) => message.sequence));
     const olderMessages = response.messages
@@ -529,11 +537,13 @@ async function loadOlderMessages() {
     isLoadingOlderMessages.value = false;
     await nextTick();
     pane.restoreScroll(scrollState);
+    return true;
   } catch (error) {
     console.error('[Dashboard] Failed to load older messages:', error);
     if (request === messageRequest && selectedConversation.value?.id === conversationId) {
       feedbackError.value = 'Could not load older messages. Try again.';
     }
+    return false;
   } finally {
     if (request === messageRequest) isLoadingOlderMessages.value = false;
   }
@@ -541,6 +551,16 @@ async function loadOlderMessages() {
 
 function handleMessageScroll() {
   void loadOlderMessages();
+}
+
+async function loadUnreadMessage(sequence: number) {
+  while (!messages.value.some((message) => message.sequence === sequence) && nextMessageBefore.value !== null) {
+    if (!(await loadOlderMessages())) break;
+  }
+  if (messages.value.some((message) => message.sequence === sequence)) {
+    await nextTick();
+    chatPane.value?.scrollToMessage(sequence);
+  }
 }
 
 async function sendMessage() {
@@ -933,6 +953,7 @@ watch(selectedConversation, (conversation, previousConversation) => {
   animatedMessageSequences.value = new Set();
   messageContent.value = '';
   messageAttachments.value = [];
+  unreadStartSequence.value = null;
   nextMessageBefore.value = null;
   isLoadingMessages.value = false;
   isLoadingOlderMessages.value = false;
@@ -1947,6 +1968,28 @@ async function markCallRead(meeting: MeetingSession) {
   }
 }
 
+async function toggleCallRead(meeting: MeetingSession) {
+  if (meeting.unread) {
+    await markCallRead(meeting);
+    return;
+  }
+  if (!meeting.missed) return;
+
+  const token = accessToken.value;
+  if (!token) return;
+  callHistory.setUnread(meeting.id, true);
+  badges.value = { ...badges.value, calls: badges.value.calls + 1 };
+  try {
+    await socialApi.markMeetingUnread(token, meeting.id);
+  } catch (error) {
+    console.error('[Dashboard] Failed to mark call unread:', error);
+    callHistory.setUnread(meeting.id, false);
+    toast({ title: 'Could not mark the call unread.', variant: 'destructive' });
+  } finally {
+    void refreshBadges();
+  }
+}
+
 // Reading a chat, answering a request or a call ending changes these, so the counts are fetched again.
 watch(
   () => [
@@ -2114,11 +2157,10 @@ async function startConversationCall(conversation: Conversation) {
           @wheel="handleCallsWheel"
           @toggle="toggleCallsPanel"
           @open="openCallDetails"
-          @call="callAgain"
+          @toggle-read="toggleCallRead"
           @accept="respondToRingingCall(true)"
           @decline="respondToRingingCall(false)"
           @load-more="callHistory.loadMore"
-          @read="markCallRead"
         />
       </aside>
       <ChatPane
@@ -2147,6 +2189,7 @@ async function startConversationCall(conversation: Conversation) {
         :should-animate="shouldAnimateMessage"
         :is-local="isLocalMessage"
         :format-time="formatMessageTime"
+        :unread-start-sequence="unreadStartSequence"
         :attachment-urls="messageAttachmentUrls"
         :is-attachment-loading="messageAttachmentCache.isLoading"
         :has-attachment-error="messageAttachmentCache.hasError"
@@ -2159,6 +2202,7 @@ async function startConversationCall(conversation: Conversation) {
         @group-info="openGroupProfile()"
         @call="startSelectedConversationCall"
         @scroll-top="handleMessageScroll"
+        @load-unread="loadUnreadMessage"
         @send="sendMessage"
         @request-notifications="requestNotificationPermission"
         @react="toggleMessageReaction"

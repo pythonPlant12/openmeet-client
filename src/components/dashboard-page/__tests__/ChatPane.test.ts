@@ -170,16 +170,51 @@ describe('ChatPane', () => {
     expect(wrapper.find('[data-reaction-picker]').exists()).toBe(false);
   });
 
-  it('scrolls the quoted message into view once the reply preview opens', async () => {
+  it('keeps history stationary while opening a reply preview', async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     const wrapper = mountPane({ conversation, messages: [message] });
 
     await wrapper.findComponent({ name: 'ChatMessage' }).vm.$emit('reply');
     await wrapper.setProps({ replyTo: message });
-    await new Promise((resolve) => setTimeout(resolve, 10));
 
-    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest' }));
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-message-bubble]').classes()).toContain('harbor-message-lifted');
+  });
+
+  it('marks the first unread message and jumps back to it from the bottom', async () => {
+    const unread = { ...message, sequence: 2 };
+    const wrapper = mountPane(
+      { conversation, messages: [message, unread], unreadStartSequence: unread.sequence },
+      { attachTo: document.body },
+    );
+    const pane = wrapper.get('[aria-label="Message history"]').element as HTMLElement;
+    const unreadMessage = wrapper.get('[data-message-sequence="2"]').element;
+    const scrollIntoView = vi.fn();
+    unreadMessage.scrollIntoView = scrollIntoView;
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 500 });
+    Object.defineProperty(pane, 'clientHeight', { configurable: true, value: 300 });
+    pane.scrollTop = 200;
+    pane.dispatchEvent(new Event('scroll'));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('[data-unread-divider]').text()).toContain('Unread messages');
+    await wrapper.get('[data-jump-to-latest]').trigger('click');
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' }));
+  });
+
+  it('asks the parent to load an unread boundary outside loaded history', async () => {
+    const wrapper = mountPane({ conversation, messages: [message], unreadStartSequence: 99 }, { attachTo: document.body });
+    const pane = wrapper.get('[aria-label="Message history"]').element as HTMLElement;
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 500 });
+    Object.defineProperty(pane, 'clientHeight', { configurable: true, value: 300 });
+    pane.scrollTop = 200;
+    pane.dispatchEvent(new Event('scroll'));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    await wrapper.get('[data-jump-to-latest]').trigger('click');
+    expect(wrapper.emitted('load-unread')).toEqual([[99]]);
   });
 
   it('offers a jump to the latest message when more than ten messages are below the view', async () => {
