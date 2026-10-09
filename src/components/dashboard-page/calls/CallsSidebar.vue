@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCheck, Info, Phone, PhoneMissed, PhoneOff, UserRound, Video } from 'lucide-vue-next';
+import { CheckCheck, EyeOff, Info, Phone, PhoneMissed, PhoneOff, UserRound, Video } from 'lucide-vue-next';
 import { motion } from 'motion-v';
 import { computed } from 'vue';
 
@@ -35,8 +35,7 @@ const emit = defineEmits<{
   (eventName: 'wheel', wheelEvent: WheelEvent): void;
   (event: 'toggle'): void;
   (event: 'open', meeting: MeetingSession): void;
-  (event: 'call', meeting: MeetingSession): void;
-  (event: 'read', meeting: MeetingSession): void;
+  (event: 'toggle-read', meeting: MeetingSession): void;
   (event: 'accept'): void;
   (event: 'decline'): void;
   (event: 'load-more'): void;
@@ -194,27 +193,29 @@ function initials(name: string) {
               :id="`call-${meeting.id}`"
               :key="meeting.id"
               class="rounded-xl"
-              :leading-width="SWIPE_ACTION_WIDTH"
+              :leading-width="meeting.missed ? SWIPE_ACTION_WIDTH : 0"
               :trailing-width="SWIPE_ACTION_WIDTH"
-              full-swipe-leading
+              :full-swipe-leading="meeting.missed"
               :full-swipe-trailing="meeting.unread"
-              @full-swipe-leading="emit('call', meeting)"
-              @full-swipe-trailing="emit('read', meeting)"
+              @full-swipe-leading="emit('toggle-read', meeting)"
+              @full-swipe-trailing="emit('toggle-read', meeting)"
             >
               <template #leading="{ armed, close }">
                 <button
+                  v-if="meeting.missed"
                   type="button"
                   data-swipe-action
                   class="flex h-full w-full items-center justify-start text-white transition-colors"
                   :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
-                  aria-label="Call again"
+                  :aria-label="meeting.unread ? 'Mark call read' : 'Mark call unread'"
                   @click="
                     close();
-                    emit('call', meeting);
+                    emit('toggle-read', meeting);
                   "
                 >
                   <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
-                    ><Phone class="size-4" />Call</span
+                    ><CheckCheck v-if="meeting.unread" class="size-4" /><EyeOff v-else class="size-4" />
+                    {{ meeting.unread ? 'Read' : 'Unread' }}</span
                   >
                 </button>
               </template>
@@ -230,7 +231,7 @@ function initials(name: string) {
                   aria-label="Mark call read"
                   @click="
                     close();
-                    emit('read', meeting);
+                    emit('toggle-read', meeting);
                   "
                 >
                   <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ArrowDown, FileText, Image, Paperclip, Reply, X } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, FileText, Image, Paperclip, Reply, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import ChatMessage from '@/components/dashboard-page/chat/ChatMessage.vue';
 import EmojiPickerButton from '@/components/dashboard-page/chat/EmojiPickerButton.vue';
+import FilePreview from '@/components/dashboard-page/chat/FilePreview.vue';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
-import type { ConversationMessage } from '@/services/social-api';
+import type { ConversationMessage, ConversationMessageAttachment } from '@/services/social-api';
 
 // The message list and composer shared by conversations and the meeting chat.
 const props = withDefaults(
@@ -34,6 +35,7 @@ const props = withDefaults(
     isAttachmentLoading?: (path: string) => boolean;
     hasAttachmentError?: (path: string) => boolean;
     loadAttachment?: (path: string) => void;
+    unreadStartSequence?: number | null;
     attachmentsEnabled?: boolean;
     emptyText?: string;
     footerNote?: string;
@@ -52,11 +54,13 @@ const props = withDefaults(
     isAttachmentLoading: () => false,
     hasAttachmentError: () => false,
     loadAttachment: () => undefined,
+    unreadStartSequence: null,
     attachmentsEnabled: true,
   },
 );
 const emit = defineEmits<{
   (event: 'scroll-top'): void;
+  (event: 'load-unread', sequence: number): void;
   (event: 'send'): void;
   (event: 'react', message: ConversationMessage, emoji: string): void;
 }>();
@@ -65,6 +69,8 @@ const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: nu
 const attachments = defineModel<File[]>('attachments', { default: () => [] });
 const reactionPickerSequence = ref<number | null>(null);
 const highlightedSequence = ref<number | null>(null);
+const previewAttachments = ref<ConversationMessageAttachment[]>([]);
+const previewIndex = ref(0);
 let highlightTimer: number | undefined;
 // Consecutive messages from one sender within this window are grouped tightly.
 const MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -170,12 +176,10 @@ function focusComposer() {
 // More hidden newer messages than this shows the jump-to-latest button.
 const JUMP_TO_LATEST_THRESHOLD = 10;
 const NEAR_BOTTOM_DISTANCE = 80;
-// The reply preview springs in over roughly this long before the quoted message is revealed.
-const REPLY_PREVIEW_SETTLE_MS = 280;
 const showJumpToLatest = ref(false);
+const showJumpToUnread = ref(false);
 let wasNearBottom = true;
 let scrollFrame: number | undefined;
-let revealTimer: number | undefined;
 let paneResizeObserver: ResizeObserver | undefined;
 
 function countMessagesBelowView() {
@@ -198,6 +202,7 @@ function updateScrollState() {
   if (!element) return;
   wasNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_DISTANCE;
   showJumpToLatest.value = !wasNearBottom && countMessagesBelowView() > JUMP_TO_LATEST_THRESHOLD;
+  showJumpToUnread.value = wasNearBottom && props.unreadStartSequence !== null;
 }
 
 function isNearBottom() {
@@ -214,31 +219,32 @@ function jumpToLatest() {
   pane.value?.scrollTo({ top: pane.value.scrollHeight, behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
 }
 
-function revealQuotedMessage() {
-  const sequence = replyTo.value?.sequence;
-  if (sequence === undefined) return;
-  pane.value
-    ?.querySelector(`[data-message-sequence="${sequence}"]`)
-    ?.scrollIntoView({ block: 'nearest', behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
+function scrollToMessage(sequence: number) {
+  const target = pane.value?.querySelector(`[data-message-sequence="${sequence}"]`);
+  if (!target) return false;
+  target.scrollIntoView({ block: 'center', behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
+  return true;
 }
 
-// When the visible chat shrinks (reply preview, mobile keyboard), keep the reader's place: the quoted
-// message while replying, otherwise the newest messages if the reader was already at the bottom.
-function keepPlaceAfterResize() {
-  if (replyTo.value) revealQuotedMessage();
-  else if (wasNearBottom) scrollToBottom('auto');
+function jumpToUnread() {
+  const sequence = props.unreadStartSequence;
+  if (sequence === null) return;
+  if (!scrollToMessage(sequence)) emit('load-unread', sequence);
+}
+
+// Keep a reader who was at the bottom pinned there when the composer or mobile keyboard changes
+// the pane height. Readers browsing older messages retain their exact position.
+function keepBottomAfterPaneResize() {
+  if (wasNearBottom) scrollToBottom('auto');
 }
 
 watch(
   pane,
   (element, previous) => {
     if (previous) paneResizeObserver?.unobserve(previous);
-    if (!element) return;
-    if (pendingBottomScroll) requestAnimationFrame(applyPendingBottomScroll);
-    if ('ResizeObserver' in window) {
-      paneResizeObserver ??= new ResizeObserver(keepPlaceAfterResize);
-      paneResizeObserver.observe(element);
-    }
+    if (!element || !('ResizeObserver' in window)) return;
+    paneResizeObserver ??= new ResizeObserver(keepBottomAfterPaneResize);
+    paneResizeObserver.observe(element);
   },
   { flush: 'post' },
 );
@@ -253,7 +259,7 @@ function keepBottomAfterListResize() {
     observedMessageCount = count;
     return;
   }
-  if (wasNearBottom && !replyTo.value) scrollToBottom('auto');
+  if (wasNearBottom) scrollToBottom('auto');
 }
 
 watch(
@@ -261,6 +267,7 @@ watch(
   (element, previous) => {
     if (previous) listResizeObserver?.unobserve(previous);
     if (!element || !('ResizeObserver' in window)) return;
+    observedMessageCount = props.messages.length;
     listResizeObserver ??= new ResizeObserver(keepBottomAfterListResize);
     listResizeObserver.observe(element);
   },
@@ -289,10 +296,7 @@ function startReply(message: ConversationMessage) {
   if (props.isLocal(message)) return;
   replyTo.value = message;
   reactionPickerSequence.value = null;
-  flash(message.sequence);
   focusComposer();
-  window.clearTimeout(revealTimer);
-  revealTimer = window.setTimeout(revealQuotedMessage, props.prefersReducedMotion ? 0 : REPLY_PREVIEW_SETTLE_MS);
 }
 
 function react(message: ConversationMessage, emoji: string) {
@@ -311,13 +315,16 @@ async function copyMessage(message: ConversationMessage) {
 }
 
 function jumpToMessage(sequence: number) {
-  const target = pane.value?.querySelector(`[data-message-sequence="${sequence}"]`);
-  if (!target) {
+  if (!scrollToMessage(sequence)) {
     toast({ title: 'The quoted message is further back in the history.' });
     return;
   }
-  target.scrollIntoView({ block: 'center', behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
   flash(sequence);
+}
+
+function openPreview(nextAttachments: ConversationMessageAttachment[], index: number) {
+  previewAttachments.value = nextAttachments;
+  previewIndex.value = index;
 }
 
 // One reaction picker at a time; a press anywhere outside it closes it.
@@ -338,6 +345,11 @@ watch(
   },
 );
 
+watch(
+  () => props.unreadStartSequence,
+  () => updateScrollState(),
+);
+
 watch(attachments, (nextAttachments) => {
   for (const [file, url] of previewUrls) {
     if (!nextAttachments.includes(file)) {
@@ -347,6 +359,8 @@ watch(attachments, (nextAttachments) => {
   }
 });
 
+window.visualViewport?.addEventListener('resize', keepBottomAfterPaneResize);
+
 function isGroupedWithPrevious(index: number) {
   const message = props.messages[index];
   const previous = props.messages[index - 1];
@@ -354,21 +368,17 @@ function isGroupedWithPrevious(index: number) {
   return Date.parse(message.createdAt) - Date.parse(previous.createdAt) < MESSAGE_GROUP_WINDOW_MS;
 }
 
-// Mobile keyboards often shrink only the visual viewport, which a resize observer cannot see.
-window.visualViewport?.addEventListener('resize', keepPlaceAfterResize);
-
 onBeforeUnmount(() => {
   window.clearTimeout(highlightTimer);
-  window.clearTimeout(revealTimer);
   if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
   paneResizeObserver?.disconnect();
   listResizeObserver?.disconnect();
   previewUrls.forEach((url) => URL.revokeObjectURL(url));
-  window.visualViewport?.removeEventListener('resize', keepPlaceAfterResize);
+  window.visualViewport?.removeEventListener('resize', keepBottomAfterPaneResize);
   document.removeEventListener('pointerdown', closeReactionPickerOnOutsidePress, true);
 });
 
-defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focusComposer });
+defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focusComposer, scrollToMessage });
 </script>
 
 <template>
@@ -391,34 +401,44 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           {{ emptyText }}
         </p>
         <ol v-else ref="list">
-          <ChatMessage
-            v-for="(message, index) in messages"
-            :key="message.sequence"
-            :message="message"
-            :grouped="isGroupedWithPrevious(index)"
-            :first="index === 0"
-            :show-sender="showSender"
-            :local="isLocal(message)"
-            :animate-in="shouldAnimate(message)"
-            :highlighted="highlightedSequence === message.sequence"
-            :reaction-picker-open="reactionPickerSequence === message.sequence"
-            :prefers-reduced-motion="prefersReducedMotion"
-            :format-time="formatTime"
-            :attachment-urls="attachmentUrls"
-            :is-attachment-loading="isAttachmentLoading"
-            :has-attachment-error="hasAttachmentError"
-            :load-attachment="loadAttachment"
-            @reply="startReply(message)"
-            @react="(emoji) => react(message, emoji)"
-            @open-reactions="reactionPickerSequence = message.sequence"
-            @copy="copyMessage(message)"
-            @jump-to="jumpToMessage"
-          />
+          <template v-for="(message, index) in messages" :key="message.sequence">
+            <li
+              v-if="message.sequence === unreadStartSequence"
+              data-unread-divider
+              class="my-5 flex items-center gap-3 text-xs font-semibold text-[#4E6B70]"
+            >
+              <span class="h-px flex-1 bg-[#D8E7E3]" /><span>Unread messages</span
+              ><span class="h-px flex-1 bg-[#D8E7E3]" />
+            </li>
+            <ChatMessage
+              :message="message"
+              :grouped="isGroupedWithPrevious(index)"
+              :first="index === 0"
+              :show-sender="showSender"
+              :local="isLocal(message)"
+              :animate-in="shouldAnimate(message)"
+              :highlighted="highlightedSequence === message.sequence"
+              :reply-selected="replyTo?.sequence === message.sequence"
+              :reaction-picker-open="reactionPickerSequence === message.sequence"
+              :prefers-reduced-motion="prefersReducedMotion"
+              :format-time="formatTime"
+              :attachment-urls="attachmentUrls"
+              :is-attachment-loading="isAttachmentLoading"
+              :has-attachment-error="hasAttachmentError"
+              :load-attachment="loadAttachment"
+              @reply="startReply(message)"
+              @react="(emoji) => react(message, emoji)"
+              @open-reactions="reactionPickerSequence = message.sequence"
+              @copy="copyMessage(message)"
+              @jump-to="jumpToMessage"
+              @preview="openPreview"
+            />
+          </template>
         </ol>
       </div>
       <AnimatePresence>
         <motion.button
-          v-if="showJumpToLatest"
+          v-if="showJumpToUnread || showJumpToLatest"
           type="button"
           data-jump-to-latest
           :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.6, y: 12 }"
@@ -426,14 +446,21 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.6, y: 12 }"
           :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 30 }"
           class="absolute bottom-4 right-4 z-30 flex size-11 items-center justify-center rounded-full bg-white text-[#0B7A75] shadow-[0_6px_20px_rgba(16,47,53,0.18),0_1px_3px_rgba(16,47,53,0.1)] [@media(hover:hover)]:hover:bg-[#E6F4F1] [@media(hover:hover)]:hover:text-[#102F35]"
-          aria-label="Scroll to the latest message"
-          title="Scroll to the latest message"
-          @click="jumpToLatest"
+          :aria-label="showJumpToUnread ? 'Go to unread messages' : 'Scroll to the latest message'"
+          :title="showJumpToUnread ? 'Go to unread messages' : 'Scroll to the latest message'"
+          @click="showJumpToUnread ? jumpToUnread() : jumpToLatest()"
         >
-          <ArrowDown class="size-5" />
+          <ArrowUp v-if="showJumpToUnread" class="size-5" /><ArrowDown v-else class="size-5" />
         </motion.button>
       </AnimatePresence>
     </div>
+    <FilePreview
+      v-if="previewAttachments.length"
+      :attachments="previewAttachments"
+      v-model:active-index="previewIndex"
+      :attachment-urls="attachmentUrls"
+      @close="previewAttachments = []"
+    />
     <div class="border-t border-[#E5EFEC] bg-white px-4 py-3 sm:px-6">
       <p v-if="footerNote" class="mb-2 text-xs text-[#61777B]">{{ footerNote }}</p>
       <AnimatePresence>
@@ -444,7 +471,12 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           :animate="{ opacity: 1, y: 0, height: 'auto' }"
           :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 10, height: 0 }"
           :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 32 }"
-          class="overflow-hidden"
+          class="cursor-pointer overflow-hidden"
+          role="button"
+          tabindex="0"
+          @click="jumpToMessage(replyTo.sequence)"
+          @keydown.enter.prevent="jumpToMessage(replyTo.sequence)"
+          @keydown.space.prevent="jumpToMessage(replyTo.sequence)"
         >
           <div class="mb-2 flex items-center gap-2.5 rounded-2xl bg-[#F3F5F4] px-3 py-2">
             <span
@@ -461,7 +493,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
               type="button"
               class="harbor-ghost-action shrink-0 rounded-full p-1 text-[#27595D]"
               aria-label="Cancel reply"
-              @click="replyTo = null"
+              @click.stop="replyTo = null"
             >
               <X class="size-4" />
             </button>

@@ -562,6 +562,14 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
 </script>
 
 <template>
+  <button
+    v-if="mobileMenuExpanded && !isClosingMobileMenu"
+    type="button"
+    class="fixed inset-0 z-[1020] cursor-default bg-transparent"
+    aria-label="Close navigation"
+    @pointerdown.stop
+    @click.stop="closeMobileMenu()"
+  />
   <motion.nav
     layout-root
     class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] text-[#102F35]"

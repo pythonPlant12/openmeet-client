@@ -106,19 +106,19 @@ describe('CallsSidebar', () => {
     expect(wrapper.find('[data-call-missed]').exists()).toBe(true);
   });
 
-  it('marks a missed call read from the left swipe, and offers details for read calls', async () => {
+  it('toggles a missed call read state without exposing call again', async () => {
     const wrapper = mountSidebar({ panel: 'middle', meetings: [missedCall, meetings[0]!] });
 
     await wrapper.get('[data-call-read-action]').trigger('click');
-    expect(wrapper.emitted('read')?.[0]).toEqual([missedCall]);
+    expect(wrapper.emitted('toggle-read')?.[0]).toEqual([missedCall]);
     expect(wrapper.findAll('[data-call-read-action]')).toHaveLength(1);
     expect(wrapper.find('[aria-label="Call details"]').exists()).toBe(true);
   });
 
-  it('calls again from the swipe action', async () => {
-    const wrapper = mountSidebar({ panel: 'top' });
-    await wrapper.get('[aria-label="Call again"]').trigger('click');
-    expect(wrapper.emitted('call')?.[0]).toEqual([meetings[0]]);
+  it('marks a read missed call unread from the right swipe action', async () => {
+    const wrapper = mountSidebar({ panel: 'top', meetings: [{ ...missedCall, unread: false }] });
+    await wrapper.get('[aria-label="Mark call unread"]').trigger('click');
+    expect(wrapper.emitted('toggle-read')?.[0]).toEqual([{ ...missedCall, unread: false }]);
   });
 
   it('rings with the caller name and answer or decline buttons, even while collapsed', async () => {

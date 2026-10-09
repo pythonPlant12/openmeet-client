@@ -99,7 +99,13 @@ const KEEP_OPEN_TARGETS = '[data-chat-trigger], [role="menu"], [role="dialog"], 
 const handleInteractOutside = (event: Event) => {
   const original = (event as CustomEvent<{ originalEvent?: Event }>).detail?.originalEvent;
   const target = original?.target instanceof Element ? original.target : null;
-  if (original?.type === 'focusin' || target?.closest(KEEP_OPEN_TARGETS)) event.preventDefault();
+  if (original?.type === 'focusin' || target?.closest(KEEP_OPEN_TARGETS)) {
+    event.preventDefault();
+    return;
+  }
+  original?.preventDefault();
+  event.preventDefault();
+  emit('update:open', false);
 };
 const restoreChatTriggerFocus = (event: Event) => {
   event.preventDefault();

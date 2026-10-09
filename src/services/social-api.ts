@@ -348,6 +348,7 @@ export interface ConversationMessage {
 export interface ConversationMessagesResponse {
   messages: ConversationMessage[];
   nextBefore: number | null;
+  firstUnreadSequence: number | null;
 }
 
 export class SocialApiError extends Error {
@@ -672,6 +673,10 @@ export const socialApi = {
 
   markMeetingRead(accessToken: string, meetingId: string) {
     return request<void>(`/meeting-sessions/${encodeURIComponent(meetingId)}/read`, accessToken, { method: 'POST' });
+  },
+
+  markMeetingUnread(accessToken: string, meetingId: string) {
+    return request<void>(`/meeting-sessions/${encodeURIComponent(meetingId)}/unread`, accessToken, { method: 'POST' });
   },
 
   getMeetingSession(accessToken: string, meetingId: string) {
