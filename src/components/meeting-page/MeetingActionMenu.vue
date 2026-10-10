@@ -80,7 +80,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         v-else
         variant="outline"
         size="icon"
-        class="size-11 rounded-full border-[#D8E7E3] bg-white/95 text-[#27595D] shadow-[0_12px_35px_rgba(16,47,53,0.14)] backdrop-blur hover:bg-[#E6F4F1] hover:text-[#0B7A75]"
+        class="size-12 rounded-xl border-[#D8E7E3] bg-white/95 text-[#27595D] shadow-[0_12px_35px_rgba(16,47,53,0.14)] backdrop-blur hover:bg-[#E6F4F1] hover:text-[#0B7A75]"
         :aria-label="t('meeting.actions.open')"
       >
         <MoreHorizontal class="size-5" />

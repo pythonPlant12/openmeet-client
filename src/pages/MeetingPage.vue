@@ -732,7 +732,7 @@ const handleReconnect = () => {
     <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-[#102F35] flex flex-col">
       <!-- Participant Count Badge -->
       <div
-        class="fixed left-7 top-[calc(84px+0.75rem)] z-50 flex items-center gap-2 rounded-full bg-[#0B7A75] px-4 py-2 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
+        class="fixed left-7 top-[calc(84px+0.75rem)] z-50 flex h-12 items-center gap-2 rounded-xl bg-[#0B7A75] px-4 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
       >
         <Users class="h-5 w-5" />
         <span class="font-semibold">{{ participantCount }}</span>

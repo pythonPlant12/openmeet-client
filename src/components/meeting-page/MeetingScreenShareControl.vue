@@ -36,7 +36,7 @@ const qualityLabel = computed(() =>
           variant="secondary"
           size="icon"
           :disabled="disabled"
-          class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:border-[#0B7A75] sm:size-11"
+          class="meeting-control size-10 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:border-[#0B7A75] sm:size-12"
           :class="{ '!border-[#0B7A75] !bg-[#0B7A75] !text-white': session }"
           :aria-label="t(session ? 'meeting.controls.presenting' : 'meeting.controls.presentScreen')"
           :data-sharing="!!session"

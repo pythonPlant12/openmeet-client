@@ -88,7 +88,7 @@ const shareOnTelegram = () => {
 <template>
   <div class="marketing-font fixed bottom-4 left-1/2 z-40 -translate-x-1/2 text-[#102F35] sm:bottom-6">
     <div
-      class="flex items-center justify-center gap-1.5 rounded-full border border-[#D8E7E3] bg-white/95 p-2 shadow-[0_18px_50px_rgba(16,47,53,0.22)] backdrop-blur-xl sm:gap-2.5"
+      class="flex items-center justify-center gap-1.5 rounded-[1.25rem] border border-[#D8E7E3] bg-white/95 p-2 shadow-[0_18px_50px_rgba(16,47,53,0.22)] backdrop-blur-xl sm:gap-2.5"
     >
       <!-- Connection status Button -->
       <div class="group relative">
@@ -96,7 +96,7 @@ const shareOnTelegram = () => {
           :variant="showConnectionStatus ? 'default' : 'secondary'"
           size="icon"
           @click="emit('toggle-stats')"
-          class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
+          class="meeting-control size-10 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-12"
           :class="{ '!border-[#0B7A75]': showConnectionStatus }"
           :aria-label="t('meeting.controls.toggleStats')"
         >
@@ -112,7 +112,7 @@ const shareOnTelegram = () => {
             <Button
               variant="secondary"
               size="icon"
-              class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:border-[#0B7A75] sm:size-11"
+              class="meeting-control size-10 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:border-[#0B7A75] sm:size-12"
               :aria-label="t('meeting.controls.openShare')"
             >
               <Share2 class="h-4 w-4" />
@@ -200,7 +200,7 @@ const shareOnTelegram = () => {
           :variant="props.isChatOpen ? 'default' : 'secondary'"
           size="icon"
           @click="emit('toggle-chat')"
-          class="meeting-control relative size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
+          class="meeting-control relative size-10 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-12"
           :class="{ '!border-[#0B7A75]': props.isChatOpen }"
           :aria-label="chatAriaLabel"
           data-chat-trigger
@@ -238,7 +238,7 @@ const shareOnTelegram = () => {
           variant="destructive"
           size="icon"
           @click="emit('end-call')"
-          class="meeting-control-danger size-10 rounded-full bg-[#F2765F] text-white shadow-none sm:size-11"
+          class="meeting-control-danger size-10 rounded-xl bg-[#F2765F] text-white shadow-none sm:size-12"
           :aria-label="t('meeting.controls.endCall')"
         >
           <PhoneOff class="h-5 w-5" />
