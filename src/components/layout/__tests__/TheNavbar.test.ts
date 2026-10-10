@@ -465,16 +465,15 @@ describe('TheNavbar', () => {
     expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(false);
   });
 
-  it('uses an account dropdown instead of the account name and keeps meeting and dashboard menus content-sized', async () => {
+  it('leads the account dropdown with the account name and keeps meeting and dashboard menus content-sized', async () => {
     vi.useFakeTimers();
     auth.authenticated = true;
     const { wrapper } = await mountNavbar('/room/meeting-id');
 
     expect(wrapper.get('button[aria-label="nav.accountInformation"]')).toBeDefined();
-    expect(wrapper.text()).toContain('nav.accountInformation');
+    expect(wrapper.text()).toContain('A deliberately long participant name');
     expect(wrapper.text()).toContain('common.dashboard');
     expect(wrapper.text()).toContain('nav.friends');
-    expect(wrapper.text()).not.toContain('A deliberately long participant name');
 
     media.desktop = false;
     const mobile = await mountNavbar('/room/meeting-id');
@@ -486,7 +485,9 @@ describe('TheNavbar', () => {
 
     // No minimum height: the drawer shrinks to its content.
     expect(mobile.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 330px');
-    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.accountInformation');
+    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain(
+      'A deliberately long participant name',
+    );
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('common.dashboard');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.friends');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).not.toContain('common.logOut');

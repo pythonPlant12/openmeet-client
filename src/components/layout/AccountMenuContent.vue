@@ -36,7 +36,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const router = useRouter();
-const { isAuthenticating, isRegistering, isCheckingSession, state, send } = useAuth();
+const { currentUser, isAuthenticating, isRegistering, isCheckingSession, state, send } = useAuth();
+// The menu leads with the person's name, above their @nickname.
+const accountName = computed(() => currentUser.value?.name?.trim() || t('nav.accountInformation'));
 const ownStatusOption = computed(() => userStatusOption(props.ownStatus));
 const isLoggingOut = computed(() => state.value.value === 'loggingOut');
 const isAuthBusy = computed(
@@ -56,7 +58,7 @@ const isAuthBusy = computed(
       @select="router.push('/account')"
     >
       <span class="min-w-0 flex-1">
-        <span class="block">{{ t('nav.accountInformation') }}</span>
+        <span class="block truncate font-semibold">{{ accountName }}</span>
         <button
           v-if="nickname"
           type="button"

@@ -48,8 +48,18 @@ const router = useRouter();
 const { t } = useI18n();
 const branding = useBranding();
 const { createMeeting } = useMeetingNavigation();
-const { state, isAuthenticating, isRegistering, isCheckingSession, isAuthenticated, hasRegisterError, send } =
-  useAuth();
+const {
+  state,
+  currentUser,
+  isAuthenticating,
+  isRegistering,
+  isCheckingSession,
+  isAuthenticated,
+  hasRegisterError,
+  send,
+} = useAuth();
+// Account menus lead with the person's name, above their @nickname.
+const accountName = computed(() => currentUser.value?.name?.trim() || t('nav.accountInformation'));
 
 const mobileMenuOpen = ref(false);
 const mobileMenuExpanded = ref(false);
@@ -583,7 +593,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 class="harbor-ghost-action w-full rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
                 @click="handleGoToPage('/account')"
               >
-                <span class="block font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
+                <span class="block truncate font-semibold text-[#102F35]">{{ accountName }}</span>
               </button>
               <button
                 v-if="nickname"
@@ -999,7 +1009,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                         />
                       </span>
                       <span class="pointer-events-none min-w-0 flex-1">
-                        <span class="block font-semibold text-[#102F35]">{{ t('nav.accountInformation') }}</span>
+                        <span class="block truncate font-semibold text-[#102F35]">{{ accountName }}</span>
                         <button
                           v-if="nickname"
                           type="button"

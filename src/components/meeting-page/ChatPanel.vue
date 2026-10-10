@@ -137,7 +137,9 @@ watch(
 
 <template>
   <Sheet :open="open" :modal="false" @update:open="emit('update:open', $event)">
+    <!-- data-dismiss-guard: a press outside the open chat only closes it (installOverlayClickGuard). -->
     <SheetContent
+      data-dismiss-guard
       :side="sheetSide"
       :show-overlay="false"
       class="harbor-chat-panel marketing-font top-auto flex h-[75vh] w-full flex-col gap-0 overflow-hidden rounded-xl border border-[#D8E7E3] bg-white p-0 text-[#102F35] data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"

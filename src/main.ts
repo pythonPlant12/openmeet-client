@@ -3,6 +3,7 @@ import { createApp } from 'vue';
 import { reveal } from '@/directives/reveal';
 import { i18n } from '@/i18n';
 import { installScrollbarVisibility } from '@/lib/scrollbar-visibility';
+import { installOverlayClickGuard } from '@/lib/swallow-next-click';
 
 import App from './App.vue';
 import './assets/index.css';
@@ -15,6 +16,8 @@ document.addEventListener('dragstart', (event) => {
 });
 
 installScrollbarVisibility();
+// A press outside an open menu or the meeting chat only closes it (see swallow-next-click.ts).
+installOverlayClickGuard();
 
 initializeTheme().then((theme) => {
   document.documentElement.lang = i18n.global.locale.value;
