@@ -587,10 +587,12 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 :class="ownStatusOption.dotClass"
               />
             </button>
-            <div class="min-w-0 flex-1">
+            <!-- Name and @nickname share one left edge: equal padding with a matching negative margin keeps their
+                 hover areas while the text lines up with the column. -->
+            <div class="flex min-w-0 flex-1 flex-col items-start gap-0.5">
               <button
                 type="button"
-                class="harbor-ghost-action w-full rounded-xl px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                class="harbor-ghost-action -mx-1.5 max-w-[calc(100%+0.75rem)] rounded-lg px-1.5 py-0.5 text-left leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
                 @click="handleGoToPage('/account')"
               >
                 <span class="block truncate font-semibold text-[#102F35]">{{ accountName }}</span>
@@ -599,7 +601,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 v-if="nickname"
                 type="button"
                 data-copy-nickname
-                class="harbor-ghost-action ml-2 inline-flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-[#61777B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                class="harbor-ghost-action -mx-1.5 inline-flex max-w-[calc(100%+0.75rem)] items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-medium leading-tight text-[#61777B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
                 :aria-label="
                   isNicknameCopied ? t('nav.nicknameCopied') : t('nav.copyNickname', { nickname: `@${nickname}` })
                 "
