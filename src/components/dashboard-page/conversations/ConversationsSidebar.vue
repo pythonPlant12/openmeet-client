@@ -13,6 +13,7 @@ import {
   Trash2,
   UserPlus,
   UsersRound,
+  Video,
   X,
 } from 'lucide-vue-next';
 import { motion } from 'motion-v';
@@ -71,6 +72,8 @@ const emit = defineEmits<{
   (event: 'update:query', value: string): void;
   (event: 'create-group'): void;
   (event: 'join-group'): void;
+  (event: 'start-meeting'): void;
+  (event: 'join-meeting'): void;
   (eventName: 'drag-end', pointerEvent: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }): void;
   (eventName: 'wheel', wheelEvent: WheelEvent): void;
   (event: 'toggle'): void;
@@ -137,8 +140,8 @@ onBeforeUnmount(clearLongPress);
 </script>
 
 <template>
-  <div class="border-b border-[#E5EFEC] px-4 py-4 sm:px-5">
-    <div class="flex items-center justify-between gap-3">
+  <div class="shrink-0 border-b border-[#E5EFEC] p-3 lg:px-5 lg:py-4">
+    <div class="flex min-h-8 items-center justify-between gap-2 px-2 lg:px-0">
       <motion.h1
         drag="y"
         :drag-constraints="{ top: 0, bottom: 0 }"
@@ -147,7 +150,7 @@ onBeforeUnmount(clearLongPress);
         role="button"
         tabindex="0"
         :aria-expanded="expanded"
-        class="-my-4 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+        class="-my-2 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B] lg:-my-4 lg:py-4"
         @drag-end="(event, info) => emit('drag-end', event, info)"
         @click="emit('toggle')"
         @wheel.prevent="emit('wheel', $event)"
@@ -173,7 +176,41 @@ onBeforeUnmount(clearLongPress);
           <DropdownMenuTrigger as-child>
             <Button
               size="icon"
-              class="harbor-primary-action size-9 rounded-full bg-[#0B7A75] text-white"
+              variant="ghost"
+              class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
+              aria-label="Meeting options"
+              title="Meeting options"
+              ><Video class="size-4"
+            /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            :side-offset="8"
+            class="harbor-action-menu min-w-44 rounded-2xl border-[#D8E7E3] bg-white p-1.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14)]"
+          >
+            <DropdownMenuItem
+              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+              @select="emit('join-meeting')"
+            >
+              <LogIn class="size-4" />
+              Join meeting
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+              @select="emit('start-meeting')"
+            >
+              <Video class="size-4" />
+              Start meeting
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu :modal="false">
+          <DropdownMenuTrigger as-child>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
               aria-label="Group options"
               title="Group options"
               ><Plus class="size-4"
@@ -229,7 +266,7 @@ onBeforeUnmount(clearLongPress);
     </div>
   </div>
   <div
-    class="min-h-0 overflow-hidden transition-[flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    class="flex min-h-0 flex-col overflow-hidden transition-[flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
     :class="expanded ? 'flex-1 opacity-100' : 'pointer-events-none flex-none basis-0 opacity-0'"
     :aria-hidden="!expanded"
   >
@@ -324,7 +361,8 @@ onBeforeUnmount(clearLongPress);
                 emit('toggle-read', conversation);
               "
             >
-              <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+              <span
+                class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                 ><MailOpen v-if="isUnread(conversation)" class="size-4" /><Mail v-else class="size-4" />{{
                   isUnread(conversation) ? 'Read' : 'Unread'
                 }}</span
@@ -358,7 +396,8 @@ onBeforeUnmount(clearLongPress);
                 emit('delete', conversation);
               "
             >
-              <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+              <span
+                class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                 ><Trash2 v-if="conversation.kind === 'direct'" class="size-4" /><LogOut v-else class="size-4" />{{
                   conversation.kind === 'direct' ? 'Delete' : 'Leave'
                 }}</span

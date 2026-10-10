@@ -91,7 +91,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
       :is="MenuContent"
       align="end"
       :side-offset="10"
-      class="harbor-action-menu !z-[70] max-h-[min(36rem,calc(100vh-7rem))] min-w-72 overflow-y-auto rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.18)]"
+      class="harbor-action-menu max-h-[min(36rem,calc(100vh-7rem))] min-w-72 overflow-y-auto rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.18)]"
     >
       <component
         :is="MenuItem"

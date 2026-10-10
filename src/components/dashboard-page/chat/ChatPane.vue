@@ -129,9 +129,10 @@ defineExpose({
 });
 </script>
 <template>
+  <!-- On mobile the browser never takes horizontal pans here, so swipe-back works even where nothing scrolls. -->
   <section
     data-chat-pane
-    class="flex h-full min-h-0 min-w-0 flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    class="flex h-full min-h-0 min-w-0 touch-pan-y flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:touch-auto"
     @pointerdown.capture="onEdgePointerDown"
     @pointermove.capture="onEdgePointerMove"
     @pointerup.capture="onEdgePointerEnd"
@@ -153,7 +154,7 @@ defineExpose({
         :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' }"
         class="flex h-full min-h-0 flex-col"
       >
-        <header class="flex min-h-16 items-center gap-3 border-b border-[#E5EFEC] px-4 sm:px-6">
+        <header class="flex min-h-16 items-center gap-3 border-b border-[#E5EFEC] px-3 sm:px-6">
           <Button
             variant="ghost"
             size="icon"

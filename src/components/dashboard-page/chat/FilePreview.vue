@@ -2,7 +2,7 @@
 import { ChevronLeft, ChevronRight, Download, FileText, X } from 'lucide-vue-next';
 import { computed } from 'vue';
 
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
 import type { ConversationMessageAttachment } from '@/services/social-api';
 
 const props = defineProps<{
@@ -46,11 +46,13 @@ function handlePointerUp(event: PointerEvent) {
 
 <template>
   <Dialog :open="attachments.length > 0" @update:open="(open) => !open && emit('close')">
-    <DialogContent
+    <HarborDialogContent
       hide-close
-      class="flex h-[min(80dvh,48rem)] max-w-5xl flex-col overflow-hidden border-[#D8E7E3] bg-white p-0 text-[#102F35]"
+      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font flex h-[min(82dvh,48rem)] w-[calc(100%-2rem)] max-w-5xl flex-col overflow-hidden rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-0 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)]"
     >
-      <header class="flex min-h-14 items-center gap-3 border-b border-[#E5EFEC] px-5">
+      <DialogTitle class="sr-only">Media preview</DialogTitle>
+      <header class="flex min-h-14 items-center gap-3 border-b border-[#E5EFEC] px-4 sm:px-5">
         <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ activeAttachment?.fileName }}</span>
         <a
           v-if="activeUrl && activeAttachment"
@@ -72,7 +74,7 @@ function handlePointerUp(event: PointerEvent) {
         </button>
       </header>
       <div
-        class="relative flex min-h-0 flex-1 items-center justify-center bg-transparent p-4"
+        class="relative flex min-h-0 flex-1 items-center justify-center bg-white p-3 sm:p-4"
         @pointerdown="handlePointerDown"
         @pointerup="handlePointerUp"
       >
@@ -89,13 +91,13 @@ function handlePointerUp(event: PointerEvent) {
           :title="activeAttachment?.fileName"
           class="size-full rounded-lg bg-white"
         />
-        <div v-else class="flex flex-col items-center gap-3 text-center text-white/75">
+        <div v-else class="flex flex-col items-center gap-3 text-center text-[#61777B]">
           <FileText class="size-10" /><span>Preview unavailable</span>
         </div>
         <button
           v-if="hasPrevious"
           type="button"
-          class="absolute left-3 flex size-10 items-center justify-center rounded-full bg-white/90 text-[#0B7A75] shadow-sm"
+          class="harbor-ghost-action absolute left-3 flex size-10 items-center justify-center rounded-full bg-white/90 text-[#0B7A75] shadow-sm"
           aria-label="Previous attachment"
           @click="move(-1)"
         >
@@ -104,16 +106,42 @@ function handlePointerUp(event: PointerEvent) {
         <button
           v-if="hasNext"
           type="button"
-          class="absolute right-3 flex size-10 items-center justify-center rounded-full bg-white/90 text-[#0B7A75] shadow-sm"
+          class="harbor-ghost-action absolute right-3 flex size-10 items-center justify-center rounded-full bg-white/90 text-[#0B7A75] shadow-sm"
           aria-label="Next attachment"
           @click="move(1)"
         >
           <ChevronRight />
         </button>
       </div>
-      <footer class="flex min-h-14 items-center gap-3 border-t border-[#E5EFEC] px-5 text-sm">
-        <span class="flex-1 text-[#61777B]">{{ activeIndex + 1 }} of {{ attachments.length }}</span>
+      <footer class="border-t border-[#E5EFEC] bg-[#FBFCF8] px-4 py-3 sm:px-5">
+        <div class="mb-2 flex items-center gap-3 text-sm">
+          <span class="flex-1 text-[#61777B]">{{ activeIndex + 1 }} of {{ attachments.length }}</span>
+        </div>
+        <div v-if="attachments.length > 1" class="flex gap-2 overflow-x-auto pb-1" aria-label="Media list" role="list">
+          <div v-for="(attachment, index) in attachments" :key="attachment.id" role="listitem">
+            <button
+              type="button"
+              class="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border text-[#0B7A75] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+              :class="
+                index === activeIndex
+                  ? 'border-[#0B7A75] bg-[#E6F4F1] ring-2 ring-[#0B7A75]/20'
+                  : 'border-[#D8E7E3] bg-white'
+              "
+              :aria-label="`Show ${attachment.fileName}`"
+              :aria-current="index === activeIndex ? 'true' : undefined"
+              @click="emit('update:activeIndex', index)"
+            >
+              <img
+                v-if="attachment.contentType.startsWith('image/') && attachmentUrls[attachment.url]"
+                :src="attachmentUrls[attachment.url]"
+                :alt="attachment.fileName"
+                class="size-full object-cover"
+              />
+              <FileText v-else class="size-5" />
+            </button>
+          </div>
+        </div>
       </footer>
-    </DialogContent>
+    </HarborDialogContent>
   </Dialog>
 </template>

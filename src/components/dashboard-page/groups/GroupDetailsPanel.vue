@@ -684,7 +684,8 @@ defineExpose({
                     emit('chat-member', member);
                   "
                 >
-                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                     ><MessageCircle class="size-4" />Message</span
                   >
                 </button>

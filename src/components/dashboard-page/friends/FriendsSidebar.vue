@@ -104,7 +104,7 @@ onBeforeUnmount(clearLongPress);
     :class="expanded ? 'flex-1 opacity-100' : 'basis-20 shrink-0 opacity-100'"
     aria-labelledby="friends-heading"
   >
-    <div class="flex min-h-8 items-center justify-between gap-2 px-2">
+    <div class="flex h-9 items-center justify-between gap-2 px-2">
       <motion.h2
         id="friends-heading"
         drag="y"
@@ -295,7 +295,8 @@ onBeforeUnmount(clearLongPress);
                   emit('call', friend);
                 "
               >
-                <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                <span
+                  class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                   ><Phone class="size-4" />Call</span
                 >
               </button>
@@ -311,7 +312,8 @@ onBeforeUnmount(clearLongPress);
                   emit('profile', friend);
                 "
               >
-                <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                <span
+                  class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                   ><CircleUserRound class="size-4" />Profile</span
                 >
               </button>

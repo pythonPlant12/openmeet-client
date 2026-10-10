@@ -14,6 +14,7 @@
     "retry": "Try again",
     "soon": "Soon",
     "startMeeting": "Start meeting",
+    "joinMeeting": "Join meeting",
     "quitMeeting": "Quit meeting",
     "roles": {
       "admin": "Admin",

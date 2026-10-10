@@ -386,7 +386,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
     <div class="relative flex min-h-0 flex-1 flex-col">
       <div
         ref="pane"
-        class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6"
+        class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
         aria-label="Message history"
         @scroll.passive="onPaneScroll"
       >
@@ -461,7 +461,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
       :attachment-urls="attachmentUrls"
       @close="previewAttachments = []"
     />
-    <div class="border-t border-[#E5EFEC] bg-white px-4 py-3 sm:px-6">
+    <div class="border-t border-[#E5EFEC] bg-white px-3 py-3 sm:px-6">
       <p v-if="footerNote" class="mb-2 text-xs text-[#61777B]">{{ footerNote }}</p>
       <AnimatePresence>
         <motion.div
@@ -599,7 +599,8 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           rows="1"
           maxlength="2000"
           :placeholder="placeholder"
-          :disabled="sending"
+          :readonly="sending"
+          :aria-busy="sending"
           aria-label="Message"
           class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-transparent bg-[#F3F5F4] px-3 py-2.5 text-sm text-[#102F35] placeholder:text-[#8A9C9E] focus-visible:border-[#D8E7E3] focus-visible:bg-white focus-visible:outline-none focus-visible:ring-0"
           @keydown.enter.exact.prevent="emit('send')"
@@ -611,9 +612,12 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           :prefers-reduced-motion="prefersReducedMotion"
           :disabled="sending"
         />
+        <!-- Sending keeps the composer focused, so the mobile keyboard stays open: the read-only state above
+             replaces `disabled`, which would blur it, and the button below never takes focus. -->
         <Button
           type="submit"
           class="harbor-primary-action h-11 rounded-xl bg-[#0B7A75] px-4 text-white"
+          @pointerdown.prevent
           :disabled="(!content.trim() && (!attachmentsEnabled || !attachments.length)) || loading || sending"
           >{{ sending ? 'Sending...' : sendLabel }}</Button
         >
