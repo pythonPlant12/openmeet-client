@@ -8,11 +8,13 @@ import {
   LogOut,
   Mail,
   MailOpen,
+  Phone,
   Plus,
   Search,
   Trash2,
   UserPlus,
   UsersRound,
+  Video,
   X,
 } from 'lucide-vue-next';
 import { motion } from 'motion-v';
@@ -71,6 +73,8 @@ const emit = defineEmits<{
   (event: 'update:query', value: string): void;
   (event: 'create-group'): void;
   (event: 'join-group'): void;
+  (event: 'start-meeting'): void;
+  (event: 'join-meeting'): void;
   (eventName: 'drag-end', pointerEvent: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }): void;
   (eventName: 'wheel', wheelEvent: WheelEvent): void;
   (event: 'toggle'): void;
@@ -90,14 +94,23 @@ const emit = defineEmits<{
 const SWIPE_ACTION_WIDTH = 80;
 
 const query = defineModel<string>('query', { required: true });
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<{ focus: (options?: FocusOptions) => void } | null>(null);
 let longPressTimer: number | undefined;
 let suppressClick = false;
 
 watch(
   () => props.searchOpen,
-  (open) => open && nextTick(() => searchInput.value?.focus()),
+  (open) => open && nextTick(() => searchInput.value?.focus({ preventScroll: true })),
 );
+
+// Same as the friends search: focus inside the tap without scrolling, then again after the expansion settles.
+function toggleSearch() {
+  const open = !props.searchOpen;
+  emit('update:searchOpen', open);
+  if (!open) return;
+  searchInput.value?.focus({ preventScroll: true });
+  window.setTimeout(() => searchInput.value?.focus({ preventScroll: true }), 320);
+}
 
 function startLongPress(event: PointerEvent, conversation: Conversation) {
   if (event.pointerType === 'mouse') return;
@@ -137,8 +150,8 @@ onBeforeUnmount(clearLongPress);
 </script>
 
 <template>
-  <div class="border-b border-[#E5EFEC] px-4 py-4 sm:px-5">
-    <div class="flex items-center justify-between gap-3">
+  <div class="shrink-0 border-b border-[#E5EFEC] p-3 lg:px-5 lg:py-4">
+    <div class="flex min-h-8 items-center justify-between gap-2 px-2 lg:px-0">
       <motion.h1
         drag="y"
         :drag-constraints="{ top: 0, bottom: 0 }"
@@ -147,7 +160,7 @@ onBeforeUnmount(clearLongPress);
         role="button"
         tabindex="0"
         :aria-expanded="expanded"
-        class="-my-4 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+        class="-my-2 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B] lg:-my-4 lg:py-4"
         @drag-end="(event, info) => emit('drag-end', event, info)"
         @click="emit('toggle')"
         @wheel.prevent="emit('wheel', $event)"
@@ -166,14 +179,48 @@ onBeforeUnmount(clearLongPress);
           aria-controls="conversation-search"
           aria-label="Search conversations"
           title="Search conversations"
-          @click="emit('update:searchOpen', !searchOpen)"
+          @click="toggleSearch"
           ><Search class="size-4"
         /></Button>
         <DropdownMenu :modal="false">
           <DropdownMenuTrigger as-child>
             <Button
               size="icon"
-              class="harbor-primary-action size-9 rounded-full bg-[#0B7A75] text-white"
+              variant="ghost"
+              class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
+              aria-label="Meeting options"
+              title="Meeting options"
+              ><Phone class="size-4"
+            /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            :side-offset="8"
+            class="harbor-action-menu min-w-44 rounded-2xl border-[#D8E7E3] bg-white p-1.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14)]"
+          >
+            <DropdownMenuItem
+              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+              @select="emit('join-meeting')"
+            >
+              <LogIn class="size-4" />
+              Join meeting
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+              @select="emit('start-meeting')"
+            >
+              <Video class="size-4" />
+              Start meeting
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu :modal="false">
+          <DropdownMenuTrigger as-child>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
               aria-label="Group options"
               title="Group options"
               ><Plus class="size-4"
@@ -229,7 +276,7 @@ onBeforeUnmount(clearLongPress);
     </div>
   </div>
   <div
-    class="min-h-0 overflow-hidden transition-[flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    class="flex min-h-0 flex-col overflow-hidden transition-[flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
     :class="expanded ? 'flex-1 opacity-100' : 'pointer-events-none flex-none basis-0 opacity-0'"
     :aria-hidden="!expanded"
   >
@@ -270,7 +317,7 @@ onBeforeUnmount(clearLongPress);
       <div v-if="directRequests.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
         <div v-for="request in directRequests" :key="request.id" class="flex items-center gap-2 rounded-xl px-2 py-2">
           <span
-            class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
+            class="flex size-8 shrink-0 items-center justify-center rounded-[28%] bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
             ><CircleUserRound class="size-4"
           /></span>
           <p class="min-w-0 flex-1 truncate text-xs text-[#4E6B70]">
@@ -324,7 +371,8 @@ onBeforeUnmount(clearLongPress);
                 emit('toggle-read', conversation);
               "
             >
-              <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+              <span
+                class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                 ><MailOpen v-if="isUnread(conversation)" class="size-4" /><Mail v-else class="size-4" />{{
                   isUnread(conversation) ? 'Read' : 'Unread'
                 }}</span
@@ -358,7 +406,8 @@ onBeforeUnmount(clearLongPress);
                 emit('delete', conversation);
               "
             >
-              <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+              <span
+                class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                 ><Trash2 v-if="conversation.kind === 'direct'" class="size-4" /><LogOut v-else class="size-4" />{{
                   conversation.kind === 'direct' ? 'Delete' : 'Leave'
                 }}</span
@@ -385,7 +434,7 @@ onBeforeUnmount(clearLongPress);
               >
                 <span class="relative shrink-0"
                   ><span
-                    class="flex size-10 items-center justify-center overflow-hidden rounded-full"
+                    class="flex size-10 items-center justify-center overflow-hidden rounded-[28%]"
                     :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
                     ><img
                       v-if="conversation.kind === 'group' && groupAvatarUrls[conversation.id]"

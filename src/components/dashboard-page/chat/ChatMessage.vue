@@ -161,18 +161,11 @@ function formatFileSize(byteSize: number) {
                 v-if="message.replyTo"
                 type="button"
                 data-message-quote
-                class="mb-1.5 mt-0.5 block w-full rounded-xl px-2.5 py-2 text-left text-xs transition-colors"
-                :class="
-                  local
-                    ? 'bg-white/[0.14] text-white/80 [@media(hover:hover)]:hover:bg-white/20'
-                    : 'bg-[#F1F4F3] text-[#61777B] [@media(hover:hover)]:hover:bg-[#EAEFED]'
-                "
+                class="mb-1.5 mt-0.5 block w-full rounded-xl bg-[#F1F4F3] px-2.5 py-2 text-left text-xs text-[#61777B] transition-colors [@media(hover:hover)]:hover:bg-[#EAEFED]"
                 :aria-label="`Show the message from ${message.replyTo.senderName}`"
                 @click="emit('jump-to', message.replyTo.sequence)"
               >
-                <span
-                  class="mb-0.5 flex items-center gap-1 font-semibold"
-                  :class="local ? 'text-white' : 'text-[#27595D]'"
+                <span class="mb-0.5 flex items-center gap-1 font-semibold text-[#27595D]"
                   ><CornerUpLeft class="size-3 shrink-0" />{{ message.replyTo.senderName }}</span
                 >
                 <span class="line-clamp-2 block leading-snug">{{ message.replyTo.content }}</span>
@@ -210,12 +203,7 @@ function formatFileSize(byteSize: number) {
                   <button
                     v-else-if="isPdf(attachment.contentType) && attachmentUrls[attachment.url]"
                     type="button"
-                    class="flex min-h-20 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
-                    :class="
-                      local
-                        ? 'bg-white/15 [@media(hover:hover)]:hover:bg-white/20'
-                        : 'bg-[#EDF8F5] [@media(hover:hover)]:hover:bg-[#E6F4F1]'
-                    "
+                    class="flex min-h-20 items-center gap-2 rounded-xl bg-[#F1F4F3] px-2.5 py-2 text-left text-[#102F35] transition-colors [@media(hover:hover)]:hover:bg-[#EAEFED]"
                     @click="emit('preview', attachments, index)"
                   >
                     <FileText class="size-5 shrink-0" />
@@ -229,12 +217,7 @@ function formatFileSize(byteSize: number) {
                     v-else-if="attachmentUrls[attachment.url]"
                     :href="attachmentUrls[attachment.url]"
                     :download="attachment.fileName"
-                    class="flex min-h-20 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
-                    :class="
-                      local
-                        ? 'bg-white/15 [@media(hover:hover)]:hover:bg-white/20'
-                        : 'bg-[#EDF8F5] [@media(hover:hover)]:hover:bg-[#E6F4F1]'
-                    "
+                    class="flex min-h-20 items-center gap-2 rounded-xl bg-[#F1F4F3] px-2.5 py-2 text-left text-[#102F35] transition-colors [@media(hover:hover)]:hover:bg-[#EAEFED]"
                   >
                     <FileText class="size-5 shrink-0" />
                     <span class="min-w-0 flex-1"
@@ -248,8 +231,7 @@ function formatFileSize(byteSize: number) {
                   <button
                     v-else
                     type="button"
-                    class="flex min-h-20 items-center gap-2 rounded-xl px-2.5 py-2 text-left"
-                    :class="local ? 'bg-white/15' : 'bg-[#EDF8F5]'"
+                    class="flex min-h-20 items-center gap-2 rounded-xl bg-[#F1F4F3] px-2.5 py-2 text-left text-[#102F35]"
                     :aria-label="`Load ${attachment.fileName}`"
                     @click="loadAttachment(attachment.url)"
                   >

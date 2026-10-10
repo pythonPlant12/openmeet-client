@@ -1,6 +1,10 @@
+import { hasNativeNotifications } from '@/services/native-notifications';
+
 export type SystemNotificationPermission = NotificationPermission | 'unsupported';
 
 export function getSystemNotificationPermission(): SystemNotificationPermission {
+  // The native app asks the OS for permission itself and does not use Web Notifications.
+  if (hasNativeNotifications()) return 'granted';
   return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
 }
 

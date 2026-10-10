@@ -7,6 +7,9 @@ settings:
 importers:
   .:
     dependencies:
+      '@tauri-apps/api':
+        specifier: ^2.12.2
+        version: 2.12.2
       '@vueuse/core':
         specifier: ^14.1.0
         version: 14.1.0(vue@3.5.25(typescript@6.0.3))
@@ -1168,6 +1171,10 @@ packages:
       { integrity: sha512-vhF7kEU9EXWXh+HdAwKJ2m3xaOnTTmgcdXcF2pim8g4GvI7eRrk2YRuV5nUlZnd/NbCIX4/Ja2OZu5EjJL06Ww== }
     peerDependencies:
       vue: ^2.7.0 || ^3.0.0
+
+  '@tauri-apps/api@2.12.2':
+    resolution:
+      { integrity: sha512-cr0FYEsbSQIeEuIIoC8bwdiHW3YlziMYOZ0j3R7F6kkIHSVrrZnV6CSjv/VQvFoyuERGxFc8NMtLJDXi5wYOYg== }
 
   '@testing-library/dom@10.4.1':
     resolution:
@@ -5306,6 +5313,8 @@ snapshots:
     dependencies:
       '@tanstack/virtual-core': 3.13.12
       vue: 3.5.25(typescript@6.0.3)
+
+  '@tauri-apps/api@2.12.2': {}
 
   '@testing-library/dom@10.4.1':
     dependencies:

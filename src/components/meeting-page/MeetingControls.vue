@@ -86,17 +86,19 @@ const shareOnTelegram = () => {
 </script>
 
 <template>
+  <!-- Controls share the navbar avatar's look: 2px border, light fill, 12px corners. The bar's radius nests around
+       them (button radius plus bar padding). On phones the account button sits above the bar (see TheNavbar). -->
   <div class="marketing-font fixed bottom-4 left-1/2 z-40 -translate-x-1/2 text-[#102F35] sm:bottom-6">
     <div
-      class="flex items-center justify-center gap-1.5 rounded-full border border-[#D8E7E3] bg-white/95 p-2 shadow-[0_18px_50px_rgba(16,47,53,0.22)] backdrop-blur-xl sm:gap-2.5"
+      class="flex items-center justify-center gap-1 rounded-[1.125rem] border border-[#D8E7E3] bg-white/95 p-1.5 shadow-[0_18px_50px_rgba(16,47,53,0.22)] backdrop-blur-xl sm:gap-2 sm:rounded-[1.25rem] sm:p-2"
     >
       <!-- Connection status Button -->
       <div class="group relative">
         <Button
-          :variant="showConnectionStatus ? 'default' : 'secondary'"
+          variant="secondary"
           size="icon"
           @click="emit('toggle-stats')"
-          class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
+          class="meeting-control size-11 rounded-xl border-2 border-[#D8E7E3] bg-[#FBFCF8] text-[#102F35] shadow-[0_4px_12px_rgba(16,47,53,0.08)] sm:size-12"
           :class="{ '!border-[#0B7A75]': showConnectionStatus }"
           :aria-label="t('meeting.controls.toggleStats')"
         >
@@ -112,7 +114,7 @@ const shareOnTelegram = () => {
             <Button
               variant="secondary"
               size="icon"
-              class="meeting-control size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:border-[#0B7A75] sm:size-11"
+              class="meeting-control size-11 rounded-xl border-2 border-[#D8E7E3] bg-[#FBFCF8] text-[#102F35] shadow-[0_4px_12px_rgba(16,47,53,0.08)] data-[state=open]:border-[#0B7A75] sm:size-12"
               :aria-label="t('meeting.controls.openShare')"
             >
               <Share2 class="h-4 w-4" />
@@ -197,10 +199,10 @@ const shareOnTelegram = () => {
       <!-- Chat Button -->
       <div class="group relative">
         <Button
-          :variant="props.isChatOpen ? 'default' : 'secondary'"
+          variant="secondary"
           size="icon"
           @click="emit('toggle-chat')"
-          class="meeting-control relative size-10 rounded-full border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none sm:size-11"
+          class="meeting-control relative size-11 rounded-xl border-2 border-[#D8E7E3] bg-[#FBFCF8] text-[#102F35] shadow-[0_4px_12px_rgba(16,47,53,0.08)] sm:size-12"
           :class="{ '!border-[#0B7A75]': props.isChatOpen }"
           :aria-label="chatAriaLabel"
           data-chat-trigger
@@ -238,7 +240,7 @@ const shareOnTelegram = () => {
           variant="destructive"
           size="icon"
           @click="emit('end-call')"
-          class="meeting-control-danger size-10 rounded-full bg-[#F2765F] text-white shadow-none sm:size-11"
+          class="meeting-control-danger size-11 rounded-xl border-2 border-[#F2765F] bg-[#F2765F] text-white shadow-[0_4px_12px_rgba(16,47,53,0.08)] sm:size-12"
           :aria-label="t('meeting.controls.endCall')"
         >
           <PhoneOff class="h-5 w-5" />

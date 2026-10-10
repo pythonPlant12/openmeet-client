@@ -684,7 +684,8 @@ defineExpose({
                     emit('chat-member', member);
                   "
                 >
-                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                     ><MessageCircle class="size-4" />Message</span
                   >
                 </button>
@@ -741,7 +742,7 @@ defineExpose({
                   >
                     <span class="relative shrink-0">
                       <span
-                        class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
                       >
                         <img
                           v-if="memberAvatarUrls[member.id]"
@@ -876,7 +877,7 @@ defineExpose({
       >
         <div class="flex items-center gap-3 rounded-2xl border border-[#D8E7E3] bg-white p-3">
           <span
-            class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#102F35] text-sm font-semibold text-white"
+            class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] text-sm font-semibold text-white"
           >
             <img
               v-if="avatarUrl"

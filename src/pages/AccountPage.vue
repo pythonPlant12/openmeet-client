@@ -452,7 +452,7 @@ onBeforeUnmount(() => {
           v-if="avatarUrl"
           :src="fullAvatarUrl ?? avatarUrl"
           alt="Your profile avatar"
-          class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-full object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
+          class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-[28%] object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
         />
       </HarborDialogContent>
     </Dialog>

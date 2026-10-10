@@ -92,7 +92,7 @@ const emit = defineEmits<{
             class="overflow-hidden"
             ><div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
               <div class="flex items-center gap-3">
-                <span class="flex size-11 items-center justify-center rounded-full bg-[#102F35] text-white"
+                <span class="flex size-11 items-center justify-center rounded-[28%] bg-[#102F35] text-white"
                   ><UsersRound class="size-5"
                 /></span>
                 <div class="min-w-0 flex-1">

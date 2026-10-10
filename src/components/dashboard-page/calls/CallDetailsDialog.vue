@@ -158,7 +158,7 @@ watch(
                 @click="person.userId && emit('profile', person)"
               >
                 <span
-                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold"
+                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[28%] text-xs font-semibold"
                   :class="person.userId ? 'bg-[#DDF1ED] text-[#0B7A75]' : 'bg-[#F0F4F3] text-[#61777B]'"
                   ><img
                     v-if="avatarFor(person)"

@@ -2,8 +2,9 @@
 import { useDebounceFn, useMediaQuery, useNow } from '@vueuse/core';
 import { motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
+import JoinRoomDialog from '@/components/dashboard-page/actions/JoinRoomDialog.vue';
 import CallDetailsDialog from '@/components/dashboard-page/calls/CallDetailsDialog.vue';
 import CallsSidebar from '@/components/dashboard-page/calls/CallsSidebar.vue';
 import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
@@ -22,6 +23,7 @@ import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useCallHistory } from '@/composables/useCallHistory';
 import { useIncomingCalls } from '@/composables/useIncomingCalls';
+import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { callAgainTargets } from '@/lib/meetings';
 import {
   type ConversationActivity,
@@ -64,6 +66,7 @@ import {
 import { cookieUtils } from '@/utils';
 
 const router = useRouter();
+const route = useRoute();
 const { accessToken, currentUser, isAuthenticated, isCheckingSession } = useAuth();
 const SIDEBAR_PANEL_STORAGE_KEY = 'openmeet.dashboard.sidebar-panel';
 const NOTIFICATION_WARNING_DISMISSED_KEY = 'openmeet.dashboard.notification-warning-dismissed';
@@ -147,6 +150,8 @@ const activeContextMenuId = ref<string | null>(null);
 const contextMenuResets = ref<Record<string, number>>({});
 const isGroupDialogOpen = ref(false);
 const isJoinGroupDialogOpen = ref(false);
+const isJoinRoomDialogOpen = ref(false);
+const { createMeeting } = useMeetingNavigation();
 const isGroupProfileDialogOpen = ref(false);
 const isContactProfileDialogOpen = ref(false);
 const isContactRemoveConfirmationOpen = ref(false);
@@ -334,6 +339,19 @@ const selectedGroupAvatarUrl = computed(() =>
   selectedConversation.value ? groupAvatarUrls.value[selectedConversation.value.id] : undefined,
 );
 const hasSelectedConversation = computed(() => !!selectedConversation.value || !!pendingDirectFriend.value);
+
+watch(
+  hasSelectedConversation,
+  (open) => window.dispatchEvent(new CustomEvent<boolean>('openmeet:dashboard-chat-state', { detail: open })),
+  { immediate: true },
+);
+// App skips message notifications for the conversation on screen.
+watch(
+  () => selectedConversation.value?.id ?? null,
+  (conversationId) =>
+    window.dispatchEvent(new CustomEvent<string | null>('openmeet:active-conversation', { detail: conversationId })),
+  { immediate: true },
+);
 const contactProfileFriend = computed(() =>
   contactProfile.value
     ? (friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId) ?? null)
@@ -898,6 +916,30 @@ watch(
   { immediate: true },
 );
 
+// Notifications open a conversation with `/dashboard?conversation=<id>`.
+async function openConversationFromRoute(conversationId: string) {
+  let conversation = conversations.value.find((item) => item.id === conversationId);
+  if (!conversation) {
+    await refreshConversationWorkspace();
+    conversation = conversations.value.find((item) => item.id === conversationId);
+  }
+  if (isUnmounted || route.query.conversation !== conversationId) return;
+  const query = { ...route.query };
+  delete query.conversation;
+  void router.replace({ query });
+  if (!conversation) return;
+  expandedSidebarPanel.value = 'messages';
+  selectConversation(conversation);
+}
+
+watch(
+  [() => route.query.conversation, accessToken],
+  ([conversationId, token]) => {
+    if (typeof conversationId === 'string' && token) void openConversationFromRoute(conversationId);
+  },
+  { immediate: true },
+);
+
 watch(peopleSearchQuery, (query, _, onCleanup) => {
   const normalizedQuery = query.trim();
   const request = ++friendSearchRequest;
@@ -1272,6 +1314,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   isUnmounted = true;
+  window.dispatchEvent(new CustomEvent<boolean>('openmeet:dashboard-chat-state', { detail: false }));
+  window.dispatchEvent(new CustomEvent<string | null>('openmeet:active-conversation', { detail: null }));
   friendSearchRequest += 1;
   window.clearTimeout(peopleSearchTimer);
   friendAvatarRequest += 1;
@@ -2038,19 +2082,20 @@ async function startConversationCall(conversation: Conversation) {
 </script>
 
 <template>
-  <div v-if="isCheckingSession" class="flex h-[calc(100dvh-84px)] items-center justify-center bg-[#FBFCF8]">
+  <div v-if="isCheckingSession" class="flex h-full items-center justify-center bg-[#FBFCF8]">
     <LoadingRipple class="size-8 text-[#0B7A75]" />
     <span class="sr-only">Loading workspace</span>
   </div>
   <main
     v-else-if="isAuthenticated"
-    class="marketing-font h-[calc(100dvh-84px)] w-full max-w-full overflow-hidden overscroll-none bg-[#FBFCF8] px-3 pb-3 pt-0 text-[#102F35] sm:px-5 sm:pb-3 sm:pt-0"
+    class="marketing-font w-full max-w-full overflow-hidden overscroll-none bg-[#FBFCF8] text-[#102F35] sm:px-5 sm:pb-3 sm:pt-0"
+    :class="hasSelectedConversation ? 'fixed inset-0 h-[100dvh] lg:static lg:h-full' : 'h-full'"
   >
     <motion.div
       :initial="{ opacity: 0, y: 10 }"
       :animate="{ opacity: 1, y: 0 }"
       :transition="{ duration: 0.35 }"
-      class="relative mx-auto h-full max-w-[1600px] overflow-hidden rounded-[1.75rem] border border-[#D8E7E3] bg-white shadow-[0_20px_70px_rgba(16,47,53,0.1)] lg:grid lg:grid-cols-[20rem_minmax(0,1fr)_18rem]"
+      class="relative mx-auto h-full max-w-[1600px] overflow-hidden bg-white sm:rounded-[1.75rem] sm:border sm:border-[#D8E7E3] sm:shadow-[0_20px_70px_rgba(16,47,53,0.1)] lg:grid lg:grid-cols-[20rem_minmax(0,1fr)_18rem]"
     >
       <aside
         class="flex h-full min-h-0 flex-col border-b border-[#D8E7E3] bg-[#FBFCF8] transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-b-0 lg:border-r"
@@ -2087,6 +2132,8 @@ async function startConversationCall(conversation: Conversation) {
           @update:search-open="setConversationSearchOpen"
           @create-group="setCreateGroupDialogOpen(true)"
           @join-group="isJoinGroupDialogOpen = true"
+          @start-meeting="createMeeting"
+          @join-meeting="isJoinRoomDialogOpen = true"
           @drag-end="(event, info) => handlePanelHeaderDragEnd('messages', event, info)"
           @wheel="handlePanelHeaderWheel('messages', $event)"
           @toggle="toggleSidebarPanel('messages')"
@@ -2271,6 +2318,7 @@ async function startConversationCall(conversation: Conversation) {
       @toggle-member="toggleCreateGroupMember"
       @submit="createGroup"
     />
+    <JoinRoomDialog v-model:open="isJoinRoomDialogOpen" />
     <JoinGroupDialog
       :open="isJoinGroupDialogOpen"
       :code="joinGroupCode"

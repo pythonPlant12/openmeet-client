@@ -39,10 +39,59 @@
   }
 }
 
+/* Scrollbars keep their space but fade in only while their element scrolls (`data-scrolling`, see
+   scrollbar-visibility.ts). Scrollbar parts cannot transition, so they read this animatable opacity instead. */
+@property --scrollbar-thumb-opacity {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 @layer base {
   * {
     @apply border-border;
     -webkit-tap-highlight-color: transparent;
+    /* Each element resets the inherited opacity, so a scrolling page does not reveal its inner scrollbars. */
+    --scrollbar-thumb-opacity: 0;
+    transition: --scrollbar-thumb-opacity 400ms ease-in;
+    /* Firefox supports only the standard properties, so it gets the thinnest standard width. */
+    scrollbar-width: thin;
+    scrollbar-color: rgb(11 122 117 / var(--scrollbar-thumb-opacity)) transparent;
+  }
+
+  [data-scrolling] {
+    --scrollbar-thumb-opacity: 1;
+    transition: --scrollbar-thumb-opacity 150ms ease-out;
+  }
+
+  /* WebKit and Chromium (the macOS and iOS app webviews, WebView2, Safari, Chrome) draw a thinner custom
+     scrollbar. Chromium ignores these pseudo-elements while the standard properties are set, so reset them. */
+  @supports selector(::-webkit-scrollbar) {
+    *,
+    [data-scrolling] {
+      scrollbar-width: auto;
+      scrollbar-color: auto;
+    }
+
+    ::-webkit-scrollbar {
+      width: 3px;
+      height: 3px;
+    }
+
+    ::-webkit-scrollbar-track,
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      border-radius: 9999px;
+      background-color: rgb(11 122 117 / var(--scrollbar-thumb-opacity));
+    }
+
+    /* A hovered thumb shows even when idle, so it can still be grabbed and dragged. */
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: #08635f;
+    }
   }
   body {
     background-color: #fbfcf8;
@@ -306,6 +355,75 @@
   transform-origin: center;
 }
 
+@media (max-width: 639px) {
+  .harbor-dialog-content:not(.harbor-mobile-account-sheet) {
+    top: 50% !important;
+    max-height: calc(100dvh - 2rem) !important;
+  }
+}
+
+.harbor-mobile-account-sheet[data-state='open'] {
+  animation: harbor-mobile-account-sheet-in 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: bottom right;
+  will-change: transform;
+}
+
+/*
+ * Closing reverses the opening path back into the account button. A literal time reversal of the
+ * opening ease-out would hold still for ~170ms before moving, so the exit starts at once with a
+ * gentle ease-in. Keep the duration in sync with MOBILE_ACCOUNT_SHEET_EXIT_DURATION in TheNavbar.vue.
+ */
+.harbor-mobile-account-sheet[data-state='closed'] {
+  animation: harbor-mobile-account-sheet-out 260ms cubic-bezier(0.11, 0, 0.5, 0) both;
+  transform-origin: bottom right;
+}
+
+.harbor-mobile-account-overlay[data-state='open'] {
+  animation: harbor-dialog-overlay-in 200ms ease-out both;
+}
+
+.harbor-mobile-account-overlay[data-state='closed'] {
+  animation: harbor-dialog-overlay-out 260ms cubic-bezier(0.11, 0, 0.5, 0) both;
+}
+
+.harbor-mobile-account-sheet[data-state='closed'] [data-mobile-account-sheet-handle] {
+  animation: harbor-mobile-account-handle-out 60ms ease-in 170ms both;
+}
+
+.harbor-mobile-account-sheet[data-state='open'] [data-mobile-account-sheet-header],
+.harbor-mobile-account-sheet[data-state='open'] [data-mobile-account-sheet-body],
+.harbor-mobile-account-sheet[data-state='open'] [data-mobile-account-sheet-footer] {
+  opacity: 0;
+  animation: harbor-mobile-account-content-in 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.harbor-mobile-account-sheet[data-state='open'] [data-mobile-account-sheet-header] {
+  animation-delay: 180ms;
+}
+
+.harbor-mobile-account-sheet[data-state='open'] [data-mobile-account-sheet-body] {
+  animation-delay: 215ms;
+}
+
+.harbor-mobile-account-sheet[data-state='open'] [data-mobile-account-sheet-footer] {
+  animation-delay: 245ms;
+}
+
+/* Matches the open rule's specificity, which would otherwise keep the content-in animation. */
+.harbor-mobile-account-sheet.harbor-mobile-account-sheet-closing [data-mobile-account-sheet-header],
+.harbor-mobile-account-sheet.harbor-mobile-account-sheet-closing [data-mobile-account-sheet-body],
+.harbor-mobile-account-sheet.harbor-mobile-account-sheet-closing [data-mobile-account-sheet-footer] {
+  animation: harbor-mobile-account-content-out 120ms ease-out both;
+}
+
+.harbor-mobile-account-sheet.harbor-mobile-account-sheet-closing [data-mobile-account-sheet-body] {
+  animation-delay: 20ms;
+}
+
+.harbor-mobile-account-sheet.harbor-mobile-account-sheet-closing [data-mobile-account-sheet-header] {
+  animation-delay: 40ms;
+}
+
 @keyframes harbor-nav-arrive {
   from {
     opacity: 0;
@@ -379,6 +497,63 @@
   }
   to {
     opacity: 0;
+  }
+}
+
+@keyframes harbor-mobile-account-sheet-in {
+  from {
+    transform: scaleX(0.12) scaleY(0.06);
+    border-radius: 1.5rem;
+    opacity: 1;
+  }
+  to {
+    transform: scaleX(1) scaleY(1);
+    border-radius: 1.75rem;
+    opacity: 1;
+  }
+}
+
+@keyframes harbor-mobile-account-sheet-out {
+  from {
+    transform: scaleX(1) scaleY(1);
+    border-radius: 1.75rem;
+    opacity: 1;
+  }
+  to {
+    transform: scaleX(0.12) scaleY(0.06);
+    border-radius: 1.5rem;
+    opacity: 1;
+  }
+}
+
+@keyframes harbor-mobile-account-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes harbor-mobile-account-handle-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes harbor-mobile-account-content-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(0.75rem);
   }
 }
 
@@ -478,9 +653,12 @@
     background-color: #d95e49 !important;
   }
 
-  .meeting-control:hover,
-  .meeting-control:focus-visible {
+  /* Meeting controls never fill dark on hover: only the border turns green. Muted controls keep their red. */
+  .meeting-control:not(.meeting-control-muted):hover,
+  .meeting-control:not(.meeting-control-muted):focus-visible {
+    color: #102f35 !important;
     border-color: #0b7a75 !important;
+    background-color: #fbfcf8 !important;
   }
 
   .meeting-share-item:hover,
@@ -494,11 +672,11 @@
 @media (hover: none), (pointer: coarse) {
   .meeting-setting-on:hover,
   .meeting-setting-on:active,
-  .meeting-control:hover,
-  .meeting-control:active {
+  .meeting-control:not(.meeting-control-muted):hover,
+  .meeting-control:not(.meeting-control-muted):active {
     color: #102f35 !important;
     border-color: #0b7a75 !important;
-    background-color: #e6f4f1 !important;
+    background-color: #fbfcf8 !important;
   }
 
   .meeting-setting-off:hover,
@@ -532,7 +710,17 @@
 
   .harbor-nav-capsule,
   .harbor-floating-menu[data-state='open'],
-  .harbor-floating-menu[data-state='closed'] {
+  .harbor-floating-menu[data-state='closed'],
+  .harbor-mobile-account-sheet[data-state] {
+    animation: none;
+  }
+
+  .harbor-mobile-account-sheet [data-mobile-account-sheet-header],
+  .harbor-mobile-account-sheet [data-mobile-account-sheet-body],
+  .harbor-mobile-account-sheet [data-mobile-account-sheet-footer],
+  .harbor-mobile-account-sheet [data-mobile-account-sheet-handle] {
+    opacity: 1;
+    transform: none;
     animation: none;
   }
 

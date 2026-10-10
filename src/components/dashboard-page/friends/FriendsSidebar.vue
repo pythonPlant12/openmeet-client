@@ -59,13 +59,24 @@ const emit = defineEmits<{
 }>();
 const query = defineModel<string>('query', { required: true });
 const SWIPE_ACTION_WIDTH = 80;
-const input = ref<HTMLInputElement | null>(null);
+const input = ref<{ focus: (options?: FocusOptions) => void } | null>(null);
 let longPressTimer: number | undefined;
 let suppressClick = false;
 watch(
   () => props.searchOpen,
-  (open) => open && nextTick(() => input.value?.focus()),
+  (open) => open && nextTick(() => input.value?.focus({ preventScroll: true })),
 );
+
+// Opening search also expands the panel. iOS keeps the keyboard only for focus inside the tap itself, and
+// scrolling to an input that is still expanding overshoots, so focus without scrolling now and again once the
+// 300ms expansion settles.
+function toggleSearch() {
+  const open = !props.searchOpen;
+  emit('update:searchOpen', open);
+  if (!open) return;
+  input.value?.focus({ preventScroll: true });
+  window.setTimeout(() => input.value?.focus({ preventScroll: true }), 320);
+}
 function initials(name: string) {
   return name
     .trim()
@@ -104,7 +115,7 @@ onBeforeUnmount(clearLongPress);
     :class="expanded ? 'flex-1 opacity-100' : 'basis-20 shrink-0 opacity-100'"
     aria-labelledby="friends-heading"
   >
-    <div class="flex min-h-8 items-center justify-between gap-2 px-2">
+    <div class="flex h-9 items-center justify-between gap-2 px-2">
       <motion.h2
         id="friends-heading"
         drag="y"
@@ -130,7 +141,7 @@ onBeforeUnmount(clearLongPress);
         :aria-expanded="searchOpen"
         aria-controls="people-search"
         aria-label="Search friends and people"
-        @click="emit('update:searchOpen', !searchOpen)"
+        @click="toggleSearch"
         ><Search class="size-4"
       /></Button>
     </div>
@@ -180,7 +191,7 @@ onBeforeUnmount(clearLongPress);
               @click="emit('open', friend)"
             >
               <span
-                class="flex size-7 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
+                class="flex size-7 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
                 ><img
                   v-if="friendAvatarUrls[friend.id]"
                   :src="friendAvatarUrls[friend.id]"
@@ -217,7 +228,7 @@ onBeforeUnmount(clearLongPress);
                 @click="emit('open-result', result)"
               >
                 <span
-                  class="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
+                  class="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
                   ><img
                     v-if="resultAvatarUrls[result.id]"
                     :src="resultAvatarUrls[result.id]"
@@ -252,7 +263,7 @@ onBeforeUnmount(clearLongPress);
             class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2"
           >
             <span
-              class="flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+              class="flex size-8 items-center justify-center rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
               >{{ initials(request.user.name) }}</span
             ><span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span
             ><Button
@@ -295,7 +306,8 @@ onBeforeUnmount(clearLongPress);
                   emit('call', friend);
                 "
               >
-                <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                <span
+                  class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                   ><Phone class="size-4" />Call</span
                 >
               </button>
@@ -311,7 +323,8 @@ onBeforeUnmount(clearLongPress);
                   emit('profile', friend);
                 "
               >
-                <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                <span
+                  class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                   ><CircleUserRound class="size-4" />Profile</span
                 >
               </button>
@@ -334,7 +347,7 @@ onBeforeUnmount(clearLongPress);
                 >
                   <span class="relative shrink-0"
                     ><span
-                      class="flex size-8 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                      class="flex size-8 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
                       ><img
                         v-if="friendAvatarUrls[friend.id]"
                         :src="friendAvatarUrls[friend.id]"

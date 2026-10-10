@@ -214,7 +214,7 @@ watch(policy, (current) => {
                 class="flex items-center gap-2.5 px-3 py-2 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[#EEF3F1]"
               >
                 <span
-                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
                   ><img
                     v-if="candidate.avatarUrl && avatarCache.urls.value[candidate.avatarUrl]"
                     :src="avatarCache.urls.value[candidate.avatarUrl]"

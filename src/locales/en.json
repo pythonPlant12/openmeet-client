@@ -14,6 +14,7 @@
     "retry": "Try again",
     "soon": "Soon",
     "startMeeting": "Start meeting",
+    "joinMeeting": "Join meeting",
     "quitMeeting": "Quit meeting",
     "roles": {
       "admin": "Admin",
@@ -281,7 +282,13 @@
     "incomingCallTitle": "Incoming OpenMeet call",
     "incomingCallBody": "Open OpenMeet to answer or decline.",
     "newMessageTitle": "New meeting message",
-    "newMessageBody": "Open OpenMeet to read it."
+    "newMessageBody": "Open OpenMeet to read it.",
+    "incomingGroupCallBody": "{name} is calling {group}.",
+    "attachmentBody": "Sent an attachment",
+    "reply": "Reply",
+    "replyPlaceholder": "Message",
+    "send": "Send",
+    "replyFailed": "Your reply could not be sent."
   },
   "notFound": {
     "eyebrow": "Signal lost",
@@ -408,7 +415,9 @@
       "pin": "Pin {name} in speaker view",
       "unpin": "Unpin {name} and return to the grid",
       "offline": "Offline",
-      "status": "Status: {status}"
+      "status": "Status: {status}",
+      "showName": "Show name",
+      "hideName": "Hide name"
     },
     "actions": {
       "open": "Open meeting actions",

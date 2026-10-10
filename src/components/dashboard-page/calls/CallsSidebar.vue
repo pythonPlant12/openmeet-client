@@ -89,7 +89,9 @@ function initials(name: string) {
     data-calls-panel
     :data-panel="panel"
     class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-    :class="panel === 'top' ? 'flex-1' : panel === 'middle' ? 'shrink-0 basis-[45%]' : 'shrink-0 basis-20'"
+    :class="
+      panel === 'top' ? 'flex-1' : panel === 'middle' ? 'max-md:flex-1 md:shrink-0 md:basis-[45%]' : 'shrink-0 basis-20'
+    "
     aria-labelledby="calls-heading"
   >
     <div
@@ -142,7 +144,7 @@ function initials(name: string) {
         </button>
       </template>
     </div>
-    <div v-else class="flex min-h-8 items-center justify-between gap-2 px-2">
+    <div v-else class="flex h-9 items-center justify-between gap-2 px-2">
       <motion.h2
         id="calls-heading"
         drag="y"
@@ -163,8 +165,8 @@ function initials(name: string) {
       /></motion.h2>
     </div>
     <div
-      class="mt-1 min-h-0 flex-1 overflow-y-auto transition-opacity duration-300 motion-reduce:transition-none"
-      :class="expanded ? 'opacity-100' : 'pointer-events-none h-0 flex-none opacity-0'"
+      class="min-h-0 flex-1 overflow-y-auto transition-[flex-basis,flex-grow,margin,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+      :class="expanded ? 'mt-1 opacity-100' : 'pointer-events-none mt-0 flex-none basis-0 opacity-0'"
       :aria-hidden="!expanded"
       data-calls-list
     >
@@ -213,7 +215,8 @@ function initials(name: string) {
                     emit('toggle-read', meeting);
                   "
                 >
-                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                     ><CheckCheck v-if="meeting.unread" class="size-4" /><EyeOff v-else class="size-4" />
                     {{ meeting.unread ? 'Read' : 'Unread' }}</span
                   >
@@ -234,7 +237,8 @@ function initials(name: string) {
                     emit('toggle-read', meeting);
                   "
                 >
-                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                     ><CheckCheck class="size-4" />Read</span
                   >
                 </button>
@@ -249,7 +253,8 @@ function initials(name: string) {
                     emit('open', meeting);
                   "
                 >
-                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                     ><Info class="size-4" />Info</span
                   >
                 </button>
@@ -264,7 +269,7 @@ function initials(name: string) {
                   <span
                     v-for="(person, index) in meeting.participants.slice(0, 2)"
                     :key="`${person.userId ?? person.name}-${index}`"
-                    class="absolute flex size-8 items-center justify-center overflow-hidden rounded-full border-2 border-[#FBFCF8] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
+                    class="absolute flex size-8 items-center justify-center overflow-hidden rounded-[28%] border-2 border-[#FBFCF8] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
                     :style="{ left: `${index * 12}px`, zIndex: 2 - index }"
                     ><img
                       v-if="avatarFor(person)"
@@ -275,7 +280,7 @@ function initials(name: string) {
                   >
                   <span
                     v-if="!meeting.participants.length"
-                    class="flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-[#0B7A75]"
+                    class="flex size-8 items-center justify-center rounded-[28%] bg-[#DDF1ED] text-[#0B7A75]"
                     ><UserRound class="size-4"
                   /></span>
                 </span>

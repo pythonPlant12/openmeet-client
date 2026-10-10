@@ -287,7 +287,8 @@ defineExpose({ close });
     @wheel="onWheel"
   >
     <!-- Actions are rounded on every corner with a small gap, so they read as pills beside the moving row.
-         The gap is padding, which keeps a box at least that wide, so a closed pane is hidden outright. -->
+         The gap is padding, which keeps a box at least that wide, so a closed pane is hidden outright.
+         A fixed-width action label must be the action width minus this 0.25rem gap to stay centered. -->
     <div
       v-if="$slots.leading"
       data-swipe-pane="leading"

@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toast';
 import { dismissToast, toast } from '@/components/ui/toast/store';
 import { type IncomingCall, incomingCallsKey } from '@/composables/useIncomingCalls';
 import { i18n } from '@/i18n';
+import type { NotificationAction } from '@/services/native-notifications';
 import { showSystemNotification } from '@/services/notifications';
 import {
   type CallInvitation,
@@ -15,7 +16,8 @@ import {
   type UserNotification,
   socialApi,
 } from '@/services/social-api';
-import { type SocialEventResource, socialEventsService } from '@/services/social-events';
+import { type SocialAlert, type SocialEventResource, socialEventsService } from '@/services/social-events';
+import { SystemAlerts } from '@/services/system-alerts';
 
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
@@ -51,7 +53,6 @@ const handleAccessTokenRefreshed = (event: Event) => {
 const knownIncomingCallIds = new Set<string>();
 const knownIncomingCallSessionIds = new Set<string>();
 const knownNotificationIds = new Set<string>();
-const incomingCallNotifications = new Map<string, Notification>();
 const incomingCallToasts = new Map<string, number | string>();
 const incomingCallExpiryTimers = new Map<string, number>();
 let presenceTimer: ReturnType<typeof setInterval> | undefined;
@@ -65,6 +66,16 @@ let incomingCallRetryAttempts = 0;
 
 // Ringing calls, shown by the dashboard's Calls header.
 const incomingCalls = ref<IncomingCall[]>([]);
+// The conversation open in the dashboard, reported by DashboardPage.
+let activeConversationId: string | null = null;
+
+const systemAlerts = new SystemAlerts({
+  translate: (key, values) => i18n.global.t(key, values ?? {}),
+  isConversationOnScreen: (conversationId) =>
+    router.currentRoute.value.name === 'dashboard' && activeConversationId === conversationId,
+  canHandleActions: () => isAuthenticated.value,
+  onAction: (action) => void handleNotificationAction(action),
+});
 
 function resolveIncomingCall(callId: string) {
   incomingCalls.value = incomingCalls.value.filter((call) => call.id !== callId);
@@ -202,6 +213,7 @@ async function pollIncomingCalls() {
   const token = authActor.snapshot.value.context.accessToken;
   const userId = authActor.snapshot.value.context.user?.id;
   const generation = pollingGeneration;
+  const startedAt = Date.now();
   if (
     !token ||
     !userId ||
@@ -251,40 +263,15 @@ async function pollIncomingCalls() {
     for (const call of calls ?? []) {
       if (knownIncomingCallIds.has(call.id)) continue;
       showIncomingCall(call);
-      const notification = showSystemNotification(
-        i18n.global.t('notifications.incomingCallTitle'),
-        {
-          body: i18n.global.t('notifications.incomingCallBody'),
-          icon: '/favicon.svg',
-          tag: `openmeet-call-${call.id}`,
-          requireInteraction: true,
-        },
-        () => router.push('/dashboard'),
-      );
-      if (notification) incomingCallNotifications.set(call.id, notification);
     }
 
     for (const call of callSessions ?? []) {
       if (knownIncomingCallSessionIds.has(call.id)) continue;
       showIncomingCallSession(call);
-      const notification = showSystemNotification(
-        i18n.global.t('notifications.incomingCallTitle'),
-        {
-          body: i18n.global.t('notifications.incomingCallBody'),
-          icon: '/favicon.svg',
-          tag: `openmeet-call-${call.id}`,
-          requireInteraction: true,
-        },
-        () => void acceptCallSession(call),
-      );
-      if (notification) incomingCallNotifications.set(call.id, notification);
     }
 
-    for (const [callId, notification] of incomingCallNotifications) {
-      if (activeCallIds.has(callId)) continue;
-      notification.close();
-      incomingCallNotifications.delete(callId);
-    }
+    // OS notifications come from server alerts, which skip users who are not Online.
+    if (calls && callSessions) systemAlerts.retainCalls(activeCallIds, startedAt);
 
     for (const [callId, toastId] of incomingCallToasts) {
       if (activeCallIds.has(callId)) continue;
@@ -435,6 +422,71 @@ async function updatePresence() {
   await socialApi.updatePresence(token).catch((error) => console.error('[App] Failed to update presence:', error));
 }
 
+function handleSocialAlert(alert: SocialAlert) {
+  systemAlerts.show(alert);
+}
+
+async function findIncomingCall(callId: string) {
+  const ringing = () => incomingCalls.value.find((call) => call.id === callId);
+  if (!ringing()) await pollIncomingCalls();
+  return ringing();
+}
+
+async function replyFromNotification(conversationId: string, text: string) {
+  const token = authActor.snapshot.value.context.accessToken;
+  if (!token) return;
+  try {
+    await socialApi.createConversationMessage(token, conversationId, text);
+  } catch (error) {
+    console.error('[App] Failed to send reply from notification:', error);
+    toast({ title: i18n.global.t('notifications.replyFailed'), variant: 'destructive' });
+    return;
+  }
+  // Replying means the user has read the conversation.
+  await socialApi
+    .markConversationRead(token, conversationId)
+    .catch((error) => console.error('[App] Failed to mark conversation read after reply:', error));
+}
+
+async function handleNotificationAction(action: NotificationAction) {
+  switch (action.action) {
+    case 'openConversation':
+      await router.push({ path: '/dashboard', query: { conversation: action.conversationId } });
+      return;
+    case 'reply':
+      await replyFromNotification(action.conversationId, action.text);
+      return;
+    case 'openCall':
+      // The app is now in front, where the call rings in the Calls header or a toast.
+      return;
+    case 'declineCall':
+      systemAlerts.dismissCall(action.callId);
+      await (action.callKind === 'invitation' ? declineCall(action.callId) : declineCallSession(action.callId));
+      return;
+    case 'answerCall': {
+      systemAlerts.dismissCall(action.callId);
+      const call = await findIncomingCall(action.callId);
+      if (!call) {
+        toast({
+          title: 'Could not join call',
+          description: 'Call may no longer be available.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      await (call.kind === 'invitation' ? acceptCall(call.call) : acceptCallSession(call.call));
+    }
+  }
+}
+
+function handleActiveConversation(event: Event) {
+  activeConversationId = (event as CustomEvent<string | null>).detail;
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') void systemAlerts.drainActions();
+}
+
 function handleSocialEvent(resource: SocialEventResource) {
   if (resource === 'calls') {
     void pollIncomingCalls();
@@ -464,8 +516,7 @@ function stopAuthenticatedPolling() {
   incomingCalls.value = [];
   incomingCallRefreshPending = false;
   notificationRefreshPending = false;
-  for (const notification of incomingCallNotifications.values()) notification.close();
-  incomingCallNotifications.clear();
+  systemAlerts.dismissAllCalls();
   for (const toastId of incomingCallToasts.values()) dismissToast(toastId);
   incomingCallToasts.clear();
   for (const timer of incomingCallExpiryTimers.values()) window.clearTimeout(timer);
@@ -479,8 +530,7 @@ function handleIncomingCallResolved(event: Event) {
   const callId = (event as CustomEvent<string>).detail;
   knownIncomingCallIds.delete(callId);
   knownIncomingCallSessionIds.delete(callId);
-  incomingCallNotifications.get(callId)?.close();
-  incomingCallNotifications.delete(callId);
+  systemAlerts.dismissCall(callId);
   const toastId = incomingCallToasts.get(callId);
   if (toastId !== undefined) dismissToast(toastId);
   incomingCallToasts.delete(callId);
@@ -500,8 +550,10 @@ watch(
     void pollIncomingCalls();
     void pollNotifications();
     void updatePresence();
-    socialEventsService.connect(handleSocialEvent, refreshSocialState);
+    socialEventsService.connect(handleSocialEvent, refreshSocialState, handleSocialAlert);
     presenceTimer = setInterval(updatePresence, 20_000);
+    // Responses made while signed out or before the app loaded wait in the native queue.
+    void systemAlerts.drainActions();
   },
   { immediate: true },
 );
@@ -509,6 +561,9 @@ watch(
 watch(isAuthenticated, setAuthenticatedViewportLock, { immediate: true });
 
 onMounted(() => {
+  void systemAlerts.start().then(() => systemAlerts.drainActions());
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('openmeet:active-conversation', handleActiveConversation);
   window.addEventListener('openmeet:session-expired', handleSessionExpired);
   window.addEventListener('openmeet:access-token-refreshed', handleAccessTokenRefreshed);
   window.addEventListener('openmeet:access-token-expired', handleAccessTokenExpired);
@@ -517,6 +572,9 @@ onMounted(() => {
 onUnmounted(() => {
   setAuthenticatedViewportLock(false);
   stopAuthenticatedPolling();
+  systemAlerts.stop();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  window.removeEventListener('openmeet:active-conversation', handleActiveConversation);
   window.removeEventListener('openmeet:session-expired', handleSessionExpired);
   window.removeEventListener('openmeet:access-token-refreshed', handleAccessTokenRefreshed);
   window.removeEventListener('openmeet:access-token-expired', handleAccessTokenExpired);
@@ -531,7 +589,7 @@ onUnmounted(() => {
 
     <RouterView v-slot="{ Component, route }">
       <Transition name="page-fade" mode="out-in">
-        <div :key="route.path" :class="route.meta.isAuthPage ? '' : 'pt-[84px]'">
+        <div :key="route.path" :class="route.meta.isAuthPage ? '' : 'h-full sm:pt-[84px]'">
           <component :is="Component" />
         </div>
       </Transition>

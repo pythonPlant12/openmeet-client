@@ -9,6 +9,7 @@ export interface UserStatusOption {
   icon: Component;
   /** Background of the presence dot shown beside avatars while the user is online. */
   dotClass: string;
+  borderClass: string;
   chipClass: string;
 }
 
@@ -19,6 +20,7 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     label: 'Online',
     icon: CircleCheck,
     dotClass: 'bg-[#2DA58F]',
+    borderClass: 'border-[#2DA58F]',
     chipClass: 'bg-[#EAF7F4] text-[#17645F]',
   },
   {
@@ -26,6 +28,7 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     label: 'Away',
     icon: Clock3,
     dotClass: 'bg-[#D9A441]',
+    borderClass: 'border-[#D9A441]',
     chipClass: 'bg-[#FFF8E8] text-[#80601D]',
   },
   {
@@ -33,6 +36,7 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     label: 'Do not disturb',
     icon: MinusCircle,
     dotClass: 'bg-[#C4513D]',
+    borderClass: 'border-[#C4513D]',
     chipClass: 'bg-[#FFF0EA] text-[#9D4636]',
   },
   {
@@ -40,6 +44,7 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     label: 'Sleeping',
     icon: Moon,
     dotClass: 'bg-[#6B7BC4]',
+    borderClass: 'border-[#6B7BC4]',
     chipClass: 'bg-[#EEF0FA] text-[#3E4B8A]',
   },
   {
@@ -47,6 +52,7 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     label: 'Appear offline',
     icon: Ban,
     dotClass: 'bg-[#B8C6C5]',
+    borderClass: 'border-[#B8C6C5]',
     chipClass: 'bg-[#F0F4F3] text-[#61777B]',
   },
 ];

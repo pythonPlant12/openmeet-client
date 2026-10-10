@@ -42,6 +42,15 @@ const conversationId = computed(() => {
 const isConversationCall = computed(() => conversationId.value !== null);
 
 const { isAuthenticated, isCheckingSession, currentUser, accessToken } = useAuth();
+// On phones TheNavbar shows a top bar only to guests; signed-in phones use the bottom account button. The meeting's
+// top row sits right under that bar, or at the very top without it, so the video area below gets the space.
+const hasPhoneTopBar = computed(() => !isAuthenticated.value);
+const phoneTopRowClass = computed(() =>
+  hasPhoneTopBar.value ? 'top-20' : 'top-[calc(0.75rem+env(safe-area-inset-top))]',
+);
+const phoneBelowTopRowClass = computed(() =>
+  hasPhoneTopBar.value ? 'top-[8.5rem]' : 'top-[calc(4.25rem+env(safe-area-inset-top))]',
+);
 const meetingExitRoute = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
 
 const {
@@ -732,15 +741,16 @@ const handleReconnect = () => {
     <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-[#102F35] flex flex-col">
       <!-- Participant Count Badge -->
       <div
-        class="fixed left-7 top-[calc(84px+0.75rem)] z-50 flex items-center gap-2 rounded-full bg-[#0B7A75] px-4 py-2 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
+        class="fixed left-7 z-50 flex h-12 items-center gap-2 rounded-xl bg-[#0B7A75] px-4 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
+        :class="phoneTopRowClass"
       >
         <Users class="h-5 w-5" />
         <span class="font-semibold">{{ participantCount }}</span>
       </div>
 
       <div
-        class="fixed top-[calc(84px+0.75rem)] z-[60] transition-[right] sm:top-[calc(84px+1.25rem)]"
-        :class="isChatOpen ? 'right-16' : 'right-7 sm:right-9'"
+        class="fixed z-[60] transition-[right] sm:top-[calc(84px+1.25rem)]"
+        :class="[phoneTopRowClass, isChatOpen ? 'right-16' : 'right-7 sm:right-9']"
       >
         <MeetingActionMenu
           :audio-available="audioAvailable"
@@ -760,32 +770,44 @@ const handleReconnect = () => {
         />
       </div>
 
-      <AnimatePresence>
-        <motion.div
-          v-if="connectionBanner"
-          :key="connectionBanner"
-          data-testid="connection-banner"
-          :data-banner="connectionBanner"
-          role="status"
-          :initial="{ opacity: 0, y: -8 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :exit="{ opacity: 0, y: -8 }"
-          class="fixed left-1/2 top-[calc(84px+0.75rem)] z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-full border px-4 py-2 text-sm font-semibold shadow-lg sm:top-[calc(84px+1.25rem)]"
-          :class="
-            connectionBanner === 'reconnecting'
-              ? 'border-[#F2B9AE] bg-[#FDE9E4] text-[#7A2E22]'
-              : 'border-[#D8E7E3] bg-white text-[#27595D]'
-          "
-        >
-          <LoadingRipple size="sm" :class="connectionBanner === 'reconnecting' ? 'text-[#D95E49]' : 'text-[#0B7A75]'" />
-          {{ t(connectionBanner === 'reconnecting' ? 'meeting.reconnecting' : 'meeting.joiningCall') }}
-        </motion.div>
-      </AnimatePresence>
+      <!-- Motion animates `transform`, which would replace a translate-based centering, so a full-width row centers it.
+           Phones place it below the participants and menu buttons, which share the top row there. -->
+      <div
+        class="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 sm:top-[calc(84px+1.25rem)]"
+        :class="phoneBelowTopRowClass"
+      >
+        <AnimatePresence>
+          <motion.div
+            v-if="connectionBanner"
+            :key="connectionBanner"
+            data-testid="connection-banner"
+            :data-banner="connectionBanner"
+            role="status"
+            :initial="{ opacity: 0, y: -8 }"
+            :animate="{ opacity: 1, y: 0 }"
+            :exit="{ opacity: 0, y: -8 }"
+            class="pointer-events-auto flex max-w-full items-center gap-2.5 rounded-full border px-4 py-2 text-center text-sm font-semibold shadow-lg"
+            :class="
+              connectionBanner === 'reconnecting'
+                ? 'border-[#F2B9AE] bg-[#FDE9E4] text-[#7A2E22]'
+                : 'border-[#D8E7E3] bg-white text-[#27595D]'
+            "
+          >
+            <LoadingRipple
+              size="sm"
+              class="shrink-0"
+              :class="connectionBanner === 'reconnecting' ? 'text-[#D95E49]' : 'text-[#0B7A75]'"
+            />
+            {{ t(connectionBanner === 'reconnecting' ? 'meeting.reconnecting' : 'meeting.joiningCall') }}
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
       <button
         v-if="hasPoorConnection"
         type="button"
-        class="fixed left-1/2 top-[calc(84px+0.75rem)] z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg sm:top-[calc(84px+1.25rem)]"
+        :class="phoneBelowTopRowClass"
+        class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg sm:top-[calc(84px+1.25rem)]"
         data-testid="connection-quality-warning"
         @click="showConnectionQualityDetails = !showConnectionQualityDetails"
       >
@@ -817,7 +839,8 @@ const handleReconnect = () => {
       <!-- Debug Info Panel -->
       <div
         v-if="showConnectionStatus"
-        class="fixed right-7 top-[calc(84px+5rem)] z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg sm:right-9 sm:top-[calc(84px+5.5rem)]"
+        :class="phoneBelowTopRowClass"
+        class="fixed right-7 z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg sm:right-9 sm:top-[calc(84px+5.5rem)]"
       >
         <div class="flex items-center gap-2">
           <span class="text-[#4E6B70]">{{ t('meeting.state') }}</span>
@@ -892,6 +915,7 @@ const handleReconnect = () => {
             :participant-statuses="participantStatuses"
             :participant-avatars="participantAvatars"
             :view-mode="viewMode"
+            :phone-top-bar="hasPhoneTopBar"
             @toggle-pin="handleTogglePin"
           />
         </MeetingActionMenu>

@@ -20,6 +20,10 @@ import {
 } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 
+import FriendshipChangeDialog, {
+  type FriendshipChange,
+  type PendingFriendshipChange,
+} from '@/components/dashboard-page/groups/FriendshipChangeDialog.vue';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Dialog, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
@@ -35,10 +39,6 @@ import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
-import FriendshipChangeDialog, {
-  type FriendshipChange,
-  type PendingFriendshipChange,
-} from '@/components/dashboard-page/groups/FriendshipChangeDialog.vue';
 import { type GroupMutationToken, groupAddActionLabel } from '@/pages/dashboard-group-state';
 import { type Friend, type GroupInfo, type GroupMember, type GroupMemberRole, socialApi } from '@/services/social-api';
 
@@ -122,7 +122,6 @@ function isFriend(member: GroupMember) {
   return member.id !== props.currentUserId && props.friends.some((friend) => friend.id === member.id);
 }
 
-
 function canRemoveMember(member: GroupMember) {
   return canManage(props.info?.role ?? null) && member.role !== 'creator' && member.id !== props.currentUserId;
 }
@@ -143,7 +142,6 @@ function trailingActionCount(member: GroupMember) {
 function requestFriendChange(member: GroupMember, change: FriendshipChange) {
   pendingFriendChange.value = { member, change };
 }
-
 
 function openProfile(member: GroupMember) {
   if (suppressProfileClick || activeParticipantContextMenuId.value === member.id) {
@@ -307,19 +305,13 @@ watch(
       </div>
       <div v-else-if="info" class="min-h-0 space-y-6 overflow-y-auto pr-1">
         <section
-          class="
-            flex flex-col items-center justify-center gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 text-center
-            sm:p-6
-          "
+          class="flex flex-col items-center justify-center gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 text-center sm:p-6"
         >
           <DropdownMenu v-if="canManage(info.role)">
             <DropdownMenuTrigger as-child>
               <button
                 type="button"
-                class="
-                  harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full
-                  bg-[#102F35] p-0 text-white
-                "
+                class="harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] p-0 text-white"
                 :aria-label="`Manage ${info.title} group icon`"
               >
                 <img
@@ -335,10 +327,7 @@ watch(
             <DropdownMenuContent
               align="center"
               :side-offset="10"
-              class="
-                harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]
-                shadow-[0_20px_55px_rgba(16,47,53,0.16)]
-              "
+              class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
             >
               <DropdownMenuItem
                 v-if="avatarUrl"
@@ -368,10 +357,7 @@ watch(
           <button
             v-else-if="avatarUrl"
             type="button"
-            class="
-              harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full
-              bg-[#102F35] p-0 text-white
-            "
+            class="harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] p-0 text-white"
             :aria-label="`View ${info.title} group icon`"
             @click="isAvatarPreviewOpen = true"
           >
@@ -379,7 +365,7 @@ watch(
           </button>
           <span
             v-else
-            class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#102F35] text-white"
+            class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] text-white"
             ><LoadingRipple v-if="avatarLoading" class="size-7 text-white" /><UsersRound v-else class="size-9"
           /></span>
           <div class="min-w-0">
@@ -429,19 +415,13 @@ watch(
           <Button
             v-if="canManage(info.role)"
             variant="ghost"
-            class="
-              group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#08635F]
-              sm:w-auto sm:px-2
-            "
+            class="group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#08635F] sm:w-auto sm:px-2"
             :aria-label="groupAddActionLabel(info.accessPolicy)"
             :title="groupAddActionLabel(info.accessPolicy)"
             @click="emit('add-members')"
           >
             <UserPlus
-              class="
-                size-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110
-                motion-reduce:transition-none
-              "
+              class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 motion-reduce:transition-none"
             />
             <span class="hidden sm:inline">{{ groupAddActionLabel(info.accessPolicy) }}</span>
           </Button>
@@ -449,10 +429,7 @@ watch(
             v-if="canManage(info.role)"
             data-group-security
             variant="ghost"
-            class="
-              group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#102F35]
-              sm:w-auto sm:px-4
-            "
+            class="group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#102F35] sm:w-auto sm:px-4"
             aria-label="Security"
             title="Change group access and password"
             @click="emit('group-settings')"
@@ -484,10 +461,7 @@ watch(
             @click="emit('remove-group')"
           >
             <Trash2
-              class="
-                size-4 transition-transform duration-200 group-hover:scale-90 group-hover:rotate-6
-                motion-reduce:transition-none
-              "
+              class="size-4 transition-transform duration-200 group-hover:scale-90 group-hover:rotate-6 motion-reduce:transition-none"
             />
             <span class="hidden sm:inline">Remove group</span>
           </Button>
@@ -520,7 +494,8 @@ watch(
                     emit('chat-member', member);
                   "
                 >
-                  <span class="flex w-20 shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
                     ><MessageCircle class="size-4" />Message</span
                   >
                 </button>
@@ -529,10 +504,7 @@ watch(
                 <button
                   type="button"
                   data-swipe-action
-                  class="
-                    flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1]
-                    text-[11px] font-semibold text-[#102F35]
-                  "
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1] text-[11px] font-semibold text-[#102F35]"
                   :aria-label="`View ${member.name}'s profile`"
                   @click="
                     close();
@@ -545,10 +517,7 @@ watch(
                   v-if="!isSelf(member) && !isFriend(member)"
                   type="button"
                   data-swipe-action
-                  class="
-                    flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#0B7A75]
-                    text-[11px] font-semibold text-white
-                  "
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#0B7A75] text-[11px] font-semibold text-white"
                   :aria-label="`Add ${member.name} as a friend`"
                   @click="
                     close();
@@ -561,10 +530,7 @@ watch(
                   v-if="canRemoveMember(member)"
                   type="button"
                   data-swipe-action
-                  class="
-                    flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D]
-                    text-[11px] font-semibold text-white disabled:opacity-60
-                  "
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D] text-[11px] font-semibold text-white disabled:opacity-60"
                   :aria-label="`Remove ${member.name} from the group`"
                   :disabled="mutationBusy"
                   @click="
@@ -590,7 +556,7 @@ watch(
                   >
                     <span class="relative shrink-0"
                       ><span
-                        class="flex size-10 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        class="flex size-10 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
                         ><img
                           v-if="memberAvatarUrls[member.id]"
                           :src="memberAvatarUrls[member.id]"
@@ -692,7 +658,7 @@ watch(
         v-if="avatarUrl"
         :src="fullAvatarUrl ?? avatarUrl"
         :alt="`${info?.title} group icon`"
-        class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-full object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
+        class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-[28%] object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
       />
     </HarborDialogContent>
   </Dialog>

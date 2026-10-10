@@ -2,8 +2,8 @@
 import { Database, Picker } from 'emoji-picker-element';
 import emojiDataUrl from 'emoji-picker-element-data/en/emojibase/data.json?url';
 import { Smile } from 'lucide-vue-next';
-import { AnimatePresence, motion } from 'motion-v';
-import { nextTick, onBeforeUnmount, ref } from 'vue';
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import { Button } from '@/components/ui/button';
 import { LoadingRipple } from '@/components/ui/loading';
@@ -15,8 +15,6 @@ const props = defineProps<{
 }>();
 
 const content = defineModel<string>({ required: true });
-const control = ref<HTMLElement | null>(null);
-const popover = ref<HTMLElement | null>(null);
 const mount = ref<HTMLElement | null>(null);
 const isOpen = ref(false);
 const isLoading = ref(false);
@@ -77,31 +75,11 @@ async function ensurePicker() {
   return loadPromise;
 }
 
-function toggle() {
-  if (props.disabled) return;
-  isOpen.value = !isOpen.value;
-  if (isOpen.value) void nextTick(ensurePicker);
-}
-
-function closeOnOutsideClick(event: PointerEvent) {
-  if (!isOpen.value) return;
-  const path = event.composedPath();
-  if ((control.value && path.includes(control.value)) || (popover.value && path.includes(popover.value))) return;
-  isOpen.value = false;
-}
-
-function closeOnEscape(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !isOpen.value) return;
-  isOpen.value = false;
-  control.value?.querySelector<HTMLButtonElement>('button')?.focus();
-}
-
-document.addEventListener('pointerdown', closeOnOutsideClick, true);
-document.addEventListener('keydown', closeOnEscape);
+watch(isOpen, (open) => {
+  if (open) void nextTick(ensurePicker);
+});
 
 onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', closeOnOutsideClick, true);
-  document.removeEventListener('keydown', closeOnEscape);
   picker?.removeEventListener('emoji-click', insertEmoji);
   picker?.remove();
   void database?.close().catch((cause) => console.error('[EmojiPickerButton] Failed to close emoji database:', cause));
@@ -109,32 +87,38 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <span ref="control" class="relative shrink-0">
-    <Button
-      type="button"
-      size="icon"
-      variant="ghost"
-      class="harbor-ghost-action size-11 rounded-xl text-[#0B7A75]"
-      :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isOpen }"
-      :aria-expanded="isOpen"
-      aria-controls="emoji-picker"
-      aria-label="Choose emoji"
-      title="Choose emoji"
-      :disabled="disabled"
-      @click="toggle"
-    >
-      <Smile class="size-5" />
-    </Button>
-    <AnimatePresence>
-      <motion.div
-        v-if="isOpen"
+  <!-- A portalled popover, like the app's menus: it stays on top of everything and inside the viewport. -->
+  <PopoverRoot v-model:open="isOpen">
+    <PopoverTrigger as-child>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        class="harbor-ghost-action size-11 shrink-0 rounded-xl text-[#0B7A75]"
+        :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isOpen }"
+        aria-label="Choose emoji"
+        title="Choose emoji"
+        :disabled="disabled"
+      >
+        <Smile class="size-5" />
+      </Button>
+    </PopoverTrigger>
+    <PopoverPortal>
+      <!-- Picking an emoji focuses the composer on pointer devices; that must not close the picker. -->
+      <PopoverContent
         id="emoji-picker"
-        ref="popover"
-        :initial="prefersReducedMotion ? false : { opacity: 0, y: 8, scale: 0.96 }"
-        :animate="{ opacity: 1, y: 0, scale: 1 }"
-        :exit="prefersReducedMotion ? undefined : { opacity: 0, y: 6, scale: 0.96 }"
-        :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.18, ease: 'easeOut' }"
-        class="fixed inset-x-3 bottom-20 z-30 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_18px_48px_rgba(16,47,53,0.18)] md:absolute md:inset-x-auto md:bottom-full md:right-0 md:mb-2 md:w-[min(22rem,calc(100vw-2rem))]"
+        side="top"
+        align="end"
+        :side-offset="8"
+        :collision-padding="12"
+        class="z-[2000] flex max-h-[var(--reka-popover-content-available-height)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_18px_48px_rgba(16,47,53,0.18)] focus:outline-none"
+        :class="
+          prefersReducedMotion
+            ? ''
+            : 'origin-[var(--reka-popover-content-transform-origin)] data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:duration-200 data-[state=closed]:duration-150'
+        "
+        @open-auto-focus.prevent
+        @focus-outside.prevent
       >
         <div v-if="isLoading" class="flex min-h-64 items-center justify-center">
           <LoadingRipple class="size-6 text-[#0B7A75]" />
@@ -152,10 +136,10 @@ onBeforeUnmount(() => {
         </div>
         <div
           ref="mount"
-          class="max-h-[min(26rem,55dvh)] overflow-y-auto [&>emoji-picker]:w-full"
+          class="max-h-[min(26rem,55dvh)] min-h-0 flex-1 overflow-y-auto [&>emoji-picker]:w-full"
           :class="{ hidden: isLoading || error }"
         />
-      </motion.div>
-    </AnimatePresence>
-  </span>
+      </PopoverContent>
+    </PopoverPortal>
+  </PopoverRoot>
 </template>

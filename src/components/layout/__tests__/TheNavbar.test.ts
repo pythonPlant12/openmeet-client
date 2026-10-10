@@ -5,7 +5,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 
 import TheNavbar from '@/components/layout/TheNavbar.vue';
 
-const media = vi.hoisted(() => ({ desktop: true, hover: true, reduced: false }));
+const media = vi.hoisted(() => ({ desktop: true, hover: true, mobile: false, reduced: false }));
 const auth = vi.hoisted(() => ({ authenticated: false }));
 const social = vi.hoisted(() => ({
   getCurrentUserProfile: vi.fn(),
@@ -35,9 +35,11 @@ vi.mock('@vueuse/core', async () => {
       ref(
         query.includes('prefers-reduced-motion')
           ? media.reduced
-          : query.includes('min-width')
-            ? media.desktop
-            : media.hover,
+          : query.includes('max-width')
+            ? media.mobile
+            : query.includes('min-width')
+              ? media.desktop
+              : media.hover,
       ),
     useTimeoutFn: (callback: () => void, delay: number | (() => number)) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -93,6 +95,7 @@ vi.mock('motion-v', async () => {
       div: motionStub('div'),
       nav: motionStub('nav'),
       span: motionStub('span'),
+      section: motionStub('section'),
     },
   };
 });
@@ -149,6 +152,9 @@ async function mountNavbar(path = '/') {
       plugins: [router, i18n],
       stubs: {
         Button: { template: '<button><slot /></button>' },
+        Dialog: { props: ['open'], template: '<div v-if="open"><slot /></div>' },
+        DialogTitle: { template: '<span><slot /></span>' },
+        HarborDialogContent: { template: '<section v-bind="$attrs"><slot /></section>' },
         DropdownMenu: { template: '<div><slot /></div>' },
         DropdownMenuContent: { template: '<div><slot /></div>' },
         DropdownMenuItem: { template: '<div @click="$emit(\'select\', $event)"><slot /></div>' },
@@ -168,6 +174,7 @@ async function mountNavbar(path = '/') {
 beforeEach(() => {
   media.desktop = true;
   media.hover = true;
+  media.mobile = false;
   media.reduced = false;
   auth.authenticated = false;
   social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null });
@@ -228,6 +235,35 @@ describe('TheNavbar', () => {
     expect(shell.classes()).toContain('w-[min(340px,calc(100vw-1.5rem))]');
 
     expect(wrapper.get('.harbor-nav-layout').attributes('data-layout')).toBeUndefined();
+  });
+
+  it('uses a persistent profile trigger and bottom sheet for authenticated phones', async () => {
+    vi.useFakeTimers();
+    media.desktop = false;
+    media.hover = false;
+    media.mobile = true;
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
+    const { wrapper } = await mountNavbar('/room/meeting-id');
+    await flushPromises();
+
+    expect(wrapper.find('.harbor-nav-layout').exists()).toBe(false);
+    const trigger = wrapper.get('button[aria-expanded="false"]');
+    expect(trigger.classes()).toContain('rounded-xl');
+
+    await trigger.trigger('click');
+    // The sheet grows out of the button, so the nav keeps the button's size and hides it while open.
+    expect(wrapper.get('nav').classes()).toContain('w-12');
+    expect(wrapper.find('nav button[aria-label="nav.accountInformation"][aria-expanded]').exists()).toBe(false);
+    await vi.advanceTimersByTimeAsync(300);
+
+    const accountNavigation = wrapper.get('section[aria-label="Account navigation"]');
+    expect(accountNavigation.classes()).toContain('bottom-[5.375rem]');
+    expect(accountNavigation.text()).toContain('common.quitMeeting');
+    expect(accountNavigation.text()).toContain('common.logOut');
+    await wrapper.get('[data-mobile-status-toggle]').trigger('click');
+    expect(wrapper.find('[data-mobile-status-options]').exists()).toBe(true);
+    wrapper.unmount();
   });
 
   it('preserves staged mobile width and height expansion', async () => {
@@ -429,16 +465,15 @@ describe('TheNavbar', () => {
     expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(false);
   });
 
-  it('uses an account dropdown instead of the account name and keeps meeting and dashboard menus content-sized', async () => {
+  it('leads the account dropdown with the account name and keeps meeting and dashboard menus content-sized', async () => {
     vi.useFakeTimers();
     auth.authenticated = true;
     const { wrapper } = await mountNavbar('/room/meeting-id');
 
     expect(wrapper.get('button[aria-label="nav.accountInformation"]')).toBeDefined();
-    expect(wrapper.text()).toContain('nav.accountInformation');
+    expect(wrapper.text()).toContain('A deliberately long participant name');
     expect(wrapper.text()).toContain('common.dashboard');
     expect(wrapper.text()).toContain('nav.friends');
-    expect(wrapper.text()).not.toContain('A deliberately long participant name');
 
     media.desktop = false;
     const mobile = await mountNavbar('/room/meeting-id');
@@ -450,7 +485,9 @@ describe('TheNavbar', () => {
 
     // No minimum height: the drawer shrinks to its content.
     expect(mobile.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 330px');
-    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.accountInformation');
+    expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain(
+      'A deliberately long participant name',
+    );
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('common.dashboard');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).toContain('nav.friends');
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).not.toContain('common.logOut');
@@ -617,7 +654,7 @@ describe('TheNavbar', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const toggle = wrapper.get('[data-mobile-status-toggle]');
-    expect(toggle.text()).toBe('nav.status');
+    expect(toggle.text()).toBe('nav.status: Online');
     const options = wrapper.get('[data-mobile-status-options]');
     expect(options.findAll('[data-status-option]').map((option) => option.text())).toEqual([
       'Online',
