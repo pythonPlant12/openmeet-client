@@ -21,6 +21,8 @@ const props = defineProps<{
   participantStatuses?: Record<string, UserStatus>;
   /** Avatar image URLs of registered participants, keyed by participant ID. */
   participantAvatars?: Record<string, string>;
+  /** Phones show the navbar at the top (guests), so the video area starts below it and the meeting's top row. */
+  phoneTopBar?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -132,7 +134,11 @@ function toggleName(participantId: string) {
   >
     <!-- The video area fills the space between the top row (participants and actions buttons) and the bottom
          control bar, so no tile hides under either. -->
-    <div v-if="hasParticipants" class="fixed inset-x-0 bottom-[5.5rem] top-[9.5rem] sm:bottom-[6.5rem] sm:top-[10rem]">
+    <div
+      v-if="hasParticipants"
+      class="fixed inset-x-0 bottom-[5.5rem] sm:bottom-[6.5rem] sm:top-[10rem]"
+      :class="phoneTopBar === false ? 'top-[calc(4.25rem+env(safe-area-inset-top))]' : 'top-[8.5rem]'"
+    >
       <Transition name="meeting-layout" mode="out-in">
         <div v-if="viewMode === 'grid'" key="grid" class="absolute inset-0 p-2 sm:p-4">
           <div ref="gridArea" class="relative size-full">
