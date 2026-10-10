@@ -290,7 +290,7 @@ onUnmounted(() => {
             v-if="!videoEnabled || !previewStream || isVideoDenied"
             class="absolute inset-0 flex items-center justify-center bg-[#E2E8F0]"
           >
-            <div class="w-20 h-20 rounded-full bg-[#0B7A75] flex items-center justify-center">
+            <div class="w-20 h-20 rounded-[28%] bg-[#0B7A75] flex items-center justify-center">
               <span class="text-2xl font-bold text-white">{{ initials }}</span>
             </div>
           </div>

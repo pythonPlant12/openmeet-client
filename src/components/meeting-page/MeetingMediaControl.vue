@@ -73,7 +73,7 @@ async function selectDevice(deviceId: unknown) {
         <Button
           :variant="off ? 'destructive' : 'secondary'"
           size="icon"
-          class="meeting-control size-10 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] text-[#102F35] shadow-none data-[state=open]:border-[#0B7A75] sm:size-12"
+          class="meeting-control size-11 rounded-xl border-2 border-[#D8E7E3] bg-[#FBFCF8] text-[#102F35] shadow-[0_4px_12px_rgba(16,47,53,0.08)] data-[state=open]:border-[#0B7A75] sm:size-12"
           :class="{ '!border-[#F2765F] !bg-[#F2765F] !text-white': off, 'meeting-control-muted': off }"
           :aria-label="tooltip"
           :data-media-off="off"

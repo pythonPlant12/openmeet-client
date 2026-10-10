@@ -23,7 +23,7 @@ const modelValue = useVModel(props, 'modelValue', emits, {
 const inputRef = ref<HTMLInputElement | null>(null);
 
 defineExpose({
-  focus: () => inputRef.value?.focus(),
+  focus: (options?: FocusOptions) => inputRef.value?.focus(options),
 });
 </script>
 

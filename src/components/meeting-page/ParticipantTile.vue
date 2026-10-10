@@ -20,6 +20,8 @@ interface Props {
   isExpanded?: boolean;
   showExpandIcon?: boolean;
   interactive?: boolean;
+  /** Small strip tiles hide the name until it is asked for. */
+  showNameTag?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -29,11 +31,14 @@ const props = withDefaults(defineProps<Props>(), {
   interactive: true,
   status: null,
   speaking: false,
+  showNameTag: true,
 });
 const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: 'click'): void;
+  /** The video's width / height, so the layout can keep portrait and landscape cameras uncropped. */
+  (e: 'aspect', aspect: number): void;
 }>();
 
 const videoRef = ref<HTMLVideoElement | null>(null);
@@ -46,8 +51,15 @@ const isMediaLoading = computed(
     (!props.participant.stream || (props.participant.stream.getVideoTracks().length > 0 && !hasVideoFrames.value)),
 );
 
+function reportAspect() {
+  const video = videoRef.value;
+  if (video && video.videoWidth > 0 && video.videoHeight > 0) emit('aspect', video.videoWidth / video.videoHeight);
+}
+
 function markVideoFrames() {
-  if (videoRef.value && videoRef.value.videoWidth > 0) hasVideoFrames.value = true;
+  if (!videoRef.value || videoRef.value.videoWidth <= 0) return;
+  hasVideoFrames.value = true;
+  reportAspect();
 }
 
 const playAttachedVideo = async () => {
@@ -81,7 +93,7 @@ const sizeClasses = computed(() => {
     case 'sidebar':
       return 'aspect-video';
     case 'mobile':
-      return 'flex-shrink-0 w-36 h-full';
+      return 'size-full';
     case 'grid':
     default:
       return 'w-full h-full';
@@ -182,7 +194,10 @@ onMounted(async () => {
       autoplay
       playsinline
       :muted="participant.isLocal"
-      @loadedmetadata="playAttachedVideo"
+      @loadedmetadata="
+        reportAspect();
+        playAttachedVideo();
+      "
       @canplay="playAttachedVideo"
       @loadeddata="markVideoFrames"
       @playing="markVideoFrames"
@@ -201,7 +216,7 @@ onMounted(async () => {
     >
       <div
         :class="[
-          'rounded-full bg-[#0B7A75] flex items-center justify-center font-bold text-white',
+          'rounded-[28%] bg-[#0B7A75] flex items-center justify-center font-bold text-white',
           size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-24 h-24 text-4xl',
         ]"
       >
@@ -226,6 +241,7 @@ onMounted(async () => {
 
     <!-- Name tag: kept small and tucked into the corner so it covers little of the video. -->
     <div
+      v-if="showNameTag"
       data-participant-name-tag
       :class="[
         'absolute flex items-center rounded-full bg-[#102F35]/75 text-white backdrop-blur',
@@ -238,7 +254,7 @@ onMounted(async () => {
         <span
           data-participant-mini-avatar
           :class="[
-            'flex items-center justify-center overflow-hidden rounded-full bg-[#0B7A75] font-semibold text-white',
+            'flex items-center justify-center overflow-hidden rounded-[28%] bg-[#0B7A75] font-semibold text-white',
             isCompact ? 'size-4 text-[7px]' : 'size-5 text-[8px]',
           ]"
           aria-hidden="true"

@@ -653,9 +653,12 @@
     background-color: #d95e49 !important;
   }
 
-  .meeting-control:hover,
-  .meeting-control:focus-visible {
+  /* Meeting controls never fill dark on hover: only the border turns green. Muted controls keep their red. */
+  .meeting-control:not(.meeting-control-muted):hover,
+  .meeting-control:not(.meeting-control-muted):focus-visible {
+    color: #102f35 !important;
     border-color: #0b7a75 !important;
+    background-color: #fbfcf8 !important;
   }
 
   .meeting-share-item:hover,
@@ -669,11 +672,11 @@
 @media (hover: none), (pointer: coarse) {
   .meeting-setting-on:hover,
   .meeting-setting-on:active,
-  .meeting-control:hover,
-  .meeting-control:active {
+  .meeting-control:not(.meeting-control-muted):hover,
+  .meeting-control:not(.meeting-control-muted):active {
     color: #102f35 !important;
     border-color: #0b7a75 !important;
-    background-color: #e6f4f1 !important;
+    background-color: #fbfcf8 !important;
   }
 
   .meeting-setting-off:hover,

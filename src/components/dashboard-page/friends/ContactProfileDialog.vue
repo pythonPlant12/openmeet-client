@@ -122,7 +122,7 @@ async function copyNickname(nickname: string) {
             <button
               v-if="avatarUrls[profile.id]"
               type="button"
-              class="harbor-ghost-action flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] p-0"
+              class="harbor-ghost-action flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] p-0"
               :aria-label="`View ${profile.name}'s profile picture`"
               @click="isAvatarPreviewOpen = true"
             >
@@ -134,13 +134,13 @@ async function copyNickname(nickname: string) {
             </button>
             <span
               v-else-if="profile.avatarUrl && avatarLoading"
-              class="flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED]"
+              class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED]"
             >
               <LoadingRipple class="size-6 text-[#0B7A75]" />
             </span>
             <span
               v-else
-              class="flex size-20 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
+              class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
               >{{ initials(profile.name) }}</span
             >
             <span
@@ -309,7 +309,7 @@ async function copyNickname(nickname: string) {
         v-if="profile && avatarUrls[profile.id]"
         :src="fullAvatarUrl ?? avatarUrls[profile.id]"
         :alt="`${profile.name}'s profile picture`"
-        class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-full object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
+        class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-[28%] object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
       />
     </HarborDialogContent> </Dialog
   ><Dialog :open="confirmationOpen" @update:open="emit('update:confirmationOpen', $event)"

@@ -25,24 +25,22 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
+import AccountMenuContent from '@/components/layout/AccountMenuContent.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useAuth } from '@/composables/useAuth';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
+import { useOwnProfile } from '@/composables/useOwnProfile';
 import { useBranding } from '@/config/branding.config';
-import { USER_STATUS_OPTIONS, userStatusOption } from '@/config/user-status.config';
-import { type UserStatus, socialApi } from '@/services/social-api';
+import { USER_STATUS_OPTIONS } from '@/config/user-status.config';
+import type { UserStatus } from '@/services/social-api';
 import { AuthEventType } from '@/xstate/machines/auth/types';
 
 const route = useRoute();
@@ -50,16 +48,8 @@ const router = useRouter();
 const { t } = useI18n();
 const branding = useBranding();
 const { createMeeting } = useMeetingNavigation();
-const {
-  state,
-  accessToken,
-  isAuthenticating,
-  isRegistering,
-  isCheckingSession,
-  isAuthenticated,
-  hasRegisterError,
-  send,
-} = useAuth();
+const { state, isAuthenticating, isRegistering, isCheckingSession, isAuthenticated, hasRegisterError, send } =
+  useAuth();
 
 const mobileMenuOpen = ref(false);
 const mobileMenuExpanded = ref(false);
@@ -78,10 +68,8 @@ const mobileMenuHeight = ref<number>();
 const mobileScrollAreaRef = ref<HTMLElement | null>(null);
 const mobileAccountActionsRef = ref<HTMLElement | null>(null);
 const closingMobileMenuIsContentSized = ref(false);
-const avatarUrl = ref<string | null>(null);
-const nickname = ref<string | null>(null);
-const ownStatus = ref<UserStatus | null>(null);
-const ownStatusOption = computed(() => userStatusOption(ownStatus.value));
+const { avatarUrl, nickname, ownStatus, ownStatusOption, isNicknameCopied, setOwnStatus, copyNickname } =
+  useOwnProfile();
 const isMobileStatusOpen = ref(false);
 const mobileStatusRef = ref<HTMLElement | null>(null);
 // The expanded status picker collapses (with its usual animation) on any press outside it.
@@ -89,15 +77,15 @@ const closeMobileStatusOnOutsidePress = (event: PointerEvent) => {
   if (!isMobileStatusOpen.value || mobileStatusRef.value?.contains(event.target as Node)) return;
   isMobileStatusOpen.value = false;
 };
-const isNicknameCopied = ref(false);
-let nicknameCopiedTimer: number | undefined;
 const isMeetingChatOpen = ref(false);
 const isDashboardChatOpen = ref(false);
-let avatarObjectUrl: string | null = null;
-let avatarRequest = 0;
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
 const isDashboardPage = computed(() => route.name === 'dashboard');
+// In a meeting the account button sits 12px above the centered control bar (16px offset + 58px bar on phones).
+const mobileNavBottomClass = computed(() =>
+  isMeetingPage.value ? 'bottom-[5.375rem]' : isDashboardPage.value ? 'bottom-4' : 'bottom-6',
+);
 const hasContentSizedMobileMenu = computed(() => isAuthenticated.value);
 const activeMobileMenuIsContentSized = computed(() =>
   isClosingMobileMenu.value ? closingMobileMenuIsContentSized.value : hasContentSizedMobileMenu.value,
@@ -445,71 +433,9 @@ const handleGoToFriends = () => {
   closeMobileMenu(() => router.push({ path: '/dashboard', query: { panel: 'friends' } }));
 };
 
-// Status changes show immediately and roll back if the server rejects them.
-async function setOwnStatus(status: UserStatus) {
-  const token = accessToken.value;
-  const previous = ownStatus.value;
-  if (!token || status === previous) return;
-  ownStatus.value = status;
-  try {
-    await socialApi.updateCurrentUserStatus(token, status);
-    window.dispatchEvent(new Event('openmeet:profile-updated'));
-  } catch (error) {
-    console.error('[Navbar] Failed to update status:', error);
-    ownStatus.value = previous;
-  }
-}
-
 function selectMobileStatus(status: UserStatus) {
   isMobileStatusOpen.value = false;
   void setOwnStatus(status);
-}
-
-async function copyNickname() {
-  if (!nickname.value) return;
-  try {
-    await navigator.clipboard.writeText(nickname.value);
-    isNicknameCopied.value = true;
-    window.clearTimeout(nicknameCopiedTimer);
-    nicknameCopiedTimer = window.setTimeout(() => (isNicknameCopied.value = false), 2_000);
-  } catch (error) {
-    console.error('[Navbar] Failed to copy nickname:', error);
-  }
-}
-
-async function loadAvatar() {
-  const token = accessToken.value;
-  const request = ++avatarRequest;
-  if (!token || !isAuthenticated.value) {
-    if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
-    avatarObjectUrl = null;
-    avatarUrl.value = null;
-    nickname.value = null;
-    ownStatus.value = null;
-    return;
-  }
-
-  try {
-    const profile = await socialApi.getCurrentUserProfile(token);
-    if (request !== avatarRequest) return;
-    nickname.value = profile.nickname;
-    ownStatus.value = profile.status;
-    if (!profile.avatarUrl) return;
-    const objectUrl = URL.createObjectURL(await socialApi.loadAvatar(token, profile.avatarUrl));
-    if (request !== avatarRequest) {
-      URL.revokeObjectURL(objectUrl);
-      return;
-    }
-    if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
-    avatarObjectUrl = objectUrl;
-    avatarUrl.value = objectUrl;
-  } catch (error) {
-    console.error('[Navbar] Failed to load avatar:', error);
-  }
-}
-
-function handleProfileUpdated() {
-  void loadAvatar();
 }
 
 let navResizeObserver: ResizeObserver | undefined;
@@ -557,11 +483,9 @@ const updateNavLayout = () => {
 };
 
 onMounted(() => {
-  window.addEventListener('openmeet:profile-updated', handleProfileUpdated);
   window.addEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   window.addEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
   document.addEventListener('pointerdown', closeMobileStatusOnOutsidePress, true);
-  void loadAvatar();
   if (!navContentRef.value) return;
   if (!('ResizeObserver' in window)) {
     updateNavLayout();
@@ -577,13 +501,10 @@ onUnmounted(() => {
   cancelMobileMenuExpansion();
   cancelMobileMenuContentExit();
   cancelMobileMenuCollapse();
-  window.clearTimeout(nicknameCopiedTimer);
   setMobileMenuPageScroll(false);
   navResizeObserver?.disconnect();
-  window.removeEventListener('openmeet:profile-updated', handleProfileUpdated);
   window.removeEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   window.removeEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
-  if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
 });
 
 watch([isDesktop, mobileMenuExpanded, activeMobileMenuIsContentSized], () => requestAnimationFrame(updateNavLayout));
@@ -592,14 +513,13 @@ watch(mobileAccountActionsRef, (element, previous) => {
   if (previous) navResizeObserver?.unobserve(previous);
   if (element) navResizeObserver?.observe(element);
 });
-watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar());
 </script>
 
 <template>
   <template v-if="isAuthenticated && !isCheckingSession && isMobile && !isMeetingChatOpen && !isDashboardChatOpen">
     <motion.nav
       class="marketing-font pointer-events-none fixed right-4 z-[1030] w-12 text-[#102F35]"
-      :class="isDashboardPage ? 'bottom-4' : 'bottom-6'"
+      :class="mobileNavBottomClass"
     >
       <!-- The sheet grows out of this button and shrinks back into it, so the button stays hidden for the whole open and close sequence. -->
       <div v-if="!mobileMenuOpen" class="pointer-events-auto flex">
@@ -630,7 +550,7 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
           overlay-class="harbor-mobile-account-overlay bg-[#102F35]/20 backdrop-blur-[2px]"
           :class="[
             'harbor-mobile-account-sheet fixed right-4 left-auto top-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.75rem] border border-[#D8E7E3] bg-[#FBFCF8] p-4 shadow-[0_-16px_42px_rgba(16,47,53,0.16)]',
-            isDashboardPage ? 'bottom-4' : 'bottom-6',
+            mobileNavBottomClass,
             { 'harbor-mobile-account-sheet-closing': isClosingMobileMenu },
           ]"
           aria-label="Account navigation"
@@ -962,15 +882,6 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
               </button>
             </template>
             <template v-else-if="isAuthenticated && !isCheckingSession">
-              <Button
-                v-if="!isMeetingPage"
-                class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
-                :disabled="isAuthBusy"
-                @click="handleStartMeeting"
-              >
-                <Video class="size-4" />
-                {{ t('common.startMeeting') }}
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>
                   <button
@@ -992,85 +903,24 @@ watch([accessToken, isAuthenticated, isCheckingSession], () => void loadAvatar()
                     />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  :side-offset="12"
-                  class="harbor-action-menu !z-[1040] min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
-                >
-                  <DropdownMenuItem
-                    class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-                    @select="handleGoToPage('/account')"
-                  >
-                    <span class="min-w-0 flex-1">
-                      <span class="block">{{ t('nav.accountInformation') }}</span>
-                      <button
-                        v-if="nickname"
-                        type="button"
-                        tabindex="-1"
-                        data-copy-nickname
-                        class="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-xs font-medium text-[#27595D] hover:text-[#08635F]"
-                        :aria-label="
-                          isNicknameCopied
-                            ? t('nav.nicknameCopied')
-                            : t('nav.copyNickname', { nickname: `@${nickname}` })
-                        "
-                        :title="isNicknameCopied ? t('nav.nicknameCopied') : undefined"
-                        @click.stop="copyNickname"
-                      >
-                        <span class="truncate">@{{ nickname }}</span>
-                        <Check v-if="isNicknameCopied" class="size-3 shrink-0" />
-                        <Copy v-else class="size-3 shrink-0" />
-                      </button>
-                    </span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-                    @select="handleGoToPage('/dashboard')"
-                  >
-                    {{ t('common.dashboard') }}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-                    @select="handleGoToFriends"
-                  >
-                    {{ t('nav.friends') }}
-                  </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger
-                      data-status-submenu
-                      class="harbor-floating-menu-item cursor-pointer gap-2 rounded-xl px-3 py-2.5"
-                    >
-                      <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
-                      <span class="flex-1">{{ t('nav.status') }}</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent
-                      class="harbor-action-menu !z-[1040] min-w-56 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
-                    >
-                      <DropdownMenuItem
-                        v-for="option in USER_STATUS_OPTIONS"
-                        :key="option.value"
-                        :data-status-option="option.value"
-                        class="harbor-floating-menu-item cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                        @select="setOwnStatus(option.value)"
-                      >
-                        <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
-                        <span class="min-w-0 flex-1 font-semibold">{{ option.label }}</span>
-                        <Check v-if="option.value === ownStatus" class="size-4 text-[#0B7A75]" />
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSeparator class="my-1 bg-[#E5EFEC]" />
-                  <DropdownMenuItem
-                    class="cursor-pointer rounded-xl px-3 py-2.5 text-[#9D4636] focus:bg-[#FFF0EA] focus:text-[#9D4636]"
-                    :disabled="isAuthBusy"
-                    @select="handleLogout"
-                  >
-                    <LoadingRipple v-if="isLoggingOut" size="sm" />
-                    <LogOut v-else class="size-4" />
-                    {{ t('common.logOut') }}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
+                <AccountMenuContent
+                  :nickname="nickname"
+                  :own-status="ownStatus"
+                  :is-nickname-copied="isNicknameCopied"
+                  @copy-nickname="copyNickname"
+                  @set-status="setOwnStatus"
+                />
               </DropdownMenu>
+              <!-- The meeting action sits right of the avatar, like Quit meeting does inside a meeting. -->
+              <Button
+                v-if="!isMeetingPage"
+                class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
+                :disabled="isAuthBusy"
+                @click="handleStartMeeting"
+              >
+                <Video class="size-4" />
+                {{ t('common.startMeeting') }}
+              </Button>
             </template>
             <a
               v-if="!isAuthenticated"

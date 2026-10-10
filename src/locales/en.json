@@ -409,7 +409,9 @@
       "pin": "Pin {name} in speaker view",
       "unpin": "Unpin {name} and return to the grid",
       "offline": "Offline",
-      "status": "Status: {status}"
+      "status": "Status: {status}",
+      "showName": "Show name",
+      "hideName": "Hide name"
     },
     "actions": {
       "open": "Open meeting actions",

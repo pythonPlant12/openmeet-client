@@ -269,7 +269,7 @@ function initials(name: string) {
                   <span
                     v-for="(person, index) in meeting.participants.slice(0, 2)"
                     :key="`${person.userId ?? person.name}-${index}`"
-                    class="absolute flex size-8 items-center justify-center overflow-hidden rounded-full border-2 border-[#FBFCF8] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
+                    class="absolute flex size-8 items-center justify-center overflow-hidden rounded-[28%] border-2 border-[#FBFCF8] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
                     :style="{ left: `${index * 12}px`, zIndex: 2 - index }"
                     ><img
                       v-if="avatarFor(person)"
@@ -280,7 +280,7 @@ function initials(name: string) {
                   >
                   <span
                     v-if="!meeting.participants.length"
-                    class="flex size-8 items-center justify-center rounded-full bg-[#DDF1ED] text-[#0B7A75]"
+                    class="flex size-8 items-center justify-center rounded-[28%] bg-[#DDF1ED] text-[#0B7A75]"
                     ><UserRound class="size-4"
                   /></span>
                 </span>

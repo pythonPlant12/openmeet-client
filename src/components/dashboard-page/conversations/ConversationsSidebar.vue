@@ -8,6 +8,7 @@ import {
   LogOut,
   Mail,
   MailOpen,
+  Phone,
   Plus,
   Search,
   Trash2,
@@ -93,14 +94,23 @@ const emit = defineEmits<{
 const SWIPE_ACTION_WIDTH = 80;
 
 const query = defineModel<string>('query', { required: true });
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<{ focus: (options?: FocusOptions) => void } | null>(null);
 let longPressTimer: number | undefined;
 let suppressClick = false;
 
 watch(
   () => props.searchOpen,
-  (open) => open && nextTick(() => searchInput.value?.focus()),
+  (open) => open && nextTick(() => searchInput.value?.focus({ preventScroll: true })),
 );
+
+// Same as the friends search: focus inside the tap without scrolling, then again after the expansion settles.
+function toggleSearch() {
+  const open = !props.searchOpen;
+  emit('update:searchOpen', open);
+  if (!open) return;
+  searchInput.value?.focus({ preventScroll: true });
+  window.setTimeout(() => searchInput.value?.focus({ preventScroll: true }), 320);
+}
 
 function startLongPress(event: PointerEvent, conversation: Conversation) {
   if (event.pointerType === 'mouse') return;
@@ -169,7 +179,7 @@ onBeforeUnmount(clearLongPress);
           aria-controls="conversation-search"
           aria-label="Search conversations"
           title="Search conversations"
-          @click="emit('update:searchOpen', !searchOpen)"
+          @click="toggleSearch"
           ><Search class="size-4"
         /></Button>
         <DropdownMenu :modal="false">
@@ -180,7 +190,7 @@ onBeforeUnmount(clearLongPress);
               class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
               aria-label="Meeting options"
               title="Meeting options"
-              ><Video class="size-4"
+              ><Phone class="size-4"
             /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -307,7 +317,7 @@ onBeforeUnmount(clearLongPress);
       <div v-if="directRequests.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
         <div v-for="request in directRequests" :key="request.id" class="flex items-center gap-2 rounded-xl px-2 py-2">
           <span
-            class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
+            class="flex size-8 shrink-0 items-center justify-center rounded-[28%] bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
             ><CircleUserRound class="size-4"
           /></span>
           <p class="min-w-0 flex-1 truncate text-xs text-[#4E6B70]">
@@ -424,7 +434,7 @@ onBeforeUnmount(clearLongPress);
               >
                 <span class="relative shrink-0"
                   ><span
-                    class="flex size-10 items-center justify-center overflow-hidden rounded-full"
+                    class="flex size-10 items-center justify-center overflow-hidden rounded-[28%]"
                     :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
                     ><img
                       v-if="conversation.kind === 'group' && groupAvatarUrls[conversation.id]"

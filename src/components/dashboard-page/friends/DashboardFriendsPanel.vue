@@ -115,7 +115,7 @@ function userInitials(name: string) {
           class="flex items-center gap-3 rounded-2xl bg-[#F8FAF8] p-3"
         >
           <span
-            class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
+            class="flex size-9 shrink-0 items-center justify-center rounded-[28%] bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
           >
             {{ userInitials(request.user.name) }}
           </span>
@@ -182,7 +182,7 @@ function userInitials(name: string) {
           class="group flex items-center gap-3 rounded-2xl px-2 py-3 transition-colors hover:bg-[#F6FAF7]"
         >
           <span
-            class="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-sm font-semibold text-[#0B7A75]"
+            class="relative flex size-10 shrink-0 items-center justify-center rounded-[28%] bg-[#E6F4F1] text-sm font-semibold text-[#0B7A75]"
           >
             {{ userInitials(friend.name) }}
             <span

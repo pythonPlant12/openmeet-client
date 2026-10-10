@@ -170,7 +170,7 @@ defineExpose({
           >
             <span class="relative shrink-0"
               ><span
-                class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#DDF1ED] text-[#0B7A75]"
+                class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-[#0B7A75]"
                 ><img
                   v-if="friendAvatarUrls[selectedFriend.id]"
                   :src="friendAvatarUrls[selectedFriend.id]"
@@ -195,7 +195,7 @@ defineExpose({
             class="harbor-ghost-action -mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left"
             @click="emit('group-info')"
           >
-            <span class="flex size-9 items-center justify-center overflow-hidden rounded-full bg-[#102F35] text-white"
+            <span class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] text-white"
               ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><LoadingRipple
                 v-else-if="conversation && isGroupAvatarLoading(conversation.id)"
                 class="size-4 text-white" /><UsersRound v-else class="size-4" /></span
@@ -205,7 +205,7 @@ defineExpose({
             >
           </button>
           <div v-else class="flex min-w-0 flex-1 items-center gap-3">
-            <span class="flex size-9 items-center justify-center rounded-full bg-[#DDF1ED] text-[#0B7A75]"
+            <span class="flex size-9 items-center justify-center rounded-[28%] bg-[#DDF1ED] text-[#0B7A75]"
               ><span class="text-xs font-semibold">{{ initials(selectedFriend?.name) }}</span></span
             >
             <div class="min-w-0">
