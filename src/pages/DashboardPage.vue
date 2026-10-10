@@ -2,7 +2,7 @@
 import { useDebounceFn, useMediaQuery, useNow } from '@vueuse/core';
 import { motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import JoinRoomDialog from '@/components/dashboard-page/actions/JoinRoomDialog.vue';
 import CallDetailsDialog from '@/components/dashboard-page/calls/CallDetailsDialog.vue';
@@ -66,6 +66,7 @@ import {
 import { cookieUtils } from '@/utils';
 
 const router = useRouter();
+const route = useRoute();
 const { accessToken, currentUser, isAuthenticated, isCheckingSession } = useAuth();
 const SIDEBAR_PANEL_STORAGE_KEY = 'openmeet.dashboard.sidebar-panel';
 const NOTIFICATION_WARNING_DISMISSED_KEY = 'openmeet.dashboard.notification-warning-dismissed';
@@ -342,6 +343,13 @@ const hasSelectedConversation = computed(() => !!selectedConversation.value || !
 watch(
   hasSelectedConversation,
   (open) => window.dispatchEvent(new CustomEvent<boolean>('openmeet:dashboard-chat-state', { detail: open })),
+  { immediate: true },
+);
+// App skips message notifications for the conversation on screen.
+watch(
+  () => selectedConversation.value?.id ?? null,
+  (conversationId) =>
+    window.dispatchEvent(new CustomEvent<string | null>('openmeet:active-conversation', { detail: conversationId })),
   { immediate: true },
 );
 const contactProfileFriend = computed(() =>
@@ -908,6 +916,30 @@ watch(
   { immediate: true },
 );
 
+// Notifications open a conversation with `/dashboard?conversation=<id>`.
+async function openConversationFromRoute(conversationId: string) {
+  let conversation = conversations.value.find((item) => item.id === conversationId);
+  if (!conversation) {
+    await refreshConversationWorkspace();
+    conversation = conversations.value.find((item) => item.id === conversationId);
+  }
+  if (isUnmounted || route.query.conversation !== conversationId) return;
+  const query = { ...route.query };
+  delete query.conversation;
+  void router.replace({ query });
+  if (!conversation) return;
+  expandedSidebarPanel.value = 'messages';
+  selectConversation(conversation);
+}
+
+watch(
+  [() => route.query.conversation, accessToken],
+  ([conversationId, token]) => {
+    if (typeof conversationId === 'string' && token) void openConversationFromRoute(conversationId);
+  },
+  { immediate: true },
+);
+
 watch(peopleSearchQuery, (query, _, onCleanup) => {
   const normalizedQuery = query.trim();
   const request = ++friendSearchRequest;
@@ -1283,6 +1315,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   isUnmounted = true;
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:dashboard-chat-state', { detail: false }));
+  window.dispatchEvent(new CustomEvent<string | null>('openmeet:active-conversation', { detail: null }));
   friendSearchRequest += 1;
   window.clearTimeout(peopleSearchTimer);
   friendAvatarRequest += 1;

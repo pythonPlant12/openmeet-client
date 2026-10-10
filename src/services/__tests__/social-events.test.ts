@@ -62,6 +62,31 @@ describe('SocialEventsService', () => {
     service.disconnect();
   });
 
+  it('forwards alerts for OS notifications', () => {
+    const service = new SocialEventsService();
+    const onAlert = vi.fn();
+    cookieUtils.set('accessToken', 'signed-token', 1);
+    const alert = {
+      kind: 'incomingCall',
+      callId: 'call-1',
+      callKind: 'session',
+      callerName: 'Maya',
+      conversationId: 'conversation-1',
+      conversationTitle: null,
+      expiresAt: '2026-10-10T12:00:00Z',
+    };
+
+    service.connect(vi.fn(), vi.fn(), onAlert);
+    const socket = FakeWebSocket.instances[0]!;
+    socket.open();
+    socket.receive({ type: 'authenticated' });
+    socket.receive({ type: 'alert', alert });
+
+    expect(onAlert).toHaveBeenCalledWith(alert);
+
+    service.disconnect();
+  });
+
   it('reconnects after an unexpected close', async () => {
     vi.useFakeTimers();
     const service = new SocialEventsService();

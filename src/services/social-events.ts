@@ -6,10 +6,43 @@ const SOCIAL_EVENTS_URL =
 
 export type SocialEventResource = 'calls' | 'conversations' | 'friends' | 'notifications';
 
+/** Which endpoint answers the call: a direct call invitation or a conversation call session. */
+export type AlertCallKind = 'invitation' | 'session';
+
+/** Something to show as an OS notification. The server sends alerts only while the user's status is Online. */
+export type SocialAlert =
+  | {
+      kind: 'message';
+      conversationId: string;
+      sequence: number;
+      senderId: string;
+      senderName: string;
+      /** Group title; null for direct conversations. */
+      conversationTitle: string | null;
+      preview: string;
+      hasAttachments: boolean;
+    }
+  | {
+      kind: 'incomingCall';
+      callId: string;
+      callKind: AlertCallKind;
+      callerName: string;
+      conversationId: string | null;
+      conversationTitle: string | null;
+      expiresAt: string;
+    };
+
 type ServerMessage =
   | { type: 'authenticated' }
   | { type: 'error'; message: string }
-  | { type: 'refresh'; resource: SocialEventResource };
+  | { type: 'refresh'; resource: SocialEventResource }
+  | { type: 'alert'; alert: SocialAlert };
+
+interface SocialEventHandlers {
+  onResource: (resource: SocialEventResource) => void;
+  onConnected: () => void;
+  onAlert?: (alert: SocialAlert) => void;
+}
 
 export class SocialEventsService {
   private socket: WebSocket | null = null;
@@ -17,10 +50,14 @@ export class SocialEventsService {
   private reconnectAttempts = 0;
   private generation = 0;
 
-  connect(onResource: (resource: SocialEventResource) => void, onConnected: () => void) {
+  connect(
+    onResource: SocialEventHandlers['onResource'],
+    onConnected: SocialEventHandlers['onConnected'],
+    onAlert?: SocialEventHandlers['onAlert'],
+  ) {
     this.disconnect();
     const generation = this.generation;
-    this.open(onResource, onConnected, generation);
+    this.open({ onResource, onConnected, onAlert }, generation);
   }
 
   disconnect() {
@@ -32,7 +69,7 @@ export class SocialEventsService {
     this.socket = null;
   }
 
-  private open(onResource: (resource: SocialEventResource) => void, onConnected: () => void, generation: number) {
+  private open(handlers: SocialEventHandlers, generation: number) {
     const socket = new WebSocket(SOCIAL_EVENTS_URL);
     this.socket = socket;
 
@@ -53,9 +90,11 @@ export class SocialEventsService {
         const message = JSON.parse(String(event.data)) as ServerMessage;
         if (message.type === 'authenticated') {
           this.reconnectAttempts = 0;
-          onConnected();
+          handlers.onConnected();
         } else if (message.type === 'refresh') {
-          onResource(message.resource);
+          handlers.onResource(message.resource);
+        } else if (message.type === 'alert') {
+          handlers.onAlert?.(message.alert);
         } else if (message.type === 'error') {
           console.error('[SocialEvents] Authentication failed:', message.message);
           reconnect = false;
@@ -72,7 +111,7 @@ export class SocialEventsService {
       const maximumDelay = Math.min(1_000 * 2 ** this.reconnectAttempts, 15_000);
       const delay = maximumDelay / 2 + Math.random() * (maximumDelay / 2);
       this.reconnectAttempts += 1;
-      this.reconnectTimer = window.setTimeout(() => this.open(onResource, onConnected, generation), delay);
+      this.reconnectTimer = window.setTimeout(() => this.open(handlers, generation), delay);
     });
     socket.addEventListener('error', () => socket.close());
   }

@@ -22,6 +22,7 @@
     "test:browser": "vitest --config=vitest.browser.config.ts"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.2",
     "@vueuse/core": "^14.1.0",
     "@xstate/vue": "^5.0.0",
     "class-variance-authority": "^0.7.1",
