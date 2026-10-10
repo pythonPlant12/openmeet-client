@@ -760,32 +760,42 @@ const handleReconnect = () => {
         />
       </div>
 
-      <AnimatePresence>
-        <motion.div
-          v-if="connectionBanner"
-          :key="connectionBanner"
-          data-testid="connection-banner"
-          :data-banner="connectionBanner"
-          role="status"
-          :initial="{ opacity: 0, y: -8 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :exit="{ opacity: 0, y: -8 }"
-          class="fixed left-1/2 top-[calc(84px+0.75rem)] z-50 flex -translate-x-1/2 items-center gap-2.5 rounded-full border px-4 py-2 text-sm font-semibold shadow-lg sm:top-[calc(84px+1.25rem)]"
-          :class="
-            connectionBanner === 'reconnecting'
-              ? 'border-[#F2B9AE] bg-[#FDE9E4] text-[#7A2E22]'
-              : 'border-[#D8E7E3] bg-white text-[#27595D]'
-          "
-        >
-          <LoadingRipple size="sm" :class="connectionBanner === 'reconnecting' ? 'text-[#D95E49]' : 'text-[#0B7A75]'" />
-          {{ t(connectionBanner === 'reconnecting' ? 'meeting.reconnecting' : 'meeting.joiningCall') }}
-        </motion.div>
-      </AnimatePresence>
+      <!-- Motion animates `transform`, which would replace a translate-based centering, so a full-width row centers it.
+           Phones place it below the participants and menu buttons, which share the top row there. -->
+      <div
+        class="pointer-events-none fixed inset-x-0 top-[calc(84px+4.25rem)] z-50 flex justify-center px-4 sm:top-[calc(84px+1.25rem)]"
+      >
+        <AnimatePresence>
+          <motion.div
+            v-if="connectionBanner"
+            :key="connectionBanner"
+            data-testid="connection-banner"
+            :data-banner="connectionBanner"
+            role="status"
+            :initial="{ opacity: 0, y: -8 }"
+            :animate="{ opacity: 1, y: 0 }"
+            :exit="{ opacity: 0, y: -8 }"
+            class="pointer-events-auto flex max-w-full items-center gap-2.5 rounded-full border px-4 py-2 text-center text-sm font-semibold shadow-lg"
+            :class="
+              connectionBanner === 'reconnecting'
+                ? 'border-[#F2B9AE] bg-[#FDE9E4] text-[#7A2E22]'
+                : 'border-[#D8E7E3] bg-white text-[#27595D]'
+            "
+          >
+            <LoadingRipple
+              size="sm"
+              class="shrink-0"
+              :class="connectionBanner === 'reconnecting' ? 'text-[#D95E49]' : 'text-[#0B7A75]'"
+            />
+            {{ t(connectionBanner === 'reconnecting' ? 'meeting.reconnecting' : 'meeting.joiningCall') }}
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
       <button
         v-if="hasPoorConnection"
         type="button"
-        class="fixed left-1/2 top-[calc(84px+0.75rem)] z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg sm:top-[calc(84px+1.25rem)]"
+        class="fixed left-1/2 top-[calc(84px+4.25rem)] z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg sm:top-[calc(84px+1.25rem)]"
         data-testid="connection-quality-warning"
         @click="showConnectionQualityDetails = !showConnectionQualityDetails"
       >
