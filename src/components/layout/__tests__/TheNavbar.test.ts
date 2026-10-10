@@ -654,7 +654,7 @@ describe('TheNavbar', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const toggle = wrapper.get('[data-mobile-status-toggle]');
-    expect(toggle.text()).toBe('nav.status');
+    expect(toggle.text()).toBe('nav.status: Online');
     const options = wrapper.get('[data-mobile-status-options]');
     expect(options.findAll('[data-status-option]').map((option) => option.text())).toEqual([
       'Online',

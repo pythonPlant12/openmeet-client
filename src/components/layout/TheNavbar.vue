@@ -647,7 +647,10 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 @click="isMobileStatusOpen = !isMobileStatusOpen"
               >
                 <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
-                <span class="min-w-0 flex-1">{{ t('nav.status') }}</span>
+                <span class="min-w-0 flex-1"
+                  ><span class="sr-only">{{ t('nav.status') }}: </span
+                  >{{ ownStatus ? ownStatusOption.label : t('nav.status') }}</span
+                >
                 <ChevronDown
                   class="size-4 shrink-0 text-[#61777B] transition-transform duration-200"
                   :class="{ 'rotate-180': isMobileStatusOpen }"
@@ -1041,7 +1044,10 @@ watch(mobileAccountActionsRef, (element, previous) => {
                         @click="isMobileStatusOpen = !isMobileStatusOpen"
                       >
                         <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
-                        <span class="min-w-0 flex-1 truncate">{{ t('nav.status') }}</span>
+                        <span class="min-w-0 flex-1 truncate"
+                          ><span class="sr-only">{{ t('nav.status') }}: </span
+                          >{{ ownStatus ? ownStatusOption.label : t('nav.status') }}</span
+                        >
                         <ChevronDown
                           class="size-4 shrink-0 text-[#61777B] transition-transform duration-200"
                           :class="{ 'rotate-180': isMobileStatusOpen }"
