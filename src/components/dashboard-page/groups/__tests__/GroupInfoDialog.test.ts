@@ -170,7 +170,7 @@ describe('GroupInfoDialog', () => {
           nickname: 'friend_1',
           avatarUrl: null,
           isOnline: true,
-          status: null,
+          status: 'away',
           role: 'member',
           joinedAt: '',
         },
@@ -188,7 +188,17 @@ describe('GroupInfoDialog', () => {
     });
     const [onlineRow, offlineRow] = wrapper.findAll('[data-swipeable-row]');
 
-    expect(onlineRow!.find('[data-presence-dot]').exists()).toBe(true);
+    const dot = onlineRow!.get('[data-presence-dot]');
+    const avatar = dot.element.previousElementSibling as HTMLElement;
+
+    expect(avatar.classList).toContain('border-2');
+    expect(avatar.classList).toContain('border-[#D9A441]');
+    expect(dot.classes()).toContain('border-[3px]');
+    expect(dot.classes()).toContain('border-[#FBFCF8]');
+    const offlineAvatar = offlineRow!.get('.relative > span').element as HTMLElement;
+
+    expect(offlineAvatar.classList).toContain('border-2');
+    expect(offlineAvatar.classList).toContain('border-[#B8C6C5]');
     expect(offlineRow!.find('[data-presence-dot]').exists()).toBe(false);
   });
 

@@ -156,12 +156,12 @@ async function mountNavbar(path = '/') {
         DialogTitle: { template: '<span><slot /></span>' },
         HarborDialogContent: { template: '<section v-bind="$attrs"><slot /></section>' },
         DropdownMenu: { template: '<div><slot /></div>' },
-        DropdownMenuContent: { template: '<div><slot /></div>' },
+        DropdownMenuContent: { template: '<div v-bind="$attrs"><slot /></div>' },
         DropdownMenuItem: { template: '<div @click="$emit(\'select\', $event)"><slot /></div>' },
         DropdownMenuSeparator: { template: '<div />' },
         DropdownMenuSub: { template: '<div><slot /></div>' },
-        DropdownMenuSubContent: { template: '<div><slot /></div>' },
-        DropdownMenuSubTrigger: { template: '<div><slot /></div>' },
+        DropdownMenuSubContent: { template: '<div v-bind="$attrs"><slot /></div>' },
+        DropdownMenuSubTrigger: { template: '<div v-bind="$attrs"><slot /></div>' },
         DropdownMenuTrigger: { template: '<div><slot /></div>' },
         LoadingRipple: { template: '<span />' },
       },
@@ -633,6 +633,10 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Online');
+    expect(wrapper.get('[data-status-submenu]').classes()).toContain('font-semibold');
+    expect(wrapper.findAll('.harbor-action-menu').every((menu) => menu.classes().includes('marketing-font'))).toBe(
+      true,
+    );
 
     await wrapper.get('[data-status-option="doNotDisturb"]').trigger('click');
     await flushPromises();

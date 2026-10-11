@@ -33,17 +33,19 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
 import { USER_STATUS_OPTIONS, userStatusOption } from '@/config/user-status.config';
-import type { ContactProfile, Friend, UserStatus } from '@/services/social-api';
+import type { ContactProfile, Friend, FriendRequest, UserStatus } from '@/services/social-api';
 
 const props = defineProps<{
   open: boolean;
   confirmationOpen: boolean;
   profile: ContactProfile | null;
   profileFriend: Friend | null;
+  pendingRequest?: FriendRequest | null;
   loading: boolean;
   error: string;
   removingId: string | null;
   opening: string | null;
+  respondingId?: string | null;
   callActive: boolean;
   avatarUrls: Record<string, string>;
   avatarLoading: boolean;
@@ -61,6 +63,8 @@ const emit = defineEmits<{
   (event: 'call'): void;
   (event: 'remove'): void;
   (event: 'add-friend'): void;
+  (event: 'accept-request', request: FriendRequest): void;
+  (event: 'decline-request', request: FriendRequest): void;
   (event: 'update-status', status: UserStatus): void;
 }>();
 function initials(name: string) {
@@ -94,8 +98,8 @@ async function copyNickname(nickname: string) {
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] min-h-[min(34rem,calc(100dvh-6rem))] w-[calc(100%-2rem)] max-w-3xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="!z-[1040] bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font !z-[1040] flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] min-h-[min(34rem,calc(100dvh-6rem))] w-[calc(100%-2rem)] max-w-3xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       @open-auto-focus="$event.preventDefault()"
       @close-auto-focus="$event.preventDefault()"
       ><DialogHeader
@@ -122,7 +126,9 @@ async function copyNickname(nickname: string) {
             <button
               v-if="avatarUrls[profile.id]"
               type="button"
+              data-profile-avatar
               class="harbor-ghost-action flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] p-0"
+              :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
               :aria-label="`View ${profile.name}'s profile picture`"
               @click="isAvatarPreviewOpen = true"
             >
@@ -134,13 +140,17 @@ async function copyNickname(nickname: string) {
             </button>
             <span
               v-else-if="profile.avatarUrl && avatarLoading"
+              data-profile-avatar
               class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED]"
+              :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
             >
               <LoadingRipple class="size-6 text-[#0B7A75]" />
             </span>
             <span
               v-else
+              data-profile-avatar
               class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
+              :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
               >{{ initials(profile.name) }}</span
             >
             <span
@@ -149,7 +159,7 @@ async function copyNickname(nickname: string) {
               role="img"
               :aria-label="statusLabel(profile.status)"
               :title="statusLabel(profile.status)"
-              class="absolute bottom-1 right-1 size-4 rounded-full border-[3px] border-white"
+              class="absolute bottom-0 right-0 size-4 rounded-full border-[3px] border-[#FBFCF8]"
               :class="userStatusOption(profile.status).dotClass"
             />
           </span>
@@ -231,7 +241,31 @@ async function copyNickname(nickname: string) {
           </div>
         </section>
         <section
-          v-if="profile.relationship === 'none'"
+          v-if="pendingRequest"
+          class="flex flex-wrap items-center justify-center gap-2"
+          aria-label="Friend request actions"
+        >
+          <Button
+            data-accept-friend-request
+            class="harbor-primary-action group size-11 rounded-full bg-[#0B7A75] p-0 text-white sm:w-auto sm:px-4"
+            :disabled="respondingId !== null"
+            aria-label="Accept friend request"
+            title="Accept friend request"
+            @click="emit('accept-request', pendingRequest)"
+            ><Check class="size-4" /><span class="hidden sm:inline">Accept</span></Button
+          ><Button
+            data-decline-friend-request
+            variant="ghost"
+            class="group size-11 rounded-full bg-[#FFF0EA] p-0 text-[#9D4636] hover:bg-[#F9DED6] sm:w-auto sm:px-4"
+            :disabled="respondingId !== null"
+            aria-label="Decline friend request"
+            title="Decline friend request"
+            @click="emit('decline-request', pendingRequest)"
+            ><UserMinus class="size-4" /><span class="hidden sm:inline">Decline</span></Button
+          >
+        </section>
+        <section
+          v-else-if="profile.relationship === 'none' && !profileFriend"
           class="flex flex-wrap items-center justify-center gap-2"
           aria-label="Profile actions"
         >

@@ -15,6 +15,7 @@ import { SwipeableRow } from '@/components/ui/swipeable-row';
 import type { ConversationMessage, ConversationMessageAttachment } from '@/services/social-api';
 
 import MessageContent from './MessageContent.vue';
+import { replyAttachmentLabel } from './chat-composer';
 import { QUICK_REACTIONS } from './reactions';
 
 const props = defineProps<{
@@ -63,6 +64,9 @@ const isLifted = computed(() => props.replySelected || props.reactionPickerOpen 
 const attachments = computed(() => props.message.attachments ?? []);
 const visibleAttachments = computed(() => attachments.value.slice(0, 4));
 const hiddenAttachmentCount = computed(() => Math.max(attachments.value.length - visibleAttachments.value.length, 0));
+const quotedAttachmentLabel = computed(() =>
+  props.message.replyTo ? replyAttachmentLabel(props.message.replyTo) : '',
+);
 const initial = computed(() =>
   props.animateIn && !props.prefersReducedMotion
     ? props.local
@@ -161,14 +165,23 @@ function formatFileSize(byteSize: number) {
                 v-if="message.replyTo"
                 type="button"
                 data-message-quote
-                class="mb-1.5 mt-0.5 block w-full rounded-xl bg-[#F1F4F3] px-2.5 py-2 text-left text-xs text-[#61777B] transition-colors [@media(hover:hover)]:hover:bg-[#EAEFED]"
+                class="mb-1.5 mt-0.5 block w-full rounded-xl bg-[#EDF8F5] px-2.5 py-2 text-left text-xs text-[#27595D] transition-colors [@media(hover:hover)]:hover:bg-[#E6F4F1]"
                 :aria-label="`Show the message from ${message.replyTo.senderName}`"
                 @click="emit('jump-to', message.replyTo.sequence)"
               >
                 <span class="mb-0.5 flex items-center gap-1 font-semibold text-[#27595D]"
                   ><CornerUpLeft class="size-3 shrink-0" />{{ message.replyTo.senderName }}</span
                 >
-                <span class="line-clamp-2 block leading-snug">{{ message.replyTo.content }}</span>
+                <span class="line-clamp-2 block leading-snug">
+                  <template v-if="quotedAttachmentLabel">
+                    <strong v-if="message.replyTo.content" class="block font-semibold">{{
+                      quotedAttachmentLabel
+                    }}</strong>
+                    <span v-else>{{ quotedAttachmentLabel }}</span>
+                    <span v-if="message.replyTo.content" class="block">{{ message.replyTo.content }}</span>
+                  </template>
+                  <template v-else>{{ message.replyTo.content }}</template>
+                </span>
               </button>
               <div
                 v-if="attachments.length"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowUp, FileText, Image, Paperclip, Reply, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import ChatMessage from '@/components/dashboard-page/chat/ChatMessage.vue';
 import EmojiPickerButton from '@/components/dashboard-page/chat/EmojiPickerButton.vue';
@@ -15,7 +15,20 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
-import type { ConversationMessage, ConversationMessageAttachment } from '@/services/social-api';
+import type {
+  ConversationMessage,
+  ConversationMessageAttachment,
+  GifSearchResult,
+  GroupMember,
+} from '@/services/social-api';
+
+import {
+  CHAT_COMMANDS,
+  activeMention,
+  matchingMembers,
+  mentionReplacement,
+  replyAttachmentLabel,
+} from './chat-composer';
 
 // The message list and composer shared by conversations and the meeting chat.
 const props = withDefaults(
@@ -37,6 +50,14 @@ const props = withDefaults(
     loadAttachment?: (path: string) => void;
     unreadStartSequence?: number | null;
     attachmentsEnabled?: boolean;
+    commandsEnabled?: boolean;
+    groupMembers?: GroupMember[];
+    groupMembersHasMore?: boolean;
+    gifResults?: GifSearchResult[];
+    gifSearchLoading?: boolean;
+    gifSearchError?: string;
+    gifPreviewUrls?: Record<string, string>;
+    isGifPreviewLoading?: (id: string) => boolean;
     emptyText?: string;
     footerNote?: string;
     placeholder?: string;
@@ -56,6 +77,14 @@ const props = withDefaults(
     loadAttachment: () => undefined,
     unreadStartSequence: null,
     attachmentsEnabled: true,
+    commandsEnabled: true,
+    groupMembers: () => [],
+    groupMembersHasMore: false,
+    gifResults: () => [],
+    gifSearchLoading: false,
+    gifSearchError: '',
+    gifPreviewUrls: () => ({}),
+    isGifPreviewLoading: () => false,
   },
 );
 const emit = defineEmits<{
@@ -63,6 +92,10 @@ const emit = defineEmits<{
   (event: 'load-unread', sequence: number): void;
   (event: 'send'): void;
   (event: 'react', message: ConversationMessage, emoji: string): void;
+  (event: 'load-group-members'): void;
+  (event: 'search-gifs', query: string): void;
+  (event: 'load-gif-preview', gif: GifSearchResult): void;
+  (event: 'select-gif', gif: GifSearchResult): void;
 }>();
 const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
@@ -81,10 +114,174 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const mediaInput = ref<HTMLInputElement | null>(null);
 const previewUrls = new Map<File, string>();
 let pendingBottomScroll: ScrollBehavior | null = null;
+const composerCaret = ref(0);
+const commandSelection = ref(0);
+const mentionSelection = ref(0);
+const gifSelection = ref(0);
+const mentionMenuDismissed = ref(false);
+let gifSearchTimer: number | undefined;
 
 const MAX_ATTACHMENTS = 10;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
+
+const slashCommandQuery = computed(() => {
+  if (!props.commandsEnabled) return null;
+  if (!content.value.startsWith('/')) return null;
+  const command = content.value.slice(1);
+  return /\s/.test(command) ? null : command;
+});
+const matchingCommands = computed(() => {
+  const query = slashCommandQuery.value?.toLocaleLowerCase();
+  return query === null ? [] : CHAT_COMMANDS.filter((command) => command.name.includes(query));
+});
+const giphySearchQuery = computed(() => {
+  if (!props.commandsEnabled) return null;
+  const match = content.value.match(/^\/giphy(?:\s(.*))?$/i);
+  return match ? (match[1] ?? '').trim() : null;
+});
+const activeMentionToken = computed(() => activeMention(content.value, composerCaret.value));
+const matchingMentions = computed(() => {
+  const mention = activeMentionToken.value;
+  return mention ? matchingMembers(props.groupMembers, mention.query) : [];
+});
+const replyToAttachmentLabel = computed(() => (replyTo.value ? replyAttachmentLabel(replyTo.value) : ''));
+const commandMenuOpen = computed(() => slashCommandQuery.value !== null && matchingCommands.value.length > 0);
+const mentionMenuOpen = computed(
+  () => !mentionMenuDismissed.value && activeMentionToken.value !== null && matchingMentions.value.length > 0,
+);
+const giphyCommandActive = computed(() => giphySearchQuery.value !== null);
+const gifPickerOpen = computed(() => giphyCommandActive.value && !commandMenuOpen.value);
+const activePickerId = computed(() => {
+  if (commandMenuOpen.value) return 'chat-command-menu';
+  if (mentionMenuOpen.value) return 'mention-menu';
+  if (gifPickerOpen.value) return 'gif-picker';
+  return undefined;
+});
+const activeOptionId = computed(() => {
+  if (commandMenuOpen.value) return `chat-command-option-${matchingCommands.value[commandSelection.value]?.name}`;
+  if (mentionMenuOpen.value) return `mention-option-${matchingMentions.value[mentionSelection.value]?.id}`;
+  if (gifPickerOpen.value && props.gifResults[gifSelection.value]) {
+    return `gif-option-${props.gifResults[gifSelection.value]!.id}`;
+  }
+  return undefined;
+});
+
+function highlightParts(value: string, query: string) {
+  const index = value.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
+  if (index < 0 || !query) return [value, '', ''];
+  return [value.slice(0, index), value.slice(index, index + query.length), value.slice(index + query.length)];
+}
+
+function updateComposerCaret() {
+  composerCaret.value = composer.value?.selectionStart ?? content.value.length;
+}
+
+function setComposerValue(value: string, caret: number) {
+  content.value = value;
+  void nextTick(() => {
+    composer.value?.focus();
+    composer.value?.setSelectionRange(caret, caret);
+    composerCaret.value = caret;
+  });
+}
+
+function selectCommand(name: string) {
+  const value = `/${name} `;
+  setComposerValue(value, value.length);
+}
+
+function selectMention(member: GroupMember) {
+  const mention = activeMentionToken.value;
+  if (!mention) return;
+  const replacement = mentionReplacement(content.value, mention.start, mention.end, member.nickname);
+  setComposerValue(replacement.value, replacement.caret);
+}
+
+function selectGif(gif: GifSearchResult) {
+  emit('select-gif', gif);
+}
+
+function submitComposer() {
+  if (!giphyCommandActive.value) emit('send');
+}
+
+function handleComposerKeydown(event: KeyboardEvent) {
+  if (commandMenuOpen.value) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      commandSelection.value = (commandSelection.value + 1) % matchingCommands.value.length;
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      commandSelection.value =
+        (commandSelection.value - 1 + matchingCommands.value.length) % matchingCommands.value.length;
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      selectCommand(matchingCommands.value[commandSelection.value]!.name);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setComposerValue('', 0);
+      return;
+    }
+  }
+
+  if (mentionMenuOpen.value) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      mentionSelection.value = (mentionSelection.value + 1) % matchingMentions.value.length;
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      mentionSelection.value =
+        (mentionSelection.value - 1 + matchingMentions.value.length) % matchingMentions.value.length;
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      selectMention(matchingMentions.value[mentionSelection.value]!);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      mentionMenuDismissed.value = true;
+      return;
+    }
+  }
+
+  // A slash command configures an attachment; it is never a chat message on its own.
+  if (gifPickerOpen.value) {
+    if (event.key === 'ArrowDown' && props.gifResults.length) {
+      event.preventDefault();
+      gifSelection.value = (gifSelection.value + 1) % props.gifResults.length;
+      return;
+    }
+    if (event.key === 'ArrowUp' && props.gifResults.length) {
+      event.preventDefault();
+      gifSelection.value = (gifSelection.value - 1 + props.gifResults.length) % props.gifResults.length;
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selected = props.gifResults[gifSelection.value];
+      if (selected) selectGif(selected);
+      return;
+    }
+  }
+
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    emit('send');
+  } else if (event.key === 'Escape') {
+    replyTo.value = null;
+  }
+}
 
 function chooseAttachments(kind: 'file' | 'media') {
   if (props.sending) return;
@@ -342,7 +539,51 @@ watch(
   () => {
     reactionPickerSequence.value = null;
     highlightedSequence.value = null;
+    commandSelection.value = 0;
+    mentionSelection.value = 0;
   },
+);
+
+watch(matchingCommands, (commands) => {
+  commandSelection.value = Math.min(commandSelection.value, Math.max(commands.length - 1, 0));
+});
+
+watch(matchingMentions, (members) => {
+  mentionSelection.value = Math.min(mentionSelection.value, Math.max(members.length - 1, 0));
+});
+
+watch(
+  () => props.gifResults,
+  (results) => {
+    gifSelection.value = Math.min(gifSelection.value, Math.max(results.length - 1, 0));
+  },
+);
+
+watch([activeMentionToken, () => props.groupMembersHasMore], ([mention, hasMore]) => {
+  mentionMenuDismissed.value = false;
+  if (mention && hasMore) emit('load-group-members');
+});
+
+watch(
+  giphySearchQuery,
+  (query) => {
+    window.clearTimeout(gifSearchTimer);
+    // Clearing synchronously invalidates an in-flight request before its debounced replacement starts.
+    emit('search-gifs', '');
+    if (query === null || !query) {
+      return;
+    }
+    gifSearchTimer = window.setTimeout(() => emit('search-gifs', query), 300);
+  },
+  { flush: 'sync' },
+);
+
+watch(
+  [gifPickerOpen, () => props.gifResults],
+  ([open, results]) => {
+    if (open) results.forEach((gif) => emit('load-gif-preview', gif));
+  },
+  { immediate: true },
 );
 
 watch(
@@ -370,6 +611,7 @@ function isGroupedWithPrevious(index: number) {
 
 onBeforeUnmount(() => {
   window.clearTimeout(highlightTimer);
+  window.clearTimeout(gifSearchTimer);
   if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
   paneResizeObserver?.disconnect();
   listResizeObserver?.disconnect();
@@ -487,7 +729,14 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
               <p class="font-semibold text-[#102F35]">
                 Replying to {{ isLocal(replyTo) ? 'yourself' : replyTo.senderName }}
               </p>
-              <p class="truncate text-[#4E6B70]">{{ replyTo.content }}</p>
+              <p class="text-[#4E6B70]">
+                <template v-if="replyToAttachmentLabel">
+                  <strong v-if="replyTo.content" class="block font-semibold">{{ replyToAttachmentLabel }}</strong>
+                  <span v-else>{{ replyToAttachmentLabel }}</span>
+                  <span v-if="replyTo.content" class="block">{{ replyTo.content }}</span>
+                </template>
+                <template v-else>{{ replyTo.content }}</template>
+              </p>
             </div>
             <button
               type="button"
@@ -550,7 +799,110 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           </div>
         </motion.div>
       </AnimatePresence>
-      <form class="flex items-end gap-2" @submit.prevent="emit('send')">
+      <div
+        id="chat-command-menu"
+        v-if="commandMenuOpen"
+        data-chat-command-menu
+        class="mb-2 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_8px_24px_rgba(16,47,53,0.12)]"
+        role="listbox"
+        aria-label="Chat commands"
+      >
+        <button
+          v-for="(command, index) in matchingCommands"
+          :key="command.name"
+          :id="`chat-command-option-${command.name}`"
+          type="button"
+          role="option"
+          :aria-selected="index === commandSelection"
+          class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-[#102F35] transition-colors"
+          :class="index === commandSelection ? 'bg-[#E6F4F1]' : '[@media(hover:hover)]:hover:bg-[#EDF8F5]'"
+          @mousedown.prevent
+          @click="selectCommand(command.name)"
+        >
+          <span class="font-semibold"
+            >/{{ highlightParts(command.name, slashCommandQuery ?? '')[0]
+            }}<mark
+              v-if="highlightParts(command.name, slashCommandQuery ?? '')[1]"
+              class="bg-transparent font-semibold text-[#0B7A75]"
+              >{{ highlightParts(command.name, slashCommandQuery ?? '')[1] }}</mark
+            >{{ highlightParts(command.name, slashCommandQuery ?? '')[2] }}</span
+          >
+          <span class="text-xs text-[#61777B]">{{ command.description }}</span>
+        </button>
+      </div>
+      <div
+        id="mention-menu"
+        v-if="mentionMenuOpen"
+        data-mention-menu
+        class="mb-2 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_8px_24px_rgba(16,47,53,0.12)]"
+        role="listbox"
+        aria-label="Group members"
+      >
+        <button
+          v-for="(member, index) in matchingMentions"
+          :key="member.id"
+          :id="`mention-option-${member.id}`"
+          type="button"
+          role="option"
+          :aria-selected="index === mentionSelection"
+          class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-[#102F35] transition-colors"
+          :class="index === mentionSelection ? 'bg-[#E6F4F1]' : '[@media(hover:hover)]:hover:bg-[#EDF8F5]'"
+          @mousedown.prevent
+          @click="selectMention(member)"
+        >
+          <span class="font-semibold"
+            >@{{ highlightParts(member.nickname, activeMentionToken?.query ?? '')[0]
+            }}<mark
+              v-if="highlightParts(member.nickname, activeMentionToken?.query ?? '')[1]"
+              class="bg-transparent font-semibold text-[#0B7A75]"
+              >{{ highlightParts(member.nickname, activeMentionToken?.query ?? '')[1] }}</mark
+            >{{ highlightParts(member.nickname, activeMentionToken?.query ?? '')[2] }}</span
+          >
+          <span class="truncate text-xs text-[#61777B]">{{ member.name }}</span>
+        </button>
+      </div>
+      <div
+        v-if="gifPickerOpen"
+        id="gif-picker"
+        data-gif-picker
+        class="mb-2 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-2 shadow-[0_8px_24px_rgba(16,47,53,0.12)]"
+        role="listbox"
+        aria-label="Giphy results"
+      >
+        <p v-if="!giphySearchQuery" class="px-2 py-1 text-xs text-[#61777B]">
+          Search Giphy and choose a GIF to attach.
+        </p>
+        <p v-else-if="gifSearchLoading" class="px-2 py-1 text-xs text-[#61777B]">Searching Giphy...</p>
+        <p v-else-if="gifSearchError" class="px-2 py-1 text-xs text-[#A34A3A]">{{ gifSearchError }}</p>
+        <p v-else-if="!gifResults.length" class="px-2 py-1 text-xs text-[#61777B]">No GIFs found.</p>
+        <div v-else class="grid max-h-52 grid-cols-3 gap-1 overflow-y-auto sm:grid-cols-4">
+          <button
+            v-for="(gif, index) in gifResults"
+            :key="gif.id"
+            :id="`gif-option-${gif.id}`"
+            type="button"
+            role="option"
+            :aria-selected="index === gifSelection"
+            class="relative aspect-video overflow-hidden rounded-lg bg-[#EDF8F5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B7A75]"
+            :aria-label="`Attach GIF: ${gif.title || 'Giphy result'}`"
+            :disabled="sending"
+            @focus="gifSelection = index"
+            @click="selectGif(gif)"
+          >
+            <img
+              v-if="gifPreviewUrls[gif.id]"
+              :src="gifPreviewUrls[gif.id]"
+              :alt="gif.title"
+              class="size-full object-cover"
+            />
+            <LoadingRipple
+              v-else-if="isGifPreviewLoading(gif.id)"
+              class="absolute inset-0 m-auto size-5 text-[#0B7A75]"
+            />
+          </button>
+        </div>
+      </div>
+      <form class="flex items-end gap-2" @submit.prevent="submitComposer">
         <input ref="fileInput" type="file" multiple class="sr-only" @change="addAttachments" />
         <input
           ref="mediaInput"
@@ -601,10 +953,16 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           :placeholder="placeholder"
           :readonly="sending"
           :aria-busy="sending"
+          :aria-expanded="!!activePickerId"
+          :aria-controls="activePickerId"
+          :aria-activedescendant="activeOptionId"
+          aria-autocomplete="list"
           aria-label="Message"
           class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-transparent bg-[#F3F5F4] px-3 py-2.5 text-sm text-[#102F35] placeholder:text-[#8A9C9E] focus-visible:border-[#D8E7E3] focus-visible:bg-white focus-visible:outline-none focus-visible:ring-0"
-          @keydown.enter.exact.prevent="emit('send')"
-          @keydown.esc="replyTo = null"
+          @input="updateComposerCaret"
+          @click="updateComposerCaret"
+          @keyup="updateComposerCaret"
+          @keydown="handleComposerKeydown"
         />
         <EmojiPickerButton
           v-model="content"
@@ -618,7 +976,12 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           type="submit"
           class="harbor-primary-action h-11 rounded-xl bg-[#0B7A75] px-4 text-white"
           @pointerdown.prevent
-          :disabled="(!content.trim() && (!attachmentsEnabled || !attachments.length)) || loading || sending"
+          :disabled="
+            giphyCommandActive ||
+            (!content.trim() && (!attachmentsEnabled || !attachments.length)) ||
+            loading ||
+            sending
+          "
           >{{ sending ? 'Sending...' : sendLabel }}</Button
         >
       </form>

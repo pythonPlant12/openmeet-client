@@ -559,7 +559,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
           hide-close
           overlay-class="harbor-mobile-account-overlay bg-[#102F35]/20 backdrop-blur-[2px]"
           :class="[
-            'harbor-mobile-account-sheet fixed right-4 left-auto top-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.75rem] border border-[#D8E7E3] bg-[#FBFCF8] p-4 shadow-[0_-16px_42px_rgba(16,47,53,0.16)]',
+            'marketing-font harbor-mobile-account-sheet fixed right-4 left-auto top-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.75rem] border border-[#D8E7E3] bg-[#FBFCF8] p-4 shadow-[0_-16px_42px_rgba(16,47,53,0.16)]',
             mobileNavBottomClass,
             { 'harbor-mobile-account-sheet-closing': isClosingMobileMenu },
           ]"

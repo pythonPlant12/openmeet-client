@@ -51,6 +51,7 @@ import {
   type DirectMessageRequest,
   type Friend,
   type FriendRequest,
+  type GifSearchResult,
   type GroupAccessPolicy,
   type GroupInfo,
   type GroupInvitation,
@@ -187,6 +188,23 @@ const messageAttachmentCache = useAttachmentCache(
 );
 const messageAttachmentUrls = computed(() => messageAttachmentCache.urls.value);
 const MAX_AUTO_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_MESSAGE_ATTACHMENTS = 10;
+const MAX_MESSAGE_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
+const gifResults = ref<GifSearchResult[]>([]);
+const isSearchingGifs = ref(false);
+const gifSearchError = ref('');
+const gifPreviewCache = useAttachmentCache(
+  () => currentUser.value?.id,
+  (path) => socialApi.loadConversationAttachment(accessToken.value ?? '', path),
+);
+const gifPreviewUrls = computed(() =>
+  Object.fromEntries(
+    gifResults.value.flatMap((gif) => {
+      const url = gifPreviewCache.urls.value[socialApi.gifImagePath(gif.id, 'preview')];
+      return url ? [[gif.id, url]] : [];
+    }),
+  ),
+);
 // A quote belongs to its conversation; switching chats by any route drops it so it cannot be sent elsewhere.
 watch(
   () => selectedConversation.value?.id,
@@ -218,6 +236,86 @@ watch(messages, (nextMessages) => {
 
 function loadMessageAttachment(path: string) {
   void messageAttachmentCache.ensure([path]);
+}
+
+function loadGifPreview(gif: GifSearchResult) {
+  void gifPreviewCache.ensure([socialApi.gifImagePath(gif.id, 'preview')]);
+}
+
+let gifSearchRequest = 0;
+function invalidateGifSearch() {
+  gifSearchRequest += 1;
+  gifResults.value = [];
+  isSearchingGifs.value = false;
+  gifSearchError.value = '';
+  gifPreviewCache.clear();
+}
+
+async function searchGifs(query: string) {
+  const request = ++gifSearchRequest;
+  const token = accessToken.value;
+  const search = query.trim();
+  if (!search || !token) {
+    gifResults.value = [];
+    isSearchingGifs.value = false;
+    gifSearchError.value = '';
+    gifPreviewCache.clear();
+    return;
+  }
+
+  isSearchingGifs.value = true;
+  gifSearchError.value = '';
+  try {
+    const results = await socialApi.searchGifs(token, search);
+    if (request === gifSearchRequest) gifResults.value = results;
+  } catch (error) {
+    console.error('[Dashboard] Failed to search GIFs:', error);
+    if (request === gifSearchRequest) {
+      gifResults.value = [];
+      gifSearchError.value = 'GIF search is unavailable.';
+    }
+  } finally {
+    if (request === gifSearchRequest) isSearchingGifs.value = false;
+  }
+}
+
+async function selectGif(gif: GifSearchResult) {
+  const token = accessToken.value;
+  if (!token || isSendingMessage.value || messageAttachments.value.length >= MAX_MESSAGE_ATTACHMENTS) {
+    if (messageAttachments.value.length >= MAX_MESSAGE_ATTACHMENTS) {
+      toast({ title: `You can send up to ${MAX_MESSAGE_ATTACHMENTS} attachments at once.`, variant: 'destructive' });
+    }
+    return;
+  }
+
+  const slashDraft = messageContent.value;
+  const conversationId = selectedConversation.value.id;
+  const conversationRevision = messageRequest;
+  messageContent.value = '';
+  try {
+    const image = await socialApi.loadGifImage(token, gif.id);
+    // A completed download belongs only to the conversation state that requested it. Do not retain
+    // its Blob through a File or restore its command after navigation reset that state.
+    if (selectedConversation.value?.id !== conversationId || messageRequest !== conversationRevision) return;
+    const nextTotal = messageAttachments.value.reduce((total, attachment) => total + attachment.size, 0) + image.size;
+    if (nextTotal > MAX_MESSAGE_ATTACHMENT_TOTAL_BYTES) {
+      toast({ title: 'Attachments in one message must total 25 MB or less.', variant: 'destructive' });
+      messageContent.value = slashDraft;
+      return;
+    }
+    messageAttachments.value = [
+      ...messageAttachments.value,
+      new File([image], `giphy-${gif.id}.webp`, { type: 'image/webp' }),
+    ];
+    gifResults.value = [];
+    gifSearchError.value = '';
+    gifPreviewCache.clear();
+  } catch (error) {
+    console.error('[Dashboard] Failed to attach GIF:', error);
+    if (selectedConversation.value?.id !== conversationId || messageRequest !== conversationRevision) return;
+    messageContent.value = slashDraft;
+    toast({ title: 'Could not attach this GIF. Try another one.', variant: 'destructive' });
+  }
 }
 const nextMessageBefore = ref<number | null>(null);
 const chatPane = ref<{
@@ -338,6 +436,9 @@ const selectedIsGroup = computed(() => selectedConversation.value?.kind === 'gro
 const selectedGroupAvatarUrl = computed(() =>
   selectedConversation.value ? groupAvatarUrls.value[selectedConversation.value.id] : undefined,
 );
+const groupInfoAvatarUrl = computed(() =>
+  groupInfo.value ? groupAvatarUrls.value[groupInfo.value.id] : selectedGroupAvatarUrl.value,
+);
 const hasSelectedConversation = computed(() => !!selectedConversation.value || !!pendingDirectFriend.value);
 
 watch(
@@ -355,6 +456,11 @@ watch(
 const contactProfileFriend = computed(() =>
   contactProfile.value
     ? (friends.value.find((friend) => friend.id === contactProfile.value?.id && friend.friendshipId) ?? null)
+    : null,
+);
+const contactProfilePendingRequest = computed(() =>
+  contactProfile.value
+    ? (incomingFriendRequests.value.find((request) => request.user.id === contactProfile.value?.id) ?? null)
     : null,
 );
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
@@ -704,11 +810,21 @@ async function syncFriendAvatars(nextFriends: Friend[], token: string) {
   }
 }
 
-async function syncGroupAvatars(nextConversations: Conversation[], token: string) {
+function workspaceGroupAvatarSources(conversationData: Conversation[], invitationData = groupInvitations.value) {
+  return [
+    ...conversationData.filter((conversation) => conversation.kind === 'group'),
+    ...invitationData.map((invitation) => ({ id: invitation.groupId, avatarUrl: invitation.groupAvatarUrl })),
+  ];
+}
+
+async function syncGroupAvatars(nextGroups: Array<{ id: string; avatarUrl: string | null }>, token: string) {
   const request = ++groupAvatarRequest;
-  const groups = nextConversations.filter(
-    (conversation): conversation is Conversation & { avatarUrl: string } =>
-      conversation.kind === 'group' && !!conversation.avatarUrl,
+  const groups = Array.from(
+    new Map(
+      nextGroups
+        .filter((group): group is { id: string; avatarUrl: string } => !!group.avatarUrl)
+        .map((group) => [group.id, group]),
+    ).values(),
   );
   loadingGroupAvatarIds.value = new Set(
     groups
@@ -766,7 +882,7 @@ async function syncSelectedGroupAvatar(info: GroupInfo) {
   if (!token || !group || group.kind !== 'group') return;
   group.avatarUrl = info.avatarUrl;
   await syncGroupAvatars(
-    conversations.value.map((item) => (item.id === group.id ? group : item)),
+    workspaceGroupAvatarSources(conversations.value.map((item) => (item.id === group.id ? group : item))),
     token,
   );
 }
@@ -787,7 +903,10 @@ async function loadWorkspace() {
     let applied = false;
     if (shouldApplyDashboardRequest(friendRequest, friendRefreshRequest, isUnmounted)) {
       friends.value = friendData.friends;
-      void syncFriendAvatars(friendData.friends, token);
+      void syncFriendAvatars(
+        [...friendData.friends, ...friendData.incomingRequests.map((request) => request.user)],
+        token,
+      );
       incomingFriendRequests.value = friendData.incomingRequests;
       applied = true;
     }
@@ -796,7 +915,10 @@ async function loadWorkspace() {
         excludeUnsentDirectDrafts(conversationData),
         conversationActivity.value,
       );
-      void syncGroupAvatars(conversationData, token);
+      void syncGroupAvatars(
+        workspaceGroupAvatarSources(conversationData, invitationData ?? groupInvitations.value),
+        token,
+      );
       directRequests.value = requestData;
       if (invitationData) groupInvitations.value = invitationData;
       applied = true;
@@ -829,7 +951,10 @@ async function refreshFriends() {
     const friendData = await socialApi.listFriends(token);
     if (!shouldApplyDashboardRequest(request, friendRefreshRequest, isUnmounted)) return;
     friends.value = friendData.friends;
-    void syncFriendAvatars(friendData.friends, token);
+    void syncFriendAvatars(
+      [...friendData.friends, ...friendData.incomingRequests.map((request) => request.user)],
+      token,
+    );
     incomingFriendRequests.value = friendData.incomingRequests;
   } catch (error) {
     if (isUnmounted) return;
@@ -867,7 +992,10 @@ async function refreshConversationWorkspace() {
         if (!shouldApplyDashboardRequest(request, conversationRefreshRequest, isUnmounted)) continue;
         const nextConversations = excludeUnsentDirectDrafts(conversationData);
         conversations.value = sortConversationsByActivity(nextConversations, conversationActivity.value);
-        void syncGroupAvatars(conversationData, token);
+        void syncGroupAvatars(
+          workspaceGroupAvatarSources(conversationData, invitationData ?? groupInvitations.value),
+          token,
+        );
         directRequests.value = requestData;
         if (invitationData) groupInvitations.value = invitationData;
 
@@ -995,6 +1123,7 @@ watch(selectedConversation, (conversation, previousConversation) => {
   animatedMessageSequences.value = new Set();
   messageContent.value = '';
   messageAttachments.value = [];
+  invalidateGifSearch();
   unreadStartSequence.value = null;
   nextMessageBefore.value = null;
   isLoadingMessages.value = false;
@@ -1184,6 +1313,40 @@ function openGroupProfile(conversation?: Conversation) {
   isGroupProfileDialogOpen.value = true;
 }
 
+function openGroupInvitationInfo(invitation: GroupInvitation) {
+  const token = accessToken.value;
+  if (!token) return;
+
+  const request = ++groupProfileRequest;
+  groupInfo.value = null;
+  groupMembers.value = [];
+  groupMembersNextOffset.value = null;
+  groupProfileError.value = '';
+  isGroupProfileLoading.value = true;
+  isGroupProfileDialogOpen.value = true;
+  void socialApi
+    .getGroupInfo(token, invitation.groupId)
+    .then((info) => {
+      if (!shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) return;
+      groupInfo.value = info;
+      void syncGroupAvatars(
+        [...workspaceGroupAvatarSources(conversations.value), { id: info.id, avatarUrl: info.avatarUrl }],
+        token,
+      );
+    })
+    .catch((error) => {
+      console.error('[Dashboard] Failed to load invited group info:', error);
+      if (shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) {
+        groupProfileError.value = 'Could not load group details. Try again.';
+      }
+    })
+    .finally(() => {
+      if (shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) {
+        isGroupProfileLoading.value = false;
+      }
+    });
+}
+
 async function loadMoreGroupMembers() {
   const token = accessToken.value;
   const group = selectedConversation.value;
@@ -1204,6 +1367,41 @@ async function loadMoreGroupMembers() {
   } finally {
     isLoadingMoreGroupMembers.value = false;
   }
+}
+
+const groupMentionLoads = new Map<string, { request: number; promise: Promise<void> }>();
+function loadAllGroupMembers() {
+  const token = accessToken.value;
+  const group = selectedConversation.value;
+  if (!token || group?.kind !== 'group' || groupMembersNextOffset.value === null) return;
+
+  const request = groupProfileRequest;
+  const groupId = group.id;
+  if (groupMentionLoads.get(groupId)?.request === request) return;
+  const load = (async () => {
+    try {
+      while (groupMembersNextOffset.value !== null) {
+        const offset = groupMembersNextOffset.value;
+        const page = await socialApi.listGroupMembers(token, groupId, offset);
+        if (
+          !shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted) ||
+          selectedConversation.value?.id !== groupId
+        )
+          return;
+        const knownIds = new Set(groupMembers.value.map(({ id }) => id));
+        groupMembers.value = [...groupMembers.value, ...page.members.filter(({ id }) => !knownIds.has(id))];
+        groupMembersNextOffset.value = page.nextOffset;
+      }
+    } catch (error) {
+      console.error('[Dashboard] Failed to load group members for mentions:', error);
+      if (selectedConversation.value?.id === groupId) {
+        toast({ title: 'Could not load all group members for mentions.', variant: 'destructive' });
+      }
+    } finally {
+      if (groupMentionLoads.get(groupId)?.request === request) groupMentionLoads.delete(groupId);
+    }
+  })();
+  groupMentionLoads.set(groupId, { request, promise: load });
 }
 
 async function refreshSelectedGroup() {
@@ -1469,6 +1667,7 @@ async function respondToFriendRequest(request: FriendRequest, accept: boolean) {
   const token = accessToken.value;
   if (!token || isRespondingToFriendRequest.value) return;
 
+  const profileWasOpen = contactProfile.value?.id === request.user.id;
   clearFeedback();
   isRespondingToFriendRequest.value = request.id;
   try {
@@ -1480,6 +1679,7 @@ async function respondToFriendRequest(request: FriendRequest, accept: boolean) {
       feedbackMessage.value = 'Friend request declined.';
     }
     await refreshFriends();
+    if (profileWasOpen && contactProfile.value?.id === request.user.id) setContactProfileDialogOpen(false);
   } catch (error) {
     console.error('[Dashboard] Failed to respond to friend request:', error);
     feedbackError.value = 'Could not update friend request.';
@@ -2150,6 +2350,7 @@ async function startConversationCall(conversation: Conversation) {
           @respond-direct-request="respondToDirectRequest"
           @accept-group-invitation="activeGroupInvitation = $event"
           @decline-group-invitation="declineGroupInvitation"
+          @group-invitation-details="openGroupInvitationInfo"
           @toggle-read="toggleConversationRead"
         />
         <FriendsSidebar
@@ -2241,6 +2442,13 @@ async function startConversationCall(conversation: Conversation) {
         :is-attachment-loading="messageAttachmentCache.isLoading"
         :has-attachment-error="messageAttachmentCache.hasError"
         :load-attachment="loadMessageAttachment"
+        :group-members="groupMembers"
+        :group-members-has-more="groupMembersNextOffset !== null"
+        :gif-results="gifResults"
+        :gif-search-loading="isSearchingGifs"
+        :gif-search-error="gifSearchError"
+        :gif-preview-urls="gifPreviewUrls"
+        :is-gif-preview-loading="(id) => gifPreviewCache.isLoading(socialApi.gifImagePath(id, 'preview'))"
         @back="
           selectedConversation = null;
           pendingDirectFriend = null;
@@ -2253,6 +2461,10 @@ async function startConversationCall(conversation: Conversation) {
         @send="sendMessage"
         @request-notifications="requestNotificationPermission"
         @react="toggleMessageReaction"
+        @load-group-members="loadAllGroupMembers"
+        @search-gifs="searchGifs"
+        @load-gif-preview="loadGifPreview"
+        @select-gif="selectGif"
         @dismiss-notifications="dismissNotificationWarning"
       />
       <DetailsPane
@@ -2346,8 +2558,8 @@ async function startConversationCall(conversation: Conversation) {
       :members-has-more="groupMembersNextOffset !== null"
       :members-loading-more="isLoadingMoreGroupMembers"
       :friends="friends"
-      :avatar-url="selectedGroupAvatarUrl"
-      :avatar-loading="isGroupAvatarLoading(selectedConversation?.id ?? '')"
+      :avatar-url="groupInfoAvatarUrl"
+      :avatar-loading="isGroupAvatarLoading(groupInfo?.id ?? '')"
       :current-user-id="currentUser?.id"
       :access-token="accessToken ?? undefined"
       :mutation-busy="isGroupMutationBusy(selectedConversation?.id ?? '')"
@@ -2378,10 +2590,12 @@ async function startConversationCall(conversation: Conversation) {
       :confirmation-open="isContactRemoveConfirmationOpen"
       :profile="contactProfile"
       :profile-friend="contactProfileFriend"
+      :pending-request="contactProfilePendingRequest"
       :loading="isContactProfileLoading"
       :error="contactProfileError"
       :removing-id="isRemovingFriend"
       :opening="isOpeningDirect"
+      :responding-id="isRespondingToFriendRequest"
       :call-active="isCallLaunchActive"
       :avatar-urls="contactProfileAvatarUrls"
       :avatar-loading="isContactProfileAvatarLoading"
@@ -2391,6 +2605,8 @@ async function startConversationCall(conversation: Conversation) {
       @call="startContactProfileCall"
       @remove="removeProfileFriend"
       @add-friend="addProfileFriend"
+      @accept-request="respondToFriendRequest($event, true)"
+      @decline-request="respondToFriendRequest($event, false)"
       @update-status="updateOwnStatus"
     />
   </main>

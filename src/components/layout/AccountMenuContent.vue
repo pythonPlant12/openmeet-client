@@ -51,7 +51,7 @@ const isAuthBusy = computed(
     :side="side"
     :align="align"
     :side-offset="12"
-    class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+    class="marketing-font harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
   >
     <DropdownMenuItem
       class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
@@ -90,13 +90,13 @@ const isAuthBusy = computed(
     <DropdownMenuSub>
       <DropdownMenuSubTrigger
         data-status-submenu
-        class="harbor-floating-menu-item cursor-pointer gap-2 rounded-xl px-3 py-2.5"
+        class="harbor-floating-menu-item cursor-pointer gap-2 rounded-xl px-3 py-2.5 font-semibold"
       >
         <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
         <span class="flex-1">{{ t('nav.status') }}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
-        class="harbor-action-menu min-w-56 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+        class="marketing-font harbor-action-menu min-w-56 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
       >
         <DropdownMenuItem
           v-for="option in USER_STATUS_OPTIONS"

@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { userStatusOption } from '@/config/user-status.config';
 import type { Friend, FriendRequest, UserSearchResult } from '@/services/social-api';
 
 const props = defineProps<{
@@ -105,6 +106,10 @@ function openFriend(friend: Friend) {
     return;
   }
   emit('open', friend);
+}
+
+function openRequesterProfile(request: FriendRequest) {
+  emit('profile', request.user);
 }
 
 onBeforeUnmount(clearLongPress);
@@ -260,25 +265,49 @@ onBeforeUnmount(clearLongPress);
           <div
             v-for="request in incomingRequests"
             :key="request.id"
-            class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2"
+            role="button"
+            tabindex="0"
+            :aria-label="`View ${request.user.name}'s profile`"
+            class="harbor-ghost-action flex cursor-pointer items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-left"
+            @click="openRequesterProfile(request)"
+            @keydown.enter.prevent="openRequesterProfile(request)"
+            @keydown.space.prevent="openRequesterProfile(request)"
           >
-            <span
-              class="flex size-8 items-center justify-center rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-              >{{ initials(request.user.name) }}</span
+            <span class="relative shrink-0"
+              ><span
+                class="flex size-8 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                :class="[
+                  'border-2',
+                  userStatusOption(request.user.isOnline ? request.user.status : 'offline').borderClass,
+                ]"
+                ><img
+                  v-if="friendAvatarUrls[request.user.id]"
+                  :src="friendAvatarUrls[request.user.id]"
+                  alt=""
+                  class="size-full object-cover"
+                /><LoadingRipple v-else-if="isAvatarLoading(request.user.id)" class="size-4 text-[#0B7A75]" /><template
+                  v-else
+                  >{{ initials(request.user.name) }}</template
+                ></span
+              ><PresenceDot
+                surface="friends"
+                :online="request.user.isOnline"
+                :status="request.user.status"
+                class="size-2.5 border-[3px] border-[#FBFCF8]" /></span
             ><span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span
             ><Button
               size="icon"
               variant="ghost"
               class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
               :disabled="isResponding !== null"
-              @click="emit('respond', request, true)"
+              @click.stop="emit('respond', request, true)"
               ><Check class="size-4" /></Button
             ><Button
               size="icon"
               variant="ghost"
               class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
               :disabled="isResponding !== null"
-              @click="emit('respond', request, false)"
+              @click.stop="emit('respond', request, false)"
               ><X class="size-4"
             /></Button>
           </div>
@@ -348,6 +377,7 @@ onBeforeUnmount(clearLongPress);
                   <span class="relative shrink-0"
                     ><span
                       class="flex size-8 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                      :class="['border-2', userStatusOption(friend.isOnline ? friend.status : 'offline').borderClass]"
                       ><img
                         v-if="friendAvatarUrls[friend.id]"
                         :src="friendAvatarUrls[friend.id]"
@@ -361,7 +391,7 @@ onBeforeUnmount(clearLongPress);
                       surface="friends"
                       :online="friend.isOnline"
                       :status="friend.status"
-                      class="size-2.5 border-2 border-[#FBFCF8]" /></span
+                      class="size-2.5 border-[3px] border-[#FBFCF8]" /></span
                   ><span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
                     ><span class="truncate">{{ friend.name }}</span
                     ><span v-if="friend.nickname" class="shrink-0 text-xs text-[#61777B]"

@@ -109,6 +109,26 @@ describe('GroupDetailsPanel', () => {
     expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'sam' });
   });
 
+  it('frames participant avatars by status and keeps dots on the panel surface', () => {
+    const wrapper = mountPanel({
+      members: [{ ...member('sam', 'Sam'), isOnline: true, status: 'doNotDisturb' }, member('pat', 'Pat')],
+    });
+    const samRow = wrapper.findAll('[data-swipeable-row]').find((row) => row.text().includes('Sam'))!;
+    const patRow = wrapper.findAll('[data-swipeable-row]').find((row) => row.text().includes('Pat'))!;
+    const dot = samRow.get('[data-presence-dot]');
+    const avatar = dot.element.previousElementSibling as HTMLElement;
+
+    expect(avatar.classList).toContain('border-2');
+    expect(avatar.classList).toContain('border-[#C4513D]');
+    expect(dot.classes()).toContain('border-[3px]');
+    expect(dot.classes()).toContain('border-[#FBFCF8]');
+    const offlineAvatar = patRow.get('.relative > span').element as HTMLElement;
+
+    expect(offlineAvatar.classList).toContain('border-2');
+    expect(offlineAvatar.classList).toContain('border-[#B8C6C5]');
+    expect(patRow.find('[data-presence-dot]').exists()).toBe(false);
+  });
+
   it('shows Remove from group only to group managers', () => {
     const admin = mountPanel({ info: { ...info, role: 'admin' }, group: { ...group, role: 'admin' } });
     const samRow = admin.findAll('[data-swipeable-row]').find((row) => row.text().includes('Sam'))!;

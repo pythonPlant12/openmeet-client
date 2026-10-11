@@ -48,6 +48,10 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.text()).toContain('Alex Smith');
     expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true);
     expect(wrapper.get('.invisible').text()).toContain('@nickname');
+    expect(wrapper.get('[data-profile-avatar]').classes()).toEqual(
+      expect.arrayContaining(['border-2', 'border-[#B8C6C5]']),
+    );
+    expect(wrapper.find('[data-online-indicator]').exists()).toBe(false);
   });
 
   it('presents friends like Group info: status, friend badge, quote, and details', () => {
@@ -127,6 +131,51 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.emitted('add-friend')).toHaveLength(1);
   });
 
+  it('offers accept or decline instead of Add friend for a pending requester profile', async () => {
+    const request = {
+      id: 'request-1',
+      user: { id: 'person-1', name: 'Sam Lee', email: 'sam@example.com', isOnline: false },
+      createdAt: '2026-08-17T12:00:00Z',
+    };
+    const wrapper = mount(ContactProfileDialog, {
+      props: {
+        open: true,
+        confirmationOpen: false,
+        profile: {
+          id: 'person-1',
+          name: 'Sam Lee',
+          nickname: 'sam',
+          email: '',
+          avatarUrl: null,
+          status: 'offline',
+          statusMessage: '',
+          createdAt: '2026-08-17T12:00:00Z',
+          lastSeenAt: null,
+          isOnline: false,
+          relationship: 'none',
+        },
+        profileFriend: null,
+        pendingRequest: request,
+        loading: false,
+        error: '',
+        removingId: null,
+        opening: null,
+        respondingId: null,
+        callActive: false,
+        avatarUrls: {},
+        avatarLoading: false,
+        formatDate: () => '17 Aug 2026',
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.find('[data-add-friend]').exists()).toBe(false);
+    await wrapper.get('[data-accept-friend-request]').trigger('click');
+    await wrapper.get('[data-decline-friend-request]').trigger('click');
+    expect(wrapper.emitted('accept-request')?.[0]).toEqual([request]);
+    expect(wrapper.emitted('decline-request')?.[0]).toEqual([request]);
+  });
+
   it('lets people change their own status from their profile', () => {
     const wrapper = mount(ContactProfileDialog, {
       props: {
@@ -167,7 +216,15 @@ describe('ContactProfileDialog', () => {
     });
 
     expect(wrapper.get('[data-status-menu]').text()).toContain('Sleeping');
-    expect(wrapper.get('[data-online-indicator]').classes()).toContain('bg-[#6B7BC4]');
+    const indicator = wrapper.get('[data-online-indicator]');
+    const avatar = indicator.element.previousElementSibling as HTMLElement;
+
+    expect(avatar.classList).toContain('border-2');
+    expect(avatar.classList).toContain('border-[#6B7BC4]');
+    expect(indicator.classes()).toContain('border-[3px]');
+    expect(indicator.classes()).toContain('border-[#FBFCF8]');
+    expect(indicator.classes()).toContain('bg-[#6B7BC4]');
+    expect(indicator.classes()).toEqual(expect.arrayContaining(['bottom-0', 'right-0']));
   });
 
   it('opens an image-only profile picture preview', async () => {
