@@ -42,6 +42,7 @@ import {
   shouldApplyDashboardRequest,
   sidebarPanelAfterDrag,
 } from '@/pages/dashboard-group-state';
+import { playHaptic } from '@/services/haptics';
 import { getSystemNotificationPermission, requestSystemNotificationPermission } from '@/services/notifications';
 import {
   type BadgeCounts,
@@ -716,6 +717,7 @@ async function sendMessage() {
       : await socialApi.createConversationMessage(token, conversationId, content, replyToSequence);
     if (selectedConversation.value?.id !== conversationId) return;
 
+    playHaptic('light');
     appendMessage(message);
     if (selectedConversation.value?.id === conversationId) addConversation(selectedConversation.value);
     messageContent.value = '';
@@ -725,6 +727,7 @@ async function sendMessage() {
     chatPane.value?.scrollToBottom('smooth');
   } catch (error) {
     console.error('[Dashboard] Failed to send message:', error);
+    playHaptic('error');
     feedbackError.value = 'Could not send message. Try again.';
   } finally {
     isSendingMessage.value = false;
@@ -739,6 +742,7 @@ async function toggleMessageReaction(message: ConversationMessage, emoji: string
   const request = (reactionRequestByMessage.get(message.sequence) ?? 0) + 1;
   reactionRequestByMessage.set(message.sequence, request);
   const previous = message.reactions ?? [];
+  playHaptic('selection');
   setMessageReactions(message.sequence, toggledReactions(previous, emoji));
   try {
     const reactions = await socialApi.toggleMessageReaction(token, conversationId, message.sequence, emoji);
@@ -1440,37 +1444,55 @@ function handleContextMenuOpen(id: string, open: boolean) {
   }
 }
 
+// Panel moves the user makes (tap, drag, or wheel) tick once; programmatic expansion stays silent.
+function moveSidebarPanels(move: () => void) {
+  const before = `${expandedSidebarPanel.value}/${callsPanel.value}`;
+  move();
+  if (`${expandedSidebarPanel.value}/${callsPanel.value}` !== before) playHaptic('selection');
+}
+
 function handlePanelHeaderDragEnd(
   panel: 'messages' | 'friends',
   _event: PointerEvent,
   info: { offset: { y: number }; velocity: { y: number } },
 ) {
-  if (callsPanel.value === 'top') {
-    callsPanel.value = 'collapsed';
-    return;
-  }
-  expandedSidebarPanel.value = sidebarPanelAfterDrag(panel, expandedSidebarPanel.value, info.offset.y, info.velocity.y);
+  moveSidebarPanels(() => {
+    if (callsPanel.value === 'top') {
+      callsPanel.value = 'collapsed';
+      return;
+    }
+    expandedSidebarPanel.value = sidebarPanelAfterDrag(
+      panel,
+      expandedSidebarPanel.value,
+      info.offset.y,
+      info.velocity.y,
+    );
+  });
 }
 
 function handlePanelHeaderWheel(panel: 'messages' | 'friends', event: WheelEvent) {
   if (!event.deltaY || panelWheelLocked) return;
   panelWheelLocked = true;
-  expandedSidebarPanel.value = sidebarPanelAfterDrag(
-    panel,
-    expandedSidebarPanel.value,
-    0,
-    Math.sign(event.deltaY) * 401,
-  );
+  moveSidebarPanels(() => {
+    expandedSidebarPanel.value = sidebarPanelAfterDrag(
+      panel,
+      expandedSidebarPanel.value,
+      0,
+      Math.sign(event.deltaY) * 401,
+    );
+  });
   panelWheelTimer = window.setTimeout(() => (panelWheelLocked = false), 250);
 }
 
 function toggleSidebarPanel(panel: 'messages' | 'friends') {
-  if (callsPanel.value === 'top') {
-    callsPanel.value = 'collapsed';
-    expandedSidebarPanel.value = panel;
-    return;
-  }
-  expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
+  moveSidebarPanels(() => {
+    if (callsPanel.value === 'top') {
+      callsPanel.value = 'collapsed';
+      expandedSidebarPanel.value = panel;
+      return;
+    }
+    expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
+  });
 }
 
 function isExistingFriend(result: UserSearchResult) {
@@ -2084,17 +2106,17 @@ async function respondToRingingCall(accept: boolean) {
 }
 
 function toggleCallsPanel() {
-  callsPanel.value = callsPanel.value === 'collapsed' ? 'middle' : 'collapsed';
+  moveSidebarPanels(() => (callsPanel.value = callsPanel.value === 'collapsed' ? 'middle' : 'collapsed'));
 }
 
 function handleCallsDragEnd(_event: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }) {
-  callsPanel.value = callsPanelAfterDrag(callsPanel.value, info.offset.y, info.velocity.y);
+  moveSidebarPanels(() => (callsPanel.value = callsPanelAfterDrag(callsPanel.value, info.offset.y, info.velocity.y)));
 }
 
 function handleCallsWheel(event: WheelEvent) {
   if (!event.deltaY || panelWheelLocked) return;
   panelWheelLocked = true;
-  callsPanel.value = callsPanelAfterDrag(callsPanel.value, 0, Math.sign(event.deltaY) * 401);
+  moveSidebarPanels(() => (callsPanel.value = callsPanelAfterDrag(callsPanel.value, 0, Math.sign(event.deltaY) * 401)));
   panelWheelTimer = window.setTimeout(() => (panelWheelLocked = false), 250);
 }
 

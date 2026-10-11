@@ -23,6 +23,7 @@ import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { layoutAfterTileClick } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
+import { playHaptic } from '@/services/haptics';
 import { showSystemNotification } from '@/services/notifications';
 import { type MeetingRoomAccess, SocialApiError, type UserStatus, socialApi } from '@/services/social-api';
 import { getServices } from '@/xstate/machines/webrtc/actors';
@@ -661,6 +662,9 @@ const handleToggleChat = () => {
   });
 };
 
+// Every layout change ticks, including automatic ones such as a screen share taking the stage.
+watch([viewMode, pinnedParticipantId], () => playHaptic('selection'));
+
 const handleSetViewMode = (mode: 'grid' | 'speaker') => {
   viewMode.value = mode;
 };
@@ -682,10 +686,12 @@ function refreshMediaAvailability() {
 }
 
 const handleSendMessage = (message: string, replyToId?: number) => {
+  playHaptic('light');
   sendChatMessage(message, replyToId);
 };
 
 const handleChatReaction = (messageId: number, emoji: string) => {
+  playHaptic('selection');
   sendChatReaction(messageId, emoji);
 };
 

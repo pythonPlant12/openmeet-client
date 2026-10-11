@@ -335,9 +335,9 @@ async function copyNickname(nickname: string) {
     ></Dialog
   ><Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/50 backdrop-blur-lg"
+      overlay-class="!z-[1050] bg-[#102F35]/50 backdrop-blur-lg"
       hide-close
-      class="w-auto max-w-[min(88dvw,42rem)] border-0 bg-transparent p-0 shadow-none"
+      class="!z-[1050] w-auto max-w-[min(88dvw,42rem)] border-0 bg-transparent p-0 shadow-none"
       ><DialogTitle class="sr-only">{{ profile?.name }} profile picture</DialogTitle
       ><img
         v-if="profile && avatarUrls[profile.id]"
@@ -348,8 +348,8 @@ async function copyNickname(nickname: string) {
     </HarborDialogContent> </Dialog
   ><Dialog :open="confirmationOpen" @update:open="emit('update:confirmationOpen', $event)"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#F2C7BE] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="!z-[1050] bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font !z-[1050] w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#F2C7BE] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       ><DialogHeader
         ><DialogTitle>Remove friend?</DialogTitle
         ><DialogDescription class="text-[#61777B]"

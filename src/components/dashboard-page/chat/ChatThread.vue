@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
+import { playHaptic } from '@/services/haptics';
 import type {
   ConversationMessage,
   ConversationMessageAttachment,
@@ -29,6 +30,7 @@ import {
   mentionReplacement,
   replyAttachmentLabel,
 } from './chat-composer';
+import { createScrollHaptics } from './scroll-haptics';
 
 // The message list and composer shared by conversations and the meeting chat.
 const props = withDefaults(
@@ -406,19 +408,24 @@ function isNearBottom() {
   return wasNearBottom;
 }
 
+const scrollHaptics = createScrollHaptics();
+
 function onPaneScroll() {
+  if (pane.value) scrollHaptics.onScroll(pane.value.scrollTop);
   if (pane.value && pane.value.scrollTop < 80) emit('scroll-top');
   if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(updateScrollState);
 }
 
 // The button stays during the smooth scroll and leaves through the scroll handler once near the bottom.
 function jumpToLatest() {
+  if (pane.value) scrollHaptics.start(pane.value.scrollTop);
   pane.value?.scrollTo({ top: pane.value.scrollHeight, behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
 }
 
-function scrollToMessage(sequence: number) {
+function scrollToMessage(sequence: number, { haptics = false } = {}) {
   const target = pane.value?.querySelector(`[data-message-sequence="${sequence}"]`);
   if (!target) return false;
+  if (haptics && pane.value) scrollHaptics.start(pane.value.scrollTop);
   target.scrollIntoView({ block: 'center', behavior: props.prefersReducedMotion ? 'auto' : 'smooth' });
   return true;
 }
@@ -426,7 +433,7 @@ function scrollToMessage(sequence: number) {
 function jumpToUnread() {
   const sequence = props.unreadStartSequence;
   if (sequence === null) return;
-  if (!scrollToMessage(sequence)) emit('load-unread', sequence);
+  if (!scrollToMessage(sequence, { haptics: true })) emit('load-unread', sequence);
 }
 
 // Keep a reader who was at the bottom pinned there when the composer or mobile keyboard changes
@@ -491,6 +498,7 @@ function flash(sequence: number) {
 function startReply(message: ConversationMessage) {
   // Only other people's messages can be quoted.
   if (props.isLocal(message)) return;
+  playHaptic('selection');
   replyTo.value = message;
   reactionPickerSequence.value = null;
   focusComposer();
@@ -512,7 +520,7 @@ async function copyMessage(message: ConversationMessage) {
 }
 
 function jumpToMessage(sequence: number) {
-  if (!scrollToMessage(sequence)) {
+  if (!scrollToMessage(sequence, { haptics: true })) {
     toast({ title: 'The quoted message is further back in the history.' });
     return;
   }
@@ -537,6 +545,7 @@ watch(reactionPickerSequence, (sequence) => {
 watch(
   () => props.threadKey,
   () => {
+    scrollHaptics.cancel();
     reactionPickerSequence.value = null;
     highlightedSequence.value = null;
     commandSelection.value = 0;
@@ -610,6 +619,7 @@ function isGroupedWithPrevious(index: number) {
 }
 
 onBeforeUnmount(() => {
+  scrollHaptics.cancel();
   window.clearTimeout(highlightTimer);
   window.clearTimeout(gifSearchTimer);
   if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
@@ -631,6 +641,8 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
         class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
         aria-label="Message history"
         @scroll.passive="onPaneScroll"
+        @wheel.passive="scrollHaptics.cancel()"
+        @touchstart.passive="scrollHaptics.cancel()"
       >
         <slot name="notice" />
         <div v-if="loadingOlder" class="flex justify-center pb-4">
