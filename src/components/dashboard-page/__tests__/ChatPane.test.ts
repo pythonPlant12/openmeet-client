@@ -2,6 +2,7 @@ import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
+import VoiceRecorder from '@/components/dashboard-page/chat/VoiceRecorder.vue';
 import type { Conversation, ConversationMessage, GroupMember } from '@/services/social-api';
 
 const conversation: Conversation = {
@@ -212,6 +213,9 @@ describe('ChatPane', () => {
       expect(composer.attributes('aria-controls')).toBe('gif-picker');
       expect(composer.attributes('aria-activedescendant')).toBe('gif-option-gif-1');
       expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+      const gifOption = wrapper.get('#gif-option-gif-1');
+      expect(gifOption.classes()).toContain('self-start');
+      expect(gifOption.attributes('style')).toContain('aspect-ratio: 320 / 180');
 
       await composer.trigger('keydown', { key: 'Enter' });
       await wrapper.get('form').trigger('submit');
@@ -514,5 +518,79 @@ describe('ChatPane', () => {
     pane.restoreScroll(scrollState);
 
     expect(history.scrollTop).toBe(400);
+  });
+
+  it('offers a voice message instead of send while nothing is typed and sends it as the only attachment', async () => {
+    vi.stubGlobal('MediaRecorder', class {});
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn() } });
+    try {
+      const wrapper = mountPane({ conversation, messages: [message] });
+      expect(wrapper.get('[data-voice-record-button]').isVisible()).toBe(true);
+      expect(wrapper.get('button[type="submit"]').isVisible()).toBe(false);
+
+      await wrapper.get('textarea').setValue('Hello');
+      await wrapper.setProps({ content: 'Hello' });
+      // Both stay mounted; typing only swaps which one is shown.
+      expect(wrapper.get('[data-voice-record-button]').isVisible()).toBe(false);
+      expect(wrapper.get('button[type="submit"]').isVisible()).toBe(true);
+
+      await wrapper.setProps({ content: '' });
+      const voice = new File(['voice'], 'voice-message-20261011-135407.webm', { type: 'audio/webm' });
+      wrapper.getComponent(VoiceRecorder).vm.$emit('send', voice);
+      expect(wrapper.emitted('update:attachments')?.slice(-1)[0]).toEqual([[voice]]);
+      expect(wrapper.emitted('send')).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps messages from re-rendering while the composer changes', async () => {
+    vi.stubGlobal('MediaRecorder', class {});
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn() } });
+    let messageUpdates = 0;
+    try {
+      const wrapper = mount(ChatPane, {
+        props: {
+          content: '',
+          conversation,
+          pendingFriend: null,
+          selectedFriend: null,
+          selectedTitle: 'Conversation',
+          selectedIsGroup: false,
+          friendAvatarUrls: {},
+          isFriendAvatarLoading: () => false,
+          isGroupAvatarLoading: () => false,
+          messages: [message, { ...message, sequence: 2, content: 'Again' }],
+          loading: false,
+          loadingOlder: false,
+          sending: false,
+          callActive: false,
+          notificationWarning: false,
+          canRequestNotificationPermission: false,
+          isDesktop: false,
+          prefersReducedMotion: true,
+          shouldAnimate: () => false,
+          isLocal: () => false,
+          formatTime: () => '12:00 PM',
+        },
+        global: {
+          stubs: { EmojiPickerButton: { template: '<div />' } },
+          mixins: [
+            {
+              updated(this: { $options: { __name?: string } }) {
+                if (this.$options.__name === 'ChatMessage') messageUpdates += 1;
+              },
+            },
+          ],
+        },
+      });
+
+      await wrapper.setProps({ content: 'Typing' });
+      wrapper.getComponent(VoiceRecorder).vm.$emit('update:active', true);
+      await wrapper.vm.$nextTick();
+      expect(messageUpdates).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

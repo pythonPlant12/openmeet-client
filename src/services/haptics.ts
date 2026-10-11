@@ -23,3 +23,12 @@ export function playHaptic(feedback: HapticFeedback) {
   }
   navigator.vibrate?.(VIBRATION_PATTERNS[feedback]);
 }
+
+/**
+ * Readies the native haptics hardware before a gesture that plays feedback in quick succession, so
+ * its first feedback has no start-up delay. Browsers need no preparation.
+ */
+export function prepareHaptics() {
+  if (!isTauri()) return;
+  invoke('prepare_haptics').catch((error) => console.error('[Haptics] Failed to prepare feedback:', error));
+}

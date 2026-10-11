@@ -1,5 +1,7 @@
 import type { ConversationMessage, GroupMember, MessageReplyPreview } from '@/services/social-api';
 
+import { VOICE_MESSAGE_LABEL, isVoiceMessageFileName } from './voice-message';
+
 export const CHAT_COMMANDS = [{ name: 'giphy', description: 'Search GIFs' }];
 
 export function activeMention(value: string, caret: number) {
@@ -38,7 +40,8 @@ export function replyAttachmentLabel(
   const attachments = 'attachments' in reply ? reply.attachments : undefined;
   const attachmentFileName = 'attachmentFileName' in reply ? reply.attachmentFileName : attachments?.[0]?.fileName;
   if (!attachmentFileName) return '';
+  const label = isVoiceMessageFileName(attachmentFileName) ? VOICE_MESSAGE_LABEL : attachmentFileName;
   const attachmentCount = 'attachmentCount' in reply ? reply.attachmentCount : attachments?.length;
   const extraAttachments = Math.max((attachmentCount ?? 1) - 1, 0);
-  return extraAttachments ? `${attachmentFileName}, +${extraAttachments}` : attachmentFileName;
+  return extraAttachments ? `${label}, +${extraAttachments}` : label;
 }

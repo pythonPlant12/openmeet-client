@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowUp, FileText, Image, Paperclip, Reply, X } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, FileText, Image, Mic, Paperclip, Reply, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import ChatMessage from '@/components/dashboard-page/chat/ChatMessage.vue';
 import EmojiPickerButton from '@/components/dashboard-page/chat/EmojiPickerButton.vue';
 import FilePreview from '@/components/dashboard-page/chat/FilePreview.vue';
+import VoiceRecorder from '@/components/dashboard-page/chat/VoiceRecorder.vue';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -31,6 +32,7 @@ import {
   replyAttachmentLabel,
 } from './chat-composer';
 import { createScrollHaptics } from './scroll-haptics';
+import { VOICE_MESSAGE_LABEL, canRecordVoice, isAudioAttachment, isVoiceMessageFileName } from './voice-message';
 
 // The message list and composer shared by conversations and the meeting chat.
 const props = withDefaults(
@@ -52,6 +54,8 @@ const props = withDefaults(
     loadAttachment?: (path: string) => void;
     unreadStartSequence?: number | null;
     attachmentsEnabled?: boolean;
+    /** Voice messages are sent as audio attachments, so they also need attachments enabled. */
+    voiceMessagesEnabled?: boolean;
     commandsEnabled?: boolean;
     groupMembers?: GroupMember[];
     groupMembersHasMore?: boolean;
@@ -79,6 +83,7 @@ const props = withDefaults(
     loadAttachment: () => undefined,
     unreadStartSequence: null,
     attachmentsEnabled: true,
+    voiceMessagesEnabled: true,
     commandsEnabled: true,
     groupMembers: () => [],
     groupMembersHasMore: false,
@@ -123,6 +128,7 @@ const gifSelection = ref(0);
 const mentionMenuDismissed = ref(false);
 let gifSearchTimer: number | undefined;
 
+const voiceRecorderActive = ref(false);
 const MAX_ATTACHMENTS = 10;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
@@ -204,11 +210,61 @@ function selectGif(gif: GifSearchResult) {
   emit('select-gif', gif);
 }
 
+// With nothing typed or attached, the send button becomes the voice message button. It stays while
+// a recording is in progress, whatever happens to the text field underneath it.
+// The recorder stays mounted whenever voice messages are possible, and the two buttons swap by
+// visibility: mounting the recorder when a press starts made the first frames of recording stutter.
+const voiceMessagesAvailable = computed(
+  () => props.attachmentsEnabled && props.voiceMessagesEnabled && canRecordVoice(),
+);
+const showVoiceRecorder = computed(
+  () =>
+    voiceRecorderActive.value ||
+    (voiceMessagesAvailable.value &&
+      !sendFlightActive.value &&
+      !content.value.trim() &&
+      !attachments.value.length),
+);
+
+// A voice message goes out as the message's only attachment, keeping any reply that was selected.
+function sendVoiceMessage(file: File) {
+  attachments.value = [file];
+  emit('send');
+}
+
+const canSend = computed(
+  () =>
+    !giphyCommandActive.value &&
+    (!!content.value.trim() || (props.attachmentsEnabled && attachments.value.length > 0)) &&
+    !props.loading &&
+    !props.sending,
+);
+// Each send replaces the arrow: the sent one flies out of the top and a fresh one rises in.
+const sendAnimationKey = ref(0);
+// The send button stays for the arrow's flight, even when the sent message clears the composer
+// and would otherwise swap it for the microphone at once.
+const SEND_FLIGHT_MS = 420;
+const sendFlightActive = ref(false);
+let sendFlightTimer: number | undefined;
+
+function sendFromComposer() {
+  if (canSend.value) {
+    sendAnimationKey.value += 1;
+    if (!props.prefersReducedMotion) {
+      sendFlightActive.value = true;
+      window.clearTimeout(sendFlightTimer);
+      sendFlightTimer = window.setTimeout(() => (sendFlightActive.value = false), SEND_FLIGHT_MS);
+    }
+  }
+  emit('send');
+}
+
 function submitComposer() {
-  if (!giphyCommandActive.value) emit('send');
+  if (!giphyCommandActive.value) sendFromComposer();
 }
 
 function handleComposerKeydown(event: KeyboardEvent) {
+  if (voiceRecorderActive.value) return;
   if (commandMenuOpen.value) {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -279,7 +335,7 @@ function handleComposerKeydown(event: KeyboardEvent) {
 
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
-    emit('send');
+    sendFromComposer();
   } else if (event.key === 'Escape') {
     replyTo.value = null;
   }
@@ -622,6 +678,7 @@ onBeforeUnmount(() => {
   scrollHaptics.cancel();
   window.clearTimeout(highlightTimer);
   window.clearTimeout(gifSearchTimer);
+  window.clearTimeout(sendFlightTimer);
   if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
   paneResizeObserver?.disconnect();
   listResizeObserver?.disconnect();
@@ -791,10 +848,12 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
                 class="aspect-[4/3] w-full bg-[#102F35] object-cover"
               />
               <div v-else class="flex aspect-[4/3] items-center justify-center bg-[#F3F5F4] text-[#0B7A75]">
-                <FileText class="size-7" />
+                <Mic v-if="isAudioAttachment(attachment.type)" class="size-7" /><FileText v-else class="size-7" />
               </div>
               <div class="min-w-0 px-2 py-1.5">
-                <p class="truncate text-xs font-semibold">{{ attachment.name }}</p>
+                <p class="truncate text-xs font-semibold">
+                  {{ isVoiceMessageFileName(attachment.name) ? VOICE_MESSAGE_LABEL : attachment.name }}
+                </p>
                 <p class="text-[0.6875rem] text-[#61777B]">{{ formatFileSize(attachment.size) }}</p>
               </div>
               <button
@@ -887,7 +946,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
         <p v-else-if="gifSearchLoading" class="px-2 py-1 text-xs text-[#61777B]">Searching Giphy...</p>
         <p v-else-if="gifSearchError" class="px-2 py-1 text-xs text-[#A34A3A]">{{ gifSearchError }}</p>
         <p v-else-if="!gifResults.length" class="px-2 py-1 text-xs text-[#61777B]">No GIFs found.</p>
-        <div v-else class="grid max-h-52 grid-cols-3 gap-1 overflow-y-auto sm:grid-cols-4">
+        <div v-else class="grid max-h-52 grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-1 overflow-y-auto">
           <button
             v-for="(gif, index) in gifResults"
             :key="gif.id"
@@ -895,7 +954,8 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             type="button"
             role="option"
             :aria-selected="index === gifSelection"
-            class="relative aspect-video overflow-hidden rounded-lg bg-[#EDF8F5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B7A75]"
+            class="relative w-full self-start overflow-hidden rounded-lg bg-[#EDF8F5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B7A75]"
+            :style="{ aspectRatio: `${gif.width} / ${gif.height}` }"
             :aria-label="`Attach GIF: ${gif.title || 'Giphy result'}`"
             :disabled="sending"
             @focus="gifSelection = index"
@@ -905,7 +965,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
               v-if="gifPreviewUrls[gif.id]"
               :src="gifPreviewUrls[gif.id]"
               :alt="gif.title"
-              class="size-full object-cover"
+              class="size-full object-contain"
             />
             <LoadingRipple
               v-else-if="isGifPreviewLoading(gif.id)"
@@ -914,7 +974,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           </button>
         </div>
       </div>
-      <form class="flex items-end gap-2" @submit.prevent="submitComposer">
+      <form class="relative flex items-end gap-2" @submit.prevent="submitComposer">
         <input ref="fileInput" type="file" multiple class="sr-only" @change="addAttachments" />
         <input
           ref="mediaInput"
@@ -924,6 +984,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           class="sr-only"
           @change="addAttachments"
         />
+        <!-- While recording, the recorder's bar covers these controls, so they stay mounted underneath. -->
         <DropdownMenu v-if="attachmentsEnabled">
           <DropdownMenuTrigger as-child>
             <button
@@ -963,7 +1024,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           rows="1"
           maxlength="2000"
           :placeholder="placeholder"
-          :readonly="sending"
+          :readonly="sending || voiceRecorderActive"
           :aria-busy="sending"
           :aria-expanded="!!activePickerId"
           :aria-controls="activePickerId"
@@ -971,6 +1032,8 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           aria-autocomplete="list"
           aria-label="Message"
           class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-transparent bg-[#F3F5F4] px-3 py-2.5 text-sm text-[#102F35] placeholder:text-[#8A9C9E] focus-visible:border-[#D8E7E3] focus-visible:bg-white focus-visible:outline-none focus-visible:ring-0"
+          :class="{ 'pointer-events-none opacity-0': voiceRecorderActive }"
+          :aria-hidden="voiceRecorderActive || undefined"
           @input="updateComposerCaret"
           @click="updateComposerCaret"
           @keyup="updateComposerCaret"
@@ -984,18 +1047,46 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
         />
         <!-- Sending keeps the composer focused, so the mobile keyboard stays open: the read-only state above
              replaces `disabled`, which would blur it, and the button below never takes focus. -->
+        <VoiceRecorder
+          v-if="voiceMessagesAvailable"
+          v-model:active="voiceRecorderActive"
+          :visible="showVoiceRecorder"
+          :disabled="loading || sending"
+          :prefers-reduced-motion="prefersReducedMotion"
+          @send="sendVoiceMessage"
+        />
         <Button
+          v-show="!showVoiceRecorder"
           type="submit"
-          class="harbor-primary-action h-11 rounded-xl bg-[#0B7A75] px-4 text-white"
+          size="icon"
+          variant="ghost"
+          class="harbor-soft-action relative size-11 shrink-0 overflow-hidden rounded-xl bg-[#F3F5F4] text-[#0B7A75]"
+          :aria-label="sending ? 'Sending...' : sendLabel"
+          :aria-busy="sending"
+          :title="sending ? 'Sending...' : sendLabel"
           @pointerdown.prevent
-          :disabled="
-            giphyCommandActive ||
-            (!content.trim() && (!attachmentsEnabled || !attachments.length)) ||
-            loading ||
-            sending
-          "
-          >{{ sending ? 'Sending...' : sendLabel }}</Button
-        >
+          :disabled="!canSend"
+          ><AnimatePresence :initial="false"
+            ><motion.span
+              :key="sendAnimationKey"
+              data-send-arrow
+              class="absolute inset-0 flex items-center justify-center"
+              :initial="prefersReducedMotion ? false : { y: 22, opacity: 0, scale: 0.6 }"
+              :animate="
+                sending && !prefersReducedMotion
+                  ? { y: [0, -3, 0], opacity: 1, scale: 1, transition: { y: { repeat: Infinity, duration: 0.7 } } }
+                  : { y: 0, opacity: 1, scale: 1 }
+              "
+              :exit="
+                prefersReducedMotion
+                  ? undefined
+                  : { y: -26, opacity: 0, scale: 0.8, transition: { duration: 0.18, ease: 'easeIn' } }
+              "
+              :transition="
+                prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 30, delay: 0.08 }
+              "
+              ><ArrowUp class="size-5" /></motion.span></AnimatePresence
+        ></Button>
       </form>
     </div>
   </div>

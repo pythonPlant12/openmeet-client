@@ -42,6 +42,10 @@ import {
   shouldApplyDashboardRequest,
   sidebarPanelAfterDrag,
 } from '@/pages/dashboard-group-state';
+import {
+  isVoiceMessageFileName,
+  shareDecodedVoiceMessage,
+} from '@/components/dashboard-page/chat/voice-message';
 import { playHaptic } from '@/services/haptics';
 import { getSystemNotificationPermission, requestSystemNotificationPermission } from '@/services/notifications';
 import {
@@ -224,6 +228,7 @@ watch(messages, (nextMessages) => {
       if (
         !attachment.contentType.startsWith('image/') &&
         !attachment.contentType.startsWith('video/') &&
+        !attachment.contentType.startsWith('audio/') &&
         attachment.contentType !== 'application/pdf'
       )
         return false;
@@ -577,11 +582,91 @@ function unreadCount(conversation: Conversation) {
   return conversation.unreadCount + (conversationActivity.value[conversation.id]?.unreadCount ?? 0);
 }
 
-function appendMessage(message: ConversationMessage) {
+// A voice message shows in the thread as soon as it is recorded, while it uploads. Pending messages
+// use sequences above any real one, so they stay last when realtime updates re-sort the thread, and
+// play from the local recording. The sent message replaces its pending copy whichever way it
+// arrives first: the upload response or a realtime update, matched by the unique recording name.
+const PENDING_SEQUENCE_BASE = Number.MAX_SAFE_INTEGER - 1_000_000;
+let pendingSequence = PENDING_SEQUENCE_BASE;
+const pendingMessageSequences = new Set<number>();
+// Sent messages that replaced a pending copy, which already played the entrance animation.
+const settledVoiceSequences = new Set<number>();
+
+function isPendingMessage(message: ConversationMessage) {
+  return pendingMessageSequences.has(message.sequence);
+}
+
+function settlePendingVoiceMessages(list: ConversationMessage[]) {
+  if (!pendingMessageSequences.size) return list;
+  const delivered = new Map<string, ConversationMessage>();
+  list.forEach((message) => {
+    const fileName = message.attachments?.[0]?.fileName;
+    if (!isPendingMessage(message) && fileName && isVoiceMessageFileName(fileName)) delivered.set(fileName, message);
+  });
+  return list.filter((message) => {
+    if (!isPendingMessage(message)) return true;
+    const pendingAttachment = message.attachments?.[0];
+    const sent = pendingAttachment && delivered.get(pendingAttachment.fileName);
+    const sentAttachment = sent?.attachments?.[0];
+    if (!pendingAttachment || !sent || !sentAttachment) return true;
+    // The sent message keeps the local recording and its waveform instead of downloading them again.
+    const localUrl = messageAttachmentCache.urls.value[pendingAttachment.url];
+    if (localUrl && !messageAttachmentCache.urls.value[sentAttachment.url]) {
+      messageAttachmentCache.urls.value = { ...messageAttachmentCache.urls.value, [sentAttachment.url]: localUrl };
+    }
+    shareDecodedVoiceMessage(pendingAttachment.url, sentAttachment.url);
+    pendingMessageSequences.delete(message.sequence);
+    settledVoiceSequences.add(sent.sequence);
+    return false;
+  });
+}
+
+function appendMessage(message: ConversationMessage, { animate = true } = {}) {
   if (messages.value.some((item) => item.sequence === message.sequence)) return;
-  animatedMessageSequences.value = new Set([...animatedMessageSequences.value, message.sequence]);
-  messages.value = [...messages.value, message];
+  if (animate) animatedMessageSequences.value = new Set([...animatedMessageSequences.value, message.sequence]);
+  messages.value = settlePendingVoiceMessages([...messages.value, message]);
   updateConversationActivity(message);
+}
+
+function showPendingVoiceMessage(conversationId: string, file: File, replyTo: ConversationMessage | null) {
+  const user = currentUser.value;
+  if (!user) return null;
+  pendingSequence += 1;
+  const sequence = pendingSequence;
+  const path = `pending-voice-message:${sequence}`;
+  messageAttachmentCache.urls.value = { ...messageAttachmentCache.urls.value, [path]: URL.createObjectURL(file) };
+  pendingMessageSequences.add(sequence);
+  appendMessage({
+    sequence,
+    conversationId,
+    senderId: user.id,
+    senderName: user.name,
+    senderNickname: user.nickname ?? undefined,
+    content: '',
+    createdAt: new Date().toISOString(),
+    replyTo: replyTo
+      ? {
+          sequence: replyTo.sequence,
+          senderId: replyTo.senderId,
+          senderName: replyTo.senderName,
+          senderNickname: replyTo.senderNickname ?? '',
+          content: replyTo.content,
+          attachmentFileName: replyTo.attachments?.[0]?.fileName ?? null,
+          attachmentCount: replyTo.attachments?.length || null,
+        }
+      : null,
+    reactions: [],
+    attachments: [{ id: path, fileName: file.name, contentType: file.type, byteSize: file.size, url: path }],
+  });
+  return { sequence, path };
+}
+
+function removePendingMessage(pending: { sequence: number; path: string }) {
+  pendingMessageSequences.delete(pending.sequence);
+  messages.value = messages.value.filter((message) => message.sequence !== pending.sequence);
+  const { [pending.path]: localUrl, ...urls } = messageAttachmentCache.urls.value;
+  if (localUrl) URL.revokeObjectURL(localUrl);
+  messageAttachmentCache.urls.value = urls;
 }
 
 function shouldAnimateMessage(message: ConversationMessage) {
@@ -605,12 +690,16 @@ async function loadLatestMessages(conversationId: string) {
     const newMessages = latestMessages.filter((message) => !previousSequences.has(message.sequence));
     const mergedMessages = new Map(previousMessages.map((message) => [message.sequence, message]));
     latestMessages.forEach((message) => mergedMessages.set(message.sequence, message));
-    messages.value = [...mergedMessages.values()].sort((left, right) => left.sequence - right.sequence);
+    messages.value = settlePendingVoiceMessages(
+      [...mergedMessages.values()].sort((left, right) => left.sequence - right.sequence),
+    );
     if (!previousMessages.length) unreadStartSequence.value = response.firstUnreadSequence;
     if (previousMessages.length && newMessages.length) {
       animatedMessageSequences.value = new Set([
         ...animatedMessageSequences.value,
-        ...newMessages.map((message) => message.sequence),
+        ...newMessages
+          .map((message) => message.sequence)
+          .filter((sequence) => !settledVoiceSequences.has(sequence)),
       ]);
     } else if (!previousMessages.length) {
       animatedMessageSequences.value = new Set();
@@ -704,8 +793,17 @@ async function sendMessage() {
 
   clearFeedback();
   isSendingMessage.value = true;
+  const replyTo = messageReplyTo.value;
+  const isVoiceMessage = !content && attachments.length === 1 && isVoiceMessageFileName(attachments[0]!.name);
+  const pending = isVoiceMessage ? showPendingVoiceMessage(conversationId, attachments[0]!, replyTo) : null;
+  if (pending) {
+    messageAttachments.value = [];
+    messageReplyTo.value = null;
+    await nextTick();
+    chatPane.value?.scrollToBottom('smooth');
+  }
   try {
-    const replyToSequence = messageReplyTo.value?.sequence;
+    const replyToSequence = replyTo?.sequence;
     const message = attachments.length
       ? await socialApi.createConversationMessageWithAttachments(
           token,
@@ -715,11 +813,16 @@ async function sendMessage() {
           replyToSequence,
         )
       : await socialApi.createConversationMessage(token, conversationId, content, replyToSequence);
-    if (selectedConversation.value?.id !== conversationId) return;
+    if (selectedConversation.value?.id !== conversationId) {
+      if (pending) removePendingMessage(pending);
+      return;
+    }
 
     playHaptic('light');
-    appendMessage(message);
+    // A pending voice message already played its entrance, so its sent copy takes its place quietly.
+    appendMessage(message, { animate: !pending });
     if (selectedConversation.value?.id === conversationId) addConversation(selectedConversation.value);
+    if (pending) return;
     messageContent.value = '';
     messageAttachments.value = [];
     messageReplyTo.value = null;
@@ -729,6 +832,12 @@ async function sendMessage() {
     console.error('[Dashboard] Failed to send message:', error);
     playHaptic('error');
     feedbackError.value = 'Could not send message. Try again.';
+    // The recording goes back to the composer, where sending it again retries the upload.
+    if (pending && selectedConversation.value?.id === conversationId) {
+      removePendingMessage(pending);
+      messageAttachments.value = attachments;
+      messageReplyTo.value = replyTo;
+    }
   } finally {
     isSendingMessage.value = false;
   }
@@ -737,7 +846,8 @@ async function sendMessage() {
 // Reactions update optimistically; the server's summary replaces the guess, and a failure restores it.
 async function toggleMessageReaction(message: ConversationMessage, emoji: string) {
   const token = accessToken.value;
-  if (!token) return;
+  // A message that is still uploading has no server copy to react to yet.
+  if (!token || isPendingMessage(message)) return;
   const conversationId = message.conversationId;
   const request = (reactionRequestByMessage.get(message.sequence) ?? 0) + 1;
   reactionRequestByMessage.set(message.sequence, request);
