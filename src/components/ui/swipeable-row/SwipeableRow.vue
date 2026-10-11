@@ -3,6 +3,8 @@ import { useMediaQuery } from '@vueuse/core';
 import { animate } from 'motion-v';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
+import { playHaptic } from '@/services/haptics';
+
 import { activeSwipeRowId } from './state';
 
 // Horizontal swipe row: touch, pen, mouse drag, and trackpad horizontal scroll all move the content to
@@ -253,10 +255,11 @@ watch(activeSwipeRowId, (id) => {
 watch(isDragging, (dragging) => emit('dragging', dragging));
 
 watch([isFullSwipeArmed, isTrailingFullSwipeArmed], ([leading, trailing]) => {
-  if ((leading || trailing) && isDragging.value) navigator.vibrate?.(10);
+  if ((leading || trailing) && isDragging.value) playHaptic('light');
 });
 
 watch(openSide, (side) => {
+  if (side) playHaptic('selection');
   if (side) document.addEventListener('pointerdown', onDocumentPointerDown, true);
   else document.removeEventListener('pointerdown', onDocumentPointerDown, true);
 });

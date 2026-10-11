@@ -189,6 +189,38 @@ onBeforeUnmount(clearLongPress);
               size="icon"
               variant="ghost"
               class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
+              aria-label="Create or join group"
+              title="Create or join group"
+              ><UsersRound class="size-4"
+            /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            :side-offset="8"
+            class="harbor-action-menu min-w-44 rounded-2xl border-[#D8E7E3] bg-white p-1.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14)]"
+          >
+            <DropdownMenuItem
+              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+              @select="emit('join-group')"
+            >
+              <LogIn class="size-4" />
+              Join group
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
+              @select="emit('create-group')"
+            >
+              <UsersRound class="size-4" />
+              Create group
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu :modal="false">
+          <DropdownMenuTrigger as-child>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
               aria-label="Meeting options"
               title="Meeting options"
               ><Phone class="size-4"
@@ -213,38 +245,6 @@ onBeforeUnmount(clearLongPress);
             >
               <Video class="size-4" />
               Start meeting
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <DropdownMenu :modal="false">
-          <DropdownMenuTrigger as-child>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
-              aria-label="Create or join group"
-              title="Create or join group"
-              ><UsersRound class="size-4"
-            /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            :side-offset="8"
-            class="harbor-action-menu min-w-44 rounded-2xl border-[#D8E7E3] bg-white p-1.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14)]"
-          >
-            <DropdownMenuItem
-              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-              @select="emit('join-group')"
-            >
-              <LogIn class="size-4" />
-              Join group
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-              @select="emit('create-group')"
-            >
-              <UsersRound class="size-4" />
-              Create group
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
