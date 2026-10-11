@@ -75,6 +75,7 @@ const systemAlerts = new SystemAlerts({
     router.currentRoute.value.name === 'dashboard' && activeConversationId === conversationId,
   canHandleActions: () => isAuthenticated.value,
   onAction: (action) => void handleNotificationAction(action),
+  loadAvatar: (path) => socialApi.loadAvatar(authActor.snapshot.value.context.accessToken ?? '', path),
 });
 
 function resolveIncomingCall(callId: string) {

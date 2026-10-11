@@ -15,8 +15,10 @@ import { SwipeableRow } from '@/components/ui/swipeable-row';
 import type { ConversationMessage, ConversationMessageAttachment } from '@/services/social-api';
 
 import MessageContent from './MessageContent.vue';
+import VoiceMessagePlayer from './VoiceMessagePlayer.vue';
 import { replyAttachmentLabel } from './chat-composer';
 import { QUICK_REACTIONS } from './reactions';
+import { isAudioAttachment } from './voice-message';
 
 const props = defineProps<{
   message: ConversationMessage;
@@ -63,6 +65,10 @@ const isMenuOpen = ref(false);
 const isLifted = computed(() => props.replySelected || props.reactionPickerOpen || isMenuOpen.value);
 const attachments = computed(() => props.message.attachments ?? []);
 const visibleAttachments = computed(() => attachments.value.slice(0, 4));
+// A lone voice message shows its time beside the duration instead of on its own row.
+const voiceOnly = computed(
+  () => !props.message.content && attachments.value.length === 1 && isAudioAttachment(attachments.value[0]!.contentType),
+);
 const hiddenAttachmentCount = computed(() => Math.max(attachments.value.length - visibleAttachments.value.length, 0));
 const quotedAttachmentLabel = computed(() =>
   props.message.replyTo ? replyAttachmentLabel(props.message.replyTo) : '',
@@ -185,12 +191,24 @@ function formatFileSize(byteSize: number) {
               </button>
               <div
                 v-if="attachments.length"
-                class="mb-1.5 grid gap-1.5"
-                :class="visibleAttachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2'"
+                class="grid gap-1.5"
+                :class="[visibleAttachments.length === 1 ? 'grid-cols-1' : 'grid-cols-2', { 'mb-1.5': !voiceOnly }]"
               >
                 <template v-for="(attachment, index) in visibleAttachments" :key="attachment.id">
+                  <VoiceMessagePlayer
+                    v-if="isAudioAttachment(attachment.contentType)"
+                    :class="{ 'col-span-2': visibleAttachments.length > 1 }"
+                    :attachment="attachment"
+                    :url="attachmentUrls[attachment.url]"
+                    :loading="isAttachmentLoading(attachment.url)"
+                    :error="hasAttachmentError(attachment.url)"
+                    :local="local"
+                    :sent-at="voiceOnly ? message.createdAt : undefined"
+                    :format-time="formatTime"
+                    @load="loadAttachment(attachment.url)"
+                  />
                   <button
-                    v-if="isImage(attachment.contentType) && attachmentUrls[attachment.url]"
+                    v-else-if="isImage(attachment.contentType) && attachmentUrls[attachment.url]"
                     type="button"
                     class="relative block overflow-hidden rounded-xl bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
                     @click="emit('preview', attachments, index)"
@@ -273,6 +291,7 @@ function formatFileSize(byteSize: number) {
               </div>
               <MessageContent v-if="message.content" :content="message.content" :local="local" />
               <time
+                v-if="!voiceOnly"
                 :datetime="message.createdAt"
                 class="mt-0.5 block text-right text-[0.6875rem] tabular-nums"
                 :class="local ? 'text-white/70' : 'text-[#8A9C9E]'"

@@ -16,6 +16,10 @@ import type { AlertCallKind, SocialAlert } from '@/services/social-events';
 type MessageAlert = Extract<SocialAlert, { kind: 'message' }>;
 type CallAlert = Extract<SocialAlert, { kind: 'incomingCall' }>;
 
+// A slow avatar must not hold back the notification for long; past this, it shows without one.
+const AVATAR_TIMEOUT_MS = 2_000;
+const APP_ICON = '/favicon.svg';
+
 export interface SystemAlertsOptions {
   translate: (key: string, values?: Record<string, string>) => string;
   /** The conversation is open in the dashboard, so the user already sees its messages. */
@@ -23,12 +27,23 @@ export interface SystemAlertsOptions {
   /** Responses stay queued in the native app until the client can act on them (signed in). */
   canHandleActions: () => boolean;
   onAction: (action: NotificationAction) => void;
+  /** Fetches an avatar thumbnail; avatars need the user's access token. */
+  loadAvatar: (path: string) => Promise<Blob>;
 }
 
 interface RingingCall {
   callKind: AlertCallKind;
   alertedAt: number;
   webNotification: Notification | null;
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function isAppInFront() {
@@ -46,19 +61,27 @@ export class SystemAlerts {
   private readonly calls = new Map<string, RingingCall>();
   private readonly ringtone = new Ringtone();
   private draining = false;
+  private generation = 0;
 
   constructor(private readonly options: SystemAlertsOptions) {}
 
   async start() {
     if (!this.native || this.nativeSession) return;
     try {
-      this.nativeSession = await startNativeNotifications(this.actionLabels(), () => void this.drainActions());
+      this.nativeSession = await startNativeNotifications(
+        this.actionLabels(),
+        () => void this.drainActions(),
+        (callId) => {
+          if (this.calls.has(callId)) this.ringtone.start();
+        },
+      );
     } catch (error) {
       console.error('[SystemAlerts] Native notifications are unavailable:', error);
     }
   }
 
   stop() {
+    this.generation += 1;
     this.dismissAllCalls();
     this.nativeSession?.stop();
     this.nativeSession = null;
@@ -116,56 +139,100 @@ export class SystemAlerts {
     const text = alert.preview || (alert.hasAttachments ? translate('notifications.attachmentBody') : '');
     const title = alert.conversationTitle ?? alert.senderName;
     const body = alert.conversationTitle ? `${alert.senderName}: ${text}` : text;
+    const generation = this.generation;
 
     if (this.nativeSession) {
-      showNativeMessageNotification({
-        conversationId: alert.conversationId,
-        sequence: alert.sequence,
-        title,
-        body,
-      }).catch((error) => console.error('[SystemAlerts] Failed to show message notification:', error));
+      void this.avatarBytes(alert.avatarUrl)
+        .then((avatar) => {
+          if (generation !== this.generation || !this.nativeSession) return;
+          return showNativeMessageNotification({
+            conversationId: alert.conversationId,
+            sequence: alert.sequence,
+            title,
+            body,
+            avatar,
+          });
+        })
+        .catch((error) => console.error('[SystemAlerts] Failed to show message notification:', error));
       return;
     }
     // In a browser, the open tab already shows new messages.
     if (document.visibilityState === 'visible') return;
-    showSystemNotification(title, { body, icon: '/favicon.svg', tag: `openmeet-message-${alert.conversationId}` }, () =>
-      this.options.onAction({ action: 'openConversation', conversationId: alert.conversationId }),
-    );
+    void this.avatarIcon(alert.avatarUrl).then((icon) => {
+      if (generation !== this.generation || isAppInFront()) return;
+      showSystemNotification(title, { body, icon, tag: `openmeet-message-${alert.conversationId}` }, () =>
+        this.options.onAction({ action: 'openConversation', conversationId: alert.conversationId }),
+      );
+    });
   }
 
   private showCall(alert: CallAlert) {
     if (this.calls.has(alert.callId)) return;
     const { translate } = this.options;
-    const title = translate('notifications.incomingCallTitle');
+    const title = alert.conversationTitle ?? alert.callerName;
     const body = alert.conversationTitle
-      ? translate('notifications.incomingGroupCallBody', { name: alert.callerName, group: alert.conversationTitle })
-      : translate('dashboard.isCalling', { name: alert.callerName });
+      ? translate('notifications.groupCallBody', { name: alert.callerName })
+      : translate('notifications.callBody');
     const call: RingingCall = { callKind: alert.callKind, alertedAt: Date.now(), webNotification: null };
     this.calls.set(alert.callId, call);
+    const generation = this.generation;
 
     // In front, the app rings in its own UI (the dashboard Calls header or a toast).
     const notify = !isAppInFront();
-    if (this.nativeSession) {
-      if (notify) {
-        showNativeCallNotification({ callId: alert.callId, callKind: alert.callKind, title, body }).catch((error) =>
-          console.error('[SystemAlerts] Failed to show call notification:', error),
-        );
-      }
-      if (!notify || !this.nativeSession.ringsNatively) this.ringtone.start();
+    const nativeSession = this.nativeSession;
+    if (nativeSession && (!notify || !nativeSession.ringsNatively)) this.ringtone.start();
+    if (!notify) return;
+    // The call can stop ringing while its avatar loads; it is then not shown at all.
+    const isRinging = () => this.calls.get(alert.callId) === call;
+    if (nativeSession) {
+      void this.avatarBytes(alert.avatarUrl)
+        .then((avatar) => {
+          if (generation !== this.generation || !this.nativeSession || !isRinging()) return;
+          return showNativeCallNotification({ callId: alert.callId, callKind: alert.callKind, title, body, avatar });
+        })
+        .catch((error) => console.error('[SystemAlerts] Failed to show call notification:', error));
       return;
     }
-    if (!notify) return;
-    call.webNotification = showSystemNotification(
-      title,
-      { body, icon: '/favicon.svg', tag: `openmeet-call-${alert.callId}`, requireInteraction: true },
-      // Web notifications have no buttons: a click on a conversation call answers it, as before.
-      () =>
-        this.options.onAction({
-          action: alert.callKind === 'session' ? 'answerCall' : 'openCall',
-          callId: alert.callId,
-          callKind: alert.callKind,
-        }),
-    );
+    void this.avatarIcon(alert.avatarUrl).then((icon) => {
+      if (generation !== this.generation || !isRinging()) return;
+      call.webNotification = showSystemNotification(
+        title,
+        { body, icon, tag: `openmeet-call-${alert.callId}`, requireInteraction: true },
+        // Web notifications have no buttons: a click on a conversation call answers it, as before.
+        () =>
+          this.options.onAction({
+            action: alert.callKind === 'session' ? 'answerCall' : 'openCall',
+            callId: alert.callId,
+            callKind: alert.callKind,
+          }),
+      );
+    });
+  }
+
+  /** Native notifications take the avatar's bytes. Null when there is none, or it fails or takes too long. */
+  private async avatarBytes(path: string | null) {
+    const avatar = await this.loadAvatar(path);
+    return avatar && [...new Uint8Array(await avatar.arrayBuffer())];
+  }
+
+  /** Web Notifications take an icon URL; the avatar is inlined because it needs the access token. */
+  private async avatarIcon(path: string | null) {
+    const avatar = await this.loadAvatar(path);
+    return avatar ? blobToDataUrl(avatar).catch(() => APP_ICON) : APP_ICON;
+  }
+
+  private async loadAvatar(path: string | null): Promise<Blob | null> {
+    if (!path) return null;
+    let timer: number | undefined;
+    const timeout = new Promise<null>((resolve) => (timer = window.setTimeout(() => resolve(null), AVATAR_TIMEOUT_MS)));
+    try {
+      return await Promise.race([this.options.loadAvatar(path), timeout]);
+    } catch (error) {
+      console.error('[SystemAlerts] Failed to load notification avatar:', error);
+      return null;
+    } finally {
+      window.clearTimeout(timer);
+    }
   }
 
   private actionLabels(): NotificationActionLabels {

@@ -25,6 +25,8 @@ export interface NativeMessageNotification {
   sequence: number;
   title: string;
   body: string;
+  /** Avatar image bytes (PNG, JPEG, or GIF), shown where the platform supports it. */
+  avatar: number[] | null;
 }
 
 export interface NativeCallNotification {
@@ -32,12 +34,18 @@ export interface NativeCallNotification {
   callKind: AlertCallKind;
   title: string;
   body: string;
+  /** Avatar image bytes (PNG, JPEG, or GIF), shown where the platform supports it. */
+  avatar: number[] | null;
 }
 
 export interface NativeNotifications {
   /** The call notification rings by itself, so the client does not play a ringtone. */
   ringsNatively: boolean;
   stop: () => void;
+}
+
+interface CallNotificationFallback {
+  callId: string;
 }
 
 interface AndroidActionEvent {
@@ -63,11 +71,19 @@ export function hasNativeNotifications() {
 export async function startNativeNotifications(
   labels: NotificationActionLabels,
   onActionsQueued: () => void,
+  onCallFallback?: (callId: string) => void,
 ): Promise<NativeNotifications> {
   const { ringsNatively } = await invoke<{ ringsNatively: boolean }>('configure_notifications', {
     actionLabels: labels,
   });
   const unlisten = await listen('notification-action', onActionsQueued);
+  // Apple emits this only when an iOS call notification cannot play the system ringtone.
+  const unlistenCallFallback =
+    ringsNatively && onCallFallback
+      ? await listen<CallNotificationFallback>('call-notification-fallback', ({ payload }) =>
+          onCallFallback(payload.callId),
+        )
+      : undefined;
   let androidListener: PluginListener | undefined;
   // The Android notification plugin reports responses to the webview only.
   if (/android/i.test(navigator.userAgent)) {
@@ -85,6 +101,7 @@ export async function startNativeNotifications(
     ringsNatively,
     stop() {
       unlisten();
+      unlistenCallFallback?.();
       void androidListener?.unregister();
     },
   };

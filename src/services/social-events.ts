@@ -19,6 +19,8 @@ export type SocialAlert =
       senderName: string;
       /** Group title; null for direct conversations. */
       conversationTitle: string | null;
+      /** The group's avatar, or the sender's in a direct conversation. */
+      avatarUrl: string | null;
       preview: string;
       hasAttachments: boolean;
     }
@@ -29,6 +31,8 @@ export type SocialAlert =
       callerName: string;
       conversationId: string | null;
       conversationTitle: string | null;
+      /** The group's avatar for a group call, otherwise the caller's. */
+      avatarUrl: string | null;
       expiresAt: string;
     };
 
