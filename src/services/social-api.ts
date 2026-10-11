@@ -291,6 +291,7 @@ export interface GroupInvitation {
   id: string;
   groupId: string;
   groupTitle: string;
+  groupAvatarUrl: string | null;
   accessPolicy: GroupAccessPolicy;
   inviterId: string;
   inviterName: string;
@@ -316,6 +317,17 @@ export interface MessageReplyPreview {
   senderNickname: string;
   /** Short excerpt of the quoted message. */
   content: string;
+  /** First attached file, when the quoted message has attachments. */
+  attachmentFileName?: string | null;
+  /** Total attached files, when the quoted message has attachments. */
+  attachmentCount?: number | null;
+}
+
+export interface GifSearchResult {
+  id: string;
+  title: string;
+  width: number;
+  height: number;
 }
 
 export interface MessageReaction {
@@ -488,6 +500,19 @@ export const socialApi = {
       throw new SocialApiError((await response.text()) || 'Could not load attachment', response.status);
     }
     return response.blob();
+  },
+
+  gifImagePath(id: string, size: 'preview' | 'full' = 'full') {
+    return `/social/gifs/${encodeURIComponent(id)}/image${size === 'preview' ? '?size=preview' : ''}`;
+  },
+
+  async loadGifImage(accessToken: string, id: string, size: 'preview' | 'full' = 'full') {
+    return this.loadConversationAttachment(accessToken, this.gifImagePath(id, size));
+  },
+
+  searchGifs(accessToken: string, query: string) {
+    const params = new URLSearchParams({ q: query, limit: '24' });
+    return request<GifSearchResult[]>(`/gifs?${params.toString()}`, accessToken);
   },
 
   searchUsers(accessToken: string, query: string) {

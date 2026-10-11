@@ -183,6 +183,7 @@ watch(
         :placeholder="t('meeting.chat.placeholder')"
         :send-label="t('meeting.chat.sendShort')"
         :attachments-enabled="false"
+        :commands-enabled="false"
         @send="handleSend"
         @react="handleReact"
       />

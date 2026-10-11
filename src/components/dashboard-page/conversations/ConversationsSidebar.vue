@@ -9,7 +9,6 @@ import {
   Mail,
   MailOpen,
   Phone,
-  Plus,
   Search,
   Trash2,
   UserPlus,
@@ -41,6 +40,7 @@ import { Input } from '@/components/ui/input';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { userStatusOption } from '@/config/user-status.config';
 import type { Conversation, DirectMessageRequest, GroupInvitation, UserStatus } from '@/services/social-api';
 
 const props = defineProps<{
@@ -88,6 +88,7 @@ const emit = defineEmits<{
   (event: 'respond-direct-request', request: DirectMessageRequest, accept: boolean): void;
   (event: 'accept-group-invitation', invitation: GroupInvitation): void;
   (event: 'decline-group-invitation', invitation: GroupInvitation): void;
+  (event: 'group-invitation-details', invitation: GroupInvitation): void;
   (event: 'toggle-read', conversation: Conversation): void;
 }>();
 
@@ -221,9 +222,9 @@ onBeforeUnmount(clearLongPress);
               size="icon"
               variant="ghost"
               class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
-              aria-label="Group options"
-              title="Group options"
-              ><Plus class="size-4"
+              aria-label="Create or join group"
+              title="Create or join group"
+              ><UsersRound class="size-4"
             /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -286,10 +287,23 @@ onBeforeUnmount(clearLongPress);
         <div
           v-for="invitation in groupInvitations"
           :key="invitation.id"
-          class="flex items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2"
+          role="button"
+          tabindex="0"
+          :aria-label="`View ${invitation.groupTitle} group info`"
+          class="harbor-ghost-action flex cursor-pointer items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-left"
+          @click="emit('group-invitation-details', invitation)"
+          @keydown.enter.prevent="emit('group-invitation-details', invitation)"
+          @keydown.space.prevent="emit('group-invitation-details', invitation)"
         >
-          <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#102F35] text-white"
-            ><LockKeyhole class="size-4"
+          <span
+            class="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] text-white"
+            ><img
+              v-if="groupAvatarUrls[invitation.groupId]"
+              :src="groupAvatarUrls[invitation.groupId]"
+              alt=""
+              class="size-full object-cover" /><LoadingRipple
+              v-else-if="isGroupAvatarLoading(invitation.groupId)"
+              class="size-4 text-white" /><UsersRound v-else class="size-4"
           /></span>
           <span class="min-w-0 flex-1"
             ><span class="block truncate text-xs font-semibold">{{ invitation.groupTitle }}</span
@@ -302,14 +316,14 @@ onBeforeUnmount(clearLongPress);
             variant="ghost"
             class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
             :aria-label="`Join ${invitation.groupTitle}`"
-            @click="emit('accept-group-invitation', invitation)"
+            @click.stop="emit('accept-group-invitation', invitation)"
             ><Check class="size-4" /></Button
           ><Button
             size="icon"
             variant="ghost"
             class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
             :aria-label="`Decline invitation to ${invitation.groupTitle}`"
-            @click="emit('decline-group-invitation', invitation)"
+            @click.stop="emit('decline-group-invitation', invitation)"
             ><X class="size-4"
           /></Button>
         </div>
@@ -435,7 +449,16 @@ onBeforeUnmount(clearLongPress);
                 <span class="relative shrink-0"
                   ><span
                     class="flex size-10 items-center justify-center overflow-hidden rounded-[28%]"
-                    :class="conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]'"
+                    :class="[
+                      conversation.kind === 'group' ? 'bg-[#102F35] text-white' : 'bg-[#DDF1ED] text-[#0B7A75]',
+                      conversation.kind === 'direct'
+                        ? [
+                            'border-2',
+                            userStatusOption(isDirectOnline(conversation) ? directStatus(conversation) : 'offline')
+                              .borderClass,
+                          ]
+                        : [],
+                    ]"
                     ><img
                       v-if="conversation.kind === 'group' && groupAvatarUrls[conversation.id]"
                       :src="groupAvatarUrls[conversation.id]"
@@ -457,7 +480,7 @@ onBeforeUnmount(clearLongPress);
                     surface="directMessages"
                     :online="conversation.kind === 'direct' && isDirectOnline(conversation)"
                     :status="directStatus(conversation)"
-                    class="size-3 border-2 border-[#FBFCF8]" /></span
+                    class="size-3 border-[3px] border-[#FBFCF8]" /></span
                 ><span class="min-w-0 flex-1"
                   ><span class="flex items-center gap-2"
                     ><strong class="truncate text-sm">{{ conversationName(conversation) }}</strong

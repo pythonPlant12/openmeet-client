@@ -39,6 +39,7 @@ import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
+import { userStatusOption } from '@/config/user-status.config';
 import { type GroupMutationToken, groupAddActionLabel } from '@/pages/dashboard-group-state';
 import { type Friend, type GroupInfo, type GroupMember, type GroupMemberRole, socialApi } from '@/services/social-api';
 
@@ -375,6 +376,7 @@ watch(
               <span class="rounded-full bg-[#EAF7F4] px-3 py-1.5 text-xs font-semibold text-[#17645F]"
                 >{{ info.memberCount }} {{ info.memberCount === 1 ? 'member' : 'members' }}</span
               ><span
+                v-if="info.isMember"
                 class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
                 :class="roleClass(info.role)"
                 ><component :is="roleIcon(info.role)" class="size-3.5" />{{ roleLabel(info.role) }}</span
@@ -411,7 +413,11 @@ watch(
             </button>
           </div>
         </section>
-        <section class="flex flex-wrap items-center justify-center gap-2" aria-label="Group actions">
+        <section
+          v-if="info.isMember"
+          class="flex flex-wrap items-center justify-center gap-2"
+          aria-label="Group actions"
+        >
           <Button
             v-if="canManage(info.role)"
             variant="ghost"
@@ -466,7 +472,7 @@ watch(
             <span class="hidden sm:inline">Remove group</span>
           </Button>
         </section>
-        <section>
+        <section v-if="info.isMember">
           <div class="mb-3 flex items-baseline justify-between gap-3">
             <h3 class="text-sm font-semibold">Participants</h3>
             <span class="text-xs text-[#61777B]">{{ members.length }} of {{ info.memberCount }} listed</span>
@@ -557,6 +563,7 @@ watch(
                     <span class="relative shrink-0"
                       ><span
                         class="flex size-10 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        :class="['border-2', userStatusOption(member.isOnline ? member.status : 'offline').borderClass]"
                         ><img
                           v-if="memberAvatarUrls[member.id]"
                           :src="memberAvatarUrls[member.id]"
@@ -567,7 +574,7 @@ watch(
                         surface="groupParticipants"
                         :online="member.isOnline"
                         :status="member.status"
-                        class="size-3 border-2 border-white" /></span
+                        class="size-3 border-[3px] border-[#FBFCF8]" /></span
                     ><span class="min-w-0 flex-1"
                       ><span class="flex min-w-0 flex-col items-start"
                         ><span class="max-w-full truncate text-sm font-semibold">{{ member.name }}</span

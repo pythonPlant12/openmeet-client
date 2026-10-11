@@ -75,4 +75,15 @@ describe('ChatPanel', () => {
 
     expect(wrapper.emitted('react')).toEqual([[2, '👍']]);
   });
+
+  it('treats slash commands as ordinary meeting-chat text because GIF attachments are unavailable', async () => {
+    const wrapper = mountPanel();
+
+    await wrapper.get('textarea').setValue('/giphy wave');
+    await wrapper.get('form').trigger('submit');
+
+    expect(wrapper.find('[data-chat-command-menu]').exists()).toBe(false);
+    expect(wrapper.find('[data-gif-picker]').exists()).toBe(false);
+    expect(wrapper.emitted('send')).toEqual([['/giphy wave', undefined]]);
+  });
 });

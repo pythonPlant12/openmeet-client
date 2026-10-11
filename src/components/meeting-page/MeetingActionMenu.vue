@@ -106,7 +106,8 @@ const reportUrl = buildGitHubIssueUrl('meeting');
       <component
         :is="MenuItem"
         :disabled="!audioAvailable"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
+        class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+        :class="{ 'bg-[#FFF0EA]': isMuted }"
         @select="emit('toggleMute')"
       >
         <Mic v-if="isMuted && audioAvailable" class="size-4" aria-hidden="true" />
@@ -125,7 +126,8 @@ const reportUrl = buildGitHubIssueUrl('meeting');
       <component
         :is="MenuItem"
         :disabled="!videoAvailable"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
+        class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+        :class="{ 'bg-[#FFF0EA]': isVideoOff }"
         @select="emit('toggleVideo')"
       >
         <Video v-if="isVideoOff && videoAvailable" class="size-4" aria-hidden="true" />

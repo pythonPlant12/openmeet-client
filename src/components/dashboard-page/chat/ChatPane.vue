@@ -7,7 +7,8 @@ import ChatThread from '@/components/dashboard-page/chat/ChatThread.vue';
 import { Button } from '@/components/ui/button';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
-import type { Conversation, ConversationMessage, Friend } from '@/services/social-api';
+import { userStatusOption } from '@/config/user-status.config';
+import type { Conversation, ConversationMessage, Friend, GifSearchResult, GroupMember } from '@/services/social-api';
 
 const props = defineProps<{
   conversation: Conversation | null;
@@ -36,6 +37,13 @@ const props = defineProps<{
   hasAttachmentError?: (path: string) => boolean;
   loadAttachment?: (path: string) => void;
   unreadStartSequence?: number | null;
+  groupMembers?: GroupMember[];
+  groupMembersHasMore?: boolean;
+  gifResults?: GifSearchResult[];
+  gifSearchLoading?: boolean;
+  gifSearchError?: string;
+  gifPreviewUrls?: Record<string, string>;
+  isGifPreviewLoading?: (id: string) => boolean;
 }>();
 const emit = defineEmits<{
   (event: 'back'): void;
@@ -48,6 +56,10 @@ const emit = defineEmits<{
   (event: 'request-notifications'): void;
   (event: 'dismiss-notifications'): void;
   (event: 'react', message: ConversationMessage, emoji: string): void;
+  (event: 'load-group-members'): void;
+  (event: 'search-gifs', query: string): void;
+  (event: 'load-gif-preview', gif: GifSearchResult): void;
+  (event: 'select-gif', gif: GifSearchResult): void;
 }>();
 const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
@@ -171,6 +183,10 @@ defineExpose({
             <span class="relative shrink-0"
               ><span
                 class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-[#0B7A75]"
+                :class="[
+                  'border-2',
+                  userStatusOption(selectedFriend.isOnline ? selectedFriend.status : 'offline').borderClass,
+                ]"
                 ><img
                   v-if="friendAvatarUrls[selectedFriend.id]"
                   :src="friendAvatarUrls[selectedFriend.id]"
@@ -214,10 +230,20 @@ defineExpose({
             </div>
           </div>
           <Button
+            v-if="selectedIsGroup"
+            variant="ghost"
+            size="icon"
+            class="harbor-ghost-action rounded-full text-[#0B7A75] lg:hidden"
+            aria-label="Open group details"
+            @click="emit('group-info')"
+            ><UsersRound class="size-5"
+          /></Button>
+          <Button
             v-if="(selectedFriend && !pendingFriend) || selectedIsGroup"
             variant="ghost"
             size="icon"
             class="harbor-ghost-action rounded-full text-[#0B7A75]"
+            :class="{ 'hidden lg:inline-flex': selectedIsGroup }"
             :disabled="callActive"
             @click="emit('call')"
             ><Phone class="size-5"
@@ -244,11 +270,22 @@ defineExpose({
           :has-attachment-error="hasAttachmentError"
           :load-attachment="loadAttachment"
           :unread-start-sequence="unreadStartSequence"
+          :group-members="selectedIsGroup ? groupMembers : []"
+          :group-members-has-more="selectedIsGroup && groupMembersHasMore"
+          :gif-results="gifResults"
+          :gif-search-loading="gifSearchLoading"
+          :gif-search-error="gifSearchError"
+          :gif-preview-urls="gifPreviewUrls"
+          :is-gif-preview-loading="isGifPreviewLoading"
           footer-note="Messages stored by OpenMeet"
           @scroll-top="emit('scroll-top')"
           @load-unread="(sequence) => emit('load-unread', sequence)"
           @send="emit('send')"
           @react="(message, emoji) => emit('react', message, emoji)"
+          @load-group-members="emit('load-group-members')"
+          @search-gifs="(query) => emit('search-gifs', query)"
+          @load-gif-preview="(gif) => emit('load-gif-preview', gif)"
+          @select-gif="(gif) => emit('select-gif', gif)"
         >
           <template #notice>
             <div

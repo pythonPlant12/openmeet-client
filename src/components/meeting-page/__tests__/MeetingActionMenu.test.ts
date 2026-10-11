@@ -81,14 +81,21 @@ describe('MeetingActionMenu', () => {
     await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
     await flushPromises();
 
+    const menuItems = () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    const actionItem = (label: string) => menuItems().find((item) => item.textContent?.includes(label));
+
     expect(document.body.textContent).toContain('Open chat');
     expect(document.body.textContent).toContain('Mute microphone');
     expect(document.body.textContent).toContain('Turn camera off');
+    expect(actionItem('Mute microphone')?.classList).toContain('harbor-context-menu-danger');
+    expect(actionItem('Turn camera off')?.classList).toContain('harbor-context-menu-danger');
 
     await wrapper.setProps({ isChatOpen: true, isMuted: true, isVideoOff: true });
     expect(document.body.textContent).toContain('Close chat');
     expect(document.body.textContent).toContain('Unmute microphone');
     expect(document.body.textContent).toContain('Turn camera on');
+    expect(actionItem('Unmute microphone')?.classList).toContain('bg-[#FFF0EA]');
+    expect(actionItem('Turn camera on')?.classList).toContain('bg-[#FFF0EA]');
   });
 
   it('shows pin actions only in speaker view and keeps reports privacy-safe', async () => {

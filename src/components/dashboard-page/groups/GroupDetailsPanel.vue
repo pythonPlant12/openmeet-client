@@ -46,6 +46,7 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { toast } from '@/components/ui/toast';
+import { userStatusOption } from '@/config/user-status.config';
 import {
   GROUP_ACCESS_POLICIES,
   type GroupMutationToken,
@@ -743,6 +744,7 @@ defineExpose({
                     <span class="relative shrink-0">
                       <span
                         class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        :class="['border-2', userStatusOption(member.isOnline ? member.status : 'offline').borderClass]"
                       >
                         <img
                           v-if="memberAvatarUrls[member.id]"
@@ -756,7 +758,7 @@ defineExpose({
                         surface="groupParticipants"
                         :online="member.isOnline"
                         :status="member.status"
-                        class="size-3 border-2 border-white"
+                        class="size-3 border-[3px] border-[#FBFCF8]"
                       />
                     </span>
                     <span class="min-w-0 flex-1">

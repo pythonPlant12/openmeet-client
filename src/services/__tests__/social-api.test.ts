@@ -223,6 +223,26 @@ describe('socialApi', () => {
     ]);
   });
 
+  it('searches GIFs and loads proxy images through authenticated requests', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('[]', { status: 200 }))
+      .mockResolvedValueOnce(new Response(new Blob(['gif']), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await socialApi.searchGifs('token', 'party popper');
+    await socialApi.loadGifImage('token', 'abc123', 'preview');
+
+    expect(fetchMock.mock.calls[0]).toEqual([
+      'http://localhost:8081/social/gifs?q=party+popper&limit=24',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    ]);
+    expect(fetchMock.mock.calls[1]).toEqual([
+      'http://localhost:8081/social/gifs/abc123/image?size=preview',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    ]);
+  });
+
   it('sends media with a shared caption in one multipart request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);

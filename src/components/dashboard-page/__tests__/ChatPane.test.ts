@@ -2,7 +2,7 @@ import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
-import type { Conversation, ConversationMessage } from '@/services/social-api';
+import type { Conversation, ConversationMessage, GroupMember } from '@/services/social-api';
 
 const conversation: Conversation = {
   id: 'conversation-1',
@@ -28,6 +28,26 @@ const message: ConversationMessage = {
   senderNickname: 'friend',
   content: 'Hello',
   createdAt: '2026-10-02T12:00:00Z',
+};
+
+const groupConversation: Conversation = {
+  ...conversation,
+  id: 'group-1',
+  kind: 'group',
+  title: 'Team',
+  groupCode: 'team',
+  otherUserId: null,
+};
+
+const groupMember: GroupMember = {
+  id: 'ada',
+  name: 'Ada Lovelace',
+  nickname: 'ada',
+  avatarUrl: null,
+  isOnline: true,
+  status: 'available',
+  role: 'member',
+  joinedAt: '2026-10-02T12:00:00Z',
 };
 
 enableAutoUnmount(afterEach);
@@ -81,6 +101,25 @@ const reply: ConversationMessage = {
 };
 
 describe('ChatPane', () => {
+  it('frames offline direct-contact avatars without showing a presence dot', () => {
+    const wrapper = mountPane({
+      conversation,
+      selectedFriend: {
+        id: 'friend-1',
+        name: 'Friend',
+        nickname: 'friend',
+        email: 'friend@example.com',
+        isOnline: false,
+        status: 'available',
+      },
+    });
+    const avatar = wrapper.get('header .relative > span').element as HTMLElement;
+
+    expect(avatar.classList).toContain('border-2');
+    expect(avatar.classList).toContain('border-[#B8C6C5]');
+    expect(wrapper.find('[data-presence-dot]').exists()).toBe(false);
+  });
+
   it('quotes a message in the composer and cancels the reply', async () => {
     const wrapper = mountPane({ conversation, messages: [message] });
 
@@ -106,6 +145,84 @@ describe('ChatPane', () => {
     await wrapper.get('[data-reaction-chip]').trigger('click');
 
     expect(wrapper.emitted('react')?.[0]).toEqual([reply, '👍']);
+  });
+
+  it('renders attachment quote labels above reply text with the same quote surface for both senders', () => {
+    const attachmentReply: ConversationMessage = {
+      ...reply,
+      replyTo: {
+        sequence: 1,
+        senderId: 'friend-1',
+        senderName: 'Friend',
+        senderNickname: 'friend',
+        content: 'Look at this',
+        attachmentFileName: 'clip.gif',
+        attachmentCount: 2,
+      },
+    };
+    const wrapper = mountPane({
+      conversation,
+      messages: [{ ...attachmentReply, senderId: 'friend-1' }, attachmentReply],
+      isLocal: (item: ConversationMessage) => item.senderId === 'me',
+    });
+    const [remoteQuote, localQuote] = wrapper.findAll('[data-message-quote]');
+
+    expect(remoteQuote!.get('strong').text()).toBe('clip.gif, +1');
+    expect(remoteQuote!.get('strong').classes()).toContain('block');
+    expect(remoteQuote!.text()).toContain('Look at this');
+    expect(remoteQuote!.classes()).toEqual(localQuote!.classes());
+  });
+
+  it('completes an entire mention token from a middle caret position and preserves its exact caret', async () => {
+    const wrapper = mountPane({
+      conversation: groupConversation,
+      selectedIsGroup: true,
+      groupMembers: [groupMember],
+    });
+    const composer = wrapper.get('textarea');
+
+    await composer.setValue('Hi @adword next');
+    const textarea = composer.element as HTMLTextAreaElement;
+    textarea.setSelectionRange(6, 6);
+    await composer.trigger('input');
+
+    expect(composer.attributes('aria-expanded')).toBe('true');
+    expect(composer.attributes('aria-controls')).toBe('mention-menu');
+    expect(composer.attributes('aria-activedescendant')).toBe('mention-option-ada');
+    await wrapper.get('#mention-option-ada').trigger('click');
+    await wrapper.vm.$nextTick();
+
+    const contentUpdates = wrapper.emitted('update:content') ?? [];
+    expect(contentUpdates[contentUpdates.length - 1]).toEqual(['Hi @ada next']);
+    expect(textarea.selectionStart).toBe(7);
+  });
+
+  it('invalidates Giphy search immediately, blocks sends, and exposes its active result to assistive tech', async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountPane({
+        conversation,
+        gifResults: [{ id: 'gif-1', title: 'Wave', width: 320, height: 180 }],
+      });
+      const composer = wrapper.get('textarea');
+
+      await composer.setValue('/giphy wave');
+      expect(wrapper.emitted('search-gifs')?.[0]).toEqual(['']);
+      expect(composer.attributes('aria-expanded')).toBe('true');
+      expect(composer.attributes('aria-controls')).toBe('gif-picker');
+      expect(composer.attributes('aria-activedescendant')).toBe('gif-option-gif-1');
+      expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+
+      await composer.trigger('keydown', { key: 'Enter' });
+      await wrapper.get('form').trigger('submit');
+      expect(wrapper.emitted('send')).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(300);
+      const gifSearches = wrapper.emitted('search-gifs') ?? [];
+      expect(gifSearches[gifSearches.length - 1]).toEqual(['wave']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lifts the selected message and draws quotes without a coloured edge', async () => {
@@ -205,7 +322,10 @@ describe('ChatPane', () => {
   });
 
   it('asks the parent to load an unread boundary outside loaded history', async () => {
-    const wrapper = mountPane({ conversation, messages: [message], unreadStartSequence: 99 }, { attachTo: document.body });
+    const wrapper = mountPane(
+      { conversation, messages: [message], unreadStartSequence: 99 },
+      { attachTo: document.body },
+    );
     const pane = wrapper.get('[aria-label="Message history"]').element as HTMLElement;
     Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 500 });
     Object.defineProperty(pane, 'clientHeight', { configurable: true, value: 300 });
