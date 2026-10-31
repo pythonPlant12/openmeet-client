@@ -33,6 +33,8 @@ const i18n = createI18n({
           layout: 'Layout',
           grid: 'Grid view',
           speaker: 'Speaker view',
+          fullscreen: 'Full screen',
+          exitFullscreen: 'Exit full screen',
           pinParticipant: 'Pin participant',
           reportBug: 'Report a bug',
           disconnect: 'Disconnect',
@@ -45,6 +47,15 @@ const i18n = createI18n({
 enableAutoUnmount(afterEach);
 
 beforeEach(() => {
+  // Animated menu icons watch the viewport, which jsdom has no observer for.
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -116,6 +127,25 @@ describe('MeetingActionMenu', () => {
     expect(reportLink?.href).toContain('Area%3A+meeting');
     expect(reportLink?.href).not.toContain('/room/');
     expect(menu?.querySelectorAll('svg').length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('toggles full screen from the menu in either layout', async () => {
+    const wrapper = mountMenu();
+    await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
+    await flushPromises();
+    const toggle = () => document.body.querySelector<HTMLElement>('[data-fullscreen-toggle]');
+
+    expect(toggle()?.textContent).toContain('Full screen');
+    expect(toggle()?.getAttribute('aria-checked')).toBe('false');
+    toggle()?.click();
+    await flushPromises();
+    expect(wrapper.emitted('toggleFullscreen')).toHaveLength(1);
+
+    await wrapper.setProps({ fullscreen: true, viewMode: 'speaker' });
+    await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
+    await flushPromises();
+    expect(toggle()?.textContent).toContain('Exit full screen');
+    expect(toggle()?.getAttribute('aria-checked')).toBe('true');
   });
 
   it('reports unavailable tracks instead of presenting false enabled actions', async () => {

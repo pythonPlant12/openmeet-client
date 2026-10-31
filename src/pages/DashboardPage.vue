@@ -36,11 +36,11 @@ import {
   type GroupMutationToken,
   type SidebarPanel,
   beginGroupMutation as acquireGroupMutation,
-  callsPanelAfterDrag,
+  dashboardPanelState,
   groupAccessPolicyLabel,
   endGroupMutation as releaseGroupMutation,
   shouldApplyDashboardRequest,
-  sidebarPanelAfterDrag,
+  sidebarForPanelQuery,
 } from '@/pages/dashboard-group-state';
 import {
   isVoiceMessageFileName,
@@ -149,9 +149,10 @@ const isLeavingGroup = ref<string | null>(null);
 const isRespondingToFriendRequest = ref<string | null>(null);
 const isCreatingGroup = ref(false);
 const startingCallConversationId = ref<string | null>(null);
-const expandedSidebarPanel = ref<SidebarPanel | null>(restoreSidebarPanel());
-// Calls start collapsed at the bottom of the sidebar on every visit.
+// The sidebar shows one section. Messages or Friends is remembered across visits; Calls opens on request.
+const sidebarSection = ref<SidebarPanel | null>(restoreSidebarPanel());
 const callsPanel = ref<CallsPanel>('collapsed');
+const activeSidebarSection = computed(() => dashboardPanelState(sidebarSection.value, callsPanel.value));
 const activeContextMenuId = ref<string | null>(null);
 const contextMenuResets = ref<Record<string, number>>({});
 const isGroupDialogOpen = ref(false);
@@ -378,8 +379,6 @@ const reactionRequestByMessage = new Map<number, number>();
 let joinGroupPreviewRequest = 0;
 let callLaunchRequest = 0;
 let isUnmounted = false;
-let panelWheelLocked = false;
-let panelWheelTimer: number | undefined;
 
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -427,7 +426,7 @@ const groupMembersWithPresence = computed(() =>
   }),
 );
 const visibleFriends = computed(() =>
-  expandedSidebarPanel.value === 'friends' ? filteredFriends.value : filteredFriends.value.slice(0, 5),
+  sidebarSection.value === 'friends' ? filteredFriends.value : filteredFriends.value.slice(0, 5),
 );
 const selectedFriend = computed(() => {
   if (pendingDirectFriend.value) return pendingDirectFriend.value;
@@ -1170,7 +1169,7 @@ async function openConversationFromRoute(conversationId: string) {
   delete query.conversation;
   void router.replace({ query });
   if (!conversation) return;
-  expandedSidebarPanel.value = 'messages';
+  sidebarSection.value = 'messages';
   selectConversation(conversation);
 }
 
@@ -1227,7 +1226,31 @@ watch(isDesktop, (desktop) => {
   if (desktop) isGroupProfileDialogOpen.value = false;
 });
 
-watch(expandedSidebarPanel, persistSidebarPanel);
+watch(sidebarSection, persistSidebarPanel);
+
+// Navbar workspace tabs link to `/dashboard?panel=<section>`. The query is dropped once applied,
+// so pressing the same tab again after switching sections still works.
+watch(
+  () => route.query.panel,
+  (panel) => {
+    const sidebar = sidebarForPanelQuery(panel);
+    if (!sidebar) return;
+    moveSidebarPanels(() => {
+      if (sidebar.section) sidebarSection.value = sidebar.section;
+      callsPanel.value = sidebar.calls;
+    });
+    const query = { ...route.query };
+    delete query.panel;
+    void router.replace({ query });
+  },
+  { immediate: true },
+);
+// The navbar highlights the workspace tab that matches the sidebar.
+watch(
+  activeSidebarSection,
+  (panel) => window.dispatchEvent(new CustomEvent('openmeet:dashboard-panel-state', { detail: panel })),
+  { immediate: true },
+);
 
 watch(selectedConversation, (conversation, previousConversation) => {
   if (conversation?.kind !== 'group') isGroupProfileDialogOpen.value = false;
@@ -1554,55 +1577,11 @@ function handleContextMenuOpen(id: string, open: boolean) {
   }
 }
 
-// Panel moves the user makes (tap, drag, or wheel) tick once; programmatic expansion stays silent.
+// Section switches the user makes tick once; programmatic switches stay silent.
 function moveSidebarPanels(move: () => void) {
-  const before = `${expandedSidebarPanel.value}/${callsPanel.value}`;
+  const before = `${sidebarSection.value}/${callsPanel.value}`;
   move();
-  if (`${expandedSidebarPanel.value}/${callsPanel.value}` !== before) playHaptic('selection');
-}
-
-function handlePanelHeaderDragEnd(
-  panel: 'messages' | 'friends',
-  _event: PointerEvent,
-  info: { offset: { y: number }; velocity: { y: number } },
-) {
-  moveSidebarPanels(() => {
-    if (callsPanel.value === 'top') {
-      callsPanel.value = 'collapsed';
-      return;
-    }
-    expandedSidebarPanel.value = sidebarPanelAfterDrag(
-      panel,
-      expandedSidebarPanel.value,
-      info.offset.y,
-      info.velocity.y,
-    );
-  });
-}
-
-function handlePanelHeaderWheel(panel: 'messages' | 'friends', event: WheelEvent) {
-  if (!event.deltaY || panelWheelLocked) return;
-  panelWheelLocked = true;
-  moveSidebarPanels(() => {
-    expandedSidebarPanel.value = sidebarPanelAfterDrag(
-      panel,
-      expandedSidebarPanel.value,
-      0,
-      Math.sign(event.deltaY) * 401,
-    );
-  });
-  panelWheelTimer = window.setTimeout(() => (panelWheelLocked = false), 250);
-}
-
-function toggleSidebarPanel(panel: 'messages' | 'friends') {
-  moveSidebarPanels(() => {
-    if (callsPanel.value === 'top') {
-      callsPanel.value = 'collapsed';
-      expandedSidebarPanel.value = panel;
-      return;
-    }
-    expandedSidebarPanel.value = expandedSidebarPanel.value === panel ? null : panel;
-  });
+  if (`${sidebarSection.value}/${callsPanel.value}` !== before) playHaptic('selection');
 }
 
 function isExistingFriend(result: UserSearchResult) {
@@ -1645,6 +1624,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   isUnmounted = true;
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:dashboard-chat-state', { detail: false }));
+  window.dispatchEvent(new CustomEvent('openmeet:dashboard-panel-state', { detail: null }));
   window.dispatchEvent(new CustomEvent<string | null>('openmeet:active-conversation', { detail: null }));
   friendSearchRequest += 1;
   window.clearTimeout(peopleSearchTimer);
@@ -1659,7 +1639,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('openmeet:social-friends-updated', handleFriendsUpdated);
   window.removeEventListener('openmeet:social-conversations-updated', handleConversationsUpdated);
   window.removeEventListener('openmeet:social-calls-updated', handleCallsUpdated);
-  window.clearTimeout(panelWheelTimer);
 });
 
 function openConversationDetails(conversation: Conversation) {
@@ -1884,12 +1863,12 @@ async function declineGroupInvitation(invitation: GroupInvitation) {
 // Opening a section's search also expands that section, so results are visible right away.
 function setConversationSearchOpen(open: boolean) {
   isConversationSearchOpen.value = open;
-  if (open) expandedSidebarPanel.value = 'messages';
+  if (open) sidebarSection.value = 'messages';
 }
 
 function setPeopleSearchOpen(open: boolean) {
   isPeopleSearchOpen.value = open;
-  if (open) expandedSidebarPanel.value = 'friends';
+  if (open) sidebarSection.value = 'friends';
 }
 
 async function respondToDirectRequest(request: DirectMessageRequest, accept: boolean) {
@@ -2189,46 +2168,9 @@ async function startMemberCall(member: GroupMember) {
 const callHistory = useCallHistory(accessToken);
 const incomingCalls = useIncomingCalls();
 const callsNow = useNow({ interval: 30_000 });
-const isAnsweringCall = ref(false);
 const callDetailsMeeting = ref<MeetingSession | null>(null);
 const isCallDetailsOpen = ref(false);
 const callingMeetingId = ref<string | null>(null);
-
-const ringingCall = computed(() => incomingCalls.calls.value[0] ?? null);
-const ringingName = computed(() => {
-  const ringing = ringingCall.value;
-  if (!ringing) return null;
-  if (ringing.kind === 'invitation') return ringing.call.caller?.name ?? 'Someone';
-  const conversation = conversations.value.find(({ id }) => id === ringing.call.conversationId);
-  if (conversation) return conversationName(conversation);
-  return friendById.value.get(ringing.call.initiatorId)?.name ?? 'Someone';
-});
-
-async function respondToRingingCall(accept: boolean) {
-  const ringing = ringingCall.value;
-  if (!ringing || isAnsweringCall.value) return;
-  isAnsweringCall.value = true;
-  try {
-    await (accept ? incomingCalls.accept(ringing) : incomingCalls.decline(ringing));
-  } finally {
-    isAnsweringCall.value = false;
-  }
-}
-
-function toggleCallsPanel() {
-  moveSidebarPanels(() => (callsPanel.value = callsPanel.value === 'collapsed' ? 'middle' : 'collapsed'));
-}
-
-function handleCallsDragEnd(_event: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }) {
-  moveSidebarPanels(() => (callsPanel.value = callsPanelAfterDrag(callsPanel.value, info.offset.y, info.velocity.y)));
-}
-
-function handleCallsWheel(event: WheelEvent) {
-  if (!event.deltaY || panelWheelLocked) return;
-  panelWheelLocked = true;
-  moveSidebarPanels(() => (callsPanel.value = callsPanelAfterDrag(callsPanel.value, 0, Math.sign(event.deltaY) * 401)));
-  panelWheelTimer = window.setTimeout(() => (panelWheelLocked = false), 250);
-}
 
 function openCallDetails(meeting: MeetingSession) {
   callDetailsMeeting.value = meeting;
@@ -2421,7 +2363,12 @@ async function startConversationCall(conversation: Conversation) {
   <main
     v-else-if="isAuthenticated"
     class="marketing-font w-full max-w-full overflow-hidden overscroll-none bg-[#FBFCF8] text-[#102F35] sm:px-5 sm:pb-3 sm:pt-0"
-    :class="hasSelectedConversation ? 'fixed inset-0 h-[100dvh] lg:static lg:h-full' : 'h-full'"
+    :class="
+      hasSelectedConversation
+        ? // Below lg an open chat fills the screen; tablets keep the floating top tabs, so it starts under them.
+          'fixed inset-0 h-[100dvh] sm:max-lg:!pt-[4.25rem] lg:static lg:h-full'
+        : 'h-full max-sm:[--sidebar-bottom-inset:calc(max(1rem,env(safe-area-inset-bottom))+4.25rem)]'
+    "
   >
     <motion.div
       :initial="{ opacity: 0, y: 10 }"
@@ -2438,58 +2385,59 @@ async function startConversationCall(conversation: Conversation) {
         "
         aria-label="Conversations"
       >
-        <ConversationsSidebar
-          v-model:query="searchQuery"
-          :active-context-menu-id="activeContextMenuId"
-          :conversations="filteredConversations"
-          :context-menu-key="contextMenuKey"
-          :conversation-name="conversationName"
-          :conversation-identifier="conversationIdentifier"
-          :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
-          :is-direct-online="(conversation) => friendById.get(conversation.otherUserId ?? '')?.isOnline ?? false"
-          :direct-status="(conversation) => friendById.get(conversation.otherUserId ?? '')?.status"
-          :is-friend-avatar-loading="isFriendAvatarLoading"
-          :is-group-avatar-loading="isGroupAvatarLoading"
-          :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
-          :direct-requests="directRequests"
-          :group-invitations="groupInvitations"
-          :expanded="callsPanel !== 'top' && expandedSidebarPanel !== 'friends'"
-          :badge="badges.messages"
-          :group-avatar-urls="groupAvatarUrls"
-          :is-loading="isLoading"
-          :is-refreshing="isRefreshingConversations"
-          :search-open="isConversationSearchOpen"
-          :selected-conversation-id="selectedConversation?.id"
-          :unread-count="unreadCount"
-          @update:search-open="setConversationSearchOpen"
-          @create-group="setCreateGroupDialogOpen(true)"
-          @join-group="isJoinGroupDialogOpen = true"
-          @start-meeting="createMeeting"
-          @join-meeting="isJoinRoomDialogOpen = true"
-          @drag-end="(event, info) => handlePanelHeaderDragEnd('messages', event, info)"
-          @wheel="handlePanelHeaderWheel('messages', $event)"
-          @toggle="toggleSidebarPanel('messages')"
-          @select="selectConversation"
-          @details="openConversationDetails"
-          @delete="
-            (conversation) =>
-              conversation.kind === 'direct' ? hideDirectConversation(conversation) : leaveGroup(conversation)
-          "
-          @add-members="openConversationManagement($event, 'add-members')"
-          @remove-group="openConversationManagement($event, 'remove-group')"
-          @context-open="handleContextMenuOpen"
-          @context-activate="activateContextMenu"
-          @respond-direct-request="respondToDirectRequest"
-          @accept-group-invitation="activeGroupInvitation = $event"
-          @decline-group-invitation="declineGroupInvitation"
-          @group-invitation-details="openGroupInvitationInfo"
-          @toggle-read="toggleConversationRead"
-        />
+        <!-- One section fills the sidebar; the navbar workspace tabs switch between them. -->
+        <div v-show="activeSidebarSection === 'messages'" class="flex min-h-0 flex-1 flex-col">
+          <ConversationsSidebar
+            v-model:query="searchQuery"
+            :active-context-menu-id="activeContextMenuId"
+            :conversations="filteredConversations"
+            :context-menu-key="contextMenuKey"
+            :conversation-name="conversationName"
+            :conversation-identifier="conversationIdentifier"
+            :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
+            :is-direct-online="(conversation) => friendById.get(conversation.otherUserId ?? '')?.isOnline ?? false"
+            :direct-status="(conversation) => friendById.get(conversation.otherUserId ?? '')?.status"
+            :is-friend-avatar-loading="isFriendAvatarLoading"
+            :is-group-avatar-loading="isGroupAvatarLoading"
+            :direct-initials="(conversation) => userInitials(friendById.get(conversation.otherUserId ?? '')?.name)"
+            :direct-requests="directRequests"
+            :group-invitations="groupInvitations"
+            expanded
+            :badge="badges.messages"
+            :group-avatar-urls="groupAvatarUrls"
+            :is-loading="isLoading"
+            :is-refreshing="isRefreshingConversations"
+            :search-open="isConversationSearchOpen"
+            :selected-conversation-id="selectedConversation?.id"
+            :unread-count="unreadCount"
+            @update:search-open="setConversationSearchOpen"
+            @create-group="setCreateGroupDialogOpen(true)"
+            @join-group="isJoinGroupDialogOpen = true"
+            @start-meeting="createMeeting"
+            @join-meeting="isJoinRoomDialogOpen = true"
+            @select="selectConversation"
+            @details="openConversationDetails"
+            @delete="
+              (conversation) =>
+                conversation.kind === 'direct' ? hideDirectConversation(conversation) : leaveGroup(conversation)
+            "
+            @add-members="openConversationManagement($event, 'add-members')"
+            @remove-group="openConversationManagement($event, 'remove-group')"
+            @context-open="handleContextMenuOpen"
+            @context-activate="activateContextMenu"
+            @respond-direct-request="respondToDirectRequest"
+            @accept-group-invitation="activeGroupInvitation = $event"
+            @decline-group-invitation="declineGroupInvitation"
+            @group-invitation-details="openGroupInvitationInfo"
+            @toggle-read="toggleConversationRead"
+          />
+        </div>
         <FriendsSidebar
+          v-show="activeSidebarSection === 'friends'"
           v-model:query="peopleSearchQuery"
           :active-context-menu-id="activeContextMenuId"
           :context-menu-key="contextMenuKey"
-          :expanded="callsPanel !== 'top' && expandedSidebarPanel !== 'messages'"
+          expanded
           :badge="badges.friends"
           :friend-avatar-urls="friendAvatarUrls"
           :is-avatar-loading="isFriendAvatarLoading"
@@ -2506,9 +2454,6 @@ async function startConversationCall(conversation: Conversation) {
           :result-avatar-urls="peopleResultAvatarUrls"
           :search-open="isPeopleSearchOpen"
           @update:search-open="setPeopleSearchOpen"
-          @drag-end="(event, info) => handlePanelHeaderDragEnd('friends', event, info)"
-          @wheel="handlePanelHeaderWheel('friends', $event)"
-          @toggle="toggleSidebarPanel('friends')"
           @open="openFriendConversation"
           @profile="(friend) => openContactProfile(friend.id, friend.name)"
           @call="startFriendCall"
@@ -2520,6 +2465,7 @@ async function startConversationCall(conversation: Conversation) {
           @context-activate="activateContextMenu"
         />
         <CallsSidebar
+          v-show="activeSidebarSection === 'calls'"
           :panel="callsPanel"
           :badge="badges.calls"
           :meetings="callHistory.meetings.value"
@@ -2529,17 +2475,9 @@ async function startConversationCall(conversation: Conversation) {
           :is-loading-more="callHistory.isLoadingMore.value"
           :now="callsNow.getTime()"
           :avatar-for="callHistory.avatarFor"
-          :ringing-name="ringingName"
-          :ringing-more="Math.max(incomingCalls.calls.value.length - 1, 0)"
-          :is-answering="isAnsweringCall"
           :calling-id="callingMeetingId"
-          @drag-end="handleCallsDragEnd"
-          @wheel="handleCallsWheel"
-          @toggle="toggleCallsPanel"
           @open="openCallDetails"
           @toggle-read="toggleCallRead"
-          @accept="respondToRingingCall(true)"
-          @decline="respondToRingingCall(false)"
           @load-more="callHistory.loadMore"
         />
       </aside>

@@ -7,6 +7,7 @@ import TheNavbar from '@/components/layout/TheNavbar.vue';
 
 const media = vi.hoisted(() => ({ desktop: true, hover: true, mobile: false, reduced: false }));
 const auth = vi.hoisted(() => ({ authenticated: false }));
+const meetings = vi.hoisted(() => ({ createMeeting: vi.fn() }));
 const social = vi.hoisted(() => ({
   getCurrentUserProfile: vi.fn(),
   loadAvatar: vi.fn(),
@@ -100,6 +101,27 @@ vi.mock('motion-v', async () => {
   };
 });
 
+// Animated icons run motion-v's viewport observer, which jsdom lacks; the stub records the press trigger instead.
+vi.mock('@respeak/lucide-motion-vue', async () => {
+  const { defineComponent, h } = await import('vue');
+  const iconStub = (name: string) =>
+    defineComponent({
+      props: { animate: { type: [Boolean, String], default: false } },
+      setup(props) {
+        return () => h('svg', { 'data-icon': name, 'data-animate': String(props.animate) });
+      },
+    });
+
+  return {
+    CirclePlusAnimated: iconStub('circle-plus'),
+    LogInAnimated: iconStub('log-in'),
+    LogOutAnimated: iconStub('log-out'),
+    MessageSquareAnimated: iconStub('message-square'),
+    PhoneAnimated: iconStub('phone'),
+    UsersAnimated: iconStub('users'),
+  };
+});
+
 vi.mock('@/composables/useAuth', async () => {
   const { ref } = await import('vue');
 
@@ -121,7 +143,7 @@ vi.mock('@/composables/useAuth', async () => {
 vi.mock('@/services/social-api', () => ({ socialApi: social }));
 
 vi.mock('@/composables/useMeetingNavigation', () => ({
-  useMeetingNavigation: () => ({ createMeeting: vi.fn() }),
+  useMeetingNavigation: () => meetings,
 }));
 
 vi.mock('@/config/branding.config', () => ({
@@ -132,11 +154,11 @@ function createTestRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/', component: { template: '<div />' }, meta: { showMarketingNav: true } },
-      { path: '/dashboard', component: { template: '<div />' } },
-      { path: '/account', component: { template: '<div />' } },
-      { path: '/login', component: { template: '<div />' } },
-      { path: '/technologies', component: { template: '<div />' } },
+      { path: '/', name: 'landing', component: { template: '<div />' }, meta: { showMarketingNav: true } },
+      { path: '/dashboard', name: 'dashboard', component: { template: '<div />' } },
+      { path: '/account', name: 'account', component: { template: '<div />' } },
+      { path: '/login', name: 'login', component: { template: '<div />' } },
+      { path: '/technologies', component: { template: '<div />' }, meta: { showMarketingNav: true } },
       { path: '/room/:id', name: 'meeting', component: { template: '<div />' } },
     ],
   });
@@ -179,6 +201,8 @@ beforeEach(() => {
   auth.authenticated = false;
   social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null });
   social.loadAvatar.mockResolvedValue(new Blob(['avatar']));
+  // jsdom has no WebGL, so the tab bar takes its CSS drop fallback.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -196,29 +220,42 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('TheNavbar', () => {
-  it('animates measured desktop width without transform-based layout', async () => {
+  it('uses the liquid bar for guests on desktop and follows the page', async () => {
     const { router, wrapper } = await mountNavbar();
-    const content = wrapper.get('.harbor-nav-capsule > div');
-    Object.defineProperty(content.element, 'offsetWidth', { configurable: true, value: 783 });
-    resizeObserverCallback([], {} as ResizeObserver);
-    await wrapper.vm.$nextTick();
 
-    expect(wrapper.get('nav').attributes('data-layout-root')).toBe('true');
-    expect(wrapper.get('.harbor-nav-layout').attributes('data-layout')).toBeUndefined();
-    expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:w-fit');
-    expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:left-1/2');
-    expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:-translate-x-1/2');
-    expect(wrapper.get('.harbor-nav-layout').classes()).toContain('xl:transition-none');
-    expect(wrapper.get('.harbor-nav-capsule').classes()).toContain('xl:transition-[width]');
-    expect(wrapper.get('.harbor-nav-capsule').attributes('style')).toContain('width: 783px');
+    expect(wrapper.find('.harbor-nav-capsule').exists()).toBe(false);
+    const bar = wrapper.get('nav[aria-label="nav.navigationTitle"]');
+    expect(bar.findAll('[data-tab]').map((tab) => tab.attributes('data-tab'))).toEqual([
+      'home',
+      'why',
+      'deploy',
+      'login',
+      'github',
+      'start',
+    ]);
+    expect(bar.get('[aria-current="page"]').attributes('data-tab')).toBe('home');
+    expect(bar.get('[data-tab="start"]').attributes('data-variant')).toBe('primary');
 
-    await router.push('/dashboard');
+    // An open menu holds the drop on its item.
+    await bar.get('[data-tab="why"]').trigger('mouseenter');
+    expect(bar.get('[data-tab="why"]').attributes('data-targeted')).toBe('true');
+
+    await router.push('/technologies');
     await flushPromises();
+    expect(bar.get('[aria-current="page"]').attributes('data-tab')).toBe('why');
+    wrapper.unmount();
+  });
 
-    expect(wrapper.get('.harbor-nav-layout').attributes('data-layout')).toBeUndefined();
+  it('keeps the glass capsule below desktop width', async () => {
+    media.desktop = false;
+    const { wrapper } = await mountNavbar();
+
+    expect(wrapper.get('.harbor-nav-capsule').classes()).toContain('liquid-glass-surface');
+    expect(wrapper.find('nav[aria-label="nav.navigationTitle"] .liquid-tab-bar').exists()).toBe(false);
   });
 
   it('skips staged mobile animation for reduced motion', async () => {
@@ -249,7 +286,7 @@ describe('TheNavbar', () => {
 
     expect(wrapper.find('.harbor-nav-layout').exists()).toBe(false);
     const trigger = wrapper.get('button[aria-expanded="false"]');
-    expect(trigger.classes()).toContain('rounded-xl');
+    expect(trigger.classes()).toContain('liquid-glass-surface');
 
     await trigger.trigger('click');
     // The sheet grows out of the button, so the nav keeps the button's size and hides it while open.
@@ -399,54 +436,6 @@ describe('TheNavbar', () => {
     expect(shell.classes()).toContain('duration-[360ms]');
   });
 
-  it('stages every authenticated mobile action through Start Meeting', async () => {
-    vi.useFakeTimers();
-    media.desktop = false;
-    media.hover = false;
-    auth.authenticated = true;
-    const { wrapper } = await mountNavbar('/dashboard');
-
-    await wrapper.get('button[aria-expanded="false"]').trigger('click');
-    await vi.advanceTimersByTimeAsync(300);
-
-    const accountActions = wrapper.findAll('[data-mobile-account-actions] > [data-motion-tag="div"]');
-    const startMeeting = wrapper
-      .findAll('[data-motion-tag="div"]')
-      .find((item) => item.text().trim() === 'common.startMeeting');
-    const logout = wrapper.findAll('[data-motion-tag="div"]').find((item) => item.text().trim() === 'common.logOut');
-
-    expect(accountActions).toHaveLength(3);
-    expect(JSON.parse(accountActions[0].attributes('data-transition'))).toMatchObject({ delay: 0.08 });
-    expect(JSON.parse(accountActions[2].attributes('data-transition'))).toMatchObject({ delay: 0.2 });
-    expect(JSON.parse(logout!.attributes('data-transition'))).toMatchObject({ delay: 0.26 });
-    expect(JSON.parse(startMeeting!.attributes('data-transition'))).toMatchObject({ delay: 0.32 });
-  });
-
-  it('starts collapsing the authenticated mobile drawer after 400ms', async () => {
-    vi.useFakeTimers();
-    media.desktop = false;
-    media.hover = false;
-    auth.authenticated = true;
-    const { wrapper } = await mountNavbar('/dashboard');
-    const shell = wrapper.get('.harbor-nav-layout');
-    const icon = wrapper.get('[data-motion-tag="span"]');
-
-    await wrapper.get('button[aria-expanded="false"]').trigger('click');
-    await vi.advanceTimersByTimeAsync(300);
-    await wrapper.get('button[aria-expanded="true"]').trigger('click');
-    expect(JSON.parse(icon.attributes('data-animate'))).toMatchObject({ rotate: 0 });
-
-    await vi.advanceTimersByTimeAsync(399);
-    expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(true);
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(wrapper.find('[data-mobile-account-actions]').exists()).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(360);
-    expect(shell.classes()).toContain('w-[min(340px,calc(100vw-1.5rem))]');
-    expect(wrapper.get('button[aria-expanded="false"]')).toBeDefined();
-  });
-
   it('starts collapsing the authenticated meeting drawer after 400ms', async () => {
     vi.useFakeTimers();
     media.desktop = false;
@@ -470,7 +459,7 @@ describe('TheNavbar', () => {
     auth.authenticated = true;
     const { wrapper } = await mountNavbar('/room/meeting-id');
 
-    expect(wrapper.get('button[aria-label="nav.accountInformation"]')).toBeDefined();
+    expect(wrapper.get('[data-tab="account"] .liquid-tab-avatar')).toBeDefined();
     expect(wrapper.text()).toContain('A deliberately long participant name');
     expect(wrapper.text()).toContain('common.dashboard');
     expect(wrapper.text()).toContain('nav.friends');
@@ -493,24 +482,6 @@ describe('TheNavbar', () => {
     expect(mobile.wrapper.get('[data-mobile-account-actions]').text()).not.toContain('common.logOut');
     expect(mobile.wrapper.text()).toContain('common.logOut');
     expect(mobile.wrapper.find('[data-mobile-public-navigation]').exists()).toBe(false);
-
-    const dashboard = await mountNavbar('/dashboard');
-    await dashboard.wrapper.get('button[aria-expanded="false"]').trigger('click');
-    await vi.advanceTimersByTimeAsync(300);
-    mockDrawerLayout(dashboard.wrapper, { capsule: 300, scrollArea: 150, content: 260 });
-    resizeObserverCallback([], {} as ResizeObserver);
-    await vi.advanceTimersByTimeAsync(16);
-
-    // And grows when its content needs more room, such as an expanded status picker.
-    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 410px');
-
-    await dashboard.wrapper
-      .get('[data-mobile-account-actions] button[aria-label="nav.accountInformation"]')
-      .trigger('click');
-    await flushPromises();
-
-    expect(dashboard.router.currentRoute.value.path).toBe('/account');
-    expect(dashboard.wrapper.get('.harbor-nav-layout').attributes('style')).toContain('height: 410px');
   });
 
   it('expands the anonymous meeting drawer to the mobile viewport', async () => {
@@ -583,7 +554,8 @@ describe('TheNavbar', () => {
     const { wrapper } = await mountNavbar();
     await flushPromises();
 
-    expect(wrapper.get('button[aria-label="nav.accountInformation"] img').attributes('src')).toBe('blob:avatar');
+    // Signed-in workspaces show the avatar as the Account tab's icon.
+    expect(wrapper.get('[data-tab="account"] .liquid-tab-avatar img').attributes('src')).toBe('blob:avatar');
     expect(social.loadAvatar).toHaveBeenCalledWith('token', '/social/users/user-id/avatar');
   });
 
@@ -595,7 +567,7 @@ describe('TheNavbar', () => {
     social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l' });
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
-    const { router, wrapper } = await mountNavbar('/dashboard');
+    const { router, wrapper } = await mountNavbar('/room/meeting-id');
 
     await wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
@@ -607,7 +579,7 @@ describe('TheNavbar', () => {
 
     expect(writeText).toHaveBeenCalledWith('ada_l');
     expect(copyButton.attributes('aria-label')).toBe('nav.nicknameCopied');
-    expect(router.currentRoute.value.path).toBe('/dashboard');
+    expect(router.currentRoute.value.path).toBe('/room/meeting-id');
 
     await wrapper.get('[data-mobile-account-card] > button[aria-label="nav.accountInformation"]').trigger('click');
     await flushPromises();
@@ -652,7 +624,7 @@ describe('TheNavbar', () => {
     auth.authenticated = true;
     social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
     social.updateCurrentUserStatus.mockResolvedValue({ status: 'away' });
-    const { wrapper } = await mountNavbar('/dashboard');
+    const { wrapper } = await mountNavbar('/room/meeting-id');
     await flushPromises();
     await wrapper.get('button[aria-expanded="false"]').trigger('click');
     await vi.advanceTimersByTimeAsync(300);
@@ -727,22 +699,97 @@ describe('TheNavbar', () => {
     expect(wrapper.get('[data-mobile-login] svg')).toBeDefined();
   });
 
-  it('sends authenticated users to the dashboard and hides marketing navigation', async () => {
-    vi.useFakeTimers();
+  it('replaces the branded capsule and marketing navigation with workspace tabs for signed-in users', async () => {
     auth.authenticated = true;
     const { wrapper } = await mountNavbar();
 
-    expect(wrapper.get('a[href="/dashboard"]').text()).toContain('OpenMeet');
+    expect(wrapper.find('nav[aria-label="nav.workspaceNavigation"]').exists()).toBe(true);
+    expect(wrapper.find('.harbor-nav-capsule').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('OpenMeet');
     expect(wrapper.text()).not.toContain('nav.why');
     expect(wrapper.text()).not.toContain('nav.howToDeploy');
+  });
+  it('shows workspace tabs as the desktop navigation and follows the dashboard panel', async () => {
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
 
+    const tabs = wrapper.get('nav[aria-label="nav.workspaceNavigation"]');
+    expect(tabs.findAll('.liquid-tab').map((tab) => tab.attributes('data-tab'))).toEqual([
+      'messages',
+      'friends',
+      'calls',
+      'account',
+      'start',
+    ]);
+    expect(tabs.get('[data-tab="friends"]').attributes('href')).toBe('/dashboard?panel=friends');
+    // Account opens the account menu from the avatar instead of navigating.
+    expect(tabs.get('[data-tab="account"]').element.tagName).toBe('BUTTON');
+    expect(wrapper.text()).toContain('A deliberately long participant name');
+    expect(tabs.find('[aria-current="page"]').exists()).toBe(false);
+
+    window.dispatchEvent(new CustomEvent('openmeet:dashboard-panel-state', { detail: 'calls' }));
+    await flushPromises();
+    expect(tabs.get('[aria-current="page"]').attributes('data-tab')).toBe('calls');
+    wrapper.unmount();
+  });
+
+  it('plays the icon animation when a workspace tab is pressed', async () => {
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    await wrapper.get('[data-tab="messages"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-tab="messages"] svg').attributes('data-animate')).toBe('true');
+    expect(wrapper.get('[data-tab="friends"] svg').attributes('data-animate')).toBe('false');
+    wrapper.unmount();
+  });
+
+  it('replaces the phone account button with bottom workspace tabs outside meetings', async () => {
     media.desktop = false;
     media.hover = false;
-    const mobile = await mountNavbar();
-    await mobile.wrapper.get('button[aria-expanded="false"]').trigger('click');
-    await vi.advanceTimersByTimeAsync(300);
+    media.mobile = true;
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
 
-    expect(mobile.wrapper.text()).not.toContain('nav.why');
-    expect(mobile.wrapper.text()).not.toContain('nav.howToDeploy');
+    const tabs = wrapper.get('nav[aria-label="nav.workspaceNavigation"]');
+    expect(tabs.attributes('data-compact')).toBe('true');
+    expect(tabs.find('[data-tab="start"]').exists()).toBe(false);
+    expect(wrapper.find('nav.w-12 button').exists()).toBe(false);
+
+    const account = tabs.get('[data-tab="account"]');
+    expect(account.element.tagName).toBe('BUTTON');
+    await account.trigger('click');
+    await flushPromises();
+    expect(wrapper.get('section[aria-label="Account navigation"]').text()).toContain('common.logOut');
+    expect(tabs.get('[aria-current="page"]').attributes('data-tab')).toBe('account');
+    wrapper.unmount();
+  });
+
+  it('starts a meeting from the primary item inside the workspace tabs', async () => {
+    auth.authenticated = true;
+    meetings.createMeeting.mockClear();
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    const start = wrapper.get('[data-tab="start"]');
+    expect(start.attributes('data-variant')).toBe('primary');
+    await start.trigger('click');
+    await flushPromises();
+
+    expect(meetings.createMeeting).toHaveBeenCalledTimes(1);
+    expect(start.get('svg').attributes('data-animate')).toBe('true');
+    wrapper.unmount();
+  });
+
+  it('hides workspace tabs inside meetings', async () => {
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar('/room/meeting-id');
+    await flushPromises();
+
+    expect(wrapper.find('nav[aria-label="nav.workspaceNavigation"]').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

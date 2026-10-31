@@ -12,7 +12,7 @@ interface Props {
   participant: Participant;
   /** Only registered participants have a status; guests show none. */
   status?: UserStatus | null;
-  /** Image for the name tag's mini avatar; initials show without one. */
+  /** The person's avatar, shown while the camera is off and in the name tag; initials show without one. */
   avatarUrl?: string;
   /** The participant is the active speaker. */
   speaking?: boolean;
@@ -22,6 +22,12 @@ interface Props {
   interactive?: boolean;
   /** Small strip tiles hide the name until it is asked for. */
   showNameTag?: boolean;
+  /** How the video fills the tile; by default only large and screen tiles fit whole. */
+  fit?: 'cover' | 'contain';
+  /** Full screen shows the media on a near-black background. */
+  dark?: boolean;
+  /** Full screen's main tile runs edge to edge, without corners, border, or shadow. */
+  bleed?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -32,6 +38,9 @@ const props = withDefaults(defineProps<Props>(), {
   status: null,
   speaking: false,
   showNameTag: true,
+  fit: undefined,
+  dark: false,
+  bleed: false,
 });
 const { t } = useI18n();
 
@@ -106,14 +115,15 @@ const statusLabel = computed(() =>
   props.status === 'offline' ? t('meeting.participant.offline') : (statusOption.value?.label ?? ''),
 );
 const isCompact = computed(() => props.size === 'sidebar' || props.size === 'mobile');
-// Only the large pinned tile has room to spell the status out; the others show its dot.
-const showsStatusLabel = computed(() => !!statusOption.value && props.size === 'full');
 
 // Screens are never cropped or mirrored, so their text stays whole and readable.
 const isScreen = computed(() => !!props.participant.screenShareOf);
 const objectFitClass = computed(() => {
-  return props.size === 'full' || isScreen.value ? 'object-contain' : 'object-cover';
+  if (isScreen.value) return 'object-contain';
+  if (props.fit) return props.fit === 'cover' ? 'object-cover' : 'object-contain';
+  return props.size === 'full' ? 'object-contain' : 'object-cover';
 });
+const surfaceClass = computed(() => (props.dark ? 'bg-[#161C1E]' : 'bg-[#E2E8F0]'));
 
 const attachStream = async () => {
   await nextTick();
@@ -164,10 +174,14 @@ onMounted(async () => {
     :is="interactive ? 'button' : 'div'"
     :type="interactive ? 'button' : undefined"
     :class="[
-      'relative group overflow-hidden rounded-[1.4rem] border-2 bg-[#E2E8F0] text-left shadow-[0_16px_40px_rgba(16,47,53,0.12)] transition-[border-color,box-shadow] duration-300',
+      'relative group overflow-hidden text-left transition-[border-color,box-shadow] duration-300',
+      bleed ? 'rounded-none border-0' : 'rounded-[1.4rem] border-2 shadow-[0_16px_40px_rgba(16,47,53,0.12)]',
+      surfaceClass,
       speaking
         ? 'border-[#0B7A75] shadow-[0_0_0_3px_rgba(11,122,117,0.22),0_16px_40px_rgba(16,47,53,0.12)]'
-        : 'border-[#E2E8F0]',
+        : dark
+          ? 'border-transparent'
+          : 'border-[#E2E8F0]',
       interactive ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BCFC7]' : '',
       sizeClasses,
     ]"
@@ -203,7 +217,9 @@ onMounted(async () => {
       @playing="markVideoFrames"
       @resize="markVideoFrames"
       :class="[
-        'w-full h-full rounded-[1.25rem] bg-[#E2E8F0]',
+        'w-full h-full',
+        bleed ? 'rounded-none' : 'rounded-[1.25rem]',
+        surfaceClass,
         objectFitClass,
         { hidden: !participant.videoEnabled, '-scale-x-100': participant.isLocal && !isScreen },
       ]"
@@ -212,15 +228,18 @@ onMounted(async () => {
     <!-- Avatar (shown when no stream or video disabled) -->
     <div
       v-if="!participant.stream || !participant.videoEnabled"
-      class="absolute inset-0 flex items-center justify-center bg-[#E2E8F0]"
+      data-participant-avatar
+      class="absolute inset-0 flex items-center justify-center"
+      :class="surfaceClass"
     >
       <div
         :class="[
-          'rounded-[28%] bg-[#0B7A75] flex items-center justify-center font-bold text-white',
-          size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-24 h-24 text-4xl',
+          'flex items-center justify-center overflow-hidden rounded-full bg-[#0B7A75] font-bold text-white shadow-[0_8px_24px_rgba(16,47,53,0.25)]',
+          size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-28 h-28 text-4xl',
         ]"
       >
         <MonitorUp v-if="isScreen" :class="size === 'sidebar' || size === 'mobile' ? 'size-5' : 'size-10'" />
+        <img v-else-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
         <template v-else>{{ initials }}</template>
       </div>
     </div>
@@ -229,7 +248,8 @@ onMounted(async () => {
     <div
       v-if="isMediaLoading"
       data-participant-loading
-      class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#E2E8F0]/70 text-[#0B7A75] backdrop-blur-[2px]"
+      class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[#0B7A75] backdrop-blur-[2px]"
+      :class="dark ? 'bg-[#161C1E]/70' : 'bg-[#E2E8F0]/70'"
       role="status"
     >
       <LoadingRipple :size="isCompact ? 'sm' : 'lg'" />
@@ -244,7 +264,7 @@ onMounted(async () => {
       v-if="showNameTag"
       data-participant-name-tag
       :class="[
-        'absolute flex items-center rounded-full bg-[#102F35]/75 text-white backdrop-blur',
+        'meeting-glass-bubble absolute flex items-center rounded-full',
         isCompact
           ? 'bottom-1.5 left-1.5 max-w-[calc(100%-0.75rem)] gap-1 py-0.5 pl-0.5 pr-2 text-[11px]'
           : 'bottom-2 left-2 max-w-[calc(100%-1rem)] gap-1.5 py-0.5 pl-0.5 pr-2.5 text-xs',
@@ -274,10 +294,19 @@ onMounted(async () => {
       </span>
       <span class="truncate font-medium">{{ participant.name }}</span>
       <span v-if="participant.isLocal" class="shrink-0 text-[#66D0C8]">{{ t('meeting.you') }}</span>
-      <span v-if="showsStatusLabel" class="shrink-0 border-l border-white/25 pl-1.5 text-white/80">{{
-        statusLabel
-      }}</span>
       <span v-if="statusOption" class="sr-only">{{ t('meeting.participant.status', { status: statusLabel }) }}</span>
+    </div>
+
+    <!-- The pinned person keeps a pin badge, so phones without hover still see who is pinned. -->
+    <div
+      v-if="isExpanded"
+      data-participant-pinned
+      :class="[
+        'meeting-glass-bubble absolute left-2 flex items-center justify-center rounded-full',
+        isCompact ? 'top-1 size-5' : 'top-4 size-7',
+      ]"
+    >
+      <Pin :class="isCompact ? 'size-3' : 'size-3.5'" aria-hidden="true" />
     </div>
 
     <!-- Audio/Video Status Indicators -->

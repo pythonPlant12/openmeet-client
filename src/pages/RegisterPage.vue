@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { AlertCircle, ArrowLeft, ArrowRight, Eye, EyeOff, Video } from 'lucide-vue-next';
+import { ArrowLeftAnimated, ArrowRightAnimated, EyeAnimated, EyeOffAnimated } from '@respeak/lucide-motion-vue';
+import { AlertCircle, Video } from 'lucide-vue-next';
 import { nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
@@ -89,7 +90,7 @@ const goToLogin = () => {
             to="/"
             class="inline-flex items-center gap-2 rounded-full py-2 text-sm font-semibold text-[#27595D] underline-offset-4 hover:text-[#0B7A75] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
           >
-            <ArrowLeft class="size-4" />
+            <ArrowLeftAnimated :size="16" animate-on-hover animate-on-tap trigger-target="parent" />
             {{ t('common.backToHome') }}
           </RouterLink>
           <button
@@ -190,8 +191,14 @@ const goToLogin = () => {
                   :disabled="isRegistering"
                   @click="isPasswordVisible = !isPasswordVisible"
                 >
-                  <EyeOff v-if="isPasswordVisible" class="size-4" />
-                  <Eye v-else class="size-4" />
+                  <EyeOffAnimated
+                    v-if="isPasswordVisible"
+                    :size="16"
+                    animate-on-hover
+                    animate-on-tap
+                    trigger-target="parent"
+                  />
+                  <EyeAnimated v-else :size="16" animate-on-hover animate-on-tap trigger-target="parent" />
                 </button>
               </div>
             </div>
@@ -215,8 +222,14 @@ const goToLogin = () => {
                   :disabled="isRegistering"
                   @click="isConfirmPasswordVisible = !isConfirmPasswordVisible"
                 >
-                  <EyeOff v-if="isConfirmPasswordVisible" class="size-4" />
-                  <Eye v-else class="size-4" />
+                  <EyeOffAnimated
+                    v-if="isConfirmPasswordVisible"
+                    :size="16"
+                    animate-on-hover
+                    animate-on-tap
+                    trigger-target="parent"
+                  />
+                  <EyeAnimated v-else :size="16" animate-on-hover animate-on-tap trigger-target="parent" />
                 </button>
               </div>
             </div>
@@ -238,7 +251,13 @@ const goToLogin = () => {
           >
             <LoadingRipple v-if="isRegistering" size="sm" />
             {{ isRegistering ? t('auth.register.submitting') : t('auth.register.title') }}
-            <ArrowRight v-if="!isRegistering" class="size-4" />
+            <ArrowRightAnimated
+              v-if="!isRegistering"
+              :size="16"
+              animate-on-hover
+              animate-on-tap
+              trigger-target="parent"
+            />
           </Button>
 
           <Button
@@ -272,7 +291,8 @@ const goToLogin = () => {
             class="inline-flex items-center gap-1.5 font-semibold text-[#27595D] underline-offset-4 hover:text-[#0B7A75] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"
             @click="createMeeting"
           >
-            {{ t('auth.register.skip') }} <ArrowRight class="size-4" />
+            {{ t('auth.register.skip') }}
+            <ArrowRightAnimated :size="16" animate-on-hover animate-on-tap trigger-target="parent" />
           </button>
         </div>
       </div>

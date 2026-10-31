@@ -170,6 +170,36 @@ describe('VoiceRecorder', () => {
     expect(wrapper.emitted('update:active')?.slice(-1)[0]).toEqual([false]);
   });
 
+  it('keeps the final time while the sent recording fades out and starts the next one from zero', async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    const runFrames = () => {
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach((callback) => callback(now));
+    };
+    const time = () => wrapper.get('[data-voice-recorder-time]').text();
+    const wrapper = mountRecorder();
+
+    await holdUntilRecording(wrapper);
+    now = 2000;
+    runFrames();
+    expect(time()).toBe('0:02,00');
+
+    await release(wrapper);
+    now = 2500;
+    runFrames();
+    expect(time()).toBe('0:02,00');
+
+    await holdUntilRecording(wrapper);
+    expect(time()).toBe('0:00,00');
+  });
+
   it('cancels when the finger slides left', async () => {
     const wrapper = mountRecorder();
     await holdUntilRecording(wrapper);

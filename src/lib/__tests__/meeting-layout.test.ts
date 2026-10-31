@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fitTilesInRows, layoutAfterTileClick } from '@/lib/meeting-layout';
+import { fitTilesInRows, layoutAfterTileClick, mainVideoFills, speakerViewMainId } from '@/lib/meeting-layout';
 
 describe('layoutAfterTileClick', () => {
   it('pins the clicked person and switches the grid to speaker view', () => {
@@ -24,11 +24,29 @@ describe('layoutAfterTileClick', () => {
     });
   });
 
-  it('returns to the grid when the pinned person is clicked', () => {
+  it('unpins the pinned person and stays in speaker view', () => {
     expect(layoutAfterTileClick({ viewMode: 'speaker', pinnedParticipantId: 'ada' }, 'ada')).toEqual({
-      viewMode: 'grid',
+      viewMode: 'speaker',
       pinnedParticipantId: null,
     });
+  });
+});
+
+describe('speakerViewMainId', () => {
+  it('shows the pinned person, else whoever speaks, else the first participant', () => {
+    expect(speakerViewMainId(['ada', 'bob'], 'bob', 'ada')).toBe('bob');
+    expect(speakerViewMainId(['ada', 'bob'], null, 'bob')).toBe('bob');
+    expect(speakerViewMainId(['ada', 'bob'], 'gone', null)).toBe('ada');
+    expect(speakerViewMainId([], null, null)).toBeNull();
+  });
+});
+
+describe('mainVideoFills', () => {
+  it('fills the stage only when the video has its orientation and full screen is off', () => {
+    expect(mainVideoFills(9 / 16, 390, 700, false)).toBe(true);
+    expect(mainVideoFills(16 / 9, 1200, 700, false)).toBe(true);
+    expect(mainVideoFills(16 / 9, 390, 700, false)).toBe(false);
+    expect(mainVideoFills(9 / 16, 390, 700, true)).toBe(false);
   });
 });
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Gauge, Mic, MicOff, Video, VideoOff, Webcam } from 'lucide-vue-next';
+import { GaugeAnimated, MicAnimated, MicOffAnimated } from '@respeak/lucide-motion-vue';
+import { Mic, MicOff, Video, VideoOff, Webcam } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -16,6 +17,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { type MediaKind, useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
 
 import MeetingQualityOptions from './MeetingQualityOptions.vue';
@@ -28,7 +30,12 @@ const props = defineProps<{
   off: boolean;
   available: boolean;
 }>();
-const emit = defineEmits<{ (event: 'toggle'): void; (event: 'media-changed'): void }>();
+const emit = defineEmits<{
+  (event: 'toggle'): void;
+  (event: 'media-changed'): void;
+  /** The device menu opened or closed; the controls bar holds its liquid drop on an open menu. */
+  (event: 'open-change', open: boolean): void;
+}>();
 const { t } = useI18n();
 const { devices, activeId, quality, sentHeight, busy, refresh, changeDevice, changeQuality } = useMeetingMediaSettings(
   props.kind,
@@ -58,6 +65,7 @@ function deviceLabel(device: MediaDeviceInfo, index: number) {
 }
 
 function onMenuOpen(open: boolean) {
+  emit('open-change', open);
   if (open) void refresh();
 }
 
@@ -73,8 +81,8 @@ async function selectDevice(deviceId: unknown) {
         <Button
           :variant="off ? 'destructive' : 'secondary'"
           size="icon"
-          class="meeting-control size-11 rounded-xl border-2 border-[#D8E7E3] bg-[#FBFCF8] text-[#102F35] shadow-[0_4px_12px_rgba(16,47,53,0.08)] data-[state=open]:border-[#0B7A75] sm:size-12"
-          :class="{ '!border-[#F2765F] !bg-[#F2765F] !text-white': off, 'meeting-control-muted': off }"
+          class="meeting-control size-11 rounded-full border-0 bg-transparent text-[#102F35] shadow-none sm:size-12"
+          :class="{ 'meeting-control-muted meeting-control-alert': off }"
           :aria-label="tooltip"
           :data-media-off="off"
           data-media-button
@@ -87,18 +95,18 @@ async function selectDevice(deviceId: unknown) {
         align="center"
         side="top"
         :side-offset="10"
-        class="marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
+        class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
       >
         <DropdownMenuSub v-if="!isAudio">
           <DropdownMenuSubTrigger
             class="meeting-share-item cursor-pointer gap-2 rounded-xl py-2.5 font-semibold"
             data-media-quality-menu
           >
-            <Gauge class="size-4 text-[#0B7A75]" />Quality
+            <LiquidMenuIcon class="text-[#0B7A75]" :animated="GaugeAnimated" />Quality
             <span class="ml-auto truncate pl-2 text-xs font-normal text-[#61777B]">{{ qualityLabel }}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent
-            class="marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
+            class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
           >
             <MeetingQualityOptions
               :quality="quality"
@@ -114,13 +122,17 @@ async function selectDevice(deviceId: unknown) {
             class="meeting-share-item cursor-pointer gap-2 rounded-xl py-2.5 font-semibold"
             data-media-source-menu
           >
-            <Mic v-if="isAudio" class="size-4 text-[#0B7A75]" /><Webcam v-else class="size-4 text-[#0B7A75]" />Source
+            <LiquidMenuIcon v-if="isAudio" class="text-[#0B7A75]" :animated="MicAnimated" /><LiquidMenuIcon
+              v-else
+              class="text-[#0B7A75]"
+              :fallback="Webcam"
+            />Source
             <span class="ml-auto max-w-28 truncate pl-2 text-xs font-normal text-[#61777B]">{{
               activeDeviceLabel
             }}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent
-            class="marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
+            class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
           >
             <p v-if="!devices.length" class="px-2 py-1.5 text-sm text-[#61777B]">
               {{ isAudio ? 'No microphones found' : 'No cameras found' }}
@@ -149,8 +161,12 @@ async function selectDevice(deviceId: unknown) {
           data-media-toggle-item
           @select="emit('toggle')"
         >
-          <template v-if="isAudio"> <Mic v-if="off" class="size-4" /><MicOff v-else class="size-4" /> </template>
-          <template v-else> <Video v-if="off" class="size-4" /><VideoOff v-else class="size-4" /> </template>
+          <template v-if="isAudio">
+            <LiquidMenuIcon v-if="off" :animated="MicAnimated" /><LiquidMenuIcon v-else :animated="MicOffAnimated" />
+          </template>
+          <template v-else>
+            <LiquidMenuIcon v-if="off" :fallback="Video" /><LiquidMenuIcon v-else :fallback="VideoOff" />
+          </template>
           {{ toggleLabel }}
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -69,6 +69,15 @@ function mountControl(kind: 'audio' | 'video', off = false) {
 
 describe('MeetingMediaControl', () => {
   beforeEach(() => {
+    // Animated menu icons watch the viewport, which jsdom has no observer for.
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
     Object.values(settings).forEach((mock) => mock.mockReset());
     settings.changeDevice.mockResolvedValue(true);
   });

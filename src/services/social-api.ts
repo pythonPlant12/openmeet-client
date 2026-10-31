@@ -100,6 +100,9 @@ export interface CallSessionNotification {
   id: string;
   conversationId: string;
   initiatorId: string;
+  initiatorName: string;
+  /** The group's title for a group call; null for a direct call. */
+  conversationTitle: string | null;
   expiresAt: string;
   createdAt: string;
 }
@@ -614,6 +617,17 @@ export const socialApi = {
     return request<CallSessionResponse>(`/call-sessions/${callSessionId}/respond`, accessToken, {
       method: 'POST',
       body: JSON.stringify({ accept }),
+    });
+  },
+
+  /**
+   * The caller leaves a call. When nobody else is in it, it stops ringing for everyone. `keepalive`
+   * lets the request finish while the page closes.
+   */
+  cancelCallSession(accessToken: string, callSessionId: string, options: { keepalive?: boolean } = {}) {
+    return request<void>(`/call-sessions/${callSessionId}/cancel`, accessToken, {
+      method: 'POST',
+      keepalive: options.keepalive,
     });
   },
 

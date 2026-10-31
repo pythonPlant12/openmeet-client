@@ -169,6 +169,8 @@ export function useVoiceRecorder(options: {
 
   /** Finishes the recording; resolves `null` when nothing was recorded. */
   async function stop(): Promise<VoiceRecording | null> {
+    // The recording UI leaves at once, so the live display must not draw while the file is finished.
+    stopFrames();
     // Released before the microphone opened: wait for it, so a quick message still has its audio.
     try {
       if (starting && !(await starting)) return null;
@@ -208,9 +210,13 @@ export function useVoiceRecorder(options: {
     release();
   }
 
-  function release() {
+  function stopFrames() {
     if (frame !== undefined) cancelAnimationFrame(frame);
     frame = undefined;
+  }
+
+  function release() {
+    stopFrames();
     stream?.getTracks().forEach((track) => track.stop());
     source?.disconnect();
     void context?.close().catch(() => undefined);

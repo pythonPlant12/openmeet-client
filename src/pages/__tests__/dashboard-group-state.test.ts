@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   beginGroupMutation,
   buildGroupSettingsRequest,
-  callsPanelAfterDrag,
+  dashboardPanelState,
   endGroupMutation,
   selectableGroupMemberIds,
   shouldApplyDashboardRequest,
-  sidebarPanelAfterDrag,
+  sidebarForPanelQuery,
   sortGroupMembers,
 } from '@/pages/dashboard-group-state';
 import type { GroupMember } from '@/services/social-api';
@@ -68,34 +68,6 @@ describe('dashboard group state', () => {
     expect(selectableGroupMemberIds(members)).toEqual(['member-b', 'admin', 'member-a']);
   });
 
-  it.each([
-    ['messages downward from default', 'messages', null, 60, 0, 'messages'],
-    ['messages upward while expanded', 'messages', 'messages', -60, 0, null],
-    ['friends upward from default', 'friends', null, 0, -500, 'friends'],
-    ['friends downward from default', 'friends', null, 0, 500, 'messages'],
-    ['friends downward while expanded', 'friends', 'friends', 0, 500, null],
-    ['messages movement while friends are expanded', 'messages', 'friends', 60, 0, null],
-    ['friends movement while messages are expanded', 'friends', 'messages', -60, 0, null],
-  ] as const)('snaps %s', (_, panel, current, offset, velocity, expected) => {
-    expect(sidebarPanelAfterDrag(panel, current, offset, velocity)).toBe(expected);
-  });
-
-  it.each([
-    ['collapsed', -60, 0, 'middle'],
-    ['middle', 0, -500, 'top'],
-    ['top', -60, 0, 'top'],
-    ['top', 60, 0, 'middle'],
-    ['middle', 0, 500, 'collapsed'],
-    ['collapsed', 60, 0, 'collapsed'],
-    ['middle', 20, 100, 'middle'],
-  ] as const)('moves the calls list from %s by %i/%i to %s', (current, offset, velocity, expected) => {
-    expect(callsPanelAfterDrag(current, offset, velocity)).toBe(expected);
-  });
-
-  it('keeps neutral drag state unchanged', () => {
-    expect(sidebarPanelAfterDrag('messages', null, 20, 100)).toBeNull();
-  });
-
   it('only applies the latest request while the dashboard is mounted', () => {
     expect(shouldApplyDashboardRequest(2, 2, false)).toBe(true);
     expect(shouldApplyDashboardRequest(1, 2, false)).toBe(false);
@@ -127,5 +99,21 @@ describe('dashboard group state', () => {
 
     endGroupMutation(activeMutations, 'group-1', first!);
     expect(activeMutations.has('group-1')).toBe(false);
+  });
+});
+
+describe('dashboard workspace tabs', () => {
+  it('maps panel deep links to one sidebar section', () => {
+    expect(sidebarForPanelQuery('messages')).toEqual({ section: 'messages', calls: 'collapsed' });
+    expect(sidebarForPanelQuery('friends')).toEqual({ section: 'friends', calls: 'collapsed' });
+    expect(sidebarForPanelQuery('calls')).toEqual({ calls: 'top' });
+    expect(sidebarForPanelQuery(undefined)).toBeNull();
+    expect(sidebarForPanelQuery(['friends'])).toBeNull();
+  });
+
+  it('shows Calls while it is open and otherwise the remembered section', () => {
+    expect(dashboardPanelState('friends', 'collapsed')).toBe('friends');
+    expect(dashboardPanelState(null, 'collapsed')).toBe('messages');
+    expect(dashboardPanelState('friends', 'top')).toBe('calls');
   });
 });

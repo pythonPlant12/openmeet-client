@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { CheckCheck, EyeOff, Info, Phone, PhoneMissed, PhoneOff, UserRound, Video } from 'lucide-vue-next';
-import { motion } from 'motion-v';
+import { CheckCheck, EyeOff, Info, PhoneMissed, UserRound, Video } from 'lucide-vue-next';
 import { computed } from 'vue';
 
-import sidebarSectionControlUrl from '@/assets/sidebar-section-control.svg';
 import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Button } from '@/components/ui/button';
 import { LoadingRipple } from '@/components/ui/loading';
@@ -23,21 +21,11 @@ const props = defineProps<{
   isLoadingMore: boolean;
   now: number;
   avatarFor: (person: MeetingPerson) => string | undefined;
-  /** Who is calling: a person or a group name. Null while nothing rings. */
-  ringingName: string | null;
-  /** More calls ringing behind the one shown. */
-  ringingMore: number;
-  isAnswering: boolean;
   callingId: string | null;
 }>();
 const emit = defineEmits<{
-  (eventName: 'drag-end', pointerEvent: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }): void;
-  (eventName: 'wheel', wheelEvent: WheelEvent): void;
-  (event: 'toggle'): void;
   (event: 'open', meeting: MeetingSession): void;
   (event: 'toggle-read', meeting: MeetingSession): void;
-  (event: 'accept'): void;
-  (event: 'decline'): void;
   (event: 'load-more'): void;
 }>();
 const SWIPE_ACTION_WIDTH = 80;
@@ -88,85 +76,25 @@ function initials(name: string) {
   <section
     data-calls-panel
     :data-panel="panel"
-    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-    :class="
-      panel === 'top' ? 'flex-1' : panel === 'middle' ? 'max-md:flex-1 md:shrink-0 md:basis-[45%]' : 'shrink-0 basis-20'
-    "
+    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] px-3 pt-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    :class="panel === 'top' ? 'flex-1' : 'shrink-0 pb-[calc(0.75rem+var(--sidebar-bottom-inset,0px))]'"
     aria-labelledby="calls-heading"
   >
-    <div
-      v-if="ringingName"
-      data-incoming-call
-      role="alert"
-      class="calls-ringing -mx-1 flex shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#0B7A75] to-[#2DA58F] py-2 pl-3 pr-2 text-white"
-    >
-      <h2 id="calls-heading" class="sr-only">Calls</h2>
-      <!-- The banner takes the header's place, so pressing the caller still opens or closes the list. -->
-      <button
-        type="button"
-        data-incoming-toggle
-        class="flex min-w-0 flex-1 items-center gap-2 text-left"
-        :aria-expanded="expanded"
-        :aria-label="`${expanded ? 'Hide' : 'Show'} calls`"
-        @click="emit('toggle')"
-      >
-        <span class="calls-ringing-icon flex size-8 shrink-0 items-center justify-center rounded-full bg-white/20"
-          ><Phone class="size-4"
-        /></span>
-        <span class="min-w-0 flex-1">
-          <span class="block truncate text-sm font-semibold" data-incoming-caller>{{ ringingName }}</span>
-          <span class="block truncate text-[11px] text-white/80"
-            >Calling you<template v-if="ringingMore"> · {{ ringingMore }} more</template></span
-          >
-        </span>
-      </button>
-      <LoadingRipple v-if="isAnswering" class="size-5 text-white" />
-      <template v-else>
-        <button
-          type="button"
-          data-incoming-decline
-          class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#C4513D] text-white transition-colors [@media(hover:hover)]:hover:bg-[#A9412F]"
-          aria-label="Decline call"
-          title="Decline"
-          @click="emit('decline')"
-        >
-          <PhoneOff class="size-4" />
-        </button>
-        <button
-          type="button"
-          data-incoming-accept
-          class="flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-[#0B7A75] transition-colors [@media(hover:hover)]:hover:bg-[#E6F4F1] [@media(hover:hover)]:hover:text-[#102F35]"
-          aria-label="Answer call"
-          title="Answer"
-          @click="emit('accept')"
-        >
-          <Phone class="size-4" />
-        </button>
-      </template>
-    </div>
-    <div v-else class="flex h-9 items-center justify-between gap-2 px-2">
-      <motion.h2
+    <div class="flex h-9 items-center justify-between gap-2 px-2">
+      <h2
         id="calls-heading"
-        drag="y"
-        :drag-constraints="{ top: 0, bottom: 0 }"
-        :drag-elastic="0.08"
-        :drag-momentum="false"
-        role="button"
-        tabindex="0"
-        :aria-expanded="expanded"
-        class="-my-2 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
-        @drag-end="(event, info) => emit('drag-end', event, info)"
-        @click="emit('toggle')"
-        @wheel.prevent="emit('wheel', $event)"
-        @keydown.enter.prevent="emit('toggle')"
-        @keydown.space.prevent="emit('toggle')"
-        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Calls</span
-        ><SectionBadge :count="badge" singular="missed call" plural="missed calls"
-      /></motion.h2>
+        class="flex flex-1 items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+      >
+        <span>Calls</span><SectionBadge :count="badge" singular="missed call" plural="missed calls" />
+      </h2>
     </div>
     <div
       class="min-h-0 flex-1 overflow-y-auto transition-[flex-basis,flex-grow,margin,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-      :class="expanded ? 'mt-1 opacity-100' : 'pointer-events-none mt-0 flex-none basis-0 opacity-0'"
+      :class="
+        expanded
+          ? 'mt-1 pb-[calc(0.75rem+var(--sidebar-bottom-inset,0px))] opacity-100'
+          : 'pointer-events-none mt-0 flex-none basis-0 opacity-0'
+      "
       :aria-hidden="!expanded"
       data-calls-list
     >
@@ -337,63 +265,3 @@ function initials(name: string) {
     </div>
   </section>
 </template>
-
-<style scoped>
-/* A ringing call buzzes like a phone: a short shake, a pause, and a soft green pulse. */
-.calls-ringing {
-  animation:
-    calls-ring-buzz 1.6s ease-in-out infinite,
-    calls-ring-pulse 1.6s ease-out infinite;
-}
-.calls-ringing-icon {
-  animation: calls-ring-wiggle 1.6s ease-in-out infinite;
-}
-@keyframes calls-ring-buzz {
-  0%,
-  40%,
-  100% {
-    transform: translateX(0);
-  }
-  5%,
-  15%,
-  25%,
-  35% {
-    transform: translateX(-2px);
-  }
-  10%,
-  20%,
-  30% {
-    transform: translateX(2px);
-  }
-}
-@keyframes calls-ring-wiggle {
-  0%,
-  40%,
-  100% {
-    transform: rotate(0);
-  }
-  8%,
-  24% {
-    transform: rotate(-16deg);
-  }
-  16%,
-  32% {
-    transform: rotate(16deg);
-  }
-}
-@keyframes calls-ring-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgb(45 165 143 / 0.55);
-  }
-  70%,
-  100% {
-    box-shadow: 0 0 0 10px rgb(45 165 143 / 0);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .calls-ringing,
-  .calls-ringing-icon {
-    animation: none;
-  }
-}
-</style>
