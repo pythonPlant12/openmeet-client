@@ -148,7 +148,8 @@ function resetGesture() {
   applyDrag();
 }
 
-// The timer and waveform are drawn outside Vue, so a finished recording clears them by hand.
+// The timer and waveform are drawn outside Vue. A new recording clears them by hand; a finished one
+// keeps its last values, so the bar fades out without the timer flicking back to zero.
 function clearLiveDisplay() {
   const timerText = timer.value?.firstChild;
   if (timerText) timerText.nodeValue = formatRecordingTime(0);
@@ -162,7 +163,6 @@ function startsImmediatelyOnMobile() {
 
 function resetAll() {
   resetGesture();
-  clearLiveDisplay();
   playback.reset();
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
   previewUrl.value = undefined;
@@ -254,6 +254,7 @@ function onButtonClick(event: MouseEvent) {
 async function beginRecording(locked: boolean) {
   holdTimer = undefined;
   startFailed = false;
+  clearLiveDisplay();
   state.value = locked ? 'locked' : 'holding';
   playHaptic('medium');
   try {
