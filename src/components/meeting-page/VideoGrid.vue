@@ -182,8 +182,10 @@ function toggleName(participantId: string) {
         fullscreen
           ? 'inset-y-0 z-[35] bg-[#0B0F10]'
           : [
-              'bottom-[5.5rem] sm:bottom-[6.5rem] sm:top-[10rem]',
-              phoneTopBar === false ? 'top-[calc(4.25rem+env(safe-area-inset-top))]' : 'top-[8.5rem]',
+              'bottom-[calc(var(--meeting-control-size)+2.5rem)] sm:bottom-[calc(var(--meeting-control-size)+3.5rem)] sm:top-[calc(84px+2.25rem+var(--meeting-control-size))]',
+              phoneTopBar === false
+                ? 'top-[calc(1.25rem+var(--meeting-control-size)+env(safe-area-inset-top))]'
+                : 'top-[calc(5rem+var(--meeting-control-size))]',
             ]
       "
     >
@@ -228,7 +230,11 @@ function toggleName(participantId: string) {
           <div
             v-if="secondaryParticipants.length"
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            :class="fullscreen && controlsShown ? 'bottom-[5.5rem] sm:bottom-[6.5rem]' : 'bottom-4 sm:bottom-6'"
+            :class="
+              fullscreen && controlsShown
+                ? 'bottom-[calc(var(--meeting-control-size)+2.5rem)] sm:bottom-[calc(var(--meeting-control-size)+3.5rem)]'
+                : 'bottom-4 sm:bottom-6'
+            "
           >
             <div class="pointer-events-auto max-w-full overflow-x-auto" data-testid="participant-strip">
               <div class="flex w-max gap-2" :style="{ height: `${stripHeight}px` }">

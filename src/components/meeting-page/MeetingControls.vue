@@ -128,7 +128,7 @@ const shareOnTelegram = () => {
           variant="secondary"
           size="icon"
           @click="emit('toggle-stats')"
-          class="meeting-control size-11 rounded-full border-0 bg-transparent text-[#102F35] shadow-none sm:size-12"
+          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
           :class="{ '!text-[#0B7A75]': showConnectionStatus }"
           :aria-label="t('meeting.controls.toggleStats')"
         >
@@ -144,7 +144,7 @@ const shareOnTelegram = () => {
             <Button
               variant="secondary"
               size="icon"
-              class="meeting-control size-11 rounded-full border-0 bg-transparent text-[#102F35] shadow-none sm:size-12"
+              class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
               :aria-label="t('meeting.controls.openShare')"
             >
               <Share2 class="h-4 w-4" />
@@ -234,7 +234,7 @@ const shareOnTelegram = () => {
           variant="secondary"
           size="icon"
           @click="emit('toggle-chat')"
-          class="meeting-control relative size-11 rounded-full border-0 bg-transparent text-[#102F35] shadow-none sm:size-12"
+          class="meeting-control relative size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
           :class="{ '!text-[#0B7A75]': props.isChatOpen }"
           :aria-label="chatAriaLabel"
           data-chat-trigger
@@ -276,7 +276,7 @@ const shareOnTelegram = () => {
           variant="destructive"
           size="icon"
           @click="emit('end-call')"
-          class="meeting-control-danger meeting-control-alert size-11 rounded-full border-0 sm:size-12"
+          class="meeting-control-danger meeting-control-alert size-[var(--meeting-control-size)] rounded-full border-0 [&_svg]:size-[var(--meeting-control-icon)]"
           :aria-label="t('meeting.controls.endCall')"
         >
           <PhoneOff class="h-5 w-5" />

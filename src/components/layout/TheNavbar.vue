@@ -105,13 +105,13 @@ const dashboardPanel = ref<DashboardPanelState>(null);
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
 const isDashboardPage = computed(() => route.name === 'dashboard');
-// In a meeting the account button sits 12px above the centered control bar (16px offset + 58px bar on phones).
-// Elsewhere the account sheet opens 12px above the workspace tabs (their offset plus the 56px bar).
+// In a meeting the account button sits 12px above the centered control bar; elsewhere the account sheet opens
+// 12px above the workspace tabs. Both bars scale with the screen, so the offsets read their size variables.
 const mobileNavBottomClass = computed(() =>
   isMeetingPage.value
-    ? 'bottom-[5.375rem]'
+    ? 'bottom-[calc(var(--meeting-control-size)+2.5rem)]'
     : showWorkspaceTabs.value
-      ? 'bottom-[calc(max(1rem,env(safe-area-inset-bottom))+4.25rem)]'
+      ? 'bottom-[calc(max(1rem,env(safe-area-inset-bottom))+var(--liquid-bar-height)+12px)]'
       : isDashboardPage.value
         ? 'bottom-4'
         : 'bottom-6',
@@ -687,7 +687,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
       <div v-if="!mobileMenuOpen && !showWorkspaceTabs" class="pointer-events-auto flex">
         <button
           type="button"
-          class="liquid-glass-surface relative flex size-12 shrink-0 items-center justify-center rounded-full p-1.5 transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+          class="liquid-glass-surface relative flex size-[var(--meeting-control-size)] shrink-0 items-center justify-center rounded-full p-1.5 transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
           :aria-label="t('nav.accountInformation')"
           :aria-expanded="mobileMenuOpen"
           @click="handleToggleMobileMenu"

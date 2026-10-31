@@ -2366,8 +2366,8 @@ async function startConversationCall(conversation: Conversation) {
     :class="
       hasSelectedConversation
         ? // Below lg an open chat fills the screen; tablets keep the floating top tabs, so it starts under them.
-          'fixed inset-0 h-[100dvh] sm:max-lg:!pt-[4.25rem] lg:static lg:h-full'
-        : 'h-full max-sm:[--sidebar-bottom-inset:calc(max(1rem,env(safe-area-inset-bottom))+4.25rem)]'
+          'fixed inset-0 h-[100dvh] sm:max-lg:!pt-[calc(var(--liquid-bar-height-sm)+1.5rem)] lg:static lg:h-full'
+        : 'h-full max-sm:[--sidebar-bottom-inset:calc(max(1rem,env(safe-area-inset-bottom))+var(--liquid-bar-height)+12px)]'
     "
   >
     <motion.div

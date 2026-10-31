@@ -327,6 +327,24 @@
   animation: harbor-nav-arrive 600ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
+/* Control sizes follow the screen: they grow with its shorter side (vmin), so phones, tablets, and desktops in
+   any orientation get comfortable targets. Everything placed around the bars reads the same values. */
+:root {
+  /* Tabs on phones and tablets (the medium tab bar). */
+  --ui-tab-size: clamp(46px, calc(30px + 4vmin), 58px);
+  --ui-icon-size: clamp(20px, calc(14px + 1.2vmin), 24px);
+  /* Tabs in the desktop top bar (the small tab bar). */
+  --ui-tab-size-sm: clamp(40px, calc(24px + 1.8vmin), 48px);
+  --ui-icon-size-sm: clamp(18px, calc(12px + 0.7vmin), 22px);
+  --ui-label-size: clamp(14px, calc(12px + 0.3vmin), 16px);
+  /* Whole bars: the tabs plus the bar's padding on both sides. */
+  --liquid-bar-height: calc(var(--ui-tab-size) + 12px);
+  --liquid-bar-height-sm: calc(var(--ui-tab-size-sm) + 8px);
+  /* Meeting controls and the meeting's top row buttons, in normal and full screen. */
+  --meeting-control-size: clamp(46px, calc(30px + 3.4vmin), 60px);
+  --meeting-control-icon: clamp(20px, calc(14px + 1.1vmin), 26px);
+}
+
 /* Liquid glass shared by the navigation bars: a translucent frosted surface with a bright rim. */
 .liquid-glass-surface {
   background: rgb(251 252 248 / 0.62);

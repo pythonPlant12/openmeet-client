@@ -295,7 +295,7 @@ describe('TheNavbar', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const accountNavigation = wrapper.get('section[aria-label="Account navigation"]');
-    expect(accountNavigation.classes()).toContain('bottom-[5.375rem]');
+    expect(accountNavigation.classes()).toContain('bottom-[calc(var(--meeting-control-size)+2.5rem)]');
     expect(accountNavigation.text()).toContain('common.quitMeeting');
     expect(accountNavigation.text()).toContain('common.logOut');
     await wrapper.get('[data-mobile-status-toggle]').trigger('click');

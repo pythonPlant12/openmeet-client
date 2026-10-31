@@ -50,7 +50,9 @@ const phoneTopRowClass = computed(() =>
   hasPhoneTopBar.value ? 'top-20' : 'top-[calc(0.75rem+env(safe-area-inset-top))]',
 );
 const phoneBelowTopRowClass = computed(() =>
-  hasPhoneTopBar.value ? 'top-[8.5rem]' : 'top-[calc(4.25rem+env(safe-area-inset-top))]',
+  hasPhoneTopBar.value
+    ? 'top-[calc(5rem+var(--meeting-control-size))]'
+    : 'top-[calc(1.25rem+var(--meeting-control-size)+env(safe-area-inset-top))]',
 );
 const meetingExitRoute = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
 
@@ -837,7 +839,7 @@ const handleReconnect = () => {
       <!-- Participant Count Badge -->
       <div
         v-if="!isFullscreen"
-        class="fixed left-7 z-50 flex h-12 items-center gap-2 rounded-xl bg-[#0B7A75] px-4 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
+        class="fixed left-7 z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-xl bg-[#0B7A75] px-4 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
         :class="phoneTopRowClass"
       >
         <Users class="h-5 w-5" />
@@ -940,7 +942,7 @@ const handleReconnect = () => {
       <div
         v-if="showConnectionStatus && !isFullscreen"
         :class="phoneBelowTopRowClass"
-        class="fixed right-7 z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg sm:right-9 sm:top-[calc(84px+5.5rem)]"
+        class="fixed right-7 z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg sm:right-9 sm:top-[calc(84px+2.5rem+var(--meeting-control-size))]"
       >
         <div class="flex items-center gap-2">
           <span class="text-[#4E6B70]">{{ t('meeting.state') }}</span>
