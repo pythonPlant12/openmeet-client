@@ -14,13 +14,18 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useScreenShare } from '@/composables/useScreenShare';
 
 import MeetingQualityOptions from './MeetingQualityOptions.vue';
 
 defineProps<{ disabled?: boolean }>();
-const emit = defineEmits<{ (event: 'start'): void; (event: 'stop'): void }>();
+const emit = defineEmits<{
+  (event: 'start'): void;
+  (event: 'stop'): void;
+  (event: 'open-change', open: boolean): void;
+}>();
 const { t } = useI18n();
 const { session, isStarting, quality, sentHeight, setQuality } = useScreenShare();
 const qualityLabel = computed(() =>
@@ -30,14 +35,14 @@ const qualityLabel = computed(() =>
 
 <template>
   <div class="group relative" data-screen-share-control>
-    <DropdownMenu>
+    <DropdownMenu @update:open="emit('open-change', $event)">
       <DropdownMenuTrigger as-child>
         <Button
           variant="secondary"
           size="icon"
           :disabled="disabled"
-          class="meeting-control size-11 rounded-xl border-2 border-[#D8E7E3] bg-[#FBFCF8] text-[#102F35] shadow-[0_4px_12px_rgba(16,47,53,0.08)] data-[state=open]:border-[#0B7A75] sm:size-12"
-          :class="{ '!border-[#0B7A75]': session }"
+          class="meeting-control size-11 rounded-full border-0 bg-transparent text-[#102F35] shadow-none sm:size-12"
+          :class="{ '!text-[#0B7A75]': session }"
           :aria-label="t(session ? 'meeting.controls.presenting' : 'meeting.controls.presentScreen')"
           :data-sharing="!!session"
           data-screen-share-button
@@ -50,7 +55,7 @@ const qualityLabel = computed(() =>
         align="center"
         side="top"
         :side-offset="10"
-        class="marketing-font w-72 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
+        class="meeting-menu marketing-font w-72 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
       >
         <DropdownMenuItem
           v-if="session"
@@ -58,7 +63,7 @@ const qualityLabel = computed(() =>
           data-stop-presenting
           @select="emit('stop')"
         >
-          <MonitorOff class="mr-2 size-4" />{{ t('meeting.controls.stopPresenting') }}
+          <LiquidMenuIcon class="mr-2" :fallback="MonitorOff" />{{ t('meeting.controls.stopPresenting') }}
         </DropdownMenuItem>
         <DropdownMenuItem
           v-else
@@ -67,7 +72,7 @@ const qualityLabel = computed(() =>
           data-start-presenting
           @select="emit('start')"
         >
-          <MonitorUp class="mr-2 size-4" />
+          <LiquidMenuIcon class="mr-2" :fallback="MonitorUp" />
           <span class="min-w-0">
             <span class="block">{{ t('meeting.controls.startPresenting') }}</span>
             <span class="block text-xs font-normal text-[#61777B]">{{ t('meeting.controls.presentHint') }}</span>
@@ -80,7 +85,7 @@ const qualityLabel = computed(() =>
             <span class="ml-auto truncate pl-2 text-xs font-normal text-[#61777B]">{{ qualityLabel }}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent
-            class="marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
+            class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
           >
             <MeetingQualityOptions :quality="quality" :sent-height="session ? sentHeight : null" @select="setQuality" />
           </DropdownMenuSubContent>

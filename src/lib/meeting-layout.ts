@@ -6,13 +6,33 @@ export interface MeetingLayout {
 }
 
 /**
- * Layout after clicking a participant tile: in the grid it pins that person in speaker view, in speaker
- * view it pins someone else, and clicking the pinned person returns to the grid.
+ * Layout after tapping a participant tile: in the grid it pins that person in speaker view. In speaker view it
+ * pins someone else, and tapping the pinned person unpins them, so the stage follows whoever speaks.
  */
 export function layoutAfterTileClick(layout: MeetingLayout, participantId: string): MeetingLayout {
   if (layout.viewMode === 'grid') return { viewMode: 'speaker', pinnedParticipantId: participantId };
-  if (layout.pinnedParticipantId === participantId) return { viewMode: 'grid', pinnedParticipantId: null };
+  if (layout.pinnedParticipantId === participantId) return { viewMode: 'speaker', pinnedParticipantId: null };
   return { viewMode: 'speaker', pinnedParticipantId: participantId };
+}
+
+/** The speaker view's main person: the pinned one, else the active speaker, else the first participant. */
+export function speakerViewMainId(
+  participantIds: readonly string[],
+  pinnedParticipantId: string | null,
+  activeSpeakerId: string | null,
+) {
+  if (pinnedParticipantId && participantIds.includes(pinnedParticipantId)) return pinnedParticipantId;
+  if (activeSpeakerId && participantIds.includes(activeSpeakerId)) return activeSpeakerId;
+  return participantIds[0] ?? null;
+}
+
+/**
+ * The main video fills the stage, cropping slightly, when it has the stage's orientation (a portrait camera on
+ * a portrait phone). Otherwise, and in full screen where the speaker must show whole, it fits inside.
+ */
+export function mainVideoFills(videoAspect: number, stageWidth: number, stageHeight: number, fullscreen: boolean) {
+  if (fullscreen || stageWidth <= 0 || stageHeight <= 0) return false;
+  return videoAspect < 1 === stageWidth / stageHeight < 1;
 }
 
 /** Fallback shape for tiles whose video has not reported its size yet, or that show an avatar. */

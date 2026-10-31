@@ -16,10 +16,8 @@ import {
   Video,
   X,
 } from 'lucide-vue-next';
-import { motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
-import sidebarSectionControlUrl from '@/assets/sidebar-section-control.svg';
 import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -75,9 +73,6 @@ const emit = defineEmits<{
   (event: 'join-group'): void;
   (event: 'start-meeting'): void;
   (event: 'join-meeting'): void;
-  (eventName: 'drag-end', pointerEvent: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }): void;
-  (eventName: 'wheel', wheelEvent: WheelEvent): void;
-  (event: 'toggle'): void;
   (event: 'select', conversation: Conversation): void;
   (event: 'details', conversation: Conversation): void;
   (event: 'delete', conversation: Conversation): void;
@@ -153,23 +148,10 @@ onBeforeUnmount(clearLongPress);
 <template>
   <div class="shrink-0 border-b border-[#E5EFEC] p-3 lg:px-5 lg:py-4">
     <div class="flex min-h-8 items-center justify-between gap-2 px-2 lg:px-0">
-      <motion.h1
-        drag="y"
-        :drag-constraints="{ top: 0, bottom: 0 }"
-        :drag-elastic="0.08"
-        :drag-momentum="false"
-        role="button"
-        tabindex="0"
-        :aria-expanded="expanded"
-        class="-my-2 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B] lg:-my-4 lg:py-4"
-        @drag-end="(event, info) => emit('drag-end', event, info)"
-        @click="emit('toggle')"
-        @wheel.prevent="emit('wheel', $event)"
-        @keydown.enter.prevent="emit('toggle')"
-        @keydown.space.prevent="emit('toggle')"
-        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Messages</span
-        ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention"
-      /></motion.h1>
+      <h1 class="flex flex-1 items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]">
+        <span>Chats</span
+        ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention" />
+      </h1>
       <div class="flex shrink-0 items-center gap-2">
         <Button
           size="icon"
@@ -281,7 +263,12 @@ onBeforeUnmount(clearLongPress);
     :class="expanded ? 'flex-1 opacity-100' : 'pointer-events-none flex-none basis-0 opacity-0'"
     :aria-hidden="!expanded"
   >
-    <div id="messages-panel" class="h-full min-h-0 overflow-y-auto p-2" aria-live="polite">
+    <!-- On phones the workspace tabs float over the list, so its end scrolls clear of them. -->
+    <div
+      id="messages-panel"
+      class="h-full min-h-0 overflow-y-auto p-2 pb-[calc(0.5rem+var(--sidebar-bottom-inset,0px))]"
+      aria-live="polite"
+    >
       <div v-if="groupInvitations.length" class="mb-3 space-y-1 border-b border-[#E5EFEC] pb-3">
         <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Group invitations</p>
         <div

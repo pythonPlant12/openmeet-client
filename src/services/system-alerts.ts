@@ -177,7 +177,7 @@ export class SystemAlerts {
     this.calls.set(alert.callId, call);
     const generation = this.generation;
 
-    // In front, the app rings in its own UI (the dashboard Calls header or a toast).
+    // In front, the app rings in its own incoming call bar.
     const notify = !isAppInFront();
     const nativeSession = this.nativeSession;
     if (nativeSession && (!notify || !nativeSession.ringsNatively)) this.ringtone.start();

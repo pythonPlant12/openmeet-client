@@ -38,11 +38,12 @@ function mountTile(
 }
 
 describe('ParticipantTile status', () => {
-  it('spells out the status of a registered participant on the pinned tile', () => {
+  it('shows only the status dot in the name tag and announces the status to screen readers', () => {
     const tag = mountTile('doNotDisturb', 'full').get('[data-participant-name-tag]');
 
     expect(tag.get('[data-participant-status]').attributes('data-status')).toBe('doNotDisturb');
-    expect(tag.text()).toContain('Do not disturb');
+    expect(tag.get('.sr-only').text()).toBe('Status: Do not disturb');
+    expect(tag.text().replace('Status: Do not disturb', '')).not.toContain('Do not disturb');
   });
 
   it('shows "appear offline" as plain offline to others', () => {
@@ -101,5 +102,27 @@ describe('ParticipantTile media states', () => {
         .find('[data-participant-loading]')
         .exists(),
     ).toBe(false);
+  });
+});
+
+describe('ParticipantTile avatar', () => {
+  const cameraOff = { ...participant, videoEnabled: false };
+
+  it('shows the real avatar while the camera is off', () => {
+    const tile = mountTile(null, 'full', { participant: cameraOff, avatarUrl: 'blob:ada' });
+    expect(tile.get('[data-participant-avatar] img').attributes('src')).toBe('blob:ada');
+  });
+
+  it('falls back to initials without an avatar', () => {
+    const tile = mountTile(null, 'full', { participant: cameraOff });
+    expect(tile.get('[data-participant-avatar]').text()).toBe('AL');
+  });
+
+  it('marks the pinned person with a badge that needs no hover', () => {
+    const tile = mount(ParticipantTile, {
+      props: { participant, isExpanded: true },
+      global: { plugins: [createI18n({ legacy: false, locale: 'en', missingWarn: false })] },
+    });
+    expect(tile.find('[data-participant-pinned]').exists()).toBe(true);
   });
 });

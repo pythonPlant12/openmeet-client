@@ -520,8 +520,25 @@ watch(isCheckingSession, (checking) => {
   }
 });
 
+// A caller who leaves a call nobody else is in, including before joining it, stops it ringing for
+// everyone. The server ignores the request from anyone else, or while someone is still in the call.
+// The call ID is kept from when the page opened: by unmount the route already shows the next page.
+const openedCallSessionId = isConversationCall.value ? meetingId.value : null;
+
+function cancelRingingCall(keepalive = false) {
+  const token = accessToken.value;
+  if (!openedCallSessionId || !token) return;
+  socialApi
+    .cancelCallSession(token, openedCallSessionId, { keepalive })
+    .catch((error) => console.error('[MeetingRoom] Failed to stop the call ringing:', error));
+}
+
+const handlePageHide = () => cancelRingingCall(true);
+
 onMounted(() => {
   window.addEventListener('openmeet:close-meeting-chat', closeMeetingChat);
+  window.addEventListener('pagehide', handlePageHide);
+  window.addEventListener('keydown', handleFullscreenKeydown);
   if (!isCheckingSession.value) {
     void initializeMeeting();
   }
@@ -531,6 +548,13 @@ onUnmounted(() => {
   screenShare.stop();
   window.clearTimeout(participantStatusTimer);
   window.removeEventListener('openmeet:close-meeting-chat', closeMeetingChat);
+  window.removeEventListener('pagehide', handlePageHide);
+  window.removeEventListener('keydown', handleFullscreenKeydown);
+  window.clearTimeout(fullscreenControlsTimer);
+  if (isFullscreen.value) setFullscreen(false);
+  document.documentElement.classList.remove('meeting-immersive');
+  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: false }));
+  cancelRingingCall();
   window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: false }));
   endCall();
 });
@@ -678,6 +702,64 @@ const handleTogglePin = (participantId: string) => {
   pinnedParticipantId.value = layout.pinnedParticipantId;
 };
 
+// Full screen works in grid and speaker view alike: only the media shows, on a near-black background. The navbar,
+// top row, and controls hide; the controls come back with a swipe up on phones, or the mouse at the bottom edge.
+const FULLSCREEN_SWIPE_PX = 40;
+const FULLSCREEN_CONTROLS_EDGE_PX = 140;
+const FULLSCREEN_CONTROLS_HIDE_MS = 2500;
+const isFullscreen = ref(false);
+const areFullscreenControlsShown = ref(false);
+const showsControls = computed(() => !isFullscreen.value || areFullscreenControlsShown.value);
+let swipeStart: { x: number; y: number } | null = null;
+let fullscreenControlsTimer: number | undefined;
+
+function setFullscreen(fullscreen: boolean) {
+  isFullscreen.value = fullscreen;
+  areFullscreenControlsShown.value = false;
+  window.clearTimeout(fullscreenControlsTimer);
+}
+
+const handleToggleFullscreen = () => setFullscreen(!isFullscreen.value);
+
+watch(isFullscreen, (fullscreen) => {
+  // Menus open in portals outside the page, so the dark theme for them hangs off the document.
+  document.documentElement.classList.toggle('meeting-immersive', fullscreen);
+  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: fullscreen }));
+});
+
+function handleFullscreenTouchStart(event: TouchEvent) {
+  const touch = event.touches[0];
+  swipeStart = isFullscreen.value && touch ? { x: touch.clientX, y: touch.clientY } : null;
+}
+
+// A mostly vertical swipe anywhere: up brings the controls in from the bottom, down hides them again.
+function handleFullscreenTouchEnd(event: TouchEvent) {
+  const touch = event.changedTouches[0];
+  if (!swipeStart || !touch) return;
+  const dx = touch.clientX - swipeStart.x;
+  const dy = touch.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dy) < FULLSCREEN_SWIPE_PX || Math.abs(dy) < Math.abs(dx)) return;
+  areFullscreenControlsShown.value = dy < 0;
+}
+
+function handleFullscreenPointerMove(event: PointerEvent) {
+  if (!isFullscreen.value || event.pointerType !== 'mouse') return;
+  if (window.innerHeight - event.clientY > FULLSCREEN_CONTROLS_EDGE_PX) return;
+  areFullscreenControlsShown.value = true;
+  window.clearTimeout(fullscreenControlsTimer);
+  fullscreenControlsTimer = window.setTimeout(() => {
+    areFullscreenControlsShown.value = false;
+  }, FULLSCREEN_CONTROLS_HIDE_MS);
+}
+
+// Escape first closes an open menu, chat, or dialog; only with none open does it leave full screen.
+function handleFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !isFullscreen.value || event.defaultPrevented) return;
+  if (document.querySelector('[role="menu"], [role="dialog"]')) return;
+  setFullscreen(false);
+}
+
 // A device switch swaps tracks without the browser's track events, so availability is read again.
 function refreshMediaAvailability() {
   const stream = localStream.value;
@@ -714,7 +796,14 @@ const handleReconnect = () => {
 </script>
 
 <template>
-  <div class="relative h-[calc(100dvh-84px)] overflow-hidden bg-[#FBFCF8] px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0">
+  <div
+    class="relative h-[calc(100dvh-84px)] overflow-hidden px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0"
+    :class="isFullscreen ? 'bg-[#0B0F10]' : 'bg-[#FBFCF8]'"
+    :data-fullscreen="isFullscreen ? 'true' : undefined"
+    @touchstart.passive="handleFullscreenTouchStart"
+    @touchend.passive="handleFullscreenTouchEnd"
+    @pointermove="handleFullscreenPointerMove"
+  >
     <div
       v-if="isCheckingSession"
       class="marketing-font h-full bg-[#102F35] flex items-center justify-center text-[#E6F4F1]"
@@ -747,6 +836,7 @@ const handleReconnect = () => {
     <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-[#102F35] flex flex-col">
       <!-- Participant Count Badge -->
       <div
+        v-if="!isFullscreen"
         class="fixed left-7 z-50 flex h-12 items-center gap-2 rounded-xl bg-[#0B7A75] px-4 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
         :class="phoneTopRowClass"
       >
@@ -755,6 +845,7 @@ const handleReconnect = () => {
       </div>
 
       <div
+        v-if="!isFullscreen"
         class="fixed z-[60] transition-[right] sm:top-[calc(84px+1.25rem)]"
         :class="[phoneTopRowClass, isChatOpen ? 'right-16' : 'right-7 sm:right-9']"
       >
@@ -767,7 +858,9 @@ const handleReconnect = () => {
           :pinned-participant-id="pinnedParticipantId"
           :video-available="videoAvailable"
           :view-mode="viewMode"
+          :fullscreen="isFullscreen"
           @disconnect="handleEndCall"
+          @toggle-fullscreen="handleToggleFullscreen"
           @set-view-mode="handleSetViewMode"
           @toggle-chat="handleToggleChat"
           @toggle-mute="handleToggleMute"
@@ -779,6 +872,7 @@ const handleReconnect = () => {
       <!-- Motion animates `transform`, which would replace a translate-based centering, so a full-width row centers it.
            Phones place it below the participants and menu buttons, which share the top row there. -->
       <div
+        v-if="!isFullscreen"
         class="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 sm:top-[calc(84px+1.25rem)]"
         :class="phoneBelowTopRowClass"
       >
@@ -810,7 +904,7 @@ const handleReconnect = () => {
       </div>
 
       <button
-        v-if="hasPoorConnection"
+        v-if="hasPoorConnection && !isFullscreen"
         type="button"
         :class="phoneBelowTopRowClass"
         class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg sm:top-[calc(84px+1.25rem)]"
@@ -844,7 +938,7 @@ const handleReconnect = () => {
 
       <!-- Debug Info Panel -->
       <div
-        v-if="showConnectionStatus"
+        v-if="showConnectionStatus && !isFullscreen"
         :class="phoneBelowTopRowClass"
         class="fixed right-7 z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg sm:right-9 sm:top-[calc(84px+5.5rem)]"
       >
@@ -907,7 +1001,9 @@ const handleReconnect = () => {
           :pinned-participant-id="pinnedParticipantId"
           :video-available="videoAvailable"
           :view-mode="viewMode"
+          :fullscreen="isFullscreen"
           @disconnect="handleEndCall"
+          @toggle-fullscreen="handleToggleFullscreen"
           @set-view-mode="handleSetViewMode"
           @toggle-chat="handleToggleChat"
           @toggle-mute="handleToggleMute"
@@ -922,31 +1018,38 @@ const handleReconnect = () => {
             :participant-avatars="participantAvatars"
             :view-mode="viewMode"
             :phone-top-bar="hasPhoneTopBar"
+            :fullscreen="isFullscreen"
+            :controls-shown="areFullscreenControlsShown"
             @toggle-pin="handleTogglePin"
+            @toggle-fullscreen="handleToggleFullscreen"
           />
         </MeetingActionMenu>
 
-        <MeetingControls
-          :audio-available="audioAvailable"
-          :is-muted="isMuted"
-          :is-video-off="isVideoOff"
-          :meeting-id="meetingId"
-          :show-connection-status="showConnectionStatus"
-          :is-chat-open="isChatOpen"
-          :unread-count="unreadCount"
-          :video-available="videoAvailable"
-          :invite-mode="inviteMode"
-          :can-present="screenShare.isSupported"
-          @start-screen-share="handleStartScreenShare"
-          @stop-screen-share="screenShare.stop()"
-          @toggle-mute="handleToggleMute"
-          @toggle-video="handleToggleVideo"
-          @toggle-stats="handleToggleStats"
-          @toggle-chat="handleToggleChat"
-          @end-call="handleEndCall"
-          @invite="isInviteOpen = true"
-          @media-changed="refreshMediaAvailability"
-        />
+        <Transition name="meeting-controls">
+          <MeetingControls
+            v-show="showsControls"
+            :dark="isFullscreen"
+            :audio-available="audioAvailable"
+            :is-muted="isMuted"
+            :is-video-off="isVideoOff"
+            :meeting-id="meetingId"
+            :show-connection-status="showConnectionStatus"
+            :is-chat-open="isChatOpen"
+            :unread-count="unreadCount"
+            :video-available="videoAvailable"
+            :invite-mode="inviteMode"
+            :can-present="screenShare.isSupported"
+            @start-screen-share="handleStartScreenShare"
+            @stop-screen-share="screenShare.stop()"
+            @toggle-mute="handleToggleMute"
+            @toggle-video="handleToggleVideo"
+            @toggle-stats="handleToggleStats"
+            @toggle-chat="handleToggleChat"
+            @end-call="handleEndCall"
+            @invite="isInviteOpen = true"
+            @media-changed="refreshMediaAvailability"
+          />
+        </Transition>
       </div>
 
       <!-- Chat Panel -->
@@ -980,4 +1083,25 @@ const handleReconnect = () => {
   </div>
 </template>
 
-<style></style>
+<style>
+/* Full screen controls slide up from the bottom and back down. */
+.meeting-controls-enter-active,
+.meeting-controls-leave-active {
+  transition:
+    opacity 0.24s ease,
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.meeting-controls-enter-from,
+.meeting-controls-leave-to {
+  opacity: 0;
+  transform: translateY(1.5rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meeting-controls-enter-active,
+  .meeting-controls-leave-active {
+    transition: none;
+  }
+}
+</style>

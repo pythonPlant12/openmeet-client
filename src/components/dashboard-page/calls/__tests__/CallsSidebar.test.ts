@@ -50,9 +50,6 @@ function mountSidebar(props: Partial<InstanceType<typeof CallsSidebar>['$props']
       isLoadingMore: false,
       now: NOW,
       avatarFor: () => undefined,
-      ringingName: null,
-      ringingMore: 0,
-      isAnswering: false,
       callingId: null,
       ...props,
     },
@@ -62,13 +59,13 @@ function mountSidebar(props: Partial<InstanceType<typeof CallsSidebar>['$props']
 const missedCall: MeetingSession = { ...meetings[0]!, id: 'meeting-2', missed: true, unread: true };
 
 describe('CallsSidebar', () => {
-  it('shows only its header while collapsed and toggles from it', async () => {
+  it('hides the list while collapsed and keeps the heading static', async () => {
     const wrapper = mountSidebar();
     expect(wrapper.get('[data-calls-list]').attributes('aria-hidden')).toBe('true');
-    expect(wrapper.get('#calls-heading').attributes('aria-expanded')).toBe('false');
+    expect(wrapper.get('#calls-heading').attributes('role')).toBeUndefined();
 
     await wrapper.get('#calls-heading').trigger('click');
-    expect(wrapper.emitted('toggle')).toHaveLength(1);
+    expect(wrapper.emitted('toggle')).toBeUndefined();
   });
 
   it('shows missed calls beside the title while collapsed', () => {
@@ -81,7 +78,7 @@ describe('CallsSidebar', () => {
   });
 
   it('lists calls when expanded and opens one on press', async () => {
-    const wrapper = mountSidebar({ panel: 'middle' });
+    const wrapper = mountSidebar({ panel: 'top' });
     expect(wrapper.get('[data-calls-list]').attributes('aria-hidden')).toBe('false');
     expect(wrapper.text()).toContain('Today');
     expect(wrapper.text()).toContain('Bob Chen');
@@ -91,7 +88,7 @@ describe('CallsSidebar', () => {
   });
 
   it('marks unread missed calls with a dot and a missed label', () => {
-    const wrapper = mountSidebar({ panel: 'middle', meetings: [missedCall, meetings[0]!] });
+    const wrapper = mountSidebar({ panel: 'top', meetings: [missedCall, meetings[0]!] });
     const [missed, answered] = wrapper.findAll('[data-call-item]');
 
     expect(missed!.find('[data-call-unread]').exists()).toBe(true);
@@ -101,13 +98,13 @@ describe('CallsSidebar', () => {
   });
 
   it('drops the dot once a missed call is read', () => {
-    const wrapper = mountSidebar({ panel: 'middle', meetings: [{ ...missedCall, unread: false }] });
+    const wrapper = mountSidebar({ panel: 'top', meetings: [{ ...missedCall, unread: false }] });
     expect(wrapper.find('[data-call-unread]').exists()).toBe(false);
     expect(wrapper.find('[data-call-missed]').exists()).toBe(true);
   });
 
   it('toggles a missed call read state without exposing call again', async () => {
-    const wrapper = mountSidebar({ panel: 'middle', meetings: [missedCall, meetings[0]!] });
+    const wrapper = mountSidebar({ panel: 'top', meetings: [missedCall, meetings[0]!] });
 
     await wrapper.get('[data-call-read-action]').trigger('click');
     expect(wrapper.emitted('toggle-read')?.[0]).toEqual([missedCall]);
@@ -119,25 +116,5 @@ describe('CallsSidebar', () => {
     const wrapper = mountSidebar({ panel: 'top', meetings: [{ ...missedCall, unread: false }] });
     await wrapper.get('[aria-label="Mark call unread"]').trigger('click');
     expect(wrapper.emitted('toggle-read')?.[0]).toEqual([{ ...missedCall, unread: false }]);
-  });
-
-  it('rings with the caller name and answer or decline buttons, even while collapsed', async () => {
-    const wrapper = mountSidebar({ ringingName: 'OpenMeet testers', ringingMore: 1 });
-    expect(wrapper.get('[data-incoming-caller]').text()).toBe('OpenMeet testers');
-    expect(wrapper.get('[data-incoming-call]').text()).toContain('1 more');
-
-    await wrapper.get('[data-incoming-accept]').trigger('click');
-    await wrapper.get('[data-incoming-decline]').trigger('click');
-    expect(wrapper.emitted('accept')).toHaveLength(1);
-    expect(wrapper.emitted('decline')).toHaveLength(1);
-
-    await wrapper.get('[data-incoming-toggle]').trigger('click');
-    expect(wrapper.emitted('toggle')).toHaveLength(1);
-  });
-
-  it('hides the answer buttons while a response is in flight', () => {
-    const wrapper = mountSidebar({ ringingName: 'Bob Chen', isAnswering: true });
-    expect(wrapper.find('[data-incoming-accept]').exists()).toBe(false);
-    expect(wrapper.find('[data-incoming-decline]').exists()).toBe(false);
   });
 });

@@ -36,6 +36,10 @@
     "nicknameCopied": "Nickname copied",
     "status": "Status",
     "friends": "Friends",
+    "chats": "Chats",
+    "calls": "Calls",
+    "account": "Account",
+    "workspaceNavigation": "Workspace navigation",
     "technologies": {
       "title": "Technologies",
       "description": "See how each open technology carries a conversation."
@@ -418,7 +422,8 @@
       "offline": "Offline",
       "status": "Status: {status}",
       "showName": "Show name",
-      "hideName": "Hide name"
+      "hideName": "Hide name",
+      "connecting": "Connecting…"
     },
     "actions": {
       "open": "Open meeting actions",
@@ -433,6 +438,8 @@
       "layout": "Layout",
       "grid": "Grid view",
       "speaker": "Speaker view",
+      "fullscreen": "Full screen",
+      "exitFullscreen": "Exit full screen",
       "pinParticipant": "Pin participant",
       "videoCanvas": "Meeting video canvas",
       "reportBug": "Report a bug",

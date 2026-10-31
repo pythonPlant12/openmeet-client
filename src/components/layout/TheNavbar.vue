@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import {
+  CirclePlusAnimated,
+  LogInAnimated,
+  LogOutAnimated,
+  MessageSquareAnimated,
+  PhoneAnimated,
+  UsersAnimated,
+} from '@respeak/lucide-motion-vue';
 import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
   ArrowRight,
@@ -12,7 +20,6 @@ import {
   Github,
   HeartHandshake,
   Lightbulb,
-  LogIn,
   LogOut,
   Menu,
   ServerCog,
@@ -26,6 +33,7 @@ import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
 import AccountMenuContent from '@/components/layout/AccountMenuContent.vue';
+import LiquidTabBar, { type LiquidTab } from '@/components/layout/LiquidTabBar.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
 import {
@@ -40,6 +48,7 @@ import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useOwnProfile } from '@/composables/useOwnProfile';
 import { useBranding } from '@/config/branding.config';
 import { USER_STATUS_OPTIONS } from '@/config/user-status.config';
+import type { DashboardPanelState } from '@/pages/dashboard-group-state';
 import type { UserStatus } from '@/services/social-api';
 import { AuthEventType } from '@/xstate/machines/auth/types';
 
@@ -66,6 +75,8 @@ const mobileMenuExpanded = ref(false);
 const mobileMenuIconOpen = ref(false);
 const isClosingMobileMenu = ref(false);
 const activeDesktopMenu = ref<DesktopMenu | null>(null);
+// The drop stays on Account while its menu is open, like the marketing menus.
+const isAccountMenuOpen = ref(false);
 const isDesktop = useMediaQuery('(min-width: 1280px)');
 const isMobile = useMediaQuery('(max-width: 639px)');
 const supportsHover = useMediaQuery('(hover: hover) and (pointer: fine)');
@@ -73,7 +84,6 @@ const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const navCapsuleRef = ref<HTMLElement | null>(null);
 const navContentRef = ref<HTMLElement | null>(null);
 const mobileMenuShellRef = ref<HTMLElement | null>(null);
-const desktopNavWidth = ref<number>();
 const mobileMenuHeight = ref<number>();
 const mobileScrollAreaRef = ref<HTMLElement | null>(null);
 const mobileAccountActionsRef = ref<HTMLElement | null>(null);
@@ -88,19 +98,108 @@ const closeMobileStatusOnOutsidePress = (event: PointerEvent) => {
   isMobileStatusOpen.value = false;
 };
 const isMeetingChatOpen = ref(false);
+// A meeting in full screen shows only its media, so the navbar steps aside until it ends.
+const isMeetingFullscreen = ref(false);
 const isDashboardChatOpen = ref(false);
+const dashboardPanel = ref<DashboardPanelState>(null);
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
 const isDashboardPage = computed(() => route.name === 'dashboard');
 // In a meeting the account button sits 12px above the centered control bar (16px offset + 58px bar on phones).
+// Elsewhere the account sheet opens 12px above the workspace tabs (their offset plus the 56px bar).
 const mobileNavBottomClass = computed(() =>
-  isMeetingPage.value ? 'bottom-[5.375rem]' : isDashboardPage.value ? 'bottom-4' : 'bottom-6',
+  isMeetingPage.value
+    ? 'bottom-[5.375rem]'
+    : showWorkspaceTabs.value
+      ? 'bottom-[calc(max(1rem,env(safe-area-inset-bottom))+4.25rem)]'
+      : isDashboardPage.value
+        ? 'bottom-4'
+        : 'bottom-6',
 );
 const hasContentSizedMobileMenu = computed(() => isAuthenticated.value);
 const activeMobileMenuIsContentSized = computed(() =>
   isClosingMobileMenu.value ? closingMobileMenuIsContentSized.value : hasContentSizedMobileMenu.value,
 );
 const homePath = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
+// Signed-in people get workspace tabs everywhere except inside a meeting, where leaving needs Quit meeting.
+// Phones show them as a bottom bar; wider screens show them as the whole top navigation.
+const showWorkspaceTabs = computed(() => isAuthenticated.value && !isCheckingSession.value && !isMeetingPage.value);
+const hasCompactWorkspaceTabs = useMediaQuery('(max-width: 767px)');
+const workspaceTabs = computed<LiquidTab[]>(() => [
+  {
+    key: 'messages',
+    label: t('nav.chats'),
+    icon: MessageSquareAnimated,
+    to: { path: '/dashboard', query: { panel: 'messages' } },
+  },
+  {
+    key: 'friends',
+    label: t('nav.friends'),
+    icon: UsersAnimated,
+    to: { path: '/dashboard', query: { panel: 'friends' } },
+  },
+  { key: 'calls', label: t('nav.calls'), icon: PhoneAnimated, to: { path: '/dashboard', query: { panel: 'calls' } } },
+  // The avatar opens the account sheet on phones and the account menu elsewhere.
+  { key: 'account', label: t('nav.account'), custom: true },
+  ...(isMobile.value
+    ? []
+    : [
+        {
+          key: 'start',
+          label: t('common.startMeeting'),
+          icon: CirclePlusAnimated,
+          variant: 'primary' as const,
+          disabled: isAuthBusy.value,
+        },
+      ]),
+]);
+const activeWorkspaceTab = computed(() => {
+  if (isMobile.value && mobileMenuOpen.value) return 'account';
+  if (route.name === 'account') return 'account';
+  return isDashboardPage.value ? dashboardPanel.value : null;
+});
+// Guests and meetings on wide screens: the brand, marketing menus, account, and the page's meeting action.
+const showDesktopLiquidBar = computed(() => (showWorkspaceTabs.value ? !isMobile.value : isDesktop.value));
+const publicTabs = computed<LiquidTab[]>(() => {
+  const signedIn = isAuthenticated.value && !isCheckingSession.value;
+  return [
+    { key: 'home', label: branding.appName, custom: true },
+    ...(showMarketingNavigation.value
+      ? [
+          { key: 'why', label: t('nav.why', { appName: branding.appName }), custom: true },
+          { key: 'deploy', label: t('nav.howToDeploy'), custom: true },
+        ]
+      : []),
+    ...(signedIn ? [{ key: 'account', label: t('nav.account'), custom: true }] : []),
+    ...(isAuthenticated.value
+      ? []
+      : [
+          { key: 'login', label: t('common.logIn'), icon: LogInAnimated, disabled: isAuthBusy.value },
+          { key: 'github', label: t('nav.openSource'), custom: true },
+        ]),
+    isMeetingPage.value
+      ? {
+          key: 'quit',
+          label: t('common.quitMeeting'),
+          icon: LogOutAnimated,
+          variant: 'primary' as const,
+          disabled: isAuthBusy.value,
+        }
+      : {
+          key: 'start',
+          label: t('common.startMeeting'),
+          icon: CirclePlusAnimated,
+          variant: 'primary' as const,
+          disabled: isAuthBusy.value,
+        },
+  ];
+});
+const activePublicTab = computed(() => {
+  if (route.name === 'landing') return 'home';
+  if (whyOpenMeetItems.value.some((item) => item.path === route.path)) return 'why';
+  if (route.name === 'login' || route.name === 'register') return 'login';
+  return null;
+});
 const showMarketingNavigation = computed(() => !isAuthenticated.value && (isLandingPage.value || isMeetingPage.value));
 const isAuthBusy = computed(
   () => isAuthenticating.value || isRegistering.value || isCheckingSession.value || state.value.value === 'loggingOut',
@@ -416,6 +515,22 @@ function handleDashboardChatState(event: Event) {
   if (isDashboardChatOpen.value) closeMobileMenu();
 }
 
+function handleMeetingFullscreen(event: Event) {
+  isMeetingFullscreen.value = (event as CustomEvent<boolean>).detail;
+  if (isMeetingFullscreen.value) closeMobileMenu();
+}
+
+function handleDashboardPanelState(event: Event) {
+  dashboardPanel.value = (event as CustomEvent<DashboardPanelState>).detail;
+}
+
+function handleTabSelect(key: string) {
+  if (key === 'account' && isMobile.value) handleToggleMobileMenu();
+  else if (key === 'start') handleStartMeeting();
+  else if (key === 'quit') handleQuitMeeting();
+  else if (key === 'login') handleGoToLogin();
+}
+
 const handleGoToLogin = () => {
   if (isAuthBusy.value) return;
   if (hasRegisterError.value) {
@@ -450,22 +565,6 @@ function selectMobileStatus(status: UserStatus) {
 
 let navResizeObserver: ResizeObserver | undefined;
 
-const updateDesktopNavWidth = () => {
-  if (!isDesktop.value || !navCapsuleRef.value || !navContentRef.value) {
-    desktopNavWidth.value = undefined;
-    return;
-  }
-
-  const style = window.getComputedStyle(navCapsuleRef.value);
-  const toPixels = (value: string) => parseFloat(value) || 0;
-  const horizontalChrome =
-    toPixels(style.paddingLeft) +
-    toPixels(style.paddingRight) +
-    toPixels(style.borderLeftWidth) +
-    toPixels(style.borderRightWidth);
-  desktopNavWidth.value = navContentRef.value.offsetWidth + horizontalChrome;
-};
-
 const syncMobileMenuHeight = () => {
   if (!mobileMenuExpanded.value || !activeMobileMenuIsContentSized.value || !navCapsuleRef.value) {
     mobileMenuHeight.value = undefined;
@@ -487,22 +586,15 @@ const syncMobileMenuHeight = () => {
   });
 };
 
-const updateNavLayout = () => {
-  updateDesktopNavWidth();
-  syncMobileMenuHeight();
-};
+const updateNavLayout = () => syncMobileMenuHeight();
 
 onMounted(() => {
   window.addEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   window.addEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
+  window.addEventListener('openmeet:dashboard-panel-state', handleDashboardPanelState);
+  window.addEventListener('openmeet:meeting-fullscreen', handleMeetingFullscreen);
   document.addEventListener('pointerdown', closeMobileStatusOnOutsidePress, true);
-  if (!navContentRef.value) return;
-  if (!('ResizeObserver' in window)) {
-    updateNavLayout();
-    return;
-  }
-  navResizeObserver = new ResizeObserver(updateNavLayout);
-  navResizeObserver.observe(navContentRef.value);
+  if ('ResizeObserver' in window) navResizeObserver = new ResizeObserver(updateNavLayout);
   updateNavLayout();
 });
 
@@ -515,9 +607,20 @@ onUnmounted(() => {
   navResizeObserver?.disconnect();
   window.removeEventListener('openmeet:meeting-chat-state', handleMeetingChatState);
   window.removeEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
+  window.removeEventListener('openmeet:dashboard-panel-state', handleDashboardPanelState);
+  window.removeEventListener('openmeet:meeting-fullscreen', handleMeetingFullscreen);
 });
 
-watch([isDesktop, mobileMenuExpanded, activeMobileMenuIsContentSized], () => requestAnimationFrame(updateNavLayout));
+watch([mobileMenuExpanded, activeMobileMenuIsContentSized], () => requestAnimationFrame(updateNavLayout));
+// The capsule mounts and unmounts with the route and screen width, so the observer follows it.
+watch(
+  navContentRef,
+  (element, previous) => {
+    if (previous) navResizeObserver?.unobserve(previous);
+    if (element) navResizeObserver?.observe(element);
+  },
+  { flush: 'post' },
+);
 // The account content changes size when the status picker expands, so the drawer follows it.
 watch(mobileAccountActionsRef, (element, previous) => {
   if (previous) navResizeObserver?.unobserve(previous);
@@ -526,22 +629,70 @@ watch(mobileAccountActionsRef, (element, previous) => {
 </script>
 
 <template>
-  <template v-if="isAuthenticated && !isCheckingSession && isMobile && !isMeetingChatOpen && !isDashboardChatOpen">
+  <!-- Every part of the navbar hides while a meeting is in full screen. -->
+  <template
+    v-if="
+      isAuthenticated &&
+      !isCheckingSession &&
+      isMobile &&
+      !isMeetingChatOpen &&
+      !isDashboardChatOpen &&
+      !isMeetingFullscreen
+    "
+  >
+    <!-- z-40 keeps the tabs above the page but under dialogs (z-50). While the account sheet is open they rise
+         above its backdrop, so the sheet sits on top of the bar instead of covering it. -->
+    <div
+      v-if="showWorkspaceTabs"
+      class="marketing-font pointer-events-none fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex justify-center px-4"
+      :class="mobileMenuOpen ? 'z-[60]' : 'z-40'"
+    >
+      <LiquidTabBar
+        class="pointer-events-auto"
+        compact
+        :items="workspaceTabs"
+        :active-key="activeWorkspaceTab"
+        :label="t('nav.workspaceNavigation')"
+        @select="handleTabSelect"
+      >
+        <template #item-account="{ attrs }">
+          <button
+            type="button"
+            v-bind="attrs"
+            :aria-label="t('nav.accountInformation')"
+            :aria-expanded="mobileMenuOpen"
+          >
+            <span class="liquid-tab-icon">
+              <span class="liquid-tab-avatar">
+                <img v-if="avatarUrl" :src="avatarUrl" alt="" />
+                <CircleUserRound v-else class="size-4" />
+                <span
+                  v-if="ownStatus"
+                  class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white"
+                  :class="ownStatusOption.dotClass"
+                />
+              </span>
+            </span>
+            <span class="liquid-tab-label">{{ t('nav.account') }}</span>
+          </button>
+        </template>
+      </LiquidTabBar>
+    </div>
     <motion.nav
       class="marketing-font pointer-events-none fixed right-4 z-[1030] w-12 text-[#102F35]"
       :class="mobileNavBottomClass"
     >
-      <!-- The sheet grows out of this button and shrinks back into it, so the button stays hidden for the whole open and close sequence. -->
-      <div v-if="!mobileMenuOpen" class="pointer-events-auto flex">
+      <!-- The sheet grows out of this button and shrinks back into it, so the button stays hidden for the whole open and close sequence.
+           Outside meetings the workspace tabs replace the button and their Account tab opens the sheet. -->
+      <div v-if="!mobileMenuOpen && !showWorkspaceTabs" class="pointer-events-auto flex">
         <button
           type="button"
-          class="relative flex size-12 shrink-0 items-center justify-center rounded-xl border-2 bg-[#FBFCF8] p-1 shadow-[0_4px_12px_rgba(16,47,53,0.12)] transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-          :class="ownStatusOption.borderClass"
+          class="liquid-glass-surface relative flex size-12 shrink-0 items-center justify-center rounded-full p-1.5 transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
           :aria-label="t('nav.accountInformation')"
           :aria-expanded="mobileMenuOpen"
           @click="handleToggleMobileMenu"
         >
-          <span class="flex size-full items-center justify-center overflow-hidden rounded-[0.55rem] bg-[#FBFCF8]">
+          <span class="flex size-full items-center justify-center overflow-hidden rounded-full bg-[#E6F4F1]">
             <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
             <CircleUserRound v-else class="size-5" />
           </span>
@@ -549,7 +700,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
             v-if="ownStatus"
             role="img"
             :aria-label="ownStatusOption.label"
-            class="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-[#FBFCF8]"
+            class="absolute bottom-0 right-0 size-3.5 rounded-full border-[3px] border-white"
             :class="ownStatusOption.dotClass"
           />
         </button>
@@ -691,7 +842,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
           <div data-mobile-account-sheet-footer class="space-y-2 border-t border-[#D8E7E3] pt-4">
             <Button
               type="button"
-              class="harbor-primary-action min-h-11 w-full rounded-full bg-[#0B7A75] text-white"
+              class="liquid-glass-primary min-h-11 w-full rounded-full"
               :disabled="isAuthBusy"
               @click="isMeetingPage ? handleQuitMeeting() : handleStartMeeting()"
             >
@@ -713,15 +864,179 @@ watch(mobileAccountActionsRef, (element, previous) => {
     </motion.nav>
   </template>
   <button
-    v-if="mobileMenuExpanded && !isClosingMobileMenu && (!isAuthenticated || !isMobile)"
+    v-if="mobileMenuExpanded && !isClosingMobileMenu && (!isAuthenticated || !isMobile) && !isMeetingFullscreen"
     type="button"
     class="fixed inset-0 z-[1020] cursor-default bg-transparent"
     aria-label="Close navigation"
     @pointerdown.stop
     @click.stop="closeMobileMenu()"
   />
+  <!-- Wider screens use one liquid bar: workspace tabs when signed in, and the brand, marketing menus, and
+       meeting action for guests and meetings. Below 1280px guests and meetings keep the glass capsule. -->
+  <div
+    v-if="showDesktopLiquidBar && !isMeetingFullscreen"
+    class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] flex justify-center px-4 text-[#102F35]"
+  >
+    <LiquidTabBar
+      class="pointer-events-auto"
+      size="sm"
+      :compact="showWorkspaceTabs && hasCompactWorkspaceTabs"
+      :items="showWorkspaceTabs ? workspaceTabs : publicTabs"
+      :active-key="showWorkspaceTabs ? activeWorkspaceTab : activePublicTab"
+      :label="showWorkspaceTabs ? t('nav.workspaceNavigation') : t('nav.navigationTitle')"
+      :highlight-key="activeDesktopMenu ?? (isAccountMenuOpen ? 'account' : null)"
+      follow-hover
+      @select="handleTabSelect"
+    >
+      <template #item-home="{ attrs }">
+        <RouterLink :to="homePath" v-bind="attrs" @click="handleBrandNavigation">
+          <span
+            class="liquid-glass-primary relative flex size-7 items-center justify-center rounded-[0.65rem] text-white"
+            aria-hidden="true"
+          >
+            <Video class="size-4" :stroke-width="2.25" />
+            <span class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white bg-[#5AC878]" />
+          </span>
+          <span class="text-base font-semibold tracking-[-0.03em] text-[#102F35]">{{ branding.appName }}</span>
+        </RouterLink>
+      </template>
+      <template #item-why="{ attrs }">
+        <DropdownMenu v-model:open="whyMenuOpen" :modal="false">
+          <DropdownMenuTrigger as-child>
+            <button
+              type="button"
+              v-bind="attrs"
+              class="group"
+              @mouseenter="handleMenuEnter('why')"
+              @mouseleave="handleMenuLeave"
+            >
+              <span>{{ t('nav.why', { appName: branding.appName }) }}</span>
+              <ChevronDown class="size-3.5 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+              <!-- Bridges the gap to the menu so moving the pointer down keeps it open. -->
+              <span class="absolute inset-x-0 top-full h-4" aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            :side-offset="12"
+            class="harbor-floating-menu w-max min-w-80 max-w-[min(25rem,calc(100vw-2rem))] rounded-[1.5rem] border-white/80 bg-white/95 p-2.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14),0_2px_8px_rgba(16,47,53,0.07)] backdrop-blur-xl"
+          >
+            <div @mouseenter="handleMenuEnter('why')" @mouseleave="handleMenuLeave">
+              <DropdownMenuItem
+                v-for="item in whyOpenMeetItems"
+                :key="item.title"
+                class="harbor-floating-menu-item cursor-pointer gap-4 rounded-2xl p-3 focus:bg-[#E6F4F1] focus:text-[#102F35]"
+                @select="handleGoToPage(item.path)"
+              >
+                <span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#E6F4F1] text-[#0B7A75]">
+                  <component :is="item.icon" class="size-5" />
+                </span>
+                <span class="min-w-0 flex-1">
+                  <strong class="block text-sm">{{ item.title }}</strong>
+                  <span class="mt-0.5 block text-xs leading-5 text-[#61777B]">{{ item.description }}</span>
+                </span>
+                <ArrowRight class="size-4 text-[#9BB4B5]" />
+              </DropdownMenuItem>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </template>
+      <template #item-deploy="{ attrs }">
+        <DropdownMenu v-model:open="deployMenuOpen" :modal="false">
+          <DropdownMenuTrigger as-child>
+            <button
+              type="button"
+              v-bind="attrs"
+              class="group"
+              @mouseenter="handleMenuEnter('deploy')"
+              @mouseleave="handleMenuLeave"
+            >
+              <span>{{ t('nav.howToDeploy') }}</span>
+              <ChevronDown class="size-3.5 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+              <span class="absolute inset-x-0 top-full h-4" aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            :side-offset="12"
+            class="harbor-floating-menu w-max min-w-80 max-w-[min(24rem,calc(100vw-2rem))] rounded-[1.5rem] border-white/80 bg-white/95 p-2.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14),0_2px_8px_rgba(16,47,53,0.07)] backdrop-blur-xl"
+          >
+            <div @mouseenter="handleMenuEnter('deploy')" @mouseleave="handleMenuLeave">
+              <div class="px-3 pb-2 pt-2 text-xs font-semibold uppercase tracking-[0.13em] text-[#0B7A75]">
+                {{ t('nav.guidesComingNext') }}
+              </div>
+              <DropdownMenuItem
+                v-for="item in deploymentItems"
+                :key="item.title"
+                disabled
+                class="harbor-floating-menu-item gap-4 rounded-2xl p-3 opacity-100 data-[disabled]:opacity-100"
+              >
+                <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#EDF3F2] text-[#61777B]">
+                  <component :is="item.icon" class="size-5" />
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="flex items-center gap-2">
+                    <strong class="text-sm">{{ item.title }}</strong>
+                    <span
+                      class="rounded-full bg-[#FFF0EA] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#A94D3B]"
+                    >
+                      {{ t('common.soon') }}
+                    </span>
+                  </span>
+                  <span class="mt-0.5 block text-xs leading-5 text-[#61777B]">{{ item.description }}</span>
+                </span>
+              </DropdownMenuItem>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </template>
+      <template #item-github="{ attrs }">
+        <a
+          v-bind="attrs"
+          href="https://github.com/pythonPlant12/openmeet"
+          target="_blank"
+          rel="noreferrer"
+          :aria-label="t('nav.openSource')"
+          :title="t('nav.openSource')"
+        >
+          <span class="liquid-tab-icon"><Github class="size-[18px]" /></span>
+        </a>
+      </template>
+      <template #item-account="{ attrs }">
+        <DropdownMenu v-model:open="isAccountMenuOpen">
+          <DropdownMenuTrigger as-child>
+            <button type="button" v-bind="attrs" :title="t('nav.accountInformation')">
+              <span class="liquid-tab-icon">
+                <span class="liquid-tab-avatar">
+                  <img v-if="avatarUrl" :src="avatarUrl" alt="" />
+                  <CircleUserRound v-else class="size-4" />
+                  <span
+                    v-if="ownStatus"
+                    data-own-status-dot
+                    role="img"
+                    :aria-label="ownStatusOption.label"
+                    class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white"
+                    :class="ownStatusOption.dotClass"
+                  />
+                </span>
+              </span>
+              <span class="liquid-tab-label">{{ t('nav.account') }}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <AccountMenuContent
+            :nickname="nickname"
+            :own-status="ownStatus"
+            :is-nickname-copied="isNicknameCopied"
+            @copy-nickname="copyNickname"
+            @set-status="setOwnStatus"
+          />
+        </DropdownMenu>
+      </template>
+    </LiquidTabBar>
+  </div>
+  <!-- Guests and meetings below 1280px keep the branded glass capsule and its expanding menu. -->
   <motion.nav
-    v-if="!isAuthenticated || !isMobile"
+    v-if="(!isAuthenticated || (!isMobile && !showWorkspaceTabs)) && !isDesktop && !isMeetingFullscreen"
     layout-root
     class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] text-[#102F35]"
     :aria-label="t('nav.navigationTitle')"
@@ -729,7 +1044,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
     <div
       ref="mobileMenuShellRef"
       :style="mobileMenuHeight ? { height: `${mobileMenuHeight}px` } : undefined"
-      class="harbor-nav-layout pointer-events-auto mx-auto min-w-[min(340px,calc(100vw-1.5rem))] max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)] transition-[height,width] ease-[cubic-bezier(0.22,1,0.36,1)] xl:relative xl:left-1/2 xl:mx-0 xl:-translate-x-1/2 xl:h-[60px] xl:w-fit xl:transition-none"
+      class="harbor-nav-layout pointer-events-auto mx-auto min-w-[min(340px,calc(100vw-1.5rem))] max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)] transition-[height,width] ease-[cubic-bezier(0.22,1,0.36,1)]"
       :class="[
         mobileMenuExpanded
           ? activeMobileMenuIsContentSized
@@ -742,13 +1057,12 @@ watch(mobileAccountActionsRef, (element, previous) => {
     >
       <div
         ref="navCapsuleRef"
-        class="harbor-nav-capsule flex size-full flex-col overflow-hidden rounded-[1.875rem] border border-[#D8E7E3] bg-[#FBFCF8] p-3 shadow-[0_16px_42px_rgba(16,47,53,0.1),0_2px_8px_rgba(16,47,53,0.05)] xl:h-full xl:w-max xl:flex-none xl:rounded-full xl:px-5 xl:py-0 xl:transition-[width] xl:duration-[360ms] xl:ease-[cubic-bezier(0.22,1,0.36,1)]"
-        :class="{ 'harbor-nav-capsule-active': activeDesktopMenu }"
-        :style="isDesktop && desktopNavWidth ? { width: `${desktopNavWidth}px` } : undefined"
+        class="harbor-nav-capsule liquid-glass-surface flex size-full flex-col overflow-hidden rounded-[1.875rem] p-3"
+        :data-expanded="mobileMenuExpanded || isClosingMobileMenu ? 'true' : undefined"
       >
         <div
           ref="navContentRef"
-          class="flex w-full xl:h-full xl:w-max xl:flex-row xl:items-center xl:gap-12"
+          class="flex w-full"
           :class="[
             mobileMenuExpanded || isClosingMobileMenu
               ? 'min-h-0 flex-1 flex-col items-stretch'
@@ -756,14 +1070,14 @@ watch(mobileAccountActionsRef, (element, previous) => {
             { 'pointer-events-none': isClosingMobileMenu },
           ]"
         >
-          <div class="flex w-full shrink-0 items-center justify-between xl:w-auto">
+          <div class="flex w-full shrink-0 items-center justify-between">
             <RouterLink
               :to="homePath"
               class="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
               @click="handleBrandNavigation"
             >
               <span
-                class="relative flex size-9 items-center justify-center rounded-xl bg-[#0B7A75] text-white shadow-sm"
+                class="liquid-glass-primary relative flex size-9 items-center justify-center rounded-xl text-white"
                 aria-hidden="true"
               >
                 <Video class="size-5" :stroke-width="2.25" />
@@ -774,7 +1088,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
 
             <button
               type="button"
-              class="inline-flex size-10 items-center justify-center rounded-full bg-transparent text-[#173E42] transition-colors hover:bg-[#E6F4F1] hover:text-[#102F35] active:bg-[#D8E7E3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] xl:hidden"
+              class="inline-flex size-10 items-center justify-center rounded-full bg-transparent text-[#173E42] transition-colors hover:bg-[#E6F4F1] hover:text-[#102F35] active:bg-[#D8E7E3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
               :aria-label="mobileMenuOpen ? t('common.close') : t('nav.openNavigation')"
               :aria-expanded="mobileMenuOpen"
               @click="handleToggleMobileMenu"
@@ -793,181 +1107,6 @@ watch(mobileAccountActionsRef, (element, previous) => {
             </button>
           </div>
 
-          <div v-if="showMarketingNavigation" class="hidden items-center gap-1 xl:flex">
-            <DropdownMenu v-model:open="whyMenuOpen" :modal="false">
-              <DropdownMenuTrigger as-child>
-                <button
-                  type="button"
-                  class="group relative inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-[#27595D] transition-[color,background-color] duration-300 ease-out hover:bg-[#E6F4F1] hover:text-[#0B7A75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] data-[state=open]:bg-[#E6F4F1] data-[state=open]:text-[#0B7A75]"
-                  @mouseenter="handleMenuEnter('why')"
-                  @mouseleave="handleMenuLeave"
-                >
-                  {{ t('nav.why', { appName: branding.appName }) }}
-                  <ChevronDown class="size-3.5 transition-transform duration-300 group-data-[state=open]:rotate-180" />
-                  <span class="absolute inset-x-0 top-full h-8" aria-hidden="true" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                :side-offset="28"
-                class="harbor-floating-menu w-max min-w-80 max-w-[min(25rem,calc(100vw-2rem))] rounded-[1.5rem] border-white/80 bg-white/95 p-2.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14),0_2px_8px_rgba(16,47,53,0.07)] backdrop-blur-xl"
-              >
-                <div @mouseenter="handleMenuEnter('why')" @mouseleave="handleMenuLeave">
-                  <DropdownMenuItem
-                    v-for="item in whyOpenMeetItems"
-                    :key="item.title"
-                    class="harbor-floating-menu-item cursor-pointer gap-4 rounded-2xl p-3 focus:bg-[#E6F4F1] focus:text-[#102F35]"
-                    @select="handleGoToPage(item.path)"
-                  >
-                    <span
-                      class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#E6F4F1] text-[#0B7A75]"
-                    >
-                      <component :is="item.icon" class="size-5" />
-                    </span>
-                    <span class="min-w-0 flex-1">
-                      <strong class="block text-sm">{{ item.title }}</strong>
-                      <span class="mt-0.5 block text-xs leading-5 text-[#61777B]">{{ item.description }}</span>
-                    </span>
-                    <ArrowRight class="size-4 text-[#9BB4B5]" />
-                  </DropdownMenuItem>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <DropdownMenu v-model:open="deployMenuOpen" :modal="false">
-              <DropdownMenuTrigger as-child>
-                <button
-                  type="button"
-                  class="group relative inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-semibold text-[#27595D] transition-[color,background-color] duration-300 ease-out hover:bg-[#E6F4F1] hover:text-[#0B7A75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] data-[state=open]:bg-[#E6F4F1] data-[state=open]:text-[#0B7A75]"
-                  @mouseenter="handleMenuEnter('deploy')"
-                  @mouseleave="handleMenuLeave"
-                >
-                  {{ t('nav.howToDeploy') }}
-                  <ChevronDown class="size-3.5 transition-transform duration-300 group-data-[state=open]:rotate-180" />
-                  <span class="absolute inset-x-0 top-full h-8" aria-hidden="true" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                :side-offset="28"
-                class="harbor-floating-menu w-max min-w-80 max-w-[min(24rem,calc(100vw-2rem))] rounded-[1.5rem] border-white/80 bg-white/95 p-2.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14),0_2px_8px_rgba(16,47,53,0.07)] backdrop-blur-xl"
-              >
-                <div @mouseenter="handleMenuEnter('deploy')" @mouseleave="handleMenuLeave">
-                  <div class="px-3 pb-2 pt-2 text-xs font-semibold uppercase tracking-[0.13em] text-[#0B7A75]">
-                    {{ t('nav.guidesComingNext') }}
-                  </div>
-                  <DropdownMenuItem
-                    v-for="item in deploymentItems"
-                    :key="item.title"
-                    disabled
-                    class="harbor-floating-menu-item gap-4 rounded-2xl p-3 opacity-100 data-[disabled]:opacity-100"
-                  >
-                    <span
-                      class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#EDF3F2] text-[#61777B]"
-                    >
-                      <component :is="item.icon" class="size-5" />
-                    </span>
-                    <span class="min-w-0 flex-1">
-                      <span class="flex items-center gap-2">
-                        <strong class="text-sm">{{ item.title }}</strong>
-                        <span
-                          class="rounded-full bg-[#FFF0EA] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#A94D3B]"
-                        >
-                          {{ t('common.soon') }}
-                        </span>
-                      </span>
-                      <span class="mt-0.5 block text-xs leading-5 text-[#61777B]">{{ item.description }}</span>
-                    </span>
-                  </DropdownMenuItem>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div class="hidden items-center gap-2 xl:flex">
-            <template v-if="!isAuthenticated">
-              <button
-                type="button"
-                class="harbor-ghost-action inline-flex h-10 items-center justify-center rounded-full px-4 text-sm font-semibold text-[#27595D] transition-[color,background-color] duration-300 hover:bg-[#E6F4F1] hover:text-[#08635F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="isAuthBusy"
-                @click="handleGoToLogin"
-              >
-                <LoadingRipple v-if="isAuthenticating" size="sm" />
-                <template v-else>{{ t('common.logIn') }}</template>
-              </button>
-            </template>
-            <template v-else-if="isAuthenticated && !isCheckingSession">
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <button
-                    type="button"
-                    class="harbor-ghost-action relative inline-flex size-[2.625rem] items-center justify-center rounded-xl border-2 p-1 transition-[background-color,border-color,border-width,color] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75] data-[state=open]:border-2 data-[state=open]:border-[#0B7A75]"
-                    :class="[ownStatusOption.chipClass, ownStatusOption.borderClass]"
-                    :aria-label="t('nav.accountInformation')"
-                    :title="t('nav.accountInformation')"
-                  >
-                    <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-[0.55rem] object-cover" />
-                    <CircleUserRound v-else class="size-5" />
-                    <span
-                      v-if="ownStatus"
-                      data-own-status-dot
-                      role="img"
-                      :aria-label="ownStatusOption.label"
-                      class="pointer-events-none absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-[#FBFCF8]"
-                      :class="ownStatusOption.dotClass"
-                    />
-                  </button>
-                </DropdownMenuTrigger>
-                <AccountMenuContent
-                  :nickname="nickname"
-                  :own-status="ownStatus"
-                  :is-nickname-copied="isNicknameCopied"
-                  @copy-nickname="copyNickname"
-                  @set-status="setOwnStatus"
-                />
-              </DropdownMenu>
-              <!-- The meeting action sits right of the avatar, like Quit meeting does inside a meeting. -->
-              <Button
-                v-if="!isMeetingPage"
-                class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
-                :disabled="isAuthBusy"
-                @click="handleStartMeeting"
-              >
-                <Video class="size-4" />
-                {{ t('common.startMeeting') }}
-              </Button>
-            </template>
-            <a
-              v-if="!isAuthenticated"
-              href="https://github.com/pythonPlant12/openmeet"
-              target="_blank"
-              rel="noreferrer"
-              class="inline-flex size-10 items-center justify-center rounded-full text-[#27595D] transition-[color,background-color] duration-300 hover:bg-[#E6F4F1] hover:text-[#0B7A75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
-              :aria-label="t('nav.openSource')"
-              :title="t('nav.openSource')"
-            >
-              <Github class="size-[1.15rem]" />
-            </a>
-            <Button
-              v-if="isMeetingPage"
-              class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
-              :disabled="isAuthBusy"
-              @click="handleQuitMeeting"
-            >
-              <LogOut class="size-4" />
-              {{ t('common.quitMeeting') }}
-            </Button>
-            <Button
-              v-if="!isAuthenticated && !isMeetingPage"
-              class="harbor-primary-action rounded-full bg-[#0B7A75] px-5 text-white"
-              :disabled="isAuthBusy"
-              @click="handleStartMeeting"
-            >
-              <Video class="size-4" />
-              {{ t('common.startMeeting') }}
-            </Button>
-          </div>
-
           <AnimatePresence>
             <motion.div
               v-if="mobileMenuExpanded"
@@ -976,7 +1115,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
               :animate="{ opacity: 1, y: 0, scale: 1 }"
               :exit="prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: -14, scale: 0.985 }"
               :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }"
-              class="flex min-h-0 flex-1 flex-col pt-7 xl:hidden"
+              class="flex min-h-0 flex-1 flex-col pt-7"
             >
               <div ref="mobileScrollAreaRef" class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-1 pb-5">
                 <div
@@ -1185,7 +1324,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                     >
                       <LoadingRipple v-if="isAuthenticating" size="sm" />
                       <template v-else>
-                        <LogIn class="size-4" />
+                        <LogInAnimated :size="16" animate-on-hover animate-on-tap trigger-target="parent" />
                         {{ t('common.logIn') }}
                       </template>
                     </Button>
@@ -1208,7 +1347,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 >
                   <Button
                     type="button"
-                    class="harbor-primary-action min-h-11 w-full rounded-full bg-[#0B7A75] text-white"
+                    class="liquid-glass-primary min-h-11 w-full rounded-full"
                     :disabled="isAuthBusy"
                     @click="handleQuitMeeting"
                   >
@@ -1222,7 +1361,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 >
                   <Button
                     type="button"
-                    class="harbor-primary-action min-h-11 w-full rounded-full bg-[#0B7A75] text-white"
+                    class="liquid-glass-primary min-h-11 w-full rounded-full"
                     :disabled="isAuthBusy"
                     @click="handleStartMeeting"
                   >

@@ -3,9 +3,10 @@ import { useMachine } from '@xstate/vue';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
+import IncomingCallBar from '@/components/layout/IncomingCallBar.vue';
 import TheNavbar from '@/components/layout/TheNavbar.vue';
 import { Toaster } from '@/components/ui/toast';
-import { dismissToast, toast } from '@/components/ui/toast/store';
+import { toast } from '@/components/ui/toast/store';
 import { type IncomingCall, incomingCallsKey } from '@/composables/useIncomingCalls';
 import { i18n } from '@/i18n';
 import type { NotificationAction } from '@/services/native-notifications';
@@ -53,7 +54,6 @@ const handleAccessTokenRefreshed = (event: Event) => {
 const knownIncomingCallIds = new Set<string>();
 const knownIncomingCallSessionIds = new Set<string>();
 const knownNotificationIds = new Set<string>();
-const incomingCallToasts = new Map<string, number | string>();
 const incomingCallExpiryTimers = new Map<string, number>();
 let presenceTimer: ReturnType<typeof setInterval> | undefined;
 let pollingGeneration = 0;
@@ -64,8 +64,30 @@ let notificationRefreshPending = false;
 let incomingCallRetryTimer: number | undefined;
 let incomingCallRetryAttempts = 0;
 
-// Ringing calls, shown by the dashboard's Calls header.
+// Ringing calls, shown by the incoming call bar on every page.
 const incomingCalls = ref<IncomingCall[]>([]);
+const ringingCall = computed(() => incomingCalls.value[0] ?? null);
+const ringingName = computed(() => {
+  const ringing = ringingCall.value;
+  if (!ringing) return '';
+  const name =
+    ringing.kind === 'invitation'
+      ? ringing.call.caller?.name
+      : (ringing.call.conversationTitle ?? ringing.call.initiatorName);
+  return name || i18n.global.t('notifications.incomingCallBody');
+});
+const isAnsweringCall = ref(false);
+
+async function respondToRingingCall(accept: boolean) {
+  const ringing = ringingCall.value;
+  if (!ringing || isAnsweringCall.value) return;
+  isAnsweringCall.value = true;
+  try {
+    await (accept ? acceptIncomingCall(ringing) : declineIncomingCall(ringing));
+  } finally {
+    isAnsweringCall.value = false;
+  }
+}
 // The conversation open in the dashboard, reported by DashboardPage.
 let activeConversationId: string | null = null;
 
@@ -147,46 +169,19 @@ async function declineCallSession(callId: string) {
   }
 }
 
+function acceptIncomingCall(incoming: IncomingCall) {
+  return incoming.kind === 'invitation' ? acceptCall(incoming.call) : acceptCallSession(incoming.call);
+}
+
+function declineIncomingCall(incoming: IncomingCall) {
+  return incoming.kind === 'invitation' ? declineCall(incoming.call.id) : declineCallSession(incoming.call.id);
+}
+
 provide(incomingCallsKey, {
   calls: incomingCalls,
-  accept: (incoming) => (incoming.kind === 'invitation' ? acceptCall(incoming.call) : acceptCallSession(incoming.call)),
-  decline: (incoming) =>
-    incoming.kind === 'invitation' ? declineCall(incoming.call.id) : declineCallSession(incoming.call.id),
+  accept: acceptIncomingCall,
+  decline: declineIncomingCall,
 });
-
-// The desktop dashboard rings in its Calls header, so a toast there would repeat it.
-function ringsInWorkspace() {
-  return router.currentRoute.value.name === 'dashboard' && window.matchMedia('(min-width: 1024px)').matches;
-}
-
-function showIncomingCall(call: CallInvitation) {
-  scheduleCallExpiry(call.id, call.expiresAt);
-  if (ringsInWorkspace()) return;
-  const description = call.caller
-    ? i18n.global.t('dashboard.isCalling', { name: call.caller.name })
-    : i18n.global.t('notifications.incomingCallBody');
-  const toastId = toast({
-    title: i18n.global.t('notifications.incomingCallTitle'),
-    description,
-    duration: Number.POSITIVE_INFINITY,
-    action: { label: i18n.global.t('dashboard.answer'), onClick: () => void acceptCall(call) },
-    cancel: { label: i18n.global.t('dashboard.decline'), onClick: () => void declineCall(call.id) },
-  });
-  incomingCallToasts.set(call.id, toastId);
-}
-
-function showIncomingCallSession(call: CallSessionNotification) {
-  scheduleCallExpiry(call.id, call.expiresAt);
-  if (ringsInWorkspace()) return;
-  const toastId = toast({
-    title: i18n.global.t('notifications.incomingCallTitle'),
-    description: i18n.global.t('notifications.incomingCallBody'),
-    duration: Number.POSITIVE_INFINITY,
-    action: { label: i18n.global.t('dashboard.answer'), onClick: () => void acceptCallSession(call) },
-    cancel: { label: i18n.global.t('dashboard.decline'), onClick: () => void declineCallSession(call.id) },
-  });
-  incomingCallToasts.set(call.id, toastId);
-}
 
 function scheduleCallExpiry(callId: string, expiresAt: string) {
   window.clearTimeout(incomingCallExpiryTimers.get(callId));
@@ -261,24 +256,17 @@ async function pollIncomingCalls() {
       activeCallIds.add(call.id),
     );
 
+    // The incoming call bar shows ringing calls; a call stops ringing once it expires.
     for (const call of calls ?? []) {
-      if (knownIncomingCallIds.has(call.id)) continue;
-      showIncomingCall(call);
+      if (!knownIncomingCallIds.has(call.id)) scheduleCallExpiry(call.id, call.expiresAt);
     }
-
     for (const call of callSessions ?? []) {
-      if (knownIncomingCallSessionIds.has(call.id)) continue;
-      showIncomingCallSession(call);
+      if (!knownIncomingCallSessionIds.has(call.id)) scheduleCallExpiry(call.id, call.expiresAt);
     }
 
     // OS notifications come from server alerts, which skip users who are not Online.
     if (calls && callSessions) systemAlerts.retainCalls(activeCallIds, startedAt);
 
-    for (const [callId, toastId] of incomingCallToasts) {
-      if (activeCallIds.has(callId)) continue;
-      dismissToast(toastId);
-      incomingCallToasts.delete(callId);
-    }
     for (const [callId, timer] of incomingCallExpiryTimers) {
       if (activeCallIds.has(callId)) continue;
       window.clearTimeout(timer);
@@ -458,7 +446,7 @@ async function handleNotificationAction(action: NotificationAction) {
       await replyFromNotification(action.conversationId, action.text);
       return;
     case 'openCall':
-      // The app is now in front, where the call rings in the Calls header or a toast.
+      // The app is now in front, where the call rings in the incoming call bar.
       return;
     case 'declineCall':
       systemAlerts.dismissCall(action.callId);
@@ -518,8 +506,6 @@ function stopAuthenticatedPolling() {
   incomingCallRefreshPending = false;
   notificationRefreshPending = false;
   systemAlerts.dismissAllCalls();
-  for (const toastId of incomingCallToasts.values()) dismissToast(toastId);
-  incomingCallToasts.clear();
   for (const timer of incomingCallExpiryTimers.values()) window.clearTimeout(timer);
   incomingCallExpiryTimers.clear();
   window.clearTimeout(incomingCallRetryTimer);
@@ -532,9 +518,6 @@ function handleIncomingCallResolved(event: Event) {
   knownIncomingCallIds.delete(callId);
   knownIncomingCallSessionIds.delete(callId);
   systemAlerts.dismissCall(callId);
-  const toastId = incomingCallToasts.get(callId);
-  if (toastId !== undefined) dismissToast(toastId);
-  incomingCallToasts.delete(callId);
   window.clearTimeout(incomingCallExpiryTimers.get(callId));
   incomingCallExpiryTimers.delete(callId);
 }
@@ -586,6 +569,14 @@ onUnmounted(() => {
 <template>
   <div :class="isAuthenticated ? 'h-[100dvh] overflow-hidden bg-[#FBFCF8]' : 'min-h-screen bg-[#FBFCF8]'">
     <TheNavbar />
+    <IncomingCallBar
+      v-if="isAuthenticated && ringingCall"
+      :name="ringingName"
+      :more="incomingCalls.length - 1"
+      :is-answering="isAnsweringCall"
+      @accept="respondToRingingCall(true)"
+      @decline="respondToRingingCall(false)"
+    />
     <Toaster />
 
     <RouterView v-slot="{ Component, route }">

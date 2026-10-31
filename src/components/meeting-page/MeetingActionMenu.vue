@@ -1,20 +1,16 @@
 <script setup lang="ts">
 import {
-  Bug,
-  Check,
-  Grid2X2,
-  MessageSquare,
-  MessageSquareOff,
-  Mic,
-  MicOff,
-  MoreHorizontal,
-  PhoneOff,
-  Pin,
-  PinOff,
-  ScanFace,
-  Video,
-  VideoOff,
-} from 'lucide-vue-next';
+  LayoutGridAnimated,
+  MaximizeAnimated,
+  MessageSquareAnimated,
+  MessageSquareOffAnimated,
+  MicAnimated,
+  MicOffAnimated,
+  MinimizeAnimated,
+  PinAnimated,
+  PinOffAnimated,
+} from '@respeak/lucide-motion-vue';
+import { Bug, Check, MoreHorizontal, PhoneOff, ScanFace, Video, VideoOff } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -35,6 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { buildGitHubIssueUrl } from '@/lib/github-issue';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
@@ -49,8 +46,10 @@ const props = withDefaults(
     pinnedParticipantId: string | null;
     videoAvailable: boolean;
     viewMode: 'grid' | 'speaker';
+    /** Full screen hides everything but the media; it works in both grid and speaker view. */
+    fullscreen?: boolean;
   }>(),
-  { context: false },
+  { context: false, fullscreen: false },
 );
 
 const emit = defineEmits<{
@@ -60,6 +59,7 @@ const emit = defineEmits<{
   toggleMute: [];
   togglePin: [participantId: string];
   toggleVideo: [];
+  toggleFullscreen: [];
 }>();
 
 const { t } = useI18n();
@@ -89,17 +89,16 @@ const reportUrl = buildGitHubIssueUrl('meeting');
 
     <component
       :is="MenuContent"
-      align="end"
-      :side-offset="10"
-      class="harbor-action-menu max-h-[min(36rem,calc(100vh-7rem))] min-w-72 overflow-y-auto rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.18)]"
+      v-bind="context ? {} : { align: 'end', sideOffset: 10 }"
+      class="harbor-action-menu w-72 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-[1.25rem] p-2 text-[#102F35]"
     >
       <component
         :is="MenuItem"
         class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
         @select="emit('toggleChat')"
       >
-        <MessageSquareOff v-if="isChatOpen" class="size-4" aria-hidden="true" />
-        <MessageSquare v-else class="size-4" aria-hidden="true" />
+        <LiquidMenuIcon v-if="isChatOpen" :animated="MessageSquareOffAnimated" />
+        <LiquidMenuIcon v-else :animated="MessageSquareAnimated" />
         {{ t(isChatOpen ? 'meeting.actions.closeChat' : 'meeting.actions.openChat') }}
       </component>
 
@@ -110,8 +109,8 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         :class="{ 'bg-[#FFF0EA]': isMuted }"
         @select="emit('toggleMute')"
       >
-        <Mic v-if="isMuted && audioAvailable" class="size-4" aria-hidden="true" />
-        <MicOff v-else class="size-4" aria-hidden="true" />
+        <LiquidMenuIcon v-if="isMuted && audioAvailable" :animated="MicAnimated" />
+        <LiquidMenuIcon v-else :animated="MicOffAnimated" />
         {{
           t(
             !audioAvailable
@@ -130,8 +129,8 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         :class="{ 'bg-[#FFF0EA]': isVideoOff }"
         @select="emit('toggleVideo')"
       >
-        <Video v-if="isVideoOff && videoAvailable" class="size-4" aria-hidden="true" />
-        <VideoOff v-else class="size-4" aria-hidden="true" />
+        <LiquidMenuIcon v-if="isVideoOff && videoAvailable" :fallback="Video" />
+        <LiquidMenuIcon v-else :fallback="VideoOff" />
         {{
           t(
             !videoAvailable
@@ -154,7 +153,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
         @select="emit('setViewMode', 'grid')"
       >
-        <Grid2X2 class="size-4" aria-hidden="true" />
+        <LiquidMenuIcon :animated="LayoutGridAnimated" />
         <span class="flex-1">{{ t('meeting.actions.grid') }}</span>
         <Check v-if="viewMode === 'grid'" class="size-4 text-[#0B7A75]" aria-hidden="true" />
       </component>
@@ -165,9 +164,25 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
         @select="emit('setViewMode', 'speaker')"
       >
-        <ScanFace class="size-4" aria-hidden="true" />
+        <LiquidMenuIcon :fallback="ScanFace" />
         <span class="flex-1">{{ t('meeting.actions.speaker') }}</span>
         <Check v-if="viewMode === 'speaker'" class="size-4 text-[#0B7A75]" aria-hidden="true" />
+      </component>
+
+      <component
+        :is="MenuItem"
+        role="menuitemcheckbox"
+        :aria-checked="fullscreen"
+        data-fullscreen-toggle
+        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
+        @select="emit('toggleFullscreen')"
+      >
+        <LiquidMenuIcon v-if="fullscreen" :animated="MinimizeAnimated" />
+        <LiquidMenuIcon v-else :animated="MaximizeAnimated" />
+        <span class="flex-1">{{
+          t(fullscreen ? 'meeting.actions.exitFullscreen' : 'meeting.actions.fullscreen')
+        }}</span>
+        <Check v-if="fullscreen" class="size-4 text-[#0B7A75]" aria-hidden="true" />
       </component>
 
       <template v-if="viewMode === 'speaker' && participants.length > 1">
@@ -188,8 +203,8 @@ const reportUrl = buildGitHubIssueUrl('meeting');
           class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
           @select="emit('togglePin', participant.id)"
         >
-          <PinOff v-if="pinnedParticipantId === participant.id" class="size-4" aria-hidden="true" />
-          <Pin v-else class="size-4" aria-hidden="true" />
+          <LiquidMenuIcon v-if="pinnedParticipantId === participant.id" :animated="PinOffAnimated" />
+          <LiquidMenuIcon v-else :animated="PinAnimated" />
           <span class="min-w-0 flex-1 truncate">{{ participant.name }}</span>
           <Check v-if="pinnedParticipantId === participant.id" class="size-4 text-[#0B7A75]" aria-hidden="true" />
         </component>
@@ -202,7 +217,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
       >
         <a :href="reportUrl" target="_blank" rel="noreferrer">
-          <Bug class="size-4" aria-hidden="true" />
+          <LiquidMenuIcon :fallback="Bug" />
           {{ t('meeting.actions.reportBug') }}
         </a>
       </component>
@@ -211,7 +226,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
         @select="emit('disconnect')"
       >
-        <PhoneOff class="size-4" aria-hidden="true" />
+        <LiquidMenuIcon :fallback="PhoneOff" />
         {{ t('meeting.actions.disconnect') }}
       </component>
     </component>

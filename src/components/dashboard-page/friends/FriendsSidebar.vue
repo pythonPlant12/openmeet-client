@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { Check, CircleUserRound, Phone, Search, UserCheck, UserMinus, UsersRound, X } from 'lucide-vue-next';
-import { motion } from 'motion-v';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
-import sidebarSectionControlUrl from '@/assets/sidebar-section-control.svg';
 import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,9 +43,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'update:searchOpen', value: boolean): void;
   (event: 'update:query', value: string): void;
-  (eventName: 'drag-end', pointerEvent: PointerEvent, info: { offset: { y: number }; velocity: { y: number } }): void;
-  (eventName: 'wheel', wheelEvent: WheelEvent): void;
-  (event: 'toggle'): void;
   (event: 'open', friend: Friend): void;
   (event: 'profile', friend: Friend): void;
   (event: 'call', friend: Friend): void;
@@ -116,29 +111,18 @@ onBeforeUnmount(clearLongPress);
 </script>
 <template>
   <section
-    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] p-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] px-3 pt-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
     :class="expanded ? 'flex-1 opacity-100' : 'basis-20 shrink-0 opacity-100'"
     aria-labelledby="friends-heading"
   >
     <div class="flex h-9 items-center justify-between gap-2 px-2">
-      <motion.h2
+      <h2
         id="friends-heading"
-        drag="y"
-        :drag-constraints="{ top: 0, bottom: 0 }"
-        :drag-elastic="0.08"
-        :drag-momentum="false"
-        role="button"
-        tabindex="0"
-        :aria-expanded="expanded"
-        class="-my-2 flex flex-1 touch-none cursor-ns-resize items-center gap-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
-        @drag-end="(event, info) => emit('drag-end', event, info)"
-        @click="emit('toggle')"
-        @wheel.prevent="emit('wheel', $event)"
-        @keydown.enter.prevent="emit('toggle')"
-        @keydown.space.prevent="emit('toggle')"
-        ><img :src="sidebarSectionControlUrl" alt="" class="size-4 opacity-60" /><span>Friends</span
-        ><SectionBadge :count="badge" singular="friend request" plural="friend requests" /></motion.h2
-      ><Button
+        class="flex flex-1 items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
+      >
+        <span>Friends</span><SectionBadge :count="badge" singular="friend request" plural="friend requests" />
+      </h2>
+      <Button
         size="icon"
         variant="ghost"
         class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
@@ -259,7 +243,8 @@ onBeforeUnmount(clearLongPress);
           </div>
         </div>
       </div>
-      <div class="min-h-0 flex-1 overflow-y-auto">
+      <!-- On phones the workspace tabs float over the list, so its end scrolls clear of them. -->
+      <div class="min-h-0 flex-1 overflow-y-auto pb-[calc(0.75rem+var(--sidebar-bottom-inset,0px))]">
         <div v-if="incomingRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
           <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
           <div

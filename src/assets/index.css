@@ -327,6 +327,329 @@
   animation: harbor-nav-arrive 600ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
+/* Liquid glass shared by the navigation bars: a translucent frosted surface with a bright rim. */
+.liquid-glass-surface {
+  background: rgb(251 252 248 / 0.62);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3) brightness(1.04);
+  backdrop-filter: blur(12px) saturate(1.3) brightness(1.04);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.9),
+    inset 0 0 0 1px rgb(216 231 227 / 0.9),
+    0 12px 32px -14px rgb(16 47 53 / 0.35),
+    0 2px 6px rgb(16 47 53 / 0.08);
+}
+
+/* An expanded menu holds a lot of text, so the glass turns almost opaque to keep it readable. */
+.liquid-glass-surface[data-expanded='true'] {
+  background: rgb(251 252 248 / 0.95);
+}
+
+/* Primary actions are a teal drop of the same glass: a top-left sheen, a rim light, and a soft inner shade. */
+.liquid-glass-primary {
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0) 55%),
+    linear-gradient(180deg, rgb(11 122 117 / 0.82), rgb(8 99 95 / 0.92));
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.7),
+    inset 0 -2px 6px rgb(16 47 53 / 0.3),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22),
+    0 6px 16px -6px rgb(11 122 117 / 0.6);
+  text-shadow: 0 1px 1px rgb(16 47 53 / 0.25);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .liquid-glass-primary:not(:disabled):hover {
+    color: #fff;
+    background:
+      radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
+      linear-gradient(180deg, rgb(8 99 95 / 0.9), rgb(8 99 95 / 0.98));
+  }
+}
+
+/* Dark liquid glass for surfaces over the near-black full screen meeting stage. */
+.liquid-surface[data-tone='dark'] .liquid-glass-surface {
+  background: rgb(18 24 26 / 0.62);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.18),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    0 12px 32px -14px rgb(0 0 0 / 0.6);
+}
+
+.meeting-controls-dark .meeting-control:not(.meeting-control-muted),
+.meeting-controls-dark .meeting-control:not(.meeting-control-muted):hover {
+  color: #e6f4f1 !important;
+}
+
+/* Leaving, and a muted microphone or camera, stay clear like the other controls and warn with a red rim and
+   icon. The rim softens while the liquid drop sits on the button, so hover moves as smoothly as elsewhere. */
+.meeting-control-alert,
+.meeting-control-alert:hover,
+.meeting-control-alert:active,
+.meeting-control-alert:focus-visible {
+  color: #c4513d !important;
+  background-color: transparent !important;
+}
+
+.meeting-control-alert {
+  box-shadow:
+    inset 0 0 0 1.5px rgb(196 81 61 / 0.55),
+    inset 0 1px 1px rgb(255 255 255 / 0.85) !important;
+  transition:
+    color 0.25s,
+    box-shadow 0.25s !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .meeting-control-alert:hover {
+    color: #a94332 !important;
+    box-shadow:
+      inset 0 0 0 1px rgb(196 81 61 / 0.25),
+      inset 0 1px 1px rgb(255 255 255 / 0.85) !important;
+  }
+}
+
+.meeting-controls-dark .meeting-control-alert,
+.meeting-controls-dark .meeting-control-alert:hover {
+  color: #f6a595 !important;
+}
+
+.meeting-controls-dark .meeting-control-alert {
+  box-shadow:
+    inset 0 0 0 1.5px rgb(246 165 149 / 0.55),
+    inset 0 1px 1px rgb(255 255 255 / 0.18) !important;
+}
+
+/* A small glass bubble for labels over video, such as a participant's name tag. */
+.meeting-glass-bubble {
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%), rgb(16 47 53 / 0.42);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.55),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22),
+    0 6px 16px -6px rgb(0 0 0 / 0.45);
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.25);
+}
+
+/* Every menu is liquid glass: a frosted surface with a bright rim, and one bubble (LiquidMenuHighlight) that
+   glides to the highlighted item. Usages may set their own colors, so the shared look wins here. */
+.liquid-menu {
+  border-color: rgb(216 231 227 / 0.9) !important;
+  background: rgb(251 252 248 / 0.84) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.9),
+    0 20px 50px -18px rgb(16 47 53 / 0.38),
+    0 2px 8px rgb(16 47 53 / 0.08) !important;
+}
+
+/* Items sit above the bubble and leave the highlight to it. */
+.liquid-menu > :not(.liquid-menu-bubble) {
+  position: relative;
+  z-index: 1;
+}
+
+.liquid-menu [role^='menuitem'],
+.liquid-menu [role^='menuitem']:hover,
+.liquid-menu [role^='menuitem']:focus,
+.liquid-menu [role^='menuitem'][data-highlighted],
+.liquid-menu [role^='menuitem'][data-state='open'] {
+  background-color: transparent !important;
+}
+
+.liquid-menu-bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 0.75rem;
+  opacity: 0;
+  pointer-events: none;
+  /* Neutral glass; only the rim carries the item's color, like the navbar's primary action. */
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0) 55%), rgb(255 255 255 / 0.45);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.95),
+    inset 0 0 0 1.5px rgb(11 122 117 / 0.4),
+    0 6px 14px -8px rgb(16 47 53 / 0.3);
+  transition:
+    opacity 0.18s ease,
+    scale 0.18s ease,
+    box-shadow 0.2s ease;
+}
+
+.liquid-menu-bubble[data-gliding='true'] {
+  transition:
+    transform 0.34s cubic-bezier(0.3, 1.25, 0.5, 1),
+    width 0.34s cubic-bezier(0.3, 1.25, 0.5, 1),
+    height 0.34s cubic-bezier(0.3, 1.25, 0.5, 1),
+    opacity 0.18s ease,
+    scale 0.18s ease,
+    box-shadow 0.2s ease;
+}
+
+.liquid-menu-bubble[data-visible='true'] {
+  opacity: 1;
+}
+
+.liquid-menu-bubble[data-pressed='true'] {
+  scale: 0.97;
+}
+
+/* Icons the animated library lacks get a short bounce on the same triggers: hover or highlight, and press. */
+.liquid-menu [role^='menuitem']:is([data-highlighted], :active) .liquid-menu-static-icon {
+  animation: liquid-menu-icon-bounce 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes liquid-menu-icon-bounce {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.82) rotate(-8deg);
+  }
+  70% {
+    transform: scale(1.14) rotate(4deg);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Destructive items keep their red while highlighted. */
+.liquid-menu .harbor-context-menu-danger:is([data-highlighted], :hover, :focus) {
+  color: #a94332 !important;
+}
+
+/* Destructive items get a warm drop, so the color still warns. */
+.liquid-menu-bubble[data-tone='danger'] {
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.95),
+    inset 0 0 0 1.5px rgb(196 81 61 / 0.42),
+    0 6px 14px -8px rgb(120 40 30 / 0.25);
+}
+
+/* The highlighted item's text takes the rim's color instead of a tinted fill. */
+.liquid-menu [role^='menuitem']:not(.harbor-context-menu-danger):is([data-highlighted], [data-state='open']) {
+  color: #08635f !important;
+}
+
+/* Full screen meetings turn every menu into dark glass. The class sits on the document because menus open in
+   portals outside the page. */
+.meeting-immersive .liquid-menu {
+  border-color: rgb(255 255 255 / 0.1) !important;
+  background: rgb(17 22 24 / 0.86) !important;
+  color: #e6f4f1 !important;
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.12),
+    0 20px 55px rgb(0 0 0 / 0.55) !important;
+}
+
+.meeting-immersive .liquid-menu [role^='menuitem'],
+.meeting-immersive .liquid-menu [role^='menuitem'] :is(span, strong) {
+  color: #e6f4f1 !important;
+}
+
+.meeting-immersive .liquid-menu :is(.harbor-context-menu-danger, .text-\[\#C4513D\], .text-\[\#9D4636\]) {
+  color: #f6a595 !important;
+}
+
+.meeting-immersive .liquid-menu :is(.text-\[\#61777B\], .text-\[\#0B7A75\]) {
+  color: #8fc7bf !important;
+}
+
+.meeting-immersive .liquid-menu [role='separator'] {
+  background-color: rgb(255 255 255 / 0.1) !important;
+}
+
+.meeting-immersive .liquid-menu [role='group'] > div:not([role]),
+.meeting-immersive .liquid-menu [role='menu'] > div:not([role]):not(.liquid-menu-bubble) {
+  color: #8fa5a8 !important;
+}
+
+.meeting-immersive .liquid-menu-bubble {
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0) 55%), rgb(255 255 255 / 0.04);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.2),
+    inset 0 0 0 1.5px rgb(102 208 200 / 0.42),
+    0 6px 14px -8px rgb(0 0 0 / 0.6);
+}
+
+.meeting-immersive .liquid-menu-bubble[data-tone='danger'] {
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.2),
+    inset 0 0 0 1.5px rgb(246 165 149 / 0.45),
+    0 6px 14px -8px rgb(0 0 0 / 0.6);
+}
+
+.meeting-immersive
+  .liquid-menu
+  [role^='menuitem']:not(.harbor-context-menu-danger):is([data-highlighted], [data-state='open']) {
+  color: #66d0c8 !important;
+}
+
+.meeting-immersive .liquid-menu .harbor-context-menu-danger:is([data-highlighted], :hover, :focus) {
+  color: #f6a595 !important;
+}
+
+/* The meeting chat turns dark in full screen too: its light surfaces, text, and borders map to dark ones. */
+.meeting-immersive .harbor-chat-panel .harbor-chat-canvas {
+  background-color: #0f1416 !important;
+}
+
+.meeting-immersive .harbor-chat-panel {
+  border-color: rgb(255 255 255 / 0.1) !important;
+  background: #111618 !important;
+  color: #e6f4f1 !important;
+}
+
+.meeting-immersive .harbor-chat-panel :is(.bg-white, .bg-\[\#FBFCF8\], .bg-\[\#F1F4F3\], .bg-\[\#F3F5F4\]) {
+  background-color: #1a2123 !important;
+}
+
+.meeting-immersive .harbor-chat-panel :is(.bg-\[\#E6F4F1\], .bg-\[\#EDF8F5\], .bg-\[\#EAEFED\], .bg-\[\#E5EFEC\]) {
+  background-color: rgb(11 122 117 / 0.22) !important;
+}
+
+.meeting-immersive .harbor-chat-panel :is(.text-\[\#102F35\], .text-\[\#27595D\], .text-\[\#4E6B70\]) {
+  color: #e6f4f1 !important;
+}
+
+.meeting-immersive .harbor-chat-panel :is(.text-\[\#61777B\], .text-\[\#8A9C9E\]) {
+  color: #8fa5a8 !important;
+}
+
+.meeting-immersive .harbor-chat-panel :is(.text-\[\#0B7A75\]) {
+  color: #66d0c8 !important;
+}
+
+.meeting-immersive .harbor-chat-panel :is(.border-\[\#D8E7E3\], .border-\[\#E5EFEC\], .border-\[\#E4ECE9\]) {
+  border-color: rgb(255 255 255 / 0.1) !important;
+}
+
+.meeting-immersive .harbor-chat-panel :is(input, textarea) {
+  color: #e6f4f1 !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .liquid-menu {
+    background: #fbfcf8 !important;
+  }
+
+  .liquid-glass-surface {
+    background: #fbfcf8;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 .harbor-floating-menu[data-state='open'] {
   animation: harbor-menu-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: var(--reka-dropdown-menu-content-transform-origin);
@@ -639,8 +962,7 @@
     background-color: #fde9e4 !important;
   }
 
-  .meeting-primary-action:hover,
-  .meeting-control-danger:hover {
+  .meeting-primary-action:hover {
     color: #ffffff !important;
   }
 
@@ -649,16 +971,12 @@
     background-color: #08635f !important;
   }
 
-  .meeting-control-danger:hover {
-    background-color: #d95e49 !important;
-  }
-
-  /* Meeting controls never fill dark on hover: only the border turns green. Muted controls keep their red. */
+  /* Meeting controls sit on liquid glass: the drop marks hover, so the button itself stays clear.
+     Muted controls keep their red. */
   .meeting-control:not(.meeting-control-muted):hover,
   .meeting-control:not(.meeting-control-muted):focus-visible {
     color: #102f35 !important;
-    border-color: #0b7a75 !important;
-    background-color: #fbfcf8 !important;
+    background-color: transparent !important;
   }
 
   .meeting-share-item:hover,
@@ -675,8 +993,7 @@
   .meeting-control:not(.meeting-control-muted):hover,
   .meeting-control:not(.meeting-control-muted):active {
     color: #102f35 !important;
-    border-color: #0b7a75 !important;
-    background-color: #fbfcf8 !important;
+    background-color: transparent !important;
   }
 
   .meeting-setting-off:hover,
@@ -690,12 +1007,6 @@
   .meeting-primary-action:active {
     color: #ffffff !important;
     background-color: #0b7a75 !important;
-  }
-
-  .meeting-control-danger:hover,
-  .meeting-control-danger:active {
-    color: #ffffff !important;
-    background-color: #f2765f !important;
   }
 }
 
@@ -712,6 +1023,15 @@
   .harbor-floating-menu[data-state='open'],
   .harbor-floating-menu[data-state='closed'],
   .harbor-mobile-account-sheet[data-state] {
+    animation: none;
+  }
+
+  .liquid-menu-bubble,
+  .liquid-menu-bubble[data-gliding='true'] {
+    transition: none;
+  }
+
+  .liquid-menu [role^='menuitem'] .liquid-menu-static-icon {
     animation: none;
   }
 
