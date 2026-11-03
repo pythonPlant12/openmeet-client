@@ -112,7 +112,7 @@ const shareOnTelegram = () => {
        hovered button or open menu. On phones the account button sits above the bar (see TheNavbar). -->
   <!-- A full-width row centers the bar, so the full screen slide-in can animate its transform freely. -->
   <div
-    class="marketing-font pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center text-[#102F35] sm:bottom-6"
+    class="marketing-font pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center text-harbor-ink sm:bottom-6"
     :class="{ 'meeting-controls-dark': dark }"
   >
     <LiquidGlassSurface
@@ -128,8 +128,8 @@ const shareOnTelegram = () => {
           variant="secondary"
           size="icon"
           @click="emit('toggle-stats')"
-          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
-          :class="{ '!text-[#0B7A75]': showConnectionStatus }"
+          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
+          :class="{ '!text-harbor-ink': showConnectionStatus }"
           :aria-label="t('meeting.controls.toggleStats')"
         >
           <Code class="h-5 w-5" />
@@ -144,58 +144,45 @@ const shareOnTelegram = () => {
             <Button
               variant="secondary"
               size="icon"
-              class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
+              class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
               :aria-label="t('meeting.controls.openShare')"
             >
               <Share2 class="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            side="top"
-            class="meeting-menu marketing-font w-60 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
-          >
+          <DropdownMenuContent align="start" side="top" class="meeting-menu marketing-font w-60">
             <template v-if="inviteMode !== 'hidden'">
               <DropdownMenuItem
                 data-invite-people
                 :disabled="inviteMode !== 'enabled'"
-                class="meeting-share-item cursor-pointer rounded-xl py-2.5 font-semibold text-[#0B7A75] focus:bg-[#E6F4F1] focus:text-[#102F35] data-[disabled]:cursor-not-allowed"
+                class="data-[disabled]:cursor-not-allowed"
                 @select="emit('invite')"
               >
                 <LiquidMenuIcon class="mr-2" :animated="UserRoundPlusAnimated" />
                 <span class="min-w-0">
                   <span class="block">{{ t('meeting.controls.invitePeople') }}</span>
-                  <span v-if="inviteMode === 'signedOut'" class="block text-xs font-normal text-[#61777B]">{{
+                  <span v-if="inviteMode === 'signedOut'" class="block text-xs font-normal text-harbor-muted">{{
                     t('meeting.controls.inviteSignIn')
                   }}</span>
                 </span>
               </DropdownMenuItem>
-              <DropdownMenuSeparator class="bg-[#D8E7E3]" />
+              <DropdownMenuSeparator />
             </template>
-            <DropdownMenuItem
-              @click="copyMeetingLink"
-              class="meeting-share-item cursor-pointer rounded-xl py-2.5 text-[#27595D] focus:bg-[#E6F4F1] focus:text-[#102F35]"
-            >
+            <DropdownMenuItem @click="copyMeetingLink">
               <LiquidMenuIcon class="mr-2" :animated="Link2Animated" />
               <span>{{ copiedLink ? t('meeting.controls.linkCopied') : t('meeting.controls.copyLink') }}</span>
-              <Check v-if="copiedLink" class="ml-auto h-4 w-4 text-[#0B7A75]" />
+              <Check v-if="copiedLink" class="ml-auto h-4 w-4 text-harbor-ink" />
             </DropdownMenuItem>
 
-            <DropdownMenuItem
-              @click="copyMeetingId"
-              class="meeting-share-item cursor-pointer rounded-xl py-2.5 text-[#27595D] focus:bg-[#E6F4F1] focus:text-[#102F35]"
-            >
+            <DropdownMenuItem @click="copyMeetingId">
               <LiquidMenuIcon class="mr-2" :animated="CopyAnimated" />
               <span>{{ copiedId ? t('meeting.controls.idCopied') : t('meeting.controls.copyId') }}</span>
-              <Check v-if="copiedId" class="ml-auto h-4 w-4 text-[#0B7A75]" />
+              <Check v-if="copiedId" class="ml-auto h-4 w-4 text-harbor-ink" />
             </DropdownMenuItem>
 
-            <DropdownMenuSeparator class="bg-[#D8E7E3]" />
+            <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              @click="shareOnWhatsApp"
-              class="meeting-share-item cursor-pointer rounded-xl py-2.5 text-[#27595D] focus:bg-[#E6F4F1] focus:text-[#102F35]"
-            >
+            <DropdownMenuItem @click="shareOnWhatsApp">
               <img
                 src="/icons/social-media/whatsapp.svg"
                 class="mr-2 h-4 w-4"
@@ -204,10 +191,7 @@ const shareOnTelegram = () => {
               <span>{{ t('meeting.controls.shareWhatsApp') }}</span>
             </DropdownMenuItem>
 
-            <DropdownMenuItem
-              @click="shareOnTelegram"
-              class="meeting-share-item cursor-pointer rounded-xl py-2.5 text-[#27595D] focus:bg-[#E6F4F1] focus:text-[#102F35]"
-            >
+            <DropdownMenuItem @click="shareOnTelegram">
               <img
                 src="/icons/social-media/telegram.svg"
                 class="mr-2 h-4 w-4"
@@ -234,15 +218,15 @@ const shareOnTelegram = () => {
           variant="secondary"
           size="icon"
           @click="emit('toggle-chat')"
-          class="meeting-control relative size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
-          :class="{ '!text-[#0B7A75]': props.isChatOpen }"
+          class="meeting-control relative size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
+          :class="{ '!text-harbor-ink': props.isChatOpen }"
           :aria-label="chatAriaLabel"
           data-chat-trigger
         >
           <MessageSquare class="h-5 w-5" />
           <span
             v-if="props.unreadCount && props.unreadCount > 0 && !props.isChatOpen"
-            class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#F2765F] text-xs font-bold text-white"
+            class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-harbor-ink text-xs font-bold text-white"
           >
             {{ props.unreadCount > 9 ? '9+' : props.unreadCount }}
           </span>

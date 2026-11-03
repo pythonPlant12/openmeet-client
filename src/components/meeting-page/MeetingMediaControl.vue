@@ -81,7 +81,7 @@ async function selectDevice(deviceId: unknown) {
         <Button
           :variant="off ? 'destructive' : 'secondary'"
           size="icon"
-          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
+          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
           :class="{ 'meeting-control-muted meeting-control-alert': off }"
           :aria-label="tooltip"
           :data-media-off="off"
@@ -91,23 +91,13 @@ async function selectDevice(deviceId: unknown) {
           <template v-else><VideoOff v-if="off" class="h-5 w-5" /><Video v-else class="h-5 w-5" /></template>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="center"
-        side="top"
-        :side-offset="10"
-        class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
-      >
+      <DropdownMenuContent align="center" side="top" :side-offset="10" class="meeting-menu marketing-font w-64">
         <DropdownMenuSub v-if="!isAudio">
-          <DropdownMenuSubTrigger
-            class="meeting-share-item cursor-pointer gap-2 rounded-xl py-2.5 font-semibold"
-            data-media-quality-menu
-          >
-            <LiquidMenuIcon class="text-[#0B7A75]" :animated="GaugeAnimated" />Quality
-            <span class="ml-auto truncate pl-2 text-xs font-normal text-[#61777B]">{{ qualityLabel }}</span>
+          <DropdownMenuSubTrigger data-media-quality-menu>
+            <LiquidMenuIcon class="text-harbor-ink" :animated="GaugeAnimated" />Quality
+            <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{ qualityLabel }}</span>
           </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent
-            class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
-          >
+          <DropdownMenuSubContent class="meeting-menu marketing-font w-64">
             <MeetingQualityOptions
               :quality="quality"
               :disabled="busy"
@@ -118,23 +108,18 @@ async function selectDevice(deviceId: unknown) {
         </DropdownMenuSub>
 
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger
-            class="meeting-share-item cursor-pointer gap-2 rounded-xl py-2.5 font-semibold"
-            data-media-source-menu
-          >
-            <LiquidMenuIcon v-if="isAudio" class="text-[#0B7A75]" :animated="MicAnimated" /><LiquidMenuIcon
+          <DropdownMenuSubTrigger data-media-source-menu>
+            <LiquidMenuIcon v-if="isAudio" class="text-harbor-ink" :animated="MicAnimated" /><LiquidMenuIcon
               v-else
-              class="text-[#0B7A75]"
+              class="text-harbor-ink"
               :fallback="Webcam"
             />Source
-            <span class="ml-auto max-w-28 truncate pl-2 text-xs font-normal text-[#61777B]">{{
+            <span class="ml-auto max-w-28 truncate pl-2 text-xs font-normal text-harbor-muted">{{
               activeDeviceLabel
             }}</span>
           </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent
-            class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
-          >
-            <p v-if="!devices.length" class="px-2 py-1.5 text-sm text-[#61777B]">
+          <DropdownMenuSubContent class="meeting-menu marketing-font w-64">
+            <p v-if="!devices.length" class="px-2 py-1.5 text-sm text-harbor-muted">
               {{ isAudio ? 'No microphones found' : 'No cameras found' }}
             </p>
             <DropdownMenuRadioGroup :model-value="activeId" @update:model-value="selectDevice">
@@ -143,7 +128,6 @@ async function selectDevice(deviceId: unknown) {
                 :key="device.deviceId"
                 :value="device.deviceId"
                 :disabled="busy"
-                class="cursor-pointer rounded-xl py-2 text-[#27595D]"
                 :data-device-option="device.deviceId"
               >
                 <span class="truncate">{{ deviceLabel(device, index) }}</span>
@@ -152,12 +136,11 @@ async function selectDevice(deviceId: unknown) {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
-        <DropdownMenuSeparator class="bg-[#D8E7E3]" />
+        <DropdownMenuSeparator />
         <!-- Turning a medium off is the destructive choice, so it highlights red; turning it on stays teal. -->
         <DropdownMenuItem
           :disabled="!available"
-          class="cursor-pointer gap-2 rounded-xl py-2.5 font-semibold"
-          :class="off ? 'meeting-share-item text-[#0B7A75]' : 'harbor-context-menu-danger text-[#C4513D]'"
+          :variant="off ? 'default' : 'danger'"
           data-media-toggle-item
           @select="emit('toggle')"
         >

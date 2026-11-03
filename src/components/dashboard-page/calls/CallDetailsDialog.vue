@@ -93,13 +93,13 @@ watch(
 <template>
   <Dialog v-model:open="open">
     <HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] overflow-y-auto rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] sm:p-6"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:p-6"
       data-call-details
     >
       <DialogHeader v-if="shown">
         <DialogTitle class="truncate pr-6">{{ meetingTitle(shown.participants, shown.participantCount) }}</DialogTitle>
-        <DialogDescription class="flex items-center gap-1.5 text-[#61777B]" data-call-detail-type>
+        <DialogDescription class="flex items-center gap-1.5 text-harbor-muted" data-call-detail-type>
           <component :is="meetingType(shown).icon" class="size-3.5 shrink-0" aria-hidden="true" />{{
             meetingType(shown).label
           }}
@@ -109,25 +109,25 @@ watch(
 
       <template v-if="shown">
         <dl class="grid grid-cols-3 gap-2" data-call-stats>
-          <div class="rounded-2xl border border-[#E5EFEC] bg-white p-3">
-            <dt class="flex items-center gap-1.5 text-xs font-semibold text-[#61777B]">
+          <div class="rounded-2xl border border-harbor-line bg-white p-3">
+            <dt class="flex items-center gap-1.5 text-xs font-semibold text-harbor-muted">
               <Clock3 class="size-3.5" />Duration
             </dt>
             <dd class="mt-1 font-semibold" data-call-duration>{{ duration(shown.startedAt, shown.endedAt) }}</dd>
           </div>
-          <div class="rounded-2xl border border-[#E5EFEC] bg-white p-3">
-            <dt class="flex items-center gap-1.5 text-xs font-semibold text-[#61777B]">
+          <div class="rounded-2xl border border-harbor-line bg-white p-3">
+            <dt class="flex items-center gap-1.5 text-xs font-semibold text-harbor-muted">
               <UsersRound class="size-3.5" />People
             </dt>
             <dd class="mt-1 font-semibold" data-call-participant-count>{{ shown.participantCount }}</dd>
           </div>
-          <div class="rounded-2xl border border-[#E5EFEC] bg-white p-3">
-            <dt class="text-xs font-semibold text-[#61777B]">{{ shown.endedAt ? 'Time' : 'Status' }}</dt>
+          <div class="rounded-2xl border border-harbor-line bg-white p-3">
+            <dt class="text-xs font-semibold text-harbor-muted">{{ shown.endedAt ? 'Time' : 'Status' }}</dt>
             <dd class="mt-1 text-sm font-semibold">
               <template v-if="shown.endedAt"
                 >{{ formatTime(shown.startedAt) }} – {{ formatTime(shown.endedAt) }}</template
               >
-              <span v-else class="inline-flex items-center gap-1.5 text-[#17645F]"
+              <span v-else class="inline-flex items-center gap-1.5 text-harbor-accent-hover"
                 ><span class="size-2 rounded-full bg-[#2DA58F]" aria-hidden="true" />Live</span
               >
             </dd>
@@ -136,30 +136,34 @@ watch(
 
         <div>
           <h3 class="mb-2 text-sm font-semibold">Participants</h3>
-          <div v-if="isLoading" class="flex justify-center py-6"><LoadingRipple class="size-6 text-[#0B7A75]" /></div>
-          <p v-else-if="error" class="rounded-xl bg-[#FFF0EA] px-3 py-2.5 text-sm text-[#9D4636]">{{ error }}</p>
+          <div v-if="isLoading" class="flex justify-center py-6">
+            <LoadingRipple class="size-6 text-harbor-accent" />
+          </div>
+          <p v-else-if="error" class="rounded-xl bg-harbor-danger-soft px-3 py-2.5 text-sm text-harbor-danger-strong">
+            {{ error }}
+          </p>
           <ul
             v-else-if="detail"
-            class="max-h-64 overflow-y-auto rounded-2xl border border-[#E5EFEC] bg-white"
+            class="max-h-64 overflow-y-auto rounded-2xl border border-harbor-line bg-white"
             data-call-participants
           >
             <li
               v-for="(person, index) in detail.participants"
               :key="`${person.userId ?? `guest-${person.name}`}-${index}`"
-              class="border-[#EEF3F1] [&:not(:first-child)]:border-t"
+              class="border-harbor-line [&:not(:first-child)]:border-t"
             >
               <component
                 :is="person.userId ? 'button' : 'div'"
                 :type="person.userId ? 'button' : undefined"
                 class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left"
-                :class="person.userId ? 'transition-colors [@media(hover:hover)]:hover:bg-[#EDF8F5]' : ''"
+                :class="person.userId ? 'transition-colors [@media(hover:hover)]:hover:bg-harbor-hover' : ''"
                 :data-registered="!!person.userId"
                 :aria-label="person.userId ? `Show ${person.name}'s profile` : undefined"
                 @click="person.userId && emit('profile', person)"
               >
                 <span
                   class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[28%] text-xs font-semibold"
-                  :class="person.userId ? 'bg-[#DDF1ED] text-[#0B7A75]' : 'bg-[#F0F4F3] text-[#61777B]'"
+                  :class="person.userId ? 'bg-harbor-avatar text-harbor-accent' : 'bg-harbor-hover text-harbor-muted'"
                   ><img
                     v-if="avatarFor(person)"
                     :src="avatarFor(person)"
@@ -170,14 +174,14 @@ watch(
                 <span class="min-w-0 flex-1">
                   <span class="flex items-center gap-1.5">
                     <span class="truncate text-sm font-semibold">{{ person.name }}</span>
-                    <span v-if="person.isYou" class="shrink-0 text-xs font-semibold text-[#0B7A75]">You</span>
+                    <span v-if="person.isYou" class="shrink-0 text-xs font-semibold text-harbor-accent">You</span>
                     <span
                       v-if="!person.userId"
-                      class="shrink-0 rounded-full bg-[#F0F4F3] px-1.5 py-px text-[0.625rem] font-bold uppercase tracking-wide text-[#61777B]"
+                      class="shrink-0 rounded-full bg-harbor-hover px-1.5 py-px text-[0.625rem] font-bold uppercase tracking-wide text-harbor-muted"
                       >Guest</span
                     >
                   </span>
-                  <span class="block truncate text-xs text-[#61777B]">
+                  <span class="block truncate text-xs text-harbor-muted">
                     <template v-if="person.nickname">@{{ person.nickname }} · </template
                     >{{ person.leftAt ? `${duration(person.joinedAt, person.leftAt)} in the call` : 'In the call now' }}
                   </span>
@@ -191,14 +195,14 @@ watch(
           <Button
             v-if="!shown.endedAt"
             variant="ghost"
-            class="harbor-ghost-action h-10 rounded-full px-4 font-semibold text-[#0B7A75]"
+            class="harbor-ghost-action h-10 rounded-full px-4 font-semibold text-harbor-accent"
             @click="emit('join', shown)"
           >
             <Video class="size-4" />Join
           </Button>
           <Button
             data-call-again
-            class="harbor-primary-action h-10 rounded-full bg-[#0B7A75] px-5 text-white"
+            class="harbor-primary-action h-10 rounded-full bg-harbor-accent px-5 text-white"
             :disabled="!canCallAgain || calling"
             :title="detail && !canCallAgain ? 'No registered participants to call' : undefined"
             @click="detail && emit('call', detail)"

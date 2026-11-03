@@ -41,8 +41,8 @@ const qualityLabel = computed(() =>
           variant="secondary"
           size="icon"
           :disabled="disabled"
-          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-[#102F35] shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
-          :class="{ '!text-[#0B7A75]': session }"
+          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
+          :class="{ '!text-harbor-ink': session }"
           :aria-label="t(session ? 'meeting.controls.presenting' : 'meeting.controls.presentScreen')"
           :data-sharing="!!session"
           data-screen-share-button
@@ -51,42 +51,24 @@ const qualityLabel = computed(() =>
           <MonitorUp v-else class="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="center"
-        side="top"
-        :side-offset="10"
-        class="meeting-menu marketing-font w-72 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
-      >
-        <DropdownMenuItem
-          v-if="session"
-          class="meeting-share-item cursor-pointer rounded-xl py-2.5 font-semibold text-[#9D4636] focus:bg-[#FFF0EA] focus:text-[#9D4636]"
-          data-stop-presenting
-          @select="emit('stop')"
-        >
+      <DropdownMenuContent align="center" side="top" :side-offset="10" class="meeting-menu marketing-font w-72">
+        <DropdownMenuItem v-if="session" variant="danger" data-stop-presenting @select="emit('stop')">
           <LiquidMenuIcon class="mr-2" :fallback="MonitorOff" />{{ t('meeting.controls.stopPresenting') }}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          v-else
-          :disabled="isStarting"
-          class="meeting-share-item cursor-pointer rounded-xl py-2.5 font-semibold text-[#0B7A75] focus:bg-[#E6F4F1] focus:text-[#102F35]"
-          data-start-presenting
-          @select="emit('start')"
-        >
+        <DropdownMenuItem v-else :disabled="isStarting" data-start-presenting @select="emit('start')">
           <LiquidMenuIcon class="mr-2" :fallback="MonitorUp" />
           <span class="min-w-0">
             <span class="block">{{ t('meeting.controls.startPresenting') }}</span>
-            <span class="block text-xs font-normal text-[#61777B]">{{ t('meeting.controls.presentHint') }}</span>
+            <span class="block text-xs font-normal text-harbor-muted">{{ t('meeting.controls.presentHint') }}</span>
           </span>
         </DropdownMenuItem>
-        <DropdownMenuSeparator class="bg-[#D8E7E3]" />
+        <DropdownMenuSeparator />
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger class="meeting-share-item cursor-pointer gap-2 rounded-xl py-2.5 font-semibold">
+          <DropdownMenuSubTrigger>
             Screen quality
-            <span class="ml-auto truncate pl-2 text-xs font-normal text-[#61777B]">{{ qualityLabel }}</span>
+            <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{ qualityLabel }}</span>
           </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent
-            class="meeting-menu marketing-font w-64 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_18px_45px_rgba(16,47,53,0.18)]"
-          >
+          <DropdownMenuSubContent class="meeting-menu marketing-font w-64">
             <MeetingQualityOptions :quality="quality" :sent-height="session ? sentHeight : null" @select="setQuality" />
           </DropdownMenuSubContent>
         </DropdownMenuSub>

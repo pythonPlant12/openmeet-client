@@ -165,7 +165,7 @@ function toggleName(participantId: string) {
 
 <template>
   <div
-    class="relative h-full w-full flex-1 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0B7A75]"
+    class="relative h-full w-full flex-1 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-accent"
     data-testid="meeting-video-canvas"
     :data-view-mode="viewMode"
     :data-fullscreen="fullscreen ? 'true' : undefined"

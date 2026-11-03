@@ -605,8 +605,7 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Online');
-    expect(wrapper.get('[data-status-submenu]').classes()).toContain('font-semibold');
-    expect(wrapper.findAll('.harbor-action-menu').every((menu) => menu.classes().includes('marketing-font'))).toBe(
+    expect(wrapper.findAll('.harbor-menu-surface').every((menu) => menu.classes().includes('marketing-font'))).toBe(
       true,
     );
 

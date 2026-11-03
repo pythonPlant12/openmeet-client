@@ -80,7 +80,7 @@ describe('CallsSidebar', () => {
   it('lists calls when expanded and opens one on press', async () => {
     const wrapper = mountSidebar({ panel: 'top' });
     expect(wrapper.get('[data-calls-list]').attributes('aria-hidden')).toBe('false');
-    expect(wrapper.text()).toContain('Today');
+    expect(wrapper.text()).toContain('Recent');
     expect(wrapper.text()).toContain('Bob Chen');
 
     await wrapper.get('[data-call-item]').trigger('click');

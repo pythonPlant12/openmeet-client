@@ -43,11 +43,11 @@ function handleJoin() {
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       ><DialogHeader
         ><DialogTitle>{{ t('common.joinMeeting') }}</DialogTitle
-        ><DialogDescription class="text-[#61777B]">{{ t('landing.joinTitle') }}</DialogDescription></DialogHeader
+        ><DialogDescription class="text-harbor-muted">{{ t('landing.joinTitle') }}</DialogDescription></DialogHeader
       >
       <form class="space-y-4" @submit.prevent="handleJoin">
         <div class="space-y-2">
@@ -60,14 +60,14 @@ function handleJoin() {
             :placeholder="t('landing.roomPlaceholder')"
             :aria-invalid="!!error"
             :aria-describedby="error ? 'join-room-error' : undefined"
-            class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+            class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
             @input="error = ''"
           />
         </div>
         <p
           v-if="error"
           id="join-room-error"
-          class="rounded-xl border border-[#F2C7BE] bg-[#FFF4F0] px-3 py-2 text-sm text-[#9D4636]"
+          class="rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-3 py-2 text-sm text-harbor-danger-strong"
           role="alert"
         >
           {{ error }}
@@ -76,12 +76,12 @@ function handleJoin() {
           ><Button
             type="button"
             variant="outline"
-            class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
             @click="emit('update:open', false)"
             >{{ t('common.cancel') }}</Button
           ><Button
             type="submit"
-            class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
+            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
             :disabled="!code.trim()"
             >{{ t('landing.joinRoom') }}</Button
           ></DialogFooter

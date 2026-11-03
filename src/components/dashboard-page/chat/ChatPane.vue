@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { ArrowLeft, MessageCircleMore, Phone, UsersRound, X } from 'lucide-vue-next';
+import { ArrowLeft, CircleUserRound, Ellipsis, MessageCircleMore, Phone, UsersRound, Video, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, ref, watch } from 'vue';
 
 import ChatThread from '@/components/dashboard-page/chat/ChatThread.vue';
+import type { SenderAvatar } from '@/components/dashboard-page/chat/voice-message';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { userStatusOption } from '@/config/user-status.config';
@@ -44,12 +51,13 @@ const props = defineProps<{
   gifSearchError?: string;
   gifPreviewUrls?: Record<string, string>;
   isGifPreviewLoading?: (id: string) => boolean;
+  senderAvatar?: (message: ConversationMessage) => SenderAvatar;
 }>();
 const emit = defineEmits<{
   (event: 'back'): void;
   (event: 'profile'): void;
   (event: 'group-info'): void;
-  (event: 'call'): void;
+  (event: 'call', options: { video: boolean }): void;
   (event: 'scroll-top'): void;
   (event: 'load-unread', sequence: number): void;
   (event: 'send'): void;
@@ -164,25 +172,29 @@ defineExpose({
         :animate="{ opacity: 1, x: 0 }"
         :exit="exit"
         :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' }"
-        class="flex h-full min-h-0 flex-col"
+        class="relative flex h-full min-h-0 flex-col"
       >
-        <header class="flex min-h-16 items-center gap-3 border-b border-[#E5EFEC] px-3 sm:px-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            class="harbor-ghost-action -ml-2 rounded-full text-[#27595D] lg:hidden"
+        <!-- The header floats over the messages, which fade and blur as they scroll under it. -->
+        <header
+          class="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 px-3 pb-7 pt-3 sm:gap-3 sm:px-5"
+        >
+          <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" />
+          <button
+            type="button"
+            class="harbor-round-button pointer-events-auto size-10 shrink-0 lg:hidden"
             aria-label="Back to conversations"
             @click="emit('back')"
-            ><ArrowLeft class="size-5" /></Button
+          >
+            <ArrowLeft class="size-5" /></button
           ><button
             v-if="selectedFriend && !pendingFriend"
             type="button"
-            class="harbor-ghost-action -mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left"
+            class="pointer-events-auto flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-1 pl-1 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
             @click="emit('profile')"
           >
             <span class="relative shrink-0"
               ><span
-                class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-[#0B7A75]"
+                class="flex size-10 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
                 :class="[
                   'border-2',
                   userStatusOption(selectedFriend.isOnline ? selectedFriend.status : 'offline').borderClass,
@@ -192,63 +204,102 @@ defineExpose({
                   :src="friendAvatarUrls[selectedFriend.id]"
                   alt=""
                   class="size-full object-cover"
-                /><LoadingRipple
-                  v-else-if="isFriendAvatarLoading(selectedFriend.id)"
-                  class="size-4 text-[#0B7A75]"
-                /><span v-else class="text-xs font-semibold">{{ initials(selectedFriend.name) }}</span></span
+                /><LoadingRipple v-else-if="isFriendAvatarLoading(selectedFriend.id)" class="size-4" /><span
+                  v-else
+                  class="text-xs font-semibold"
+                  >{{ initials(selectedFriend.name) }}</span
+                ></span
               ><PresenceDot
                 surface="directMessages"
                 :online="selectedFriend.isOnline"
                 :status="selectedFriend.status"
                 class="size-3 border-2 border-white" /></span
             ><span class="min-w-0"
-              ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
-              ><span class="block truncate text-xs text-[#61777B]">{{ directConversationLabel }}</span></span
+              ><span id="conversation-title" class="block truncate text-base font-semibold text-harbor-ink">{{
+                selectedTitle
+              }}</span
+              ><span class="sr-only">{{ directConversationLabel }}</span></span
             ></button
           ><button
             v-else-if="selectedIsGroup"
             type="button"
-            class="harbor-ghost-action -mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left"
+            class="pointer-events-auto flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-1 pl-1 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
             @click="emit('group-info')"
           >
-            <span class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] text-white"
+            <span
+              class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
               ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><LoadingRipple
                 v-else-if="conversation && isGroupAvatarLoading(conversation.id)"
-                class="size-4 text-white" /><UsersRound v-else class="size-4" /></span
+                class="size-4" /><UsersRound v-else class="size-5" /></span
             ><span class="min-w-0"
-              ><span id="conversation-title" class="block truncate font-semibold">{{ selectedTitle }}</span
-              ><span class="block truncate text-xs text-[#61777B]">{{ groupConversationLabel }}</span></span
+              ><span id="conversation-title" class="block truncate text-base font-semibold text-harbor-ink">{{
+                selectedTitle
+              }}</span
+              ><span class="sr-only">{{ groupConversationLabel }}</span></span
             >
           </button>
-          <div v-else class="flex min-w-0 flex-1 items-center gap-3">
-            <span class="flex size-9 items-center justify-center rounded-[28%] bg-[#DDF1ED] text-[#0B7A75]"
+          <div v-else class="pointer-events-auto flex min-w-0 items-center gap-3">
+            <span
+              class="flex size-10 shrink-0 items-center justify-center rounded-full bg-harbor-avatar text-harbor-icon"
               ><span class="text-xs font-semibold">{{ initials(selectedFriend?.name) }}</span></span
             >
             <div class="min-w-0">
-              <h2 id="conversation-title" class="truncate font-semibold">{{ selectedTitle }}</h2>
-              <p class="truncate text-xs text-[#61777B]">Direct-message request pending</p>
+              <h2 id="conversation-title" class="truncate text-base font-semibold text-harbor-ink">
+                {{ selectedTitle }}
+              </h2>
+              <p class="truncate text-xs text-harbor-muted">Direct-message request pending</p>
             </div>
           </div>
-          <Button
-            v-if="selectedIsGroup"
-            variant="ghost"
-            size="icon"
-            class="harbor-ghost-action rounded-full text-[#0B7A75] lg:hidden"
-            aria-label="Open group details"
-            @click="emit('group-info')"
-            ><UsersRound class="size-5"
-          /></Button>
-          <Button
+          <div
             v-if="(selectedFriend && !pendingFriend) || selectedIsGroup"
-            variant="ghost"
-            size="icon"
-            class="harbor-ghost-action rounded-full text-[#0B7A75]"
-            :aria-label="selectedIsGroup ? 'Start a group call' : 'Start a call'"
-            :title="selectedIsGroup ? 'Start a group call' : 'Start a call'"
-            :disabled="callActive"
-            @click="emit('call')"
-            ><Phone class="size-5"
-          /></Button>
+            data-chat-actions
+            class="harbor-round-group pointer-events-auto ml-auto shrink-0"
+          >
+            <button
+              type="button"
+              class="size-10"
+              :aria-label="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
+              :title="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
+              :disabled="callActive"
+              @click="emit('call', { video: true })"
+            >
+              <Video class="size-5" /></button
+            ><button
+              type="button"
+              class="size-10"
+              :aria-label="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
+              :title="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
+              :disabled="callActive"
+              @click="emit('call', { video: false })"
+            >
+              <Phone class="size-[1.125rem]" />
+            </button>
+            <DropdownMenu :modal="false">
+              <DropdownMenuTrigger as-child>
+                <button type="button" class="size-10" aria-label="More chat options" title="More options">
+                  <Ellipsis class="size-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" :side-offset="8" class="min-w-52">
+                <DropdownMenuItem v-if="selectedIsGroup" @select="emit('group-info')">
+                  <UsersRound />
+                  Group info
+                </DropdownMenuItem>
+                <DropdownMenuItem v-else @select="emit('profile')">
+                  <CircleUserRound />
+                  See profile
+                </DropdownMenuItem>
+                <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: true })">
+                  <Video />
+                  Video call
+                </DropdownMenuItem>
+                <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: false })">
+                  <Phone />
+                  Audio call
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </header>
         <ChatThread
           v-if="conversation"
@@ -279,6 +330,8 @@ defineExpose({
           :gif-preview-urls="gifPreviewUrls"
           :is-gif-preview-loading="isGifPreviewLoading"
           footer-note="Messages stored by OpenMeet"
+          overlay-header
+          :sender-avatar="senderAvatar"
           @scroll-top="emit('scroll-top')"
           @load-unread="(sequence) => emit('load-unread', sequence)"
           @send="emit('send')"
@@ -291,7 +344,7 @@ defineExpose({
           <template #notice>
             <div
               v-if="notificationWarning"
-              class="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#D8E7E3] bg-[#E6F4F1] px-3 py-2.5 text-sm text-[#102F35]"
+              class="sticky top-[4.5rem] z-10 mb-4 flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5 text-sm text-harbor-ink shadow-[0_1px_2px_rgba(17,27,33,0.06),0_4px_14px_rgba(17,27,33,0.07)]"
             >
               <p>
                 {{
@@ -305,14 +358,14 @@ defineExpose({
                   v-if="canRequestNotificationPermission"
                   variant="ghost"
                   size="sm"
-                  class="harbor-ghost-action h-8 rounded-lg px-2 font-bold text-[#0B7A75]"
+                  class="harbor-ghost-action h-8 rounded-lg px-2 font-semibold text-harbor-accent"
                   @click="emit('request-notifications')"
                   >Enable</Button
                 >
                 <Button
                   variant="ghost"
                   size="icon"
-                  class="harbor-ghost-action size-8 rounded-lg text-[#27595D]"
+                  class="harbor-ghost-action size-8 rounded-lg text-harbor-icon"
                   aria-label="Dismiss notification notice"
                   title="Dismiss"
                   @click="emit('dismiss-notifications')"
@@ -322,7 +375,7 @@ defineExpose({
             </div>
           </template>
         </ChatThread>
-        <div v-else class="flex flex-1 items-center justify-center px-6 py-10 text-center">
+        <div v-else class="harbor-chat-canvas flex flex-1 items-center justify-center px-6 py-10 text-center">
           <p class="max-w-sm rounded-xl bg-[#FFF8E8] px-4 py-3 text-sm text-[#80601D]">
             Waiting for {{ pendingFriend?.name }} to accept this direct-message request.
           </p>
@@ -331,16 +384,17 @@ defineExpose({
         v-else-if="isDesktop"
         key="empty-conversation"
         :initial="initial"
-        :animate="{ opacity: 1, y: 0, scale: 1 }"
+        :animate="{ opacity: 1, x: 0, y: 0, scale: 1 }"
         :exit="exit"
         :transition="prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: 'easeOut' }"
-        class="flex h-full flex-1 items-center justify-center px-6 py-10 text-center"
+        class="harbor-chat-canvas flex h-full flex-1 items-center justify-center px-6 py-10 text-center"
         ><div class="max-w-sm">
-          <span class="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#E6F4F1] text-[#0B7A75]"
+          <span
+            class="mx-auto flex size-14 items-center justify-center rounded-full bg-white text-harbor-icon shadow-[0_1px_2px_rgba(17,27,33,0.06),0_4px_14px_rgba(17,27,33,0.08)]"
             ><MessageCircleMore class="size-7"
           /></span>
           <h2 id="conversation-title" class="mt-5 text-xl font-semibold">Choose a conversation</h2>
-          <p class="mt-2 text-sm leading-6 text-[#61777B]">
+          <p class="mt-2 text-sm leading-6 text-harbor-muted">
             Select a conversation or an accepted friend to manage its secure access.
           </p>
         </div></motion.div

@@ -11,8 +11,8 @@ function mountWaveform(playing = false, progress = 0) {
       bars: [0.1, 0.8, 0.2],
       playing,
       progress,
-      playedClass: 'bg-[#0B7A75]',
-      unplayedClass: 'bg-[#B8C6C5]',
+      playedClass: 'bg-harbor-accent',
+      unplayedClass: 'bg-harbor-waveform',
     },
   });
 }

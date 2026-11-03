@@ -45,7 +45,9 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       >
         <slot />
 
-        <DialogClose class="absolute top-4 right-4 p-0.5 transition-colors rounded-md hover:bg-secondary">
+        <DialogClose
+          class="harbor-round-button absolute right-3 top-3 size-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle disabled:pointer-events-none [&_svg]:size-[1.125rem]"
+        >
           <X class="w-4 h-4" />
           <span class="sr-only">{{ t('common.close') }}</span>
         </DialogClose>

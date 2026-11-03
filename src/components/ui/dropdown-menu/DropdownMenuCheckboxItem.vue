@@ -20,7 +20,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
     v-bind="forwarded"
     :class="
       cn(
-        'relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-[#E6F4F1] focus:text-[#102F35] data-[highlighted]:bg-[#E6F4F1] data-[highlighted]:text-[#102F35] data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        'harbor-menu-item relative flex select-none items-center !pl-9 outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         props.class,
       )
     "

@@ -119,13 +119,13 @@ describe('GroupDetailsPanel', () => {
     const avatar = dot.element.previousElementSibling as HTMLElement;
 
     expect(avatar.classList).toContain('border-2');
-    expect(avatar.classList).toContain('border-[#C4513D]');
+    expect(avatar.classList).toContain('border-harbor-danger');
     expect(dot.classes()).toContain('border-[3px]');
-    expect(dot.classes()).toContain('border-[#FBFCF8]');
+    expect(dot.classes()).toContain('border-harbor-surface');
     const offlineAvatar = patRow.get('.relative > span').element as HTMLElement;
 
     expect(offlineAvatar.classList).toContain('border-2');
-    expect(offlineAvatar.classList).toContain('border-[#B8C6C5]');
+    expect(offlineAvatar.classList).toContain('border-harbor-waveform');
     expect(patRow.find('[data-presence-dot]').exists()).toBe(false);
   });
 

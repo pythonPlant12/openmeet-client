@@ -567,7 +567,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="isAuthenticated ? 'h-[100dvh] overflow-hidden bg-[#FBFCF8]' : 'min-h-screen bg-[#FBFCF8]'">
+  <div :class="isAuthenticated ? 'h-[100dvh] overflow-hidden bg-harbor-app' : 'min-h-screen bg-harbor-surface'">
     <TheNavbar />
     <IncomingCallBar
       v-if="isAuthenticated && ringingCall"

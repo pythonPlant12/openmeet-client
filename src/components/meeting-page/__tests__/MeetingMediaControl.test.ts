@@ -96,15 +96,13 @@ describe('MeetingMediaControl', () => {
     const camera = mountControl('video');
     expect(camera.get('[data-media-quality-menu]').text()).toContain('Auto · 720p');
     expect(camera.get('[data-media-source-menu]').text()).toContain('Front camera');
-    expect(camera.get('[data-media-toggle-item]').classes()).toContain('harbor-context-menu-danger');
+    expect(camera.get('[data-media-toggle-item]').attributes('variant')).toBe('danger');
 
     const mic = mountControl('audio');
     expect(mic.find('[data-media-quality-menu]').exists()).toBe(false);
     expect(mic.find('[data-media-source-menu]').exists()).toBe(true);
     // Turning a muted microphone back on is not destructive.
-    expect(mountControl('audio', true).get('[data-media-toggle-item]').classes()).not.toContain(
-      'harbor-context-menu-danger',
-    );
+    expect(mountControl('audio', true).get('[data-media-toggle-item]').attributes('variant')).toBe('default');
   });
 
   it('switches the source and reports the media change', async () => {

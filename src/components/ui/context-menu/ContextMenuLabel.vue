@@ -12,7 +12,7 @@ const forwarded = useForwardProps(delegatedProps);
 </script>
 
 <template>
-  <ContextMenuLabel v-bind="forwarded" :class="cn('px-2 py-1.5 text-sm font-semibold', inset && 'pl-8', props.class)">
+  <ContextMenuLabel v-bind="forwarded" :class="cn('harbor-menu-label', inset && 'pl-8', props.class)">
     <slot />
   </ContextMenuLabel>
 </template>

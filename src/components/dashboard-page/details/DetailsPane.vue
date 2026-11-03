@@ -80,12 +80,11 @@ defineExpose({
 });
 </script>
 <template>
-  <aside
-    class="hidden h-full min-h-0 overflow-hidden border-l border-[#D8E7E3] bg-[#FBFCF8] lg:flex lg:flex-col"
-    aria-label="Conversation details"
-  >
-    <div class="border-b border-[#E5EFEC] px-5 py-5">
-      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">Details</p>
+  <!-- Never shown: the workspace has no details column. It stays mounted because its group panel owns the
+       management dialogs (add members, quit, delete, settings) that Group info opens. -->
+  <aside class="hidden" aria-label="Conversation details">
+    <div class="border-b border-harbor-line px-5 py-5">
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-harbor-accent">Details</p>
       <h2 class="mt-1 font-semibold">{{ selectedConversation || pendingFriend ? selectedTitle : 'Your workspace' }}</h2>
     </div>
     <GroupDetailsPanel
@@ -117,29 +116,29 @@ defineExpose({
       @removed="emit('group-removed', $event)"
     />
     <div v-else-if="selectedConversation || pendingFriend" class="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-      <div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
-        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Message storage</p>
+      <div class="rounded-2xl border border-harbor-line bg-white p-4">
+        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-harbor-muted">Message storage</p>
         <div class="mt-3 flex gap-3">
-          <ShieldCheck class="size-5 shrink-0 text-[#0B7A75]" />
-          <p class="text-sm leading-5 text-[#4E6B70]">Messages stored by OpenMeet.</p>
+          <ShieldCheck class="size-5 shrink-0 text-harbor-accent" />
+          <p class="text-sm leading-5 text-harbor-icon">Messages stored by OpenMeet.</p>
         </div>
       </div>
-      <div v-if="selectedIsGroup" class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
+      <div v-if="selectedIsGroup" class="rounded-2xl border border-harbor-line bg-white p-4">
         <p class="text-sm font-semibold">Group calls</p>
-        <p class="mt-1 text-sm leading-5 text-[#61777B]">Start a call with this group.</p>
+        <p class="mt-1 text-sm leading-5 text-harbor-muted">Start a call with this group.</p>
       </div>
       <Button
         v-if="selectedConversation && !pendingFriend"
-        class="harbor-primary-action w-full rounded-full bg-[#0B7A75] text-white"
+        class="harbor-primary-action w-full rounded-full bg-harbor-accent text-white"
         :disabled="callActive"
         @click="emit('call')"
         ><Phone class="size-4" />Start call</Button
       >
     </div>
-    <div v-else class="min-h-0 flex-1 overflow-y-auto p-5 text-sm leading-6 text-[#61777B]">
+    <div v-else class="min-h-0 flex-1 overflow-y-auto p-5 text-sm leading-6 text-harbor-muted">
       Create group conversations, review direct-message requests, or select an accepted friend.
     </div>
-    <div class="mt-auto border-t border-[#E5EFEC] p-4">
+    <div class="mt-auto border-t border-harbor-line p-4">
       <DropdownMenu v-model:open="isAccountMenuOpen" :modal="false">
         <div class="relative">
           <button
@@ -159,12 +158,12 @@ defineExpose({
                 v-if="ownStatus"
                 role="img"
                 :aria-label="ownStatusOption.label"
-                class="pointer-events-none absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-[#FBFCF8]"
+                class="pointer-events-none absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-harbor-surface"
                 :class="ownStatusOption.dotClass"
               /> </span
             ><span class="min-w-0"
               ><strong class="block truncate text-sm">{{ currentUser?.name }}</strong
-              ><span class="block truncate text-xs text-[#61777B]">{{ currentUser?.email }}</span></span
+              ><span class="block truncate text-xs text-harbor-muted">{{ currentUser?.email }}</span></span
             >
           </button>
           <!-- The menu anchors to the card; this trigger only positions it, so left clicks still reach the card. -->

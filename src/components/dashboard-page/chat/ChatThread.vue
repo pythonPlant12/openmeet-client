@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowUp, FileText, Image, Mic, Paperclip, Reply, X } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, FileText, Image, Mic, Plus, Reply, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
+import { RoundButton } from '@/components/ui/round-button';
 import { toast } from '@/components/ui/toast';
 import { playHaptic } from '@/services/haptics';
 import type {
@@ -32,7 +33,13 @@ import {
   replyAttachmentLabel,
 } from './chat-composer';
 import { createScrollHaptics } from './scroll-haptics';
-import { VOICE_MESSAGE_LABEL, canRecordVoice, isAudioAttachment, isVoiceMessageFileName } from './voice-message';
+import {
+  type SenderAvatar,
+  VOICE_MESSAGE_LABEL,
+  canRecordVoice,
+  isAudioAttachment,
+  isVoiceMessageFileName,
+} from './voice-message';
 
 // The message list and composer shared by conversations and the meeting chat.
 const props = withDefaults(
@@ -68,6 +75,10 @@ const props = withDefaults(
     footerNote?: string;
     placeholder?: string;
     sendLabel?: string;
+    /** A header floats over the top of the history, so the first messages start below it. */
+    overlayHeader?: boolean;
+    /** The sender's picture shown on voice messages. */
+    senderAvatar?: (message: ConversationMessage) => SenderAvatar;
   }>(),
   {
     loading: false,
@@ -220,10 +231,7 @@ const voiceMessagesAvailable = computed(
 const showVoiceRecorder = computed(
   () =>
     voiceRecorderActive.value ||
-    (voiceMessagesAvailable.value &&
-      !sendFlightActive.value &&
-      !content.value.trim() &&
-      !attachments.value.length),
+    (voiceMessagesAvailable.value && !sendFlightActive.value && !content.value.trim() && !attachments.value.length),
 );
 
 // A voice message goes out as the message's only attachment, keeping any reply that was selected.
@@ -696,6 +704,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
       <div
         ref="pane"
         class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
+        :class="{ '!pt-[4.5rem]': overlayHeader }"
         aria-label="Message history"
         @scroll.passive="onPaneScroll"
         @wheel.passive="scrollHaptics.cancel()"
@@ -703,12 +712,12 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
       >
         <slot name="notice" />
         <div v-if="loadingOlder" class="flex justify-center pb-4">
-          <LoadingRipple class="size-5 text-[#0B7A75]" />
+          <LoadingRipple class="size-5 text-harbor-icon" />
         </div>
         <div v-if="loading && !messages.length" class="flex h-full items-center justify-center">
-          <LoadingRipple class="size-7 text-[#0B7A75]" />
+          <LoadingRipple class="size-7 text-harbor-icon" />
         </div>
-        <p v-else-if="!messages.length" class="py-10 text-center text-sm text-[#61777B]">
+        <p v-else-if="!messages.length" class="py-10 text-center text-sm text-harbor-muted">
           {{ emptyText }}
         </p>
         <ol v-else ref="list">
@@ -716,10 +725,10 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             <li
               v-if="message.sequence === unreadStartSequence"
               data-unread-divider
-              class="my-5 flex items-center gap-3 text-xs font-semibold text-[#4E6B70]"
+              class="my-5 flex items-center gap-3 text-xs font-semibold text-harbor-icon"
             >
-              <span class="h-px flex-1 bg-[#D8E7E3]" /><span>Unread messages</span
-              ><span class="h-px flex-1 bg-[#D8E7E3]" />
+              <span class="h-px flex-1 bg-[#D1D7DB]" /><span>Unread messages</span
+              ><span class="h-px flex-1 bg-[#D1D7DB]" />
             </li>
             <ChatMessage
               :message="message"
@@ -737,6 +746,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
               :is-attachment-loading="isAttachmentLoading"
               :has-attachment-error="hasAttachmentError"
               :load-attachment="loadAttachment"
+              :sender-avatar="senderAvatar?.(message)"
               @reply="startReply(message)"
               @react="(emoji) => react(message, emoji)"
               @open-reactions="reactionPickerSequence = message.sequence"
@@ -756,7 +766,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           :animate="{ opacity: 1, scale: 1, y: 0 }"
           :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.6, y: 12 }"
           :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 30 }"
-          class="absolute bottom-4 right-4 z-30 flex size-11 items-center justify-center rounded-full bg-white text-[#0B7A75] shadow-[0_6px_20px_rgba(16,47,53,0.18),0_1px_3px_rgba(16,47,53,0.1)] [@media(hover:hover)]:hover:bg-[#E6F4F1] [@media(hover:hover)]:hover:text-[#102F35]"
+          class="absolute bottom-4 right-4 z-30 flex size-11 items-center justify-center rounded-full bg-white text-harbor-icon shadow-[0_6px_20px_rgba(17,27,33,0.18),0_1px_3px_rgba(17,27,33,0.1)] [@media(hover:hover)]:hover:bg-harbor-hover [@media(hover:hover)]:hover:text-harbor-ink"
           :aria-label="showJumpToUnread ? 'Go to unread messages' : 'Scroll to the latest message'"
           :title="showJumpToUnread ? 'Go to unread messages' : 'Scroll to the latest message'"
           @click="showJumpToUnread ? jumpToUnread() : jumpToLatest()"
@@ -772,8 +782,8 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
       :attachment-urls="attachmentUrls"
       @close="previewAttachments = []"
     />
-    <div class="border-t border-[#E5EFEC] bg-white px-3 py-3 sm:px-6">
-      <p v-if="footerNote" class="mb-2 text-xs text-[#61777B]">{{ footerNote }}</p>
+    <div class="bg-harbor-canvas px-2 pb-2.5 pt-2 sm:px-4">
+      <p v-if="footerNote" class="mb-2 text-xs text-harbor-muted">{{ footerNote }}</p>
       <AnimatePresence>
         <motion.div
           v-if="replyTo"
@@ -789,16 +799,16 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           @keydown.enter.prevent="jumpToMessage(replyTo.sequence)"
           @keydown.space.prevent="jumpToMessage(replyTo.sequence)"
         >
-          <div class="mb-2 flex items-center gap-2.5 rounded-2xl bg-[#F3F5F4] px-3 py-2">
+          <div class="mb-2 flex items-center gap-2.5 rounded-2xl bg-harbor-hover px-3 py-2">
             <span
-              class="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-[#0B7A75] shadow-[0_1px_2px_rgba(16,47,53,0.08)]"
+              class="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-harbor-icon shadow-[0_1px_2px_rgba(17,27,33,0.08)]"
               ><Reply class="size-3.5"
             /></span>
             <div class="min-w-0 flex-1 text-xs">
-              <p class="font-semibold text-[#102F35]">
+              <p class="font-semibold text-harbor-ink">
                 Replying to {{ isLocal(replyTo) ? 'yourself' : replyTo.senderName }}
               </p>
-              <p class="text-[#4E6B70]">
+              <p class="text-harbor-icon">
                 <template v-if="replyToAttachmentLabel">
                   <strong v-if="replyTo.content" class="block font-semibold">{{ replyToAttachmentLabel }}</strong>
                   <span v-else>{{ replyToAttachmentLabel }}</span>
@@ -809,7 +819,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             </div>
             <button
               type="button"
-              class="harbor-ghost-action shrink-0 rounded-full p-1 text-[#27595D]"
+              class="harbor-ghost-action shrink-0 rounded-full p-1 text-harbor-ink-soft"
               aria-label="Cancel reply"
               @click.stop="replyTo = null"
             >
@@ -827,11 +837,11 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 32 }"
           class="overflow-hidden"
         >
-          <div class="mb-2 flex gap-2 overflow-x-auto rounded-2xl bg-[#EDF8F5] p-2">
+          <div class="mb-2 flex gap-2 overflow-x-auto rounded-2xl bg-harbor-hover p-2">
             <article
               v-for="attachment in attachments"
               :key="`${attachment.name}-${attachment.lastModified}-${attachment.size}`"
-              class="relative flex w-32 shrink-0 flex-col overflow-hidden rounded-xl border border-[#D8E7E3] bg-white text-[#102F35]"
+              class="relative flex w-32 shrink-0 flex-col overflow-hidden rounded-xl border border-harbor-line bg-white text-harbor-ink"
             >
               <img
                 v-if="attachment.type.startsWith('image/')"
@@ -845,20 +855,20 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
                 muted
                 playsinline
                 preload="metadata"
-                class="aspect-[4/3] w-full bg-[#102F35] object-cover"
+                class="aspect-[4/3] w-full bg-harbor-ink object-cover"
               />
-              <div v-else class="flex aspect-[4/3] items-center justify-center bg-[#F3F5F4] text-[#0B7A75]">
+              <div v-else class="flex aspect-[4/3] items-center justify-center bg-harbor-hover text-harbor-icon">
                 <Mic v-if="isAudioAttachment(attachment.type)" class="size-7" /><FileText v-else class="size-7" />
               </div>
               <div class="min-w-0 px-2 py-1.5">
                 <p class="truncate text-xs font-semibold">
                   {{ isVoiceMessageFileName(attachment.name) ? VOICE_MESSAGE_LABEL : attachment.name }}
                 </p>
-                <p class="text-[0.6875rem] text-[#61777B]">{{ formatFileSize(attachment.size) }}</p>
+                <p class="text-[0.6875rem] text-harbor-muted">{{ formatFileSize(attachment.size) }}</p>
               </div>
               <button
                 type="button"
-                class="harbor-ghost-action absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-[#102F35]/75 text-white [@media(hover:hover)]:hover:bg-[#102F35]"
+                class="harbor-ghost-action absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-harbor-ink/75 text-white [@media(hover:hover)]:hover:bg-harbor-ink"
                 :aria-label="`Remove ${attachment.name}`"
                 :disabled="sending"
                 @click="removeAttachment(attachment)"
@@ -874,7 +884,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
         id="chat-command-menu"
         v-if="commandMenuOpen"
         data-chat-command-menu
-        class="mb-2 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_8px_24px_rgba(16,47,53,0.12)]"
+        class="mb-2 overflow-hidden rounded-2xl border border-harbor-line bg-white p-1 shadow-[0_8px_24px_rgba(17,27,33,0.12)]"
         role="listbox"
         aria-label="Chat commands"
       >
@@ -885,8 +895,8 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           type="button"
           role="option"
           :aria-selected="index === commandSelection"
-          class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-[#102F35] transition-colors"
-          :class="index === commandSelection ? 'bg-[#E6F4F1]' : '[@media(hover:hover)]:hover:bg-[#EDF8F5]'"
+          class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-harbor-ink transition-colors"
+          :class="index === commandSelection ? 'bg-harbor-hover' : '[@media(hover:hover)]:hover:bg-harbor-hover'"
           @mousedown.prevent
           @click="selectCommand(command.name)"
         >
@@ -894,18 +904,18 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             >/{{ highlightParts(command.name, slashCommandQuery ?? '')[0]
             }}<mark
               v-if="highlightParts(command.name, slashCommandQuery ?? '')[1]"
-              class="bg-transparent font-semibold text-[#0B7A75]"
+              class="bg-transparent font-semibold text-harbor-icon"
               >{{ highlightParts(command.name, slashCommandQuery ?? '')[1] }}</mark
             >{{ highlightParts(command.name, slashCommandQuery ?? '')[2] }}</span
           >
-          <span class="text-xs text-[#61777B]">{{ command.description }}</span>
+          <span class="text-xs text-harbor-muted">{{ command.description }}</span>
         </button>
       </div>
       <div
         id="mention-menu"
         v-if="mentionMenuOpen"
         data-mention-menu
-        class="mb-2 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_8px_24px_rgba(16,47,53,0.12)]"
+        class="mb-2 overflow-hidden rounded-2xl border border-harbor-line bg-white p-1 shadow-[0_8px_24px_rgba(17,27,33,0.12)]"
         role="listbox"
         aria-label="Group members"
       >
@@ -916,8 +926,8 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           type="button"
           role="option"
           :aria-selected="index === mentionSelection"
-          class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-[#102F35] transition-colors"
-          :class="index === mentionSelection ? 'bg-[#E6F4F1]' : '[@media(hover:hover)]:hover:bg-[#EDF8F5]'"
+          class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-harbor-ink transition-colors"
+          :class="index === mentionSelection ? 'bg-harbor-hover' : '[@media(hover:hover)]:hover:bg-harbor-hover'"
           @mousedown.prevent
           @click="selectMention(member)"
         >
@@ -925,27 +935,27 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             >@{{ highlightParts(member.nickname, activeMentionToken?.query ?? '')[0]
             }}<mark
               v-if="highlightParts(member.nickname, activeMentionToken?.query ?? '')[1]"
-              class="bg-transparent font-semibold text-[#0B7A75]"
+              class="bg-transparent font-semibold text-harbor-icon"
               >{{ highlightParts(member.nickname, activeMentionToken?.query ?? '')[1] }}</mark
             >{{ highlightParts(member.nickname, activeMentionToken?.query ?? '')[2] }}</span
           >
-          <span class="truncate text-xs text-[#61777B]">{{ member.name }}</span>
+          <span class="truncate text-xs text-harbor-muted">{{ member.name }}</span>
         </button>
       </div>
       <div
         v-if="gifPickerOpen"
         id="gif-picker"
         data-gif-picker
-        class="mb-2 overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-2 shadow-[0_8px_24px_rgba(16,47,53,0.12)]"
+        class="mb-2 overflow-hidden rounded-2xl border border-harbor-line bg-white p-2 shadow-[0_8px_24px_rgba(17,27,33,0.12)]"
         role="listbox"
         aria-label="Giphy results"
       >
-        <p v-if="!giphySearchQuery" class="px-2 py-1 text-xs text-[#61777B]">
+        <p v-if="!giphySearchQuery" class="px-2 py-1 text-xs text-harbor-muted">
           Search Giphy and choose a GIF to attach.
         </p>
-        <p v-else-if="gifSearchLoading" class="px-2 py-1 text-xs text-[#61777B]">Searching Giphy...</p>
-        <p v-else-if="gifSearchError" class="px-2 py-1 text-xs text-[#A34A3A]">{{ gifSearchError }}</p>
-        <p v-else-if="!gifResults.length" class="px-2 py-1 text-xs text-[#61777B]">No GIFs found.</p>
+        <p v-else-if="gifSearchLoading" class="px-2 py-1 text-xs text-harbor-muted">Searching Giphy...</p>
+        <p v-else-if="gifSearchError" class="px-2 py-1 text-xs text-harbor-danger-strong">{{ gifSearchError }}</p>
+        <p v-else-if="!gifResults.length" class="px-2 py-1 text-xs text-harbor-muted">No GIFs found.</p>
         <div v-else class="grid max-h-52 grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-1 overflow-y-auto">
           <button
             v-for="(gif, index) in gifResults"
@@ -954,7 +964,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             type="button"
             role="option"
             :aria-selected="index === gifSelection"
-            class="relative w-full self-start overflow-hidden rounded-lg bg-[#EDF8F5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B7A75]"
+            class="relative w-full self-start overflow-hidden rounded-lg bg-harbor-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-harbor-subtle"
             :style="{ aspectRatio: `${gif.width} / ${gif.height}` }"
             :aria-label="`Attach GIF: ${gif.title || 'Giphy result'}`"
             :disabled="sending"
@@ -969,7 +979,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
             />
             <LoadingRipple
               v-else-if="isGifPreviewLoading(gif.id)"
-              class="absolute inset-0 m-auto size-5 text-[#0B7A75]"
+              class="absolute inset-0 m-auto size-5 text-harbor-icon"
             />
           </button>
         </div>
@@ -987,64 +997,57 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
         <!-- While recording, the recorder's bar covers these controls, so they stay mounted underneath. -->
         <DropdownMenu v-if="attachmentsEnabled">
           <DropdownMenuTrigger as-child>
-            <button
-              type="button"
-              class="harbor-ghost-action flex size-11 shrink-0 items-center justify-center rounded-xl text-[#0B7A75]"
+            <RoundButton
+              tone="plain"
+              class="[&_svg]:!size-6 [&_svg]:stroke-[1.75]"
               aria-label="Add an attachment"
               title="Add an attachment"
               :disabled="sending"
             >
-              <Paperclip class="size-5" />
-            </button>
+              <Plus />
+            </RoundButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            side="top"
-            class="harbor-action-menu min-w-44 rounded-2xl border-[#D8E7E3] bg-white p-1.5 text-[#102F35]"
-          >
-            <DropdownMenuItem
-              class="harbor-context-menu-item min-h-10 cursor-pointer rounded-xl px-3 py-2 font-semibold"
-              :disabled="sending"
-              @select="chooseAttachments('file')"
-            >
+          <DropdownMenuContent align="start" side="top" class="min-w-44">
+            <DropdownMenuItem :disabled="sending" @select="chooseAttachments('file')">
               <FileText class="size-4" />Attach file
             </DropdownMenuItem>
-            <DropdownMenuItem
-              class="harbor-context-menu-item min-h-10 cursor-pointer rounded-xl px-3 py-2 font-semibold"
-              :disabled="sending"
-              @select="chooseAttachments('media')"
-            >
+            <DropdownMenuItem :disabled="sending" @select="chooseAttachments('media')">
               <Image class="size-4" />Send media
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <textarea
-          ref="composer"
-          v-model="content"
-          rows="1"
-          maxlength="2000"
-          :placeholder="placeholder"
-          :readonly="sending || voiceRecorderActive"
-          :aria-busy="sending"
-          :aria-expanded="!!activePickerId"
-          :aria-controls="activePickerId"
-          :aria-activedescendant="activeOptionId"
-          aria-autocomplete="list"
-          aria-label="Message"
-          class="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-transparent bg-[#F3F5F4] px-3 py-2.5 text-sm text-[#102F35] placeholder:text-[#8A9C9E] focus-visible:border-[#D8E7E3] focus-visible:bg-white focus-visible:outline-none focus-visible:ring-0"
+        <!-- The message pill: a white rounded field with the emoji button inside its end. -->
+        <div
+          class="flex min-h-11 min-w-0 flex-1 items-end rounded-[1.375rem] border border-harbor-line bg-harbor-surface shadow-[0_1px_1px_rgb(var(--harbor-ink)/0.04)]"
           :class="{ 'pointer-events-none opacity-0': voiceRecorderActive }"
-          :aria-hidden="voiceRecorderActive || undefined"
-          @input="updateComposerCaret"
-          @click="updateComposerCaret"
-          @keyup="updateComposerCaret"
-          @keydown="handleComposerKeydown"
-        />
-        <EmojiPickerButton
-          v-model="content"
-          :composer="composer"
-          :prefers-reduced-motion="prefersReducedMotion"
-          :disabled="sending"
-        />
+        >
+          <textarea
+            ref="composer"
+            v-model="content"
+            rows="1"
+            maxlength="2000"
+            :placeholder="placeholder"
+            :readonly="sending || voiceRecorderActive"
+            :aria-busy="sending"
+            :aria-expanded="!!activePickerId"
+            :aria-controls="activePickerId"
+            :aria-activedescendant="activeOptionId"
+            aria-autocomplete="list"
+            aria-label="Message"
+            class="max-h-32 min-h-[2.625rem] min-w-0 flex-1 resize-none bg-transparent py-2.5 pl-4 pr-1 text-[0.9375rem] leading-[1.375rem] text-harbor-ink [field-sizing:content] placeholder:text-harbor-muted focus-visible:outline-none"
+            :aria-hidden="voiceRecorderActive || undefined"
+            @input="updateComposerCaret"
+            @click="updateComposerCaret"
+            @keyup="updateComposerCaret"
+            @keydown="handleComposerKeydown"
+          />
+          <EmojiPickerButton
+            v-model="content"
+            :composer="composer"
+            :prefers-reduced-motion="prefersReducedMotion"
+            :disabled="sending"
+          />
+        </div>
         <!-- Sending keeps the composer focused, so the mobile keyboard stays open: the read-only state above
              replaces `disabled`, which would blur it, and the button below never takes focus. -->
         <VoiceRecorder
@@ -1060,7 +1063,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
           type="submit"
           size="icon"
           variant="ghost"
-          class="harbor-soft-action relative size-11 shrink-0 overflow-hidden rounded-xl bg-[#F3F5F4] text-[#0B7A75]"
+          class="harbor-primary-action relative size-11 shrink-0 overflow-hidden rounded-full bg-harbor-accent text-white shadow-harbor-soft disabled:opacity-100 disabled:bg-harbor-subtle"
           :aria-label="sending ? 'Sending...' : sendLabel"
           :aria-busy="sending"
           :title="sending ? 'Sending...' : sendLabel"

@@ -39,11 +39,11 @@ const emit = defineEmits<{
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       ><DialogHeader
         ><DialogTitle>Join group</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
+        ><DialogDescription class="text-harbor-muted"
           >Enter the 22-character Group ID shared by a group member.</DialogDescription
         ></DialogHeader
       ><motion.form
@@ -61,7 +61,7 @@ const emit = defineEmits<{
               autocomplete="off"
               placeholder="2aIFX0J6L4w7Y9KzQp8VrN"
               :disabled="joining"
-              class="h-11 min-w-0 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+              class="h-11 min-w-0 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
               @update:model-value="
                 emit('update:code', $event);
                 emit('invalidate-preview');
@@ -69,7 +69,7 @@ const emit = defineEmits<{
             /><Button
               type="button"
               variant="outline"
-              class="rounded-xl border-[#D8E7E3] bg-white text-[#27595D] hover:bg-[#E6F4F1]"
+              class="rounded-xl border-harbor-line bg-white text-harbor-ink-soft hover:bg-harbor-hover"
               :disabled="!code.trim() || previewing || joining"
               @click="emit('preview')"
               ><LoadingRipple v-if="previewing" size="sm" />{{ previewing ? 'Checking' : 'Preview' }}</Button
@@ -78,7 +78,7 @@ const emit = defineEmits<{
         </div>
         <p
           v-if="error"
-          class="rounded-xl border border-[#F2C7BE] bg-[#FFF4F0] px-3 py-2 text-sm text-[#9D4636]"
+          class="rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-3 py-2 text-sm text-harbor-danger-strong"
           role="alert"
         >
           {{ error }}
@@ -90,14 +90,14 @@ const emit = defineEmits<{
             :animate="{ opacity: 1, height: 'auto' }"
             :exit="prefersReducedMotion ? undefined : { opacity: 0, height: 0 }"
             class="overflow-hidden"
-            ><div class="rounded-2xl border border-[#D8E7E3] bg-white p-4">
+            ><div class="rounded-2xl border border-harbor-line bg-white p-4">
               <div class="flex items-center gap-3">
-                <span class="flex size-11 items-center justify-center rounded-[28%] bg-[#102F35] text-white"
+                <span class="flex size-11 items-center justify-center rounded-[28%] bg-harbor-ink text-white"
                   ><UsersRound class="size-5"
                 /></span>
                 <div class="min-w-0 flex-1">
                   <h3 class="truncate font-semibold">{{ preview.title }}</h3>
-                  <p class="text-sm text-[#61777B]">{{ accessLabel(preview.accessPolicy) }}</p>
+                  <p class="text-sm text-harbor-muted">{{ accessLabel(preview.accessPolicy) }}</p>
                 </div>
               </div>
             </div>
@@ -111,21 +111,21 @@ const emit = defineEmits<{
                 autocomplete="current-password"
                 placeholder="Group password"
                 :disabled="joining"
-                class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+                class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
                 @update:model-value="emit('update:password', $event)"
               /></div></motion.section></AnimatePresence
         ><DialogFooter
           ><Button
             type="button"
             variant="outline"
-            class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
             :disabled="joining"
             @click="emit('update:open', false)"
             >Cancel</Button
           ><Button
             v-if="preview"
             type="submit"
-            class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
+            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
             :disabled="joining || (!preview.canJoin && !preview.isMember)"
             >{{ joining ? 'Joining...' : preview.isMember ? 'Open group' : 'Join group' }}</Button
           ></DialogFooter

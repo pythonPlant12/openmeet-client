@@ -112,7 +112,7 @@ function roleClass(role: string | null) {
     ? 'bg-[#FFF8E8] text-[#80601D]'
     : role === 'admin'
       ? 'bg-[#E8F2F8] text-[#27647A]'
-      : 'bg-[#EAF7F4] text-[#17645F]';
+      : 'bg-harbor-hover text-harbor-accent-hover';
 }
 
 function canManage(role: string | null) {
@@ -289,30 +289,30 @@ watch(
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] flex max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-4xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font top-[calc(50%+2.25rem)] flex max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-4xl flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       @open-auto-focus="$event.preventDefault()"
       @close-auto-focus="$event.preventDefault()"
       ><DialogHeader><DialogTitle>Group info</DialogTitle></DialogHeader>
       <div v-if="loading" class="flex min-h-72 items-center justify-center">
-        <LoadingRipple class="size-7 text-[#0B7A75]" />
+        <LoadingRipple class="size-7 text-harbor-accent" />
       </div>
       <div
         v-else-if="error"
-        class="rounded-2xl border border-[#F2C7BE] bg-[#FFF4F0] p-4 text-sm text-[#9D4636]"
+        class="rounded-2xl border border-harbor-danger/25 bg-harbor-danger-soft p-4 text-sm text-harbor-danger-strong"
         role="alert"
       >
         {{ error }}
       </div>
       <div v-else-if="info" class="min-h-0 space-y-6 overflow-y-auto pr-1">
         <section
-          class="flex flex-col items-center justify-center gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 text-center sm:p-6"
+          class="flex flex-col items-center justify-center gap-5 rounded-2xl border border-harbor-line bg-white p-5 text-center sm:p-6"
         >
           <DropdownMenu v-if="canManage(info.role)">
             <DropdownMenuTrigger as-child>
               <button
                 type="button"
-                class="harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] p-0 text-white"
+                class="harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-ink p-0 text-white"
                 :aria-label="`Manage ${info.title} group icon`"
               >
                 <img
@@ -325,29 +325,17 @@ watch(
                 <UsersRound v-else class="size-9" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="center"
-              :side-offset="10"
-              class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
-            >
-              <DropdownMenuItem
-                v-if="avatarUrl"
-                class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                @select="isAvatarPreviewOpen = true"
-              >
+            <DropdownMenuContent align="center" :side-offset="10" class="min-w-48">
+              <DropdownMenuItem v-if="avatarUrl" @select="isAvatarPreviewOpen = true">
                 <Eye class="size-4" />View
               </DropdownMenuItem>
-              <DropdownMenuSeparator v-if="avatarUrl" class="mx-1 my-2 bg-[#E5EFEC]" />
-              <DropdownMenuItem
-                class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                :disabled="isUploadingAvatar || mutationBusy"
-                @select="avatarInput?.click()"
-              >
+              <DropdownMenuSeparator v-if="avatarUrl" class="mx-1 my-2 bg-harbor-line" />
+              <DropdownMenuItem :disabled="isUploadingAvatar || mutationBusy" @select="avatarInput?.click()">
                 <Camera class="size-4" />Change avatar
               </DropdownMenuItem>
               <DropdownMenuItem
                 v-if="avatarUrl"
-                class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                variant="danger"
                 :disabled="isUploadingAvatar || mutationBusy"
                 @select="removeAvatar"
               >
@@ -358,7 +346,7 @@ watch(
           <button
             v-else-if="avatarUrl"
             type="button"
-            class="harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] p-0 text-white"
+            class="harbor-ghost-action flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-ink p-0 text-white"
             :aria-label="`View ${info.title} group icon`"
             @click="isAvatarPreviewOpen = true"
           >
@@ -366,14 +354,14 @@ watch(
           </button>
           <span
             v-else
-            class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] text-white"
+            class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-ink text-white"
             ><LoadingRipple v-if="avatarLoading" class="size-7 text-white" /><UsersRound v-else class="size-9"
           /></span>
           <div class="min-w-0">
             <h3 class="truncate text-xl font-semibold tracking-[-0.025em]">{{ info.title }}</h3>
-            <p class="mt-1 text-sm text-[#61777B]">{{ accessLabel(info.accessPolicy) }}</p>
+            <p class="mt-1 text-sm text-harbor-muted">{{ accessLabel(info.accessPolicy) }}</p>
             <div class="mt-4 flex flex-wrap justify-center gap-2">
-              <span class="rounded-full bg-[#EAF7F4] px-3 py-1.5 text-xs font-semibold text-[#17645F]"
+              <span class="rounded-full bg-harbor-hover px-3 py-1.5 text-xs font-semibold text-harbor-accent-hover"
                 >{{ info.memberCount }} {{ info.memberCount === 1 ? 'member' : 'members' }}</span
               ><span
                 v-if="info.isMember"
@@ -385,26 +373,26 @@ watch(
           </div>
           <input ref="avatarInput" type="file" accept="image/*" class="sr-only" @change="uploadAvatar" />
         </section>
-        <section class="grid gap-3 rounded-2xl border border-[#D8E7E3] bg-white p-4 text-sm sm:grid-cols-3">
-          <div class="inline-flex items-center gap-2 text-[#61777B]">
-            <ShieldCheck class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
+        <section class="grid gap-3 rounded-2xl border border-harbor-line bg-white p-4 text-sm sm:grid-cols-3">
+          <div class="inline-flex items-center gap-2 text-harbor-muted">
+            <ShieldCheck class="size-4 shrink-0 text-harbor-accent" /><span class="min-w-0"
               ><span class="block text-xs">Access</span
-              ><strong class="block font-semibold text-[#102F35]">{{ accessLabel(info.accessPolicy) }}</strong></span
+              ><strong class="block font-semibold text-harbor-ink">{{ accessLabel(info.accessPolicy) }}</strong></span
             >
           </div>
-          <div class="inline-flex items-center gap-2 text-[#61777B]">
-            <CalendarDays class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
+          <div class="inline-flex items-center gap-2 text-harbor-muted">
+            <CalendarDays class="size-4 shrink-0 text-harbor-accent" /><span class="min-w-0"
               ><span class="block text-xs">Created</span
-              ><strong class="block font-semibold text-[#102F35]">{{ formatDate(info.createdAt) }}</strong></span
+              ><strong class="block font-semibold text-harbor-ink">{{ formatDate(info.createdAt) }}</strong></span
             >
           </div>
-          <div class="inline-flex min-w-0 items-center gap-2 text-[#61777B]">
-            <Copy class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0 flex-1"
+          <div class="inline-flex min-w-0 items-center gap-2 text-harbor-muted">
+            <Copy class="size-4 shrink-0 text-harbor-accent" /><span class="min-w-0 flex-1"
               ><span class="block text-xs">Group ID</span
-              ><code class="block truncate font-semibold text-[#102F35]">#{{ info.groupCode }}</code></span
+              ><code class="block truncate font-semibold text-harbor-ink">#{{ info.groupCode }}</code></span
             ><button
               type="button"
-              class="harbor-ghost-action shrink-0 rounded-lg p-2 text-[#0B7A75]"
+              class="harbor-ghost-action shrink-0 rounded-lg p-2 text-harbor-accent"
               :aria-label="copiedGroupId ? 'Group ID copied' : 'Copy group ID'"
               :title="copiedGroupId ? 'Copied' : 'Copy group ID'"
               @click="copyGroupId"
@@ -421,7 +409,7 @@ watch(
           <Button
             v-if="canManage(info.role)"
             variant="ghost"
-            class="group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#08635F] sm:w-auto sm:px-2"
+            class="group size-11 rounded-full bg-harbor-hover p-0 text-harbor-accent hover:bg-harbor-line hover:text-harbor-accent-hover sm:w-auto sm:px-2"
             :aria-label="groupAddActionLabel(info.accessPolicy)"
             :title="groupAddActionLabel(info.accessPolicy)"
             @click="emit('add-members')"
@@ -435,7 +423,7 @@ watch(
             v-if="canManage(info.role)"
             data-group-security
             variant="ghost"
-            class="group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#102F35] sm:w-auto sm:px-4"
+            class="group size-11 rounded-full bg-harbor-hover p-0 text-harbor-accent hover:bg-harbor-line hover:text-harbor-ink sm:w-auto sm:px-4"
             aria-label="Security"
             title="Change group access and password"
             @click="emit('group-settings')"
@@ -448,7 +436,7 @@ watch(
           <Button
             v-if="info.role !== 'creator'"
             variant="ghost"
-            class="group size-11 rounded-full bg-[#FFF0EA] p-0 text-[#9D4636] hover:bg-[#F9DED6] sm:w-auto sm:px-4"
+            class="group size-11 rounded-full bg-harbor-danger-soft p-0 text-harbor-danger-strong hover:bg-harbor-danger/25 sm:w-auto sm:px-4"
             aria-label="Quit group"
             title="Quit group"
             @click="emit('quit-group')"
@@ -461,7 +449,7 @@ watch(
           <Button
             v-if="canManage(info.role)"
             variant="ghost"
-            class="group size-11 rounded-full bg-[#FFF0EA] p-0 text-[#9D4636] hover:bg-[#F9DED6] sm:w-auto sm:px-4"
+            class="group size-11 rounded-full bg-harbor-danger-soft p-0 text-harbor-danger-strong hover:bg-harbor-danger/25 sm:w-auto sm:px-4"
             aria-label="Remove group"
             title="Remove group"
             @click="emit('remove-group')"
@@ -475,9 +463,9 @@ watch(
         <section v-if="info.isMember">
           <div class="mb-3 flex items-baseline justify-between gap-3">
             <h3 class="text-sm font-semibold">Participants</h3>
-            <span class="text-xs text-[#61777B]">{{ members.length }} of {{ info.memberCount }} listed</span>
+            <span class="text-xs text-harbor-muted">{{ members.length }} of {{ info.memberCount }} listed</span>
           </div>
-          <div v-if="members.length" class="space-y-1 rounded-2xl border border-[#D8E7E3] bg-white p-1.5">
+          <div v-if="members.length" class="space-y-1 rounded-2xl border border-harbor-line bg-white p-1.5">
             <SwipeableRow
               v-for="member in members"
               :id="`participant-${member.id}`"
@@ -493,7 +481,7 @@ watch(
                   type="button"
                   data-swipe-action
                   class="flex flex-1 items-center justify-start text-white transition-colors"
-                  :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
+                  :class="armed ? 'bg-harbor-accent-hover' : 'bg-harbor-accent'"
                   :aria-label="`Message ${member.name}`"
                   @click="
                     close();
@@ -510,7 +498,7 @@ watch(
                 <button
                   type="button"
                   data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1] text-[11px] font-semibold text-[#102F35]"
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-hover text-[11px] font-semibold text-harbor-ink"
                   :aria-label="`View ${member.name}'s profile`"
                   @click="
                     close();
@@ -523,7 +511,7 @@ watch(
                   v-if="!isSelf(member) && !isFriend(member)"
                   type="button"
                   data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#0B7A75] text-[11px] font-semibold text-white"
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-accent text-[11px] font-semibold text-white"
                   :aria-label="`Add ${member.name} as a friend`"
                   @click="
                     close();
@@ -536,7 +524,7 @@ watch(
                   v-if="canRemoveMember(member)"
                   type="button"
                   data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D] text-[11px] font-semibold text-white disabled:opacity-60"
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-danger text-[11px] font-semibold text-white disabled:opacity-60"
                   :aria-label="`Remove ${member.name} from the group`"
                   :disabled="mutationBusy"
                   @click="
@@ -555,14 +543,14 @@ watch(
                 <ContextMenuTrigger as-child>
                   <button
                     type="button"
-                    class="harbor-ghost-action flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none focus:outline-none [@media(hover:hover)]:focus-visible:ring-2 [@media(hover:hover)]:focus-visible:ring-inset [@media(hover:hover)]:focus-visible:ring-[#0B7A75]"
+                    class="harbor-ghost-action flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none focus:outline-none [@media(hover:hover)]:focus-visible:ring-2 [@media(hover:hover)]:focus-visible:ring-inset [@media(hover:hover)]:focus-visible:ring-harbor-accent"
                     title="Open profile"
                     @pointerdown="closeParticipantContextMenuBeforeClick"
                     @click="openProfile(member)"
                   >
                     <span class="relative shrink-0"
                       ><span
-                        class="flex size-10 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        class="flex size-10 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar text-xs font-semibold text-harbor-accent"
                         :class="['border-2', userStatusOption(member.isOnline ? member.status : 'offline').borderClass]"
                         ><img
                           v-if="memberAvatarUrls[member.id]"
@@ -574,12 +562,12 @@ watch(
                         surface="groupParticipants"
                         :online="member.isOnline"
                         :status="member.status"
-                        class="size-3 border-[3px] border-[#FBFCF8]" /></span
+                        class="size-3 border-[3px] border-harbor-surface" /></span
                     ><span class="min-w-0 flex-1"
                       ><span class="flex min-w-0 flex-col items-start"
                         ><span class="max-w-full truncate text-sm font-semibold">{{ member.name }}</span
-                        ><span class="max-w-full truncate text-xs text-[#61777B]">@{{ member.nickname }}</span></span
-                      ><span class="inline-flex items-center gap-1 truncate text-xs text-[#61777B]"
+                        ><span class="max-w-full truncate text-xs text-harbor-muted">@{{ member.nickname }}</span></span
+                      ><span class="inline-flex items-center gap-1 truncate text-xs text-harbor-muted"
                         ><Clock3 class="size-3" />{{ formatDate(member.joinedAt) }}</span
                       ></span
                     ><span
@@ -590,29 +578,24 @@ watch(
                       v-if="isFriend(member)"
                       data-friend-badge
                       role="img"
-                      class="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
+                      class="flex size-6 shrink-0 items-center justify-center rounded-full bg-harbor-hover text-harbor-accent"
                       title="Your friend"
                       aria-label="Your friend"
                       ><UserCheck class="size-3.5" /></span
                     ><span
                       v-if="member.id === currentUserId"
-                      class="rounded-full bg-[#EAF7F4] px-2 py-1 text-[11px] font-semibold text-[#17645F]"
+                      class="rounded-full bg-harbor-hover px-2 py-1 text-[11px] font-semibold text-harbor-accent-hover"
                       >You</span
                     >
                   </button>
                 </ContextMenuTrigger>
-                <ContextMenuContent
-                  class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
-                >
-                  <ContextMenuItem
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                    @select="emit('profile', member.id, member.name)"
-                  >
+                <ContextMenuContent class="min-w-48">
+                  <ContextMenuItem @select="emit('profile', member.id, member.name)">
                     <UserRound class="size-4" />See profile
                   </ContextMenuItem>
                   <ContextMenuItem
                     v-if="canRemoveMember(member)"
-                    class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                    variant="danger"
                     :disabled="mutationBusy"
                     @select="removeMember(member)"
                   >
@@ -620,7 +603,6 @@ watch(
                   </ContextMenuItem>
                   <ContextMenuItem
                     v-if="canChangeMemberRole(member) && member.role === 'member'"
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                     :disabled="mutationBusy"
                     @select="updateMemberRole(member, 'admin')"
                   >
@@ -628,7 +610,6 @@ watch(
                   </ContextMenuItem>
                   <ContextMenuItem
                     v-if="canChangeMemberRole(member) && member.role === 'admin'"
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                     :disabled="mutationBusy"
                     @select="updateMemberRole(member, 'member')"
                   >
@@ -641,14 +622,17 @@ watch(
           <Button
             v-if="members.length && membersHasMore"
             variant="ghost"
-            class="harbor-ghost-action mt-2 w-full rounded-full text-[#0B7A75]"
+            class="harbor-ghost-action mt-2 w-full rounded-full text-harbor-accent"
             :disabled="membersLoadingMore"
             @click="emit('load-more-members')"
           >
             <LoadingRipple v-if="membersLoadingMore" size="sm" />
             {{ membersLoadingMore ? 'Loading participants...' : 'Load more participants' }}
           </Button>
-          <p v-if="!members.length" class="rounded-2xl border border-[#D8E7E3] bg-white p-4 text-sm text-[#61777B]">
+          <p
+            v-if="!members.length"
+            class="rounded-2xl border border-harbor-line bg-white p-4 text-sm text-harbor-muted"
+          >
             No participants are listed for this group.
           </p>
         </section>
@@ -657,7 +641,7 @@ watch(
   >
   <Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/50 backdrop-blur-lg"
+      overlay-class="bg-harbor-ink/50 backdrop-blur-lg"
       hide-close
       class="w-auto max-w-[min(88dvw,42rem)] border-0 bg-transparent p-0 shadow-none"
       ><DialogTitle class="sr-only">{{ info?.title }} group icon</DialogTitle

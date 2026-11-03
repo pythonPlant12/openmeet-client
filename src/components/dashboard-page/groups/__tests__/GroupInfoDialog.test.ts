@@ -194,11 +194,11 @@ describe('GroupInfoDialog', () => {
     expect(avatar.classList).toContain('border-2');
     expect(avatar.classList).toContain('border-[#D9A441]');
     expect(dot.classes()).toContain('border-[3px]');
-    expect(dot.classes()).toContain('border-[#FBFCF8]');
+    expect(dot.classes()).toContain('border-harbor-surface');
     const offlineAvatar = offlineRow!.get('.relative > span').element as HTMLElement;
 
     expect(offlineAvatar.classList).toContain('border-2');
-    expect(offlineAvatar.classList).toContain('border-[#B8C6C5]');
+    expect(offlineAvatar.classList).toContain('border-harbor-waveform');
     expect(offlineRow!.find('[data-presence-dot]').exists()).toBe(false);
   });
 

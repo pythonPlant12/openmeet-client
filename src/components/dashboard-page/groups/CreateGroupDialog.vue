@@ -50,11 +50,11 @@ const candidates = computed(() => {
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       ><DialogHeader
         ><DialogTitle>Create group</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
+        ><DialogDescription class="text-harbor-muted"
           >Set access and invite accepted friends.</DialogDescription
         ></DialogHeader
       ><motion.form
@@ -71,7 +71,7 @@ const candidates = computed(() => {
             maxlength="120"
             placeholder="Group name"
             :disabled="creating"
-            class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+            class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
             @update:model-value="emit('update:title', $event)"
           />
         </div>
@@ -80,13 +80,13 @@ const candidates = computed(() => {
           <label
             v-for="item in GROUP_ACCESS_POLICIES"
             :key="item"
-            class="flex cursor-pointer items-center gap-3 rounded-xl border border-[#D8E7E3] bg-white px-3 py-3 has-[:checked]:border-[#0B7A75] has-[:checked]:bg-[#EAF7F4]"
+            class="flex cursor-pointer items-center gap-3 rounded-xl border border-harbor-line bg-white px-3 py-3 has-[:checked]:border-harbor-accent has-[:checked]:bg-harbor-hover"
             ><input
               type="radio"
               name="group-policy"
               :value="item"
               :checked="policy === item"
-              class="size-4 accent-[#0B7A75]"
+              class="size-4 accent-harbor-accent"
               @change="emit('update:policy', item)"
             /><span class="text-sm font-medium">{{ groupAccessPolicyLabel(item) }}</span></label
           >
@@ -107,43 +107,46 @@ const candidates = computed(() => {
               autocomplete="new-password"
               placeholder="Group password"
               :disabled="creating"
-              class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+              class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
               @update:model-value="emit('update:password', $event)" /></motion.div
         ></AnimatePresence>
         <fieldset class="space-y-2" :disabled="creating">
           <div class="flex items-baseline justify-between gap-3">
             <legend class="text-sm font-medium">Invite friends</legend>
-            <span class="text-xs text-[#61777B]">{{ memberIds.length }} selected</span>
+            <span class="text-xs text-harbor-muted">{{ memberIds.length }} selected</span>
           </div>
           <label class="relative block"
-            ><Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" /><Input
+            ><Search
+              class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle" /><Input
               :model-value="memberSearch"
               type="search"
               placeholder="Filter accepted friends"
-              class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 pr-9 focus-visible:ring-0"
+              class="h-10 rounded-xl border-harbor-line bg-white pl-9 pr-9 focus-visible:ring-0"
               @update:model-value="emit('update:memberSearch', $event)" /><button
               v-if="memberSearch"
               type="button"
-              class="harbor-ghost-action absolute right-1.5 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-[#61777B]"
+              class="harbor-ghost-action absolute right-1.5 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-harbor-muted"
               aria-label="Clear friend filter"
               @click="emit('update:memberSearch', '')"
             >
               <X class="size-3.5" /></button
           ></label>
-          <div class="max-h-44 overflow-y-auto rounded-2xl border border-[#D8E7E3] bg-white">
-            <p v-if="!candidates.length" class="p-4 text-center text-sm text-[#61777B]">No accepted friends match.</p>
+          <div class="max-h-44 overflow-y-auto rounded-2xl border border-harbor-line bg-white">
+            <p v-if="!candidates.length" class="p-4 text-center text-sm text-harbor-muted">
+              No accepted friends match.
+            </p>
             <label
               v-for="friend in candidates"
               :key="friend.id"
-              class="flex cursor-pointer items-center gap-3 border-b border-[#E5EFEC] px-3 py-3 last:border-b-0"
+              class="flex cursor-pointer items-center gap-3 border-b border-harbor-line px-3 py-3 last:border-b-0"
               ><input
                 type="checkbox"
-                class="size-4 accent-[#0B7A75]"
+                class="size-4 accent-harbor-accent"
                 :checked="memberIds.includes(friend.id)"
                 @change="emit('toggle-member', friend.id)"
               /><span class="min-w-0 flex-1"
                 ><span class="block truncate text-sm font-semibold">{{ friend.name }}</span
-                ><span class="block truncate text-xs text-[#61777B]">{{ friend.email }}</span></span
+                ><span class="block truncate text-xs text-harbor-muted">{{ friend.email }}</span></span
               ></label
             >
           </div>
@@ -152,13 +155,13 @@ const candidates = computed(() => {
           ><Button
             type="button"
             variant="outline"
-            class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
             :disabled="creating"
             @click="emit('update:open', false)"
             >Cancel</Button
           ><Button
             type="submit"
-            class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
+            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
             :disabled="creating"
             >{{ creating ? 'Creating...' : 'Create group' }}</Button
           ></DialogFooter

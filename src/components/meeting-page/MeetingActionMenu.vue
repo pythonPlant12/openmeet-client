@@ -80,7 +80,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         v-else
         variant="outline"
         size="icon"
-        class="size-[var(--meeting-control-size)] rounded-xl border-[#D8E7E3] [&_svg]:size-[var(--meeting-control-icon)] bg-white/95 text-[#27595D] shadow-[0_12px_35px_rgba(16,47,53,0.14)] backdrop-blur hover:bg-[#E6F4F1] hover:text-[#0B7A75]"
+        class="harbor-round-button size-[var(--meeting-control-size)] border-0 [&_svg]:size-[var(--meeting-control-icon)]"
         :aria-label="t('meeting.actions.open')"
       >
         <MoreHorizontal class="size-5" />
@@ -90,13 +90,9 @@ const reportUrl = buildGitHubIssueUrl('meeting');
     <component
       :is="MenuContent"
       v-bind="context ? {} : { align: 'end', sideOffset: 10 }"
-      class="harbor-action-menu w-72 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-[1.25rem] p-2 text-[#102F35]"
+      class="w-72 max-w-[calc(100vw-1.5rem)]"
     >
-      <component
-        :is="MenuItem"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
-        @select="emit('toggleChat')"
-      >
+      <component :is="MenuItem" @select="emit('toggleChat')">
         <LiquidMenuIcon v-if="isChatOpen" :animated="MessageSquareOffAnimated" />
         <LiquidMenuIcon v-else :animated="MessageSquareAnimated" />
         {{ t(isChatOpen ? 'meeting.actions.closeChat' : 'meeting.actions.openChat') }}
@@ -105,8 +101,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
       <component
         :is="MenuItem"
         :disabled="!audioAvailable"
-        class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-        :class="{ 'bg-[#FFF0EA]': isMuted }"
+        :variant="isMuted && audioAvailable ? 'default' : 'danger'"
         @select="emit('toggleMute')"
       >
         <LiquidMenuIcon v-if="isMuted && audioAvailable" :animated="MicAnimated" />
@@ -125,8 +120,7 @@ const reportUrl = buildGitHubIssueUrl('meeting');
       <component
         :is="MenuItem"
         :disabled="!videoAvailable"
-        class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-        :class="{ 'bg-[#FFF0EA]': isVideoOff }"
+        :variant="isVideoOff && videoAvailable ? 'default' : 'danger'"
         @select="emit('toggleVideo')"
       >
         <LiquidMenuIcon v-if="isVideoOff && videoAvailable" :fallback="Video" />
@@ -142,31 +136,29 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         }}
       </component>
 
-      <component :is="MenuSeparator" class="mx-1 my-2 bg-[#E5EFEC]" />
-      <component :is="MenuLabel" class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
+      <component :is="MenuSeparator" />
+      <component :is="MenuLabel">
         {{ t('meeting.actions.layout') }}
       </component>
       <component
         :is="MenuItem"
         role="menuitemradio"
         :aria-checked="viewMode === 'grid'"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
         @select="emit('setViewMode', 'grid')"
       >
         <LiquidMenuIcon :animated="LayoutGridAnimated" />
         <span class="flex-1">{{ t('meeting.actions.grid') }}</span>
-        <Check v-if="viewMode === 'grid'" class="size-4 text-[#0B7A75]" aria-hidden="true" />
+        <Check v-if="viewMode === 'grid'" class="size-4 text-harbor-ink" aria-hidden="true" />
       </component>
       <component
         :is="MenuItem"
         role="menuitemradio"
         :aria-checked="viewMode === 'speaker'"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
         @select="emit('setViewMode', 'speaker')"
       >
         <LiquidMenuIcon :fallback="ScanFace" />
         <span class="flex-1">{{ t('meeting.actions.speaker') }}</span>
-        <Check v-if="viewMode === 'speaker'" class="size-4 text-[#0B7A75]" aria-hidden="true" />
+        <Check v-if="viewMode === 'speaker'" class="size-4 text-harbor-ink" aria-hidden="true" />
       </component>
 
       <component
@@ -174,7 +166,6 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         role="menuitemcheckbox"
         :aria-checked="fullscreen"
         data-fullscreen-toggle
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
         @select="emit('toggleFullscreen')"
       >
         <LiquidMenuIcon v-if="fullscreen" :animated="MinimizeAnimated" />
@@ -182,11 +173,11 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         <span class="flex-1">{{
           t(fullscreen ? 'meeting.actions.exitFullscreen' : 'meeting.actions.fullscreen')
         }}</span>
-        <Check v-if="fullscreen" class="size-4 text-[#0B7A75]" aria-hidden="true" />
+        <Check v-if="fullscreen" class="size-4 text-harbor-ink" aria-hidden="true" />
       </component>
 
       <template v-if="viewMode === 'speaker' && participants.length > 1">
-        <component :is="MenuLabel" class="mt-1 px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
+        <component :is="MenuLabel" class="mt-1">
           {{ t('meeting.actions.pinParticipant') }}
         </component>
         <component
@@ -200,32 +191,23 @@ const reportUrl = buildGitHubIssueUrl('meeting');
               name: participant.name,
             })
           "
-          class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
           @select="emit('togglePin', participant.id)"
         >
           <LiquidMenuIcon v-if="pinnedParticipantId === participant.id" :animated="PinOffAnimated" />
           <LiquidMenuIcon v-else :animated="PinAnimated" />
           <span class="min-w-0 flex-1 truncate">{{ participant.name }}</span>
-          <Check v-if="pinnedParticipantId === participant.id" class="size-4 text-[#0B7A75]" aria-hidden="true" />
+          <Check v-if="pinnedParticipantId === participant.id" class="size-4 text-harbor-ink" aria-hidden="true" />
         </component>
       </template>
 
-      <component :is="MenuSeparator" class="mx-1 my-2 bg-[#E5EFEC]" />
-      <component
-        :is="MenuItem"
-        as-child
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
-      >
+      <component :is="MenuSeparator" />
+      <component :is="MenuItem" as-child>
         <a :href="reportUrl" target="_blank" rel="noreferrer">
           <LiquidMenuIcon :fallback="Bug" />
           {{ t('meeting.actions.reportBug') }}
         </a>
       </component>
-      <component
-        :is="MenuItem"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
-        @select="emit('disconnect')"
-      >
+      <component :is="MenuItem" variant="danger" @select="emit('disconnect')">
         <LiquidMenuIcon :fallback="PhoneOff" />
         {{ t('meeting.actions.disconnect') }}
       </component>

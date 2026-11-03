@@ -60,6 +60,8 @@ let intersectionObserver: IntersectionObserver | undefined;
 const pixelRatio = () => Math.min(window.devicePixelRatio || 1, 2);
 
 function render() {
+  // Full screen meetings mark the surface `data-tone="dark"`.
+  state.dark = rootRef.value?.dataset.tone === 'dark';
   if (glc) {
     renderLiquid(state, glc, pixelRatio());
   } else if (dropRef.value) {
@@ -289,12 +291,21 @@ onUnmounted(() => {
   pointer-events: none;
   will-change: transform, width, height;
   background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0) 55%), rgb(230 244 241 / 0.75);
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0) 55%), rgb(233 237 239 / 0.8);
   box-shadow:
     inset 0 1px 1px rgb(255 255 255 / 0.95),
-    inset 0 -2px 6px rgb(11 122 117 / 0.18),
-    inset 0 0 0 1px rgb(216 231 227 / 0.9),
-    0 6px 16px -6px rgb(16 47 53 / 0.35);
+    inset 0 -2px 6px rgb(17 27 33 / 0.12),
+    inset 0 0 0 1px rgb(233 237 239 / 0.95),
+    0 6px 16px -6px rgb(17 27 33 / 0.3);
+}
+
+.liquid-surface[data-tone='dark'] .liquid-surface-drop {
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0) 55%), rgb(255 255 255 / 0.1);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.2),
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    0 6px 16px -6px rgb(0 0 0 / 0.5);
 }
 
 .liquid-surface[data-gl='off'] .liquid-surface-water {

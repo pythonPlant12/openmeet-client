@@ -14,6 +14,9 @@ export const buttonVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
         ghost: 'harbor-ghost-action',
         link: 'text-primary underline-offset-4 hover:underline',
+        // White pill with a soft shadow and a gray icon; `pill-danger` dims the text and icon red.
+        pill: 'harbor-pill-button',
+        'pill-danger': 'harbor-pill-button harbor-pill-button-danger',
       },
       size: {
         default: 'h-9 px-4 py-2',

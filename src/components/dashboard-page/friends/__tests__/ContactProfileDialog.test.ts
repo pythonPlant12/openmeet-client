@@ -49,7 +49,7 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true);
     expect(wrapper.get('.invisible').text()).toContain('@nickname');
     expect(wrapper.get('[data-profile-avatar]').classes()).toEqual(
-      expect.arrayContaining(['border-2', 'border-[#B8C6C5]']),
+      expect.arrayContaining(['border-2', 'border-harbor-waveform']),
     );
     expect(wrapper.find('[data-online-indicator]').exists()).toBe(false);
   });
@@ -222,7 +222,7 @@ describe('ContactProfileDialog', () => {
     expect(avatar.classList).toContain('border-2');
     expect(avatar.classList).toContain('border-[#6B7BC4]');
     expect(indicator.classes()).toContain('border-[3px]');
-    expect(indicator.classes()).toContain('border-[#FBFCF8]');
+    expect(indicator.classes()).toContain('border-harbor-surface');
     expect(indicator.classes()).toContain('bg-[#6B7BC4]');
     expect(indicator.classes()).toEqual(expect.arrayContaining(['bottom-0', 'right-0']));
   });

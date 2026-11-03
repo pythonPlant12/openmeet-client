@@ -60,14 +60,16 @@ function userInitials(name: string) {
     :initial="entranceInitial"
     :animate="{ opacity: 1, y: 0 }"
     :transition="{ duration: 0.5, delay: 0.18 }"
-    class="h-fit min-w-0 rounded-[2rem] border border-[#D8E7E3] bg-white p-5 shadow-[0_18px_55px_rgba(16,47,53,0.07)] sm:p-6 xl:sticky xl:top-24"
+    class="h-fit min-w-0 rounded-[2rem] border border-harbor-line bg-white p-5 shadow-[0_18px_55px_rgba(16,47,53,0.07)] sm:p-6 xl:sticky xl:top-24"
   >
     <div class="flex items-start justify-between gap-4">
       <div>
-        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-[#0B7A75]">{{ t('dashboard.people') }}</p>
+        <p class="text-sm font-semibold uppercase tracking-[0.14em] text-harbor-accent">{{ t('dashboard.people') }}</p>
         <h2 class="mt-2 text-2xl font-semibold tracking-[-0.035em]">{{ t('dashboard.friends') }}</h2>
       </div>
-      <span class="flex items-center gap-2 rounded-full bg-[#EDF8F5] px-3 py-1.5 text-xs font-semibold text-[#17645F]">
+      <span
+        class="flex items-center gap-2 rounded-full bg-harbor-hover px-3 py-1.5 text-xs font-semibold text-harbor-accent-hover"
+      >
         <span class="size-2 rounded-full bg-[#29A899]" />
         {{ t('dashboard.onlineCount', { count: onlineFriends }) }}
       </span>
@@ -77,13 +79,13 @@ function userInitials(name: string) {
       <label for="friend-email" class="text-sm font-semibold">{{ t('dashboard.addFriend') }}</label>
       <div class="mt-2 flex gap-2">
         <div class="relative min-w-0 flex-1">
-          <MailPlus class="pointer-events-none absolute left-3.5 top-3.5 size-4 text-[#809697]" />
+          <MailPlus class="pointer-events-none absolute left-3.5 top-3.5 size-4 text-harbor-subtle" />
           <Input
             id="friend-email"
             v-model="friendEmail"
             type="email"
             :placeholder="t('dashboard.friendEmailPlaceholder')"
-            class="h-11 rounded-full border-[#D8E7E3] bg-[#F8FAF8] pl-10 pr-4 focus-visible:border-[#0B7A75] focus-visible:ring-2 focus-visible:ring-[#9BCFC7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F8FAF8]"
+            class="h-11 rounded-full border-harbor-line bg-harbor-app pl-10 pr-4 focus-visible:border-harbor-accent focus-visible:ring-2 focus-visible:ring-harbor-faint focus-visible:ring-offset-2 focus-visible:ring-offset-harbor-app"
             required
             @input="emit('clear-feedback')"
           />
@@ -93,41 +95,43 @@ function userInitials(name: string) {
           size="icon"
           :disabled="isAddingFriend || !friendEmail.trim()"
           :aria-label="t('dashboard.sendFriendRequest')"
-          class="size-11 shrink-0 rounded-full bg-[#102F35] text-white hover:bg-[#1C4A4F]"
+          class="size-11 shrink-0 rounded-full bg-harbor-ink text-white hover:bg-harbor-ink"
         >
           <LoadingRipple v-if="isAddingFriend" size="sm" />
           <UserPlus v-else class="size-4" />
         </Button>
       </div>
-      <p class="mt-2 text-xs leading-5 text-[#809697]">{{ t('dashboard.registeredOnly') }}</p>
+      <p class="mt-2 text-xs leading-5 text-harbor-subtle">{{ t('dashboard.registeredOnly') }}</p>
     </form>
 
-    <section v-if="incomingRequests.length" class="mt-6 border-t border-[#E5EFEC] pt-5">
+    <section v-if="incomingRequests.length" class="mt-6 border-t border-harbor-line pt-5">
       <h3 class="flex items-center gap-2 text-sm font-semibold">
-        <Users class="size-4 text-[#0B7A75]" />
+        <Users class="size-4 text-harbor-accent" />
         {{ t('dashboard.friendRequests') }}
-        <span class="rounded-full bg-[#FFF0EA] px-2 py-0.5 text-xs text-[#B44D3A]">{{ incomingRequests.length }}</span>
+        <span class="rounded-full bg-harbor-danger-soft px-2 py-0.5 text-xs text-harbor-danger">{{
+          incomingRequests.length
+        }}</span>
       </h3>
       <div class="mt-3 space-y-2">
         <div
           v-for="request in incomingRequests"
           :key="request.id"
-          class="flex items-center gap-3 rounded-2xl bg-[#F8FAF8] p-3"
+          class="flex items-center gap-3 rounded-2xl bg-harbor-app p-3"
         >
           <span
-            class="flex size-9 shrink-0 items-center justify-center rounded-[28%] bg-[#E6F4F1] text-xs font-semibold text-[#0B7A75]"
+            class="flex size-9 shrink-0 items-center justify-center rounded-[28%] bg-harbor-hover text-xs font-semibold text-harbor-accent"
           >
             {{ userInitials(request.user.name) }}
           </span>
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-semibold">{{ request.user.name }}</p>
-            <p class="truncate text-xs text-[#809697]">{{ request.user.email }}</p>
+            <p class="truncate text-xs text-harbor-subtle">{{ request.user.email }}</p>
           </div>
           <Button
             size="icon"
             variant="ghost"
             :aria-label="t('dashboard.declineRequest')"
-            class="size-8 rounded-full text-[#B44D3A] hover:bg-[#FFF0EA]"
+            class="size-8 rounded-full text-harbor-danger hover:bg-harbor-danger-soft"
             @click="emit('answer-friend-request', request.id, false)"
           >
             <X class="size-4" />
@@ -135,7 +139,7 @@ function userInitials(name: string) {
           <Button
             size="icon"
             :aria-label="t('dashboard.acceptRequest')"
-            class="size-8 rounded-full bg-[#0B7A75] text-white hover:bg-[#08635F]"
+            class="size-8 rounded-full bg-harbor-accent text-white hover:bg-harbor-accent-hover"
             @click="emit('answer-friend-request', request.id, true)"
           >
             <Check class="size-4" />
@@ -144,62 +148,62 @@ function userInitials(name: string) {
       </div>
     </section>
 
-    <section class="mt-6 border-t border-[#E5EFEC] pt-5">
+    <section class="mt-6 border-t border-harbor-line pt-5">
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-semibold">{{ t('dashboard.yourFriends') }}</h3>
-        <span class="text-xs text-[#809697]">{{ friends.length }}</span>
+        <span class="text-xs text-harbor-subtle">{{ friends.length }}</span>
       </div>
 
       <div v-if="friends.length" class="relative mt-3">
-        <Search class="pointer-events-none absolute left-4 top-3.5 size-4 text-[#809697]" />
+        <Search class="pointer-events-none absolute left-4 top-3.5 size-4 text-harbor-subtle" />
         <Input
           v-model="friendSearch"
           type="search"
           :aria-label="t('dashboard.searchFriends')"
           :placeholder="t('dashboard.searchFriends')"
-          class="h-11 rounded-full border-[#D8E7E3] bg-[#F8FAF8] pl-11 pr-4 focus-visible:border-[#0B7A75] focus-visible:ring-2 focus-visible:ring-[#9BCFC7]"
+          class="h-11 rounded-full border-harbor-line bg-harbor-app pl-11 pr-4 focus-visible:border-harbor-accent focus-visible:ring-2 focus-visible:ring-harbor-faint"
         />
       </div>
 
       <div v-if="isLoading" class="flex min-h-36 items-center justify-center">
-        <LoadingRipple class="size-5 text-[#0B7A75]" />
+        <LoadingRipple class="size-5 text-harbor-accent" />
       </div>
       <div v-else-if="!friends.length" class="flex min-h-44 flex-col items-center justify-center px-4 text-center">
-        <span class="flex size-12 items-center justify-center rounded-full bg-[#EDF3F2] text-[#61777B]">
+        <span class="flex size-12 items-center justify-center rounded-full bg-harbor-hover text-harbor-muted">
           <Users class="size-5" />
         </span>
         <p class="mt-3 text-sm font-semibold">{{ t('dashboard.noFriends') }}</p>
-        <p class="mt-1 text-xs leading-5 text-[#809697]">{{ t('dashboard.noFriendsDescription') }}</p>
+        <p class="mt-1 text-xs leading-5 text-harbor-subtle">{{ t('dashboard.noFriendsDescription') }}</p>
       </div>
       <div v-else-if="!filteredFriends.length" class="flex min-h-32 items-center justify-center px-4 text-center">
-        <p class="text-sm text-[#61777B]">{{ t('dashboard.noFriendSearchResults') }}</p>
+        <p class="text-sm text-harbor-muted">{{ t('dashboard.noFriendSearchResults') }}</p>
       </div>
       <div v-else id="dashboard-friend-list" class="mt-3 space-y-1">
         <motion.div
           v-for="friend in visibleFriends"
           :key="friend.id"
           :whileHover="prefersReducedMotion ? undefined : { x: 3 }"
-          class="group flex items-center gap-3 rounded-2xl px-2 py-3 transition-colors hover:bg-[#F6FAF7]"
+          class="group flex items-center gap-3 rounded-2xl px-2 py-3 transition-colors hover:bg-harbor-app"
         >
           <span
-            class="relative flex size-10 shrink-0 items-center justify-center rounded-[28%] bg-[#E6F4F1] text-sm font-semibold text-[#0B7A75]"
+            class="relative flex size-10 shrink-0 items-center justify-center rounded-[28%] bg-harbor-hover text-sm font-semibold text-harbor-accent"
           >
             {{ userInitials(friend.name) }}
             <span
               :class="[
                 'absolute bottom-0 right-0 size-3 rounded-full border-2 border-white',
-                friend.isOnline ? 'bg-[#29A899]' : 'bg-[#B8C6C5]',
+                friend.isOnline ? 'bg-[#29A899]' : 'bg-harbor-waveform',
               ]"
             />
           </span>
           <div class="min-w-0 flex-1">
             <p class="flex items-center gap-1.5 truncate text-sm font-semibold">
               <span class="truncate">{{ friend.name }}</span>
-              <span v-if="friend.nickname" class="shrink-0 text-xs font-medium text-[#61777B]"
+              <span v-if="friend.nickname" class="shrink-0 text-xs font-medium text-harbor-muted"
                 >@{{ friend.nickname }}</span
               >
             </p>
-            <p class="truncate text-xs text-[#809697]">
+            <p class="truncate text-xs text-harbor-subtle">
               {{ friend.isOnline ? t('dashboard.online') : t('dashboard.offline') }}
             </p>
           </div>
@@ -207,7 +211,7 @@ function userInitials(name: string) {
             size="icon"
             :disabled="callingFriendId !== null"
             :aria-label="t('dashboard.callFriend', { name: friend.name })"
-            class="size-9 rounded-full bg-[#E6F4F1] text-[#0B7A75] hover:bg-[#0B7A75] hover:text-white"
+            class="size-9 rounded-full bg-harbor-hover text-harbor-accent hover:bg-harbor-accent hover:text-white"
             @click="emit('call-friend', friend)"
           >
             <LoadingRipple v-if="callingFriendId === friend.id" size="sm" />
@@ -218,7 +222,7 @@ function userInitials(name: string) {
       <Button
         v-if="canToggleFriends"
         variant="ghost"
-        class="mt-2 w-full rounded-full text-[#0B7A75] hover:bg-[#E6F4F1]"
+        class="mt-2 w-full rounded-full text-harbor-accent hover:bg-harbor-hover"
         aria-controls="dashboard-friend-list"
         :aria-expanded="showAllFriends"
         @click="showAllFriends = !showAllFriends"
@@ -228,11 +232,11 @@ function userInitials(name: string) {
       </Button>
     </section>
 
-    <div class="mt-6 flex items-center gap-3 rounded-2xl bg-[#102F35] p-4 text-white">
+    <div class="mt-6 flex items-center gap-3 rounded-2xl bg-harbor-ink p-4 text-white">
       <span class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
         <Plus class="size-4" />
       </span>
-      <p class="text-xs leading-5 text-[#B8C9CB]">
+      <p class="text-xs leading-5 text-harbor-faint">
         <strong class="block text-sm text-white">{{ t('dashboard.openByDesign') }}</strong>
         {{ t('dashboard.guestsStillWelcome') }}
       </p>

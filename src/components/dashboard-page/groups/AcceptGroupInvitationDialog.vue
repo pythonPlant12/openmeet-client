@@ -72,11 +72,11 @@ async function accept() {
 <template>
   <Dialog :open="open" @update:open="setOpen"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       ><DialogHeader
         ><DialogTitle>Join {{ invitation?.groupTitle }}</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
+        ><DialogDescription class="text-harbor-muted"
           >{{ invitation?.inviterName }} invited you. Enter the group password to join.</DialogDescription
         ></DialogHeader
       >
@@ -84,7 +84,9 @@ async function accept() {
         <div v-if="invitation?.accessPolicy === 'password'" class="space-y-2">
           <Label for="group-invitation-password">Password</Label>
           <div class="relative">
-            <LockKeyhole class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" />
+            <LockKeyhole
+              class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle"
+            />
             <Input
               id="group-invitation-password"
               v-model="password"
@@ -93,13 +95,13 @@ async function accept() {
               autocomplete="current-password"
               placeholder="Group password"
               :disabled="isAccepting"
-              class="h-11 rounded-xl border-[#D8E7E3] bg-white pl-10 focus-visible:ring-0"
+              class="h-11 rounded-xl border-harbor-line bg-white pl-10 focus-visible:ring-0"
             />
           </div>
         </div>
         <p
           v-if="error"
-          class="rounded-xl border border-[#F2C7BE] bg-[#FFF4F0] px-3 py-2 text-sm text-[#9D4636]"
+          class="rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-3 py-2 text-sm text-harbor-danger-strong"
           role="alert"
         >
           {{ error }}
@@ -108,13 +110,13 @@ async function accept() {
           ><Button
             type="button"
             variant="outline"
-            class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
             :disabled="isAccepting"
             @click="setOpen(false)"
             >Cancel</Button
           ><Button
             type="submit"
-            class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
+            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
             :disabled="isAccepting || (invitation?.accessPolicy === 'password' && !password)"
             ><LoadingRipple v-if="isAccepting" size="sm" />{{ isAccepting ? 'Joining...' : 'Join group' }}</Button
           ></DialogFooter

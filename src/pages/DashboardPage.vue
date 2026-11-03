@@ -8,6 +8,7 @@ import JoinRoomDialog from '@/components/dashboard-page/actions/JoinRoomDialog.v
 import CallDetailsDialog from '@/components/dashboard-page/calls/CallDetailsDialog.vue';
 import CallsSidebar from '@/components/dashboard-page/calls/CallsSidebar.vue';
 import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
+import { isVoiceMessageFileName, shareDecodedVoiceMessage } from '@/components/dashboard-page/chat/voice-message';
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
 import DetailsPane from '@/components/dashboard-page/details/DetailsPane.vue';
 import ContactProfileDialog from '@/components/dashboard-page/friends/ContactProfileDialog.vue';
@@ -24,6 +25,8 @@ import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useCallHistory } from '@/composables/useCallHistory';
 import { useIncomingCalls } from '@/composables/useIncomingCalls';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
+import { useOwnProfile } from '@/composables/useOwnProfile';
+import { formatListTime } from '@/lib/list-time';
 import { callAgainTargets } from '@/lib/meetings';
 import {
   type ConversationActivity,
@@ -42,10 +45,6 @@ import {
   shouldApplyDashboardRequest,
   sidebarForPanelQuery,
 } from '@/pages/dashboard-group-state';
-import {
-  isVoiceMessageFileName,
-  shareDecodedVoiceMessage,
-} from '@/components/dashboard-page/chat/voice-message';
 import { playHaptic } from '@/services/haptics';
 import { getSystemNotificationPermission, requestSystemNotificationPermission } from '@/services/notifications';
 import {
@@ -540,6 +539,22 @@ function formatMessageTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
 }
 
+// The sidebar's time of a conversation's last activity: the clock today, "Yesterday", a weekday within the
+// week, then a short date.
+function conversationActivityTime(conversation: Conversation) {
+  const timestamp = conversationActivity.value[conversation.id]?.lastActivityAt ?? Date.parse(conversation.updatedAt);
+  return formatListTime(timestamp, callsNow.value);
+}
+
+const { avatarUrl: ownAvatarUrl } = useOwnProfile();
+
+function messageSenderAvatar(message: ConversationMessage) {
+  const url = isLocalMessage(message)
+    ? ownAvatarUrl.value
+    : (friendAvatarUrls.value[message.senderId] ?? groupMemberAvatarUrls.value[message.senderId]);
+  return { url: url ?? undefined, initials: userInitials(message.senderName) };
+}
+
 function isLocalMessage(message: ConversationMessage) {
   return message.senderId === currentUser.value?.id;
 }
@@ -696,9 +711,7 @@ async function loadLatestMessages(conversationId: string) {
     if (previousMessages.length && newMessages.length) {
       animatedMessageSequences.value = new Set([
         ...animatedMessageSequences.value,
-        ...newMessages
-          .map((message) => message.sequence)
-          .filter((sequence) => !settledVoiceSequences.has(sequence)),
+        ...newMessages.map((message) => message.sequence).filter((sequence) => !settledVoiceSequences.has(sequence)),
       ]);
     } else if (!previousMessages.length) {
       animatedMessageSequences.value = new Set();
@@ -2021,10 +2034,10 @@ async function joinGroupByCode() {
   }
 }
 
-async function startSelectedConversationCall() {
+async function startSelectedConversationCall(options?: { video: boolean }) {
   const conversation = selectedConversation.value;
   if (!conversation || pendingDirectFriend.value) return;
-  await startConversationCall(conversation);
+  await startConversationCall(conversation, options);
 }
 
 async function startContactProfileCall() {
@@ -2332,7 +2345,7 @@ watch(
   },
 );
 
-async function startConversationCall(conversation: Conversation) {
+async function startConversationCall(conversation: Conversation, options?: { video: boolean }) {
   const token = accessToken.value;
   if (!token || startingCallConversationId.value) return;
 
@@ -2342,7 +2355,10 @@ async function startConversationCall(conversation: Conversation) {
   try {
     const callSession = await socialApi.startConversationCall(token, conversation.id);
     if (!shouldApplyDashboardRequest(request, callLaunchRequest, isUnmounted)) return;
-    await router.push({ path: `/room/${callSession.id}`, query: { conversation: conversation.id } });
+    await router.push({
+      path: `/room/${callSession.id}`,
+      query: { conversation: conversation.id, ...(options?.video === false ? { video: 'off' } : {}) },
+    });
   } catch (error) {
     if (!shouldApplyDashboardRequest(request, callLaunchRequest, isUnmounted)) return;
     console.error('[Dashboard] Failed to start conversation call:', error);
@@ -2356,13 +2372,13 @@ async function startConversationCall(conversation: Conversation) {
 </script>
 
 <template>
-  <div v-if="isCheckingSession" class="flex h-full items-center justify-center bg-[#FBFCF8]">
-    <LoadingRipple class="size-8 text-[#0B7A75]" />
+  <div v-if="isCheckingSession" class="flex h-full items-center justify-center bg-harbor-app">
+    <LoadingRipple class="size-8 text-harbor-icon" />
     <span class="sr-only">Loading workspace</span>
   </div>
   <main
     v-else-if="isAuthenticated"
-    class="marketing-font w-full max-w-full overflow-hidden overscroll-none bg-[#FBFCF8] text-[#102F35] sm:px-5 sm:pb-3 sm:pt-0"
+    class="marketing-font w-full max-w-full overflow-hidden overscroll-none bg-harbor-app text-harbor-ink sm:px-5 sm:pb-3 sm:pt-0"
     :class="
       hasSelectedConversation
         ? // Below lg an open chat fills the screen; tablets keep the floating top tabs, so it starts under them.
@@ -2374,10 +2390,10 @@ async function startConversationCall(conversation: Conversation) {
       :initial="{ opacity: 0, y: 10 }"
       :animate="{ opacity: 1, y: 0 }"
       :transition="{ duration: 0.35 }"
-      class="relative mx-auto h-full max-w-[1600px] overflow-hidden bg-white sm:rounded-[1.75rem] sm:border sm:border-[#D8E7E3] sm:shadow-[0_20px_70px_rgba(16,47,53,0.1)] lg:grid lg:grid-cols-[20rem_minmax(0,1fr)_18rem]"
+      class="relative mx-auto h-full max-w-[1600px] overflow-hidden bg-white sm:rounded-[1.75rem] sm:border sm:border-harbor-line sm:shadow-[0_20px_70px_rgba(17,27,33,0.08)] lg:grid lg:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]"
     >
       <aside
-        class="flex h-full min-h-0 flex-col border-b border-[#D8E7E3] bg-[#FBFCF8] transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-b-0 lg:border-r"
+        class="flex h-full min-h-0 flex-col border-b border-harbor-line bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-b-0 lg:border-r lg:border-harbor-line"
         :class="
           hasSelectedConversation
             ? 'pointer-events-none absolute inset-0 -translate-x-3 opacity-0 lg:static lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto'
@@ -2394,6 +2410,7 @@ async function startConversationCall(conversation: Conversation) {
             :context-menu-key="contextMenuKey"
             :conversation-name="conversationName"
             :conversation-identifier="conversationIdentifier"
+            :activity-time="conversationActivityTime"
             :direct-avatar-url="(conversation) => friendAvatarUrls[conversation.otherUserId ?? '']"
             :is-direct-online="(conversation) => friendById.get(conversation.otherUserId ?? '')?.isOnline ?? false"
             :direct-status="(conversation) => friendById.get(conversation.otherUserId ?? '')?.status"
@@ -2477,6 +2494,8 @@ async function startConversationCall(conversation: Conversation) {
           :avatar-for="callHistory.avatarFor"
           :calling-id="callingMeetingId"
           @open="openCallDetails"
+          @call="callAgain"
+          @start-meeting="createMeeting"
           @toggle-read="toggleCallRead"
           @load-more="callHistory.loadMore"
         />
@@ -2519,6 +2538,7 @@ async function startConversationCall(conversation: Conversation) {
         :gif-search-error="gifSearchError"
         :gif-preview-urls="gifPreviewUrls"
         :is-gif-preview-loading="(id) => gifPreviewCache.isLoading(socialApi.gifImagePath(id, 'preview'))"
+        :sender-avatar="messageSenderAvatar"
         @back="
           selectedConversation = null;
           pendingDirectFriend = null;

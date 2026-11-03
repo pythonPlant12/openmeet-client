@@ -6,7 +6,7 @@ import { findMeetingReferences, firstPreviewableLink, splitMessageLinks } from '
 import LinkPreviewCard from './LinkPreviewCard.vue';
 import MeetingLinkCard from './MeetingLinkCard.vue';
 
-const props = defineProps<{ content: string; local: boolean }>();
+const props = defineProps<{ content: string }>();
 
 const segments = computed(() => splitMessageLinks(props.content));
 const meetings = computed(() => findMeetingReferences(props.content));
@@ -21,12 +21,11 @@ const previewUrl = computed(() => firstPreviewableLink(props.content));
         :href="segment.href"
         target="_blank"
         rel="noopener noreferrer nofollow"
-        class="break-all underline underline-offset-2"
-        :class="local ? 'text-white decoration-white/60' : 'text-[#0B7A75] decoration-[#0B7A75]/40'"
+        class="break-all text-harbor-accent underline decoration-harbor-accent/40 underline-offset-2"
         >{{ segment.text }}</a
       ><template v-else>{{ segment.text }}</template></template
     >
   </p>
-  <MeetingLinkCard v-for="meeting in meetings" :key="meeting.roomRef" :reference="meeting" :local="local" />
-  <LinkPreviewCard v-if="previewUrl" :url="previewUrl" :local="local" />
+  <MeetingLinkCard v-for="meeting in meetings" :key="meeting.roomRef" :reference="meeting" />
+  <LinkPreviewCard v-if="previewUrl" :url="previewUrl" />
 </template>

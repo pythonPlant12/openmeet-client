@@ -78,11 +78,11 @@ describe('FriendsSidebar', () => {
     expect(avatar.classList).toContain('border-2');
     expect(avatar.classList).toContain('border-[#6B7BC4]');
     expect(dot.classes()).toContain('border-[3px]');
-    expect(dot.classes()).toContain('border-[#FBFCF8]');
-    const offlineAvatar = offlineRow!.get('.relative > span').element as HTMLElement;
+    expect(dot.classes()).toContain('border-harbor-surface');
+    const offlineAvatar = offlineRow!.get('[data-friend-avatar]').element as HTMLElement;
 
     expect(offlineAvatar.classList).toContain('border-2');
-    expect(offlineAvatar.classList).toContain('border-[#B8C6C5]');
+    expect(offlineAvatar.classList).toContain('border-harbor-waveform');
     expect(offlineRow!.find('[data-presence-dot]').exists()).toBe(false);
   });
 

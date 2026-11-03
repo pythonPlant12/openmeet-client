@@ -563,14 +563,14 @@ defineExpose({
 </script>
 
 <template>
-  <div v-bind="attrs" class="flex h-full min-h-0 flex-col text-[#102F35]">
+  <div v-bind="attrs" class="flex h-full min-h-0 flex-col text-harbor-ink">
     <div v-if="loading" class="flex min-h-64 flex-1 items-center justify-center" aria-live="polite">
-      <LoadingRipple class="size-7 text-[#0B7A75]" />
+      <LoadingRipple class="size-7 text-harbor-accent" />
       <span class="sr-only">Loading group details</span>
     </div>
     <div
       v-else-if="error"
-      class="m-4 rounded-2xl border border-[#F2C7BE] bg-[#FFF4F0] p-4 text-sm text-[#9D4636]"
+      class="m-4 rounded-2xl border border-harbor-danger/25 bg-harbor-danger-soft p-4 text-sm text-harbor-danger-strong"
       role="alert"
     >
       {{ error }}
@@ -578,21 +578,21 @@ defineExpose({
     <template v-else-if="info">
       <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1">
         <section class="flex flex-col gap-2 py-4 text-sm" data-group-facts>
-          <div class="rounded-xl border border-[#D8E7E3] bg-white p-3">
-            <span class="block text-xs text-[#61777B]">Access</span
+          <div class="rounded-xl border border-harbor-line bg-white p-3">
+            <span class="block text-xs text-harbor-muted">Access</span
             ><strong class="mt-1 block text-xs leading-4">{{ accessLabel(info.accessPolicy) }}</strong>
           </div>
-          <div class="rounded-xl border border-[#D8E7E3] bg-white p-3">
-            <span class="block text-xs text-[#61777B]">Created</span
+          <div class="rounded-xl border border-harbor-line bg-white p-3">
+            <span class="block text-xs text-harbor-muted">Created</span
             ><strong class="mt-1 block text-xs leading-4">{{ new Date(info.createdAt).toLocaleDateString() }}</strong>
           </div>
-          <div class="min-w-0 rounded-xl border border-[#D8E7E3] bg-white p-3">
-            <span class="block text-xs text-[#61777B]">Group ID</span>
+          <div class="min-w-0 rounded-xl border border-harbor-line bg-white p-3">
+            <span class="block text-xs text-harbor-muted">Group ID</span>
             <div class="mt-1 flex items-center gap-1">
               <code class="min-w-0 flex-1 truncate text-xs font-semibold">#{{ info.groupCode }}</code
               ><button
                 type="button"
-                class="harbor-ghost-action shrink-0 rounded-md p-1 text-[#0B7A75]"
+                class="harbor-ghost-action shrink-0 rounded-md p-1 text-harbor-accent"
                 :aria-label="copiedGroupId ? 'Group ID copied' : 'Copy group ID'"
                 :title="copiedGroupId ? 'Copied' : 'Copy group ID'"
                 @click="copyGroupId"
@@ -611,30 +611,23 @@ defineExpose({
             <DropdownMenuTrigger as-child>
               <Button
                 variant="ghost"
-                class="harbor-ghost-action h-auto min-h-20 flex-col gap-2 rounded-2xl bg-[#EDF8F5] px-2 py-3 text-[#102F35]"
+                class="harbor-ghost-action h-auto min-h-20 flex-col gap-2 rounded-2xl bg-harbor-hover px-2 py-3 text-harbor-ink"
                 :disabled="!selectedMemberIds.length || isRemovingMembers"
               >
                 <UserMinus class="size-5" />
                 <span class="text-center text-[11px] leading-4">Actions</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-              class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
-            >
-              <DropdownMenuItem
-                class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                @select="removeSelectedMembers"
-              >
+            <DropdownMenuContent class="min-w-48">
+              <DropdownMenuItem variant="danger" @select="removeSelectedMembers">
                 <UserMinus class="size-4" /> Remove {{ selectedMemberIds.length }} from group
               </DropdownMenuItem>
-              <DropdownMenuItem class="cursor-pointer rounded-xl px-3 py-2.5" @select="leaveSelectionMode">
-                Cancel selection
-              </DropdownMenuItem>
+              <DropdownMenuItem @select="leaveSelectionMode"> Cancel selection </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
             variant="ghost"
-            class="harbor-ghost-action h-auto min-h-20 flex-col gap-2 rounded-2xl bg-[#EDF8F5] px-2 py-3 text-[#102F35]"
+            class="harbor-ghost-action h-auto min-h-20 flex-col gap-2 rounded-2xl bg-harbor-hover px-2 py-3 text-harbor-ink"
             :disabled="!canManage || mutationBusy"
             :title="canManage ? addActionLabel : 'Only group admins can add people'"
             @click="setAddMembersOpen(true)"
@@ -644,7 +637,7 @@ defineExpose({
           </Button>
           <Button
             variant="ghost"
-            class="h-auto min-h-20 flex-col gap-2 rounded-2xl bg-[#FFF0EA] px-2 py-3 text-[#9D4636] hover:bg-[#F9DED6]"
+            class="h-auto min-h-20 flex-col gap-2 rounded-2xl bg-harbor-danger-soft px-2 py-3 text-harbor-danger-strong hover:bg-harbor-danger/25"
             :disabled="isCreator || mutationBusy"
             :title="isCreator ? 'Creator must transfer ownership before quitting.' : 'Quit group'"
             @click="setQuitOpen(true)"
@@ -658,10 +651,10 @@ defineExpose({
           <div class="flex items-center justify-between gap-2">
             <div>
               <h4 id="group-participants-heading" class="text-sm font-semibold">Participants</h4>
-              <p class="text-xs text-[#61777B]">Swipe a participant, or press and hold, for actions.</p>
+              <p class="text-xs text-harbor-muted">Swipe a participant, or press and hold, for actions.</p>
             </div>
           </div>
-          <div class="mt-3 max-h-80 space-y-1 overflow-y-auto rounded-2xl border border-[#D8E7E3] bg-white p-1.5">
+          <div class="mt-3 max-h-80 space-y-1 overflow-y-auto rounded-2xl border border-harbor-line bg-white p-1.5">
             <SwipeableRow
               v-for="member in sortedMembers"
               :id="`details-participant-${member.id}`"
@@ -678,7 +671,7 @@ defineExpose({
                   type="button"
                   data-swipe-action
                   class="flex flex-1 items-center justify-start text-white transition-colors"
-                  :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
+                  :class="armed ? 'bg-harbor-accent-hover' : 'bg-harbor-accent'"
                   :aria-label="`Message ${member.name}`"
                   @click="
                     close();
@@ -695,7 +688,7 @@ defineExpose({
                 <button
                   type="button"
                   data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#E6F4F1] text-[11px] font-semibold text-[#102F35]"
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-hover text-[11px] font-semibold text-harbor-ink"
                   :aria-label="`View ${member.name}'s profile`"
                   @click="
                     close();
@@ -708,7 +701,7 @@ defineExpose({
                   v-if="!isSelf(member) && !isFriend(member)"
                   type="button"
                   data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#0B7A75] text-[11px] font-semibold text-white"
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-accent text-[11px] font-semibold text-white"
                   :aria-label="`Add ${member.name} as a friend`"
                   @click="
                     close();
@@ -721,7 +714,7 @@ defineExpose({
                   v-if="isSelectableMember(member)"
                   type="button"
                   data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-[#C4513D] text-[11px] font-semibold text-white disabled:opacity-60"
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-danger text-[11px] font-semibold text-white disabled:opacity-60"
                   :aria-label="`Remove ${member.name} from the group`"
                   :disabled="mutationBusy"
                   @click="
@@ -736,14 +729,14 @@ defineExpose({
                 <ContextMenuTrigger as-child>
                   <button
                     type="button"
-                    class="harbor-ghost-action flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none focus:outline-none [@media(hover:hover)]:focus-visible:ring-2 [@media(hover:hover)]:focus-visible:ring-inset [@media(hover:hover)]:focus-visible:ring-[#0B7A75]"
-                    :class="{ 'bg-[#E6F4F1]': selectedMemberIds.includes(member.id) }"
+                    class="harbor-ghost-action flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none focus:outline-none [@media(hover:hover)]:focus-visible:ring-2 [@media(hover:hover)]:focus-visible:ring-inset [@media(hover:hover)]:focus-visible:ring-harbor-accent"
+                    :class="{ 'bg-harbor-hover': selectedMemberIds.includes(member.id) }"
                     :title="isSelectionMode ? undefined : 'Open profile'"
                     @click="isSelectionMode ? selectMember(member) : emit('open-profile', member.id, member.name)"
                   >
                     <span class="relative shrink-0">
                       <span
-                        class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                        class="flex size-9 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar text-xs font-semibold text-harbor-accent"
                         :class="['border-2', userStatusOption(member.isOnline ? member.status : 'offline').borderClass]"
                       >
                         <img
@@ -758,12 +751,12 @@ defineExpose({
                         surface="groupParticipants"
                         :online="member.isOnline"
                         :status="member.status"
-                        class="size-3 border-[3px] border-[#FBFCF8]"
+                        class="size-3 border-[3px] border-harbor-surface"
                       />
                     </span>
                     <span class="min-w-0 flex-1">
                       <span class="block truncate text-sm font-semibold">{{ member.name }}</span>
-                      <span class="block truncate text-xs text-[#61777B]">@{{ member.nickname }}</span>
+                      <span class="block truncate text-xs text-harbor-muted">@{{ member.nickname }}</span>
                     </span>
                     <span
                       v-if="isFriend(member)"
@@ -771,31 +764,22 @@ defineExpose({
                       role="img"
                       aria-label="Your friend"
                       title="Your friend"
-                      class="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
+                      class="flex size-6 shrink-0 items-center justify-center rounded-full bg-harbor-hover text-harbor-accent"
                     >
                       <UserCheck class="size-3.5" />
                     </span>
                   </button>
                 </ContextMenuTrigger>
-                <ContextMenuContent
-                  class="harbor-action-menu min-w-48 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
-                >
-                  <ContextMenuItem
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                    @select="emit('open-profile', member.id, member.name)"
-                  >
+                <ContextMenuContent class="min-w-48">
+                  <ContextMenuItem @select="emit('open-profile', member.id, member.name)">
                     <UserRound class="size-4" />See profile
                   </ContextMenuItem>
-                  <ContextMenuItem
-                    v-if="canCallMember(member)"
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                    @select="emit('call-member', member)"
-                  >
+                  <ContextMenuItem v-if="canCallMember(member)" @select="emit('call-member', member)">
                     <Phone class="size-4" /> Call
                   </ContextMenuItem>
                   <ContextMenuItem
                     v-if="isSelectableMember(member)"
-                    class="harbor-context-menu-danger cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
+                    variant="danger"
                     :disabled="mutationBusy"
                     @select="removeMember(member)"
                   >
@@ -803,7 +787,6 @@ defineExpose({
                   </ContextMenuItem>
                   <ContextMenuItem
                     v-if="canChangeMemberRole(member) && member.role === 'member'"
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                     :disabled="mutationBusy"
                     @select="updateMemberRole(member, 'admin')"
                   >
@@ -811,17 +794,12 @@ defineExpose({
                   </ContextMenuItem>
                   <ContextMenuItem
                     v-if="canChangeMemberRole(member) && member.role === 'admin'"
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
                     :disabled="mutationBusy"
                     @select="updateMemberRole(member, 'member')"
                   >
                     <UserRound class="size-4" />Make participant
                   </ContextMenuItem>
-                  <ContextMenuItem
-                    v-if="isSelectableMember(member)"
-                    class="harbor-context-menu-item cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                    @select="selectMember(member)"
-                  >
+                  <ContextMenuItem v-if="isSelectableMember(member)" @select="selectMember(member)">
                     Select
                   </ContextMenuItem>
                 </ContextMenuContent>
@@ -831,7 +809,7 @@ defineExpose({
           <Button
             v-if="membersHasMore"
             variant="ghost"
-            class="harbor-ghost-action mt-2 w-full rounded-full text-[#0B7A75]"
+            class="harbor-ghost-action mt-2 w-full rounded-full text-harbor-accent"
             :disabled="membersLoadingMore"
             @click="emit('load-more-members')"
           >
@@ -840,11 +818,11 @@ defineExpose({
           </Button>
         </section>
 
-        <section class="mt-5 space-y-2 border-t border-[#E5EFEC] pt-5">
+        <section class="mt-5 space-y-2 border-t border-harbor-line pt-5">
           <Button
             v-if="canManage"
             variant="outline"
-            class="w-full rounded-full border-[#D8E7E3] bg-white text-[#27595D] hover:bg-[#E6F4F1] hover:text-[#102F35]"
+            class="w-full rounded-full border-harbor-line bg-white text-harbor-ink-soft hover:bg-harbor-hover hover:text-harbor-ink"
             @click="setSettingsOpen(true)"
           >
             <Settings class="size-4" /> Group settings
@@ -852,7 +830,7 @@ defineExpose({
           <Button
             v-if="canManage"
             variant="ghost"
-            class="w-full rounded-full bg-[#FFF0EA] text-[#9D4636] hover:bg-[#F9DED6]"
+            class="w-full rounded-full bg-harbor-danger-soft text-harbor-danger-strong hover:bg-harbor-danger/25"
             @click="setDeleteOpen(true)"
           >
             <Trash2 class="size-4" /> Delete group
@@ -864,12 +842,12 @@ defineExpose({
 
   <Dialog :open="isSettingsOpen" @update:open="setSettingsOpen">
     <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] sm:w-full"
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
         ><DialogTitle>Group settings</DialogTitle
-        ><DialogDescription class="text-[#61777B]">Update group name and access.</DialogDescription></DialogHeader
+        ><DialogDescription class="text-harbor-muted">Update group name and access.</DialogDescription></DialogHeader
       >
       <motion.form
         layout
@@ -877,9 +855,9 @@ defineExpose({
         class="space-y-4"
         @submit.prevent="saveSettings"
       >
-        <div class="flex items-center gap-3 rounded-2xl border border-[#D8E7E3] bg-white p-3">
+        <div class="flex items-center gap-3 rounded-2xl border border-harbor-line bg-white p-3">
           <span
-            class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#102F35] text-sm font-semibold text-white"
+            class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-ink text-sm font-semibold text-white"
           >
             <img
               v-if="avatarUrl"
@@ -892,7 +870,7 @@ defineExpose({
           <Button
             type="button"
             variant="outline"
-            class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
             :disabled="isUploadingAvatar || mutationBusy"
             @click="avatarInput?.click()"
           >
@@ -909,7 +887,7 @@ defineExpose({
             v-model="settingsTitle"
             maxlength="120"
             required
-            class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+            class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
           />
         </div>
         <fieldset class="space-y-2">
@@ -917,13 +895,13 @@ defineExpose({
           <label
             v-for="policy in GROUP_ACCESS_POLICIES"
             :key="policy"
-            class="flex cursor-pointer items-center gap-3 rounded-xl border border-[#D8E7E3] bg-white px-3 py-3 has-[:checked]:border-[#0B7A75] has-[:checked]:bg-[#EAF7F4]"
+            class="flex cursor-pointer items-center gap-3 rounded-xl border border-harbor-line bg-white px-3 py-3 has-[:checked]:border-harbor-accent has-[:checked]:bg-harbor-hover"
             ><input
               v-model="settingsPolicy"
               type="radio"
               name="settings-policy"
               :value="policy"
-              class="size-4 accent-[#0B7A75]"
+              class="size-4 accent-harbor-accent"
             /><span class="text-sm font-medium">{{ accessLabel(policy) }}</span></label
           >
         </fieldset>
@@ -941,18 +919,18 @@ defineExpose({
               type="password"
               autocomplete="new-password"
               placeholder="Leave blank to keep current password"
-              class="mt-2 h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0" /></motion.div
+              class="mt-2 h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0" /></motion.div
         ></AnimatePresence>
         <DialogFooter
           ><Button
             type="button"
             variant="outline"
-            class="rounded-full border-[#D8E7E3] bg-white"
+            class="rounded-full border-harbor-line bg-white"
             @click="setSettingsOpen(false)"
             >Cancel</Button
           ><Button
             type="submit"
-            class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
+            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
             :disabled="isSavingSettings || !settingsTitle.trim()"
             >{{ isSavingSettings ? 'Saving...' : 'Save settings' }}</Button
           ></DialogFooter
@@ -963,83 +941,83 @@ defineExpose({
 
   <Dialog :open="isAddMembersOpen" @update:open="setAddMembersOpen">
     <HarborDialogContent
-      class="marketing-font flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] sm:w-full"
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
         ><DialogTitle>{{ addActionLabel }}</DialogTitle
-        ><DialogDescription class="text-[#61777B]">{{ addMembersDescription }}</DialogDescription></DialogHeader
+        ><DialogDescription class="text-harbor-muted">{{ addMembersDescription }}</DialogDescription></DialogHeader
       >
       <label class="relative"
         ><span class="sr-only">Search people</span
-        ><Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" /><Input
+        ><Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle" /><Input
           v-model="memberSearch"
           type="search"
           placeholder="Search by name, nickname, or email"
-          class="h-11 rounded-xl border-[#D8E7E3] bg-white pl-10 pr-10 focus-visible:ring-0" /><button
+          class="h-11 rounded-xl border-harbor-line bg-white pl-10 pr-10 focus-visible:ring-0" /><button
           v-if="memberSearch"
           type="button"
-          class="harbor-ghost-action absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-[#61777B]"
+          class="harbor-ghost-action absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-harbor-muted"
           aria-label="Clear people search"
           @click="memberSearch = ''"
         >
           <X class="size-4" /></button
       ></label>
-      <div class="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-[#D8E7E3] bg-white">
+      <div class="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-harbor-line bg-white">
         <p
           v-if="!friendCandidates.length && !registeredCandidates.length && !isSearchingPeople"
-          class="p-5 text-center text-sm text-[#61777B]"
+          class="p-5 text-center text-sm text-harbor-muted"
         >
           No available people found.
         </p>
         <template v-if="friendCandidates.length"
           ><p
-            class="sticky top-0 bg-[#F0F7F5] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]"
+            class="sticky top-0 bg-harbor-hover px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-harbor-muted"
           >
             Accepted friends
           </p>
           <label
             v-for="friend in friendCandidates"
             :key="friend.id"
-            class="flex cursor-pointer items-center gap-3 border-b border-[#E5EFEC] px-3 py-3 last:border-b-0"
+            class="flex cursor-pointer items-center gap-3 border-b border-harbor-line px-3 py-3 last:border-b-0"
             ><input
               type="checkbox"
-              class="size-4 accent-[#0B7A75]"
+              class="size-4 accent-harbor-accent"
               :checked="selectedCandidateIds.includes(friend.id)"
               @change="selectedCandidateIds = toggleId(selectedCandidateIds, friend.id)"
             /><span class="min-w-0 flex-1"
               ><span class="block truncate text-sm font-semibold">{{ friend.name }}</span
-              ><span class="block truncate text-xs text-[#61777B]">{{ friend.email }}</span></span
+              ><span class="block truncate text-xs text-harbor-muted">{{ friend.email }}</span></span
             ></label
           ></template
         >
         <div v-if="isSearchingPeople" class="flex h-16 items-center justify-center">
-          <LoadingRipple class="size-5 text-[#0B7A75]" /><span class="sr-only">Searching registered people</span>
+          <LoadingRipple class="size-5 text-harbor-accent" /><span class="sr-only">Searching registered people</span>
         </div>
         <template v-else-if="registeredCandidates.length"
           ><p
-            class="sticky top-0 bg-[#F0F7F5] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]"
+            class="sticky top-0 bg-harbor-hover px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-harbor-muted"
           >
             {{ candidateSectionLabel }}
           </p>
           <label
             v-for="person in registeredCandidates"
             :key="person.id"
-            class="flex cursor-pointer items-center gap-3 border-b border-[#E5EFEC] px-3 py-3 last:border-b-0"
+            class="flex cursor-pointer items-center gap-3 border-b border-harbor-line px-3 py-3 last:border-b-0"
             ><input
               type="checkbox"
-              class="size-4 accent-[#0B7A75]"
+              class="size-4 accent-harbor-accent"
               :checked="selectedCandidateIds.includes(person.id)"
               @change="selectedCandidateIds = toggleId(selectedCandidateIds, person.id)"
             /><span class="min-w-0 flex-1"
               ><span class="block truncate text-sm font-semibold">{{ person.name }}</span
-              ><span class="block truncate text-xs text-[#61777B]">@{{ person.nickname }}</span></span
+              ><span class="block truncate text-xs text-harbor-muted">@{{ person.nickname }}</span></span
             ></label
           >
           <Button
             v-if="registeredNextOffset !== null"
             variant="ghost"
-            class="harbor-ghost-action m-2 w-[calc(100%-1rem)] rounded-full text-[#0B7A75]"
+            class="harbor-ghost-action m-2 w-[calc(100%-1rem)] rounded-full text-harbor-accent"
             :disabled="isLoadingMorePeople"
             @click="loadMorePeople"
           >
@@ -1049,10 +1027,10 @@ defineExpose({
         >
       </div>
       <DialogFooter
-        ><Button variant="outline" class="rounded-full border-[#D8E7E3] bg-white" @click="setAddMembersOpen(false)"
+        ><Button variant="outline" class="rounded-full border-harbor-line bg-white" @click="setAddMembersOpen(false)"
           >Cancel</Button
         ><Button
-          class="harbor-primary-action rounded-full bg-[#0B7A75] mb-2 text-white"
+          class="harbor-primary-action rounded-full bg-harbor-accent mb-2 text-white"
           :disabled="!selectedCandidateIds.length || isAddingMembers"
           @click="addSelectedMembers"
           >{{
@@ -1069,12 +1047,12 @@ defineExpose({
 
   <Dialog :open="isQuitOpen" @update:open="setQuitOpen">
     <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#F2C7BE] bg-[#FBFCF8] p-5 text-[#102F35] sm:w-full"
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-danger/25 bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
         ><DialogTitle>Quit group?</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
+        ><DialogDescription class="text-harbor-muted"
           >Type <strong>quit</strong> to leave. Group messages will disappear from your workspace.</DialogDescription
         ></DialogHeader
       >
@@ -1082,13 +1060,13 @@ defineExpose({
         v-model="quitConfirmation"
         autocomplete="off"
         placeholder="Type quit"
-        class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+        class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
       />
       <DialogFooter
-        ><Button variant="outline" class="rounded-full border-[#D8E7E3] bg-white" @click="setQuitOpen(false)"
+        ><Button variant="outline" class="rounded-full border-harbor-line bg-white" @click="setQuitOpen(false)"
           >Cancel</Button
         ><Button
-          class="rounded-full bg-[#C4513D] text-white hover:bg-[#9D4636]"
+          class="rounded-full bg-harbor-danger text-white hover:bg-harbor-danger-strong"
           :disabled="quitConfirmation.toLocaleLowerCase() !== 'quit' || isLeaving"
           @click="leaveGroup"
           >{{ isLeaving ? 'Quitting...' : 'Quit group' }}</Button
@@ -1099,12 +1077,12 @@ defineExpose({
 
   <Dialog :open="isDeleteOpen" @update:open="setDeleteOpen">
     <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#F2C7BE] bg-[#FBFCF8] p-5 text-[#102F35] sm:w-full"
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-danger/25 bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
         ><DialogTitle>Delete group?</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
+        ><DialogDescription class="text-harbor-muted"
           >This cannot be undone. Type <strong>delete</strong> to continue.</DialogDescription
         ></DialogHeader
       >
@@ -1112,13 +1090,13 @@ defineExpose({
         v-model="deleteConfirmation"
         autocomplete="off"
         placeholder="Type delete"
-        class="h-11 rounded-xl border-[#D8E7E3] bg-white focus-visible:ring-0"
+        class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
       />
       <DialogFooter
-        ><Button variant="outline" class="rounded-full border-[#D8E7E3] bg-white" @click="setDeleteOpen(false)"
+        ><Button variant="outline" class="rounded-full border-harbor-line bg-white" @click="setDeleteOpen(false)"
           >Cancel</Button
         ><Button
-          class="rounded-full mb-2 bg-[#C4513D] text-white hover:bg-[#9D4636]"
+          class="rounded-full mb-2 bg-harbor-danger text-white hover:bg-harbor-danger-strong"
           :disabled="deleteConfirmation.toLocaleLowerCase() !== 'delete' || isDeleting"
           @click="deleteGroup"
           >{{ isDeleting ? 'Deleting...' : 'Delete group' }}</Button

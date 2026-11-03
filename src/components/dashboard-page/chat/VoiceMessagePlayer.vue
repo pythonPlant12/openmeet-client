@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Pause, Play } from 'lucide-vue-next';
+import { ArrowDown, Mic, Pause, Play } from 'lucide-vue-next';
 import { computed, ref, toRef, watch } from 'vue';
 
 import { LoadingRipple } from '@/components/ui/loading';
@@ -8,7 +8,7 @@ import { playHaptic } from '@/services/haptics';
 import type { ConversationMessageAttachment } from '@/services/social-api';
 
 import VoiceWaveform from './VoiceWaveform.vue';
-import { decodeVoiceMessage, formatVoiceDuration } from './voice-message';
+import { type SenderAvatar, decodeVoiceMessage, formatVoiceDuration } from './voice-message';
 
 // A voice message inside a chat bubble.
 const props = defineProps<{
@@ -17,10 +17,11 @@ const props = defineProps<{
   url?: string;
   loading: boolean;
   error: boolean;
-  local: boolean;
   /** Message time, shown on the duration row when the voice message is the whole message. */
   sentAt?: string;
   formatTime?: (value: string) => string;
+  /** The sender's picture, with a microphone badge like a recorded note. */
+  avatar?: SenderAvatar;
 }>();
 const emit = defineEmits<{ (event: 'load'): void }>();
 
@@ -28,6 +29,8 @@ const durationMs = ref(0);
 const levels = ref<number[]>([]);
 const decodeFailed = ref(false);
 const playback = useVoicePlayback(toRef(props, 'url'), durationMs);
+// The badge turns teal once the message has been played from this device.
+const hasPlayed = computed(() => playback.playing.value || playback.positionMs.value > 0);
 const clock = computed(() =>
   formatVoiceDuration(
     playback.playing.value || playback.positionMs.value ? playback.positionMs.value : durationMs.value,
@@ -65,18 +68,23 @@ function togglePlayback() {
 </script>
 
 <template>
-  <div data-voice-message class="flex w-60 max-w-full items-center sm:w-72 lg:w-80 gap-2.5 py-0.5">
+  <div data-voice-message class="flex w-64 max-w-full items-center gap-2 py-0.5 sm:w-80 lg:w-96">
     <button
       type="button"
-      class="flex size-10 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
-      :class="local ? 'bg-white text-[#0B7A75]' : 'bg-[#0B7A75] text-white'"
+      class="flex size-10 shrink-0 items-center justify-center rounded-full text-harbor-icon transition-transform active:scale-95"
       :aria-label="playback.playing.value ? 'Pause voice message' : 'Play voice message'"
       :disabled="loading"
       @click.stop="togglePlayback"
     >
-      <LoadingRipple v-if="loading" class="size-4" />
-      <Pause v-else-if="playback.playing.value" class="size-4 fill-current" />
-      <Play v-else class="ml-0.5 size-4 fill-current" />
+      <LoadingRipple v-if="loading" class="size-5" />
+      <span
+        v-else-if="!url"
+        class="flex size-9 items-center justify-center rounded-full border-2 border-current"
+        aria-hidden="true"
+        ><ArrowDown class="size-[1.125rem]" :stroke-width="2.5"
+      /></span>
+      <Pause v-else-if="playback.playing.value" class="size-6 fill-current" />
+      <Play v-else class="ml-0.5 size-6 fill-current" />
     </button>
     <div class="min-w-0 flex-1">
       <VoiceWaveform
@@ -84,27 +92,31 @@ function togglePlayback() {
         :progress="playback.progress.value"
         :playing="playback.playing.value"
         :seekable="!!url && durationMs > 0"
-        :played-class="local ? 'bg-white' : 'bg-[#0B7A75]'"
-        :unplayed-class="local ? 'bg-white/45' : 'bg-[#B8C6C5]'"
+        played-class="bg-harbor-accent"
+        unplayed-class="bg-harbor-waveform"
         @seek="playback.seek"
       />
-      <p
-        class="mt-0.5 flex items-baseline justify-between gap-2 text-[0.6875rem] tabular-nums"
-        :class="local ? 'text-white/75' : 'text-[#61777B]'"
-      >
+      <p class="mt-0.5 flex items-baseline justify-between gap-2 text-[0.6875rem] tabular-nums text-harbor-muted">
         <span class="min-w-0 truncate">
           <template v-if="error">Could not load. Tap to retry.</template>
           <template v-else-if="decodeFailed">Voice message</template>
           <template v-else>{{ url && durationMs ? clock : '0:00' }}</template>
         </span>
-        <time
-          v-if="sentAt && formatTime"
-          :datetime="sentAt"
-          class="shrink-0"
-          :class="local ? 'text-white/70' : 'text-[#8A9C9E]'"
-          >{{ formatTime(sentAt) }}</time
-        >
+        <time v-if="sentAt && formatTime" :datetime="sentAt" class="shrink-0">{{ formatTime(sentAt) }}</time>
       </p>
     </div>
+    <span v-if="avatar" data-voice-avatar class="relative ml-1 shrink-0" aria-hidden="true">
+      <span
+        class="flex size-12 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-sm font-semibold text-harbor-icon"
+        ><img v-if="avatar.url" :src="avatar.url" alt="" class="size-full object-cover" /><template v-else>{{
+          avatar.initials
+        }}</template></span
+      >
+      <span
+        class="absolute -bottom-1 -left-1.5 flex size-5 items-center justify-center rounded-full bg-white shadow-sm"
+        :class="hasPlayed ? 'text-harbor-accent' : 'text-harbor-subtle'"
+        ><Mic class="size-3.5" :stroke-width="2.5"
+      /></span>
+    </span>
   </div>
 </template>
