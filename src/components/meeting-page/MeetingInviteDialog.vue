@@ -155,22 +155,22 @@ watch(policy, (current) => {
 <template>
   <Dialog v-model:open="open">
     <HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-1.5rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.5rem] border-[#D8E7E3] bg-[#FBFCF8] p-4 text-[#102F35] sm:rounded-[1.75rem] sm:p-6"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-1.5rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.5rem] border-harbor-line bg-harbor-surface p-4 text-harbor-ink sm:rounded-[1.75rem] sm:p-6"
       data-meeting-invite
     >
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2"
-          ><UserPlus class="size-5 text-[#0B7A75]" />Invite people</DialogTitle
+          ><UserPlus class="size-5 text-harbor-accent" />Invite people</DialogTitle
         >
-        <DialogDescription class="flex items-center gap-1.5 text-[#61777B]">
+        <DialogDescription class="flex items-center gap-1.5 text-harbor-muted">
           <component :is="policyOption.icon" class="size-3.5 shrink-0" />
           <span data-meeting-access-summary>{{ policyOption.label }} · {{ policyOption.description }}</span>
         </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-4">
-        <section v-if="isHost" class="space-y-3 rounded-2xl border border-[#E5EFEC] bg-white p-3" data-host-access>
+        <section v-if="isHost" class="space-y-3 rounded-2xl border border-harbor-line bg-white p-3" data-host-access>
           <MeetingAccessPicker
             v-model:policy="draftPolicy"
             v-model:password="draftPassword"
@@ -178,11 +178,7 @@ watch(policy, (current) => {
             :disabled="isSavingAccess"
           />
           <div class="flex justify-end">
-            <Button
-              class="harbor-primary-action h-9 rounded-full bg-[#0B7A75] px-4 text-white"
-              :disabled="!canSaveAccess"
-              @click="saveAccess"
-            >
+            <Button variant="pill" class="!h-9 px-4" :disabled="!canSaveAccess" @click="saveAccess">
               <LoadingRipple v-if="isSavingAccess" size="sm" />
               <template v-else>Save access</template>
             </Button>
@@ -191,30 +187,34 @@ watch(policy, (current) => {
 
         <div class="space-y-2">
           <div class="relative">
-            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8A9C9E]" />
+            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle" />
             <Input
               v-model="query"
               type="search"
               maxlength="80"
               :placeholder="searchPlaceholder"
               aria-label="Search people to invite"
-              class="h-10 rounded-xl border-[#D8E7E3] bg-white pl-9 text-sm focus-visible:ring-0"
+              class="h-10 rounded-full border-0 bg-harbor-surface pl-9 text-sm shadow-harbor-around focus-visible:ring-0"
             />
           </div>
-          <div class="min-h-24 rounded-2xl border border-[#E5EFEC] bg-white" data-invite-candidates>
+          <div class="min-h-24 rounded-2xl border border-harbor-line bg-white" data-invite-candidates>
             <div v-if="isSearching && !candidates.length" class="flex justify-center py-8">
-              <LoadingRipple class="size-6 text-[#0B7A75]" />
+              <LoadingRipple class="size-6 text-harbor-accent" />
             </div>
-            <p v-else-if="searchError" class="px-4 py-6 text-center text-sm text-[#9D4636]">{{ searchError }}</p>
-            <p v-else-if="!candidates.length" class="px-4 py-6 text-center text-sm text-[#61777B]">{{ emptyText }}</p>
+            <p v-else-if="searchError" class="px-4 py-6 text-center text-sm text-harbor-danger-strong">
+              {{ searchError }}
+            </p>
+            <p v-else-if="!candidates.length" class="px-4 py-6 text-center text-sm text-harbor-muted">
+              {{ emptyText }}
+            </p>
             <ul v-else class="max-h-[40dvh] overflow-y-auto sm:max-h-72">
               <li
                 v-for="candidate in candidates"
                 :key="candidate.id"
-                class="flex items-center gap-2.5 px-3 py-2 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[#EEF3F1]"
+                class="flex items-center gap-3 px-3 py-2.5 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-harbor-line"
               >
                 <span
-                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
+                  class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-xs font-semibold text-harbor-icon"
                   ><img
                     v-if="candidate.avatarUrl && avatarCache.urls.value[candidate.avatarUrl]"
                     :src="avatarCache.urls.value[candidate.avatarUrl]"
@@ -224,7 +224,7 @@ watch(policy, (current) => {
                 >
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-sm font-semibold">{{ candidate.name }}</span>
-                  <span class="block truncate text-xs text-[#61777B]"
+                  <span class="block truncate text-xs text-harbor-muted"
                     >@{{ candidate.nickname }}<template v-if="candidate.isFriend"> · Friend</template></span
                   >
                 </span>
@@ -233,19 +233,20 @@ watch(policy, (current) => {
                   variant="ghost"
                   size="sm"
                   disabled
-                  class="shrink-0 rounded-full text-[#17645F] disabled:opacity-100"
+                  class="h-8 shrink-0 rounded-full px-3 text-xs font-semibold text-harbor-muted disabled:opacity-100 [&_svg]:text-harbor-accent"
                   ><Check class="size-4" />Invited</Button
                 >
                 <Button
                   v-else
                   size="sm"
-                  class="harbor-primary-action h-8 shrink-0 rounded-full bg-[#0B7A75] px-3 text-xs text-white"
+                  variant="pill"
+                  class="!h-8 shrink-0 px-3.5 text-xs"
                   :disabled="invitingId !== null"
                   :data-invite="candidate.id"
                   @click="invite(candidate)"
                 >
                   <LoadingRipple v-if="invitingId === candidate.id" size="sm" />
-                  <template v-else>Invite</template>
+                  <template v-else><UserPlus class="size-3.5" />Invite</template>
                 </Button>
               </li>
             </ul>

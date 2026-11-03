@@ -160,15 +160,15 @@ onUnmounted(() => window.clearTimeout(pressTimer));
   position: relative;
   z-index: 1;
   display: inline-flex;
-  height: 44px;
+  height: var(--ui-tab-size);
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 0 16px;
   border: 0;
   border-radius: 999px;
-  color: #27595d;
-  font-size: 14px;
+  color: #54656f;
+  font-size: var(--ui-label-size);
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.01em;
@@ -182,17 +182,17 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 
 .liquid-tab[aria-current='page'],
 .liquid-tab[data-state='open'] {
-  color: #102f35;
+  color: #111b21;
 }
 
-/* Primary actions read like the other items, set apart by a green glass rim. The rim is strongest at rest and
+/* Primary actions read like the other items, set apart by a gray glass rim. The rim is strongest at rest and
    fades while the drop sits on the item, so the drop takes over as its highlight. */
 .liquid-tab[data-variant='primary'] {
   margin-left: 4px;
-  color: #0b7a75;
-  background: rgb(230 244 241 / 0.35);
+  color: #111b21;
+  background: rgb(255 255 255 / 0.55);
   box-shadow:
-    inset 0 0 0 1.5px rgb(11 122 117 / 0.55),
+    inset 0 0 0 1.5px rgb(134 150 160 / 0.45),
     inset 0 1px 1px rgb(255 255 255 / 0.85);
   transition:
     color 0.25s,
@@ -201,9 +201,9 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 }
 
 .liquid-tab[data-variant='primary'][data-targeted='true'] {
-  color: #08635f;
+  color: #111b21;
   background: transparent;
-  box-shadow: inset 0 0 0 1px rgb(11 122 117 / 0.22);
+  box-shadow: inset 0 0 0 1px rgb(134 150 160 / 0.22);
 }
 
 .liquid-tab:disabled {
@@ -213,7 +213,7 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 
 @media (hover: hover) and (pointer: fine) {
   .liquid-tab:hover {
-    color: #102f35;
+    color: #111b21;
   }
 
   .liquid-tab:hover .liquid-tab-avatar {
@@ -222,7 +222,7 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 }
 
 .liquid-tab:focus-visible {
-  outline: 2px solid #0b7a75;
+  outline: 2px solid #8696a0;
   outline-offset: 2px;
 }
 
@@ -230,6 +230,16 @@ onUnmounted(() => window.clearTimeout(pressTimer));
   display: inline-flex;
   flex: none;
   transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.liquid-tab-icon > svg {
+  width: var(--ui-icon-size);
+  height: var(--ui-icon-size);
+}
+
+.liquid-tab-bar[data-size='sm'] .liquid-tab-icon > svg {
+  width: var(--ui-icon-size-sm);
+  height: var(--ui-icon-size-sm);
 }
 
 .liquid-tab[aria-current='page'] .liquid-tab-icon {
@@ -240,16 +250,16 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 .liquid-tab-avatar {
   position: relative;
   display: inline-flex;
-  width: 26px;
-  height: 26px;
+  width: calc(var(--ui-icon-size) + 6px);
+  height: calc(var(--ui-icon-size) + 6px);
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgb(230 244 241 / 0.75);
+  background: rgb(233 237 239 / 0.85);
   box-shadow:
     0 0 0 2px rgb(255 255 255 / 0.65),
-    0 0 0 3px rgb(216 231 227 / 0.8),
-    0 4px 10px -4px rgb(16 47 53 / 0.4);
+    0 0 0 3px rgb(233 237 239 / 0.9),
+    0 4px 10px -4px rgb(17 27 33 / 0.35);
   transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
 }
 
@@ -261,7 +271,7 @@ onUnmounted(() => window.clearTimeout(pressTimer));
   background: radial-gradient(120% 90% at 30% 0%, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0) 55%);
   box-shadow:
     inset 0 1px 1px rgb(255 255 255 / 0.8),
-    inset 0 -2px 4px rgb(16 47 53 / 0.18);
+    inset 0 -2px 4px rgb(17 27 33 / 0.16);
   pointer-events: none;
 }
 
@@ -275,13 +285,13 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 }
 
 .liquid-tab-bar[data-size='sm'] .liquid-tab {
-  height: 36px;
+  height: var(--ui-tab-size-sm);
   padding: 0 14px;
 }
 
 .liquid-tab-bar[data-size='sm'] .liquid-tab-avatar {
-  width: 22px;
-  height: 22px;
+  width: calc(var(--ui-icon-size-sm) + 4px);
+  height: calc(var(--ui-icon-size-sm) + 4px);
 }
 
 .liquid-tab-avatar img {
@@ -308,7 +318,7 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 }
 
 .liquid-tab-bar[data-compact='true'] .liquid-tab {
-  min-width: 56px;
+  min-width: calc(var(--ui-tab-size) + 12px);
   padding: 0 14px;
 }
 

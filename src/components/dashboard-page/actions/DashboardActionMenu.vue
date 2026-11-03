@@ -56,7 +56,7 @@ const reportUrl = buildGitHubIssueUrl('dashboard');
         v-else
         variant="outline"
         size="icon"
-        class="size-11 rounded-full border-[#D8E7E3] bg-white text-[#27595D] shadow-[0_8px_30px_rgba(16,47,53,0.07)] hover:bg-[#E6F4F1] hover:text-[#0B7A75]"
+        class="size-11 rounded-full border-harbor-line bg-white text-harbor-ink-soft shadow-[0_8px_30px_rgba(16,47,53,0.07)] hover:bg-harbor-hover hover:text-harbor-accent"
         :aria-label="t('dashboard.actions.open')"
         @contextmenu.stop
         @pointerdown.stop
@@ -69,23 +69,23 @@ const reportUrl = buildGitHubIssueUrl('dashboard');
       :is="MenuContent"
       align="end"
       :side-offset="10"
-      class="harbor-action-menu min-w-72 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
+      class="harbor-action-menu min-w-72 rounded-[1.25rem] border-harbor-line bg-white p-2 text-harbor-ink shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
     >
       <component
         :is="MenuItem"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#0B7A75] focus:bg-[#E6F4F1] focus:text-[#08635F]"
+        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-harbor-accent focus:bg-harbor-hover focus:text-harbor-accent-hover"
         @select="emit('createMeeting')"
       >
         <Video class="size-4" aria-hidden="true" />
         {{ t('dashboard.newMeeting') }}
       </component>
 
-      <component :is="MenuSeparator" class="mx-1 my-2 bg-[#E5EFEC]" />
-      <component :is="MenuLabel" class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">
+      <component :is="MenuSeparator" class="mx-1 my-2 bg-harbor-line" />
+      <component :is="MenuLabel" class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-harbor-muted">
         {{ t('dashboard.actions.friends') }}
       </component>
 
-      <component :is="MenuItem" v-if="isLoading" disabled class="min-h-11 rounded-xl px-3 py-2.5 text-[#61777B]">
+      <component :is="MenuItem" v-if="isLoading" disabled class="min-h-11 rounded-xl px-3 py-2.5 text-harbor-muted">
         <LoaderCircle class="size-4 animate-spin" aria-hidden="true" />
         {{ t('dashboard.actions.loadingFriends') }}
       </component>
@@ -93,7 +93,7 @@ const reportUrl = buildGitHubIssueUrl('dashboard');
         :is="MenuItem"
         v-else-if="!friends.length"
         disabled
-        class="min-h-11 rounded-xl px-3 py-2.5 text-[#61777B]"
+        class="min-h-11 rounded-xl px-3 py-2.5 text-harbor-muted"
       >
         <Users class="size-4" aria-hidden="true" />
         {{ t('dashboard.noFriends') }}
@@ -105,27 +105,27 @@ const reportUrl = buildGitHubIssueUrl('dashboard');
         :key="friend.id"
         :disabled="callingFriendId !== null"
         :aria-label="t('dashboard.callFriend', { name: friend.name })"
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-[#E6F4F1] focus:text-[#102F35]"
+        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 focus:bg-harbor-hover focus:text-harbor-ink"
         @select="emit('callFriend', friend)"
       >
         <span
           class="size-2.5 shrink-0 rounded-full ring-2 ring-white"
-          :class="friend.isOnline ? 'bg-[#29A899]' : 'bg-[#B8C6C5]'"
+          :class="friend.isOnline ? 'bg-[#29A899]' : 'bg-harbor-waveform'"
           aria-hidden="true"
         />
         <span class="min-w-0 flex-1 truncate">{{ friend.name }}</span>
         <LoaderCircle v-if="callingFriendId === friend.id" class="size-4 animate-spin" aria-hidden="true" />
-        <PhoneCall v-else class="size-4 text-[#0B7A75]" aria-hidden="true" />
+        <PhoneCall v-else class="size-4 text-harbor-accent" aria-hidden="true" />
         <span class="sr-only">
           {{ friend.isOnline ? t('dashboard.online') : t('dashboard.offline') }}
         </span>
       </component>
 
-      <component :is="MenuSeparator" class="mx-1 my-2 bg-[#E5EFEC]" />
+      <component :is="MenuSeparator" class="mx-1 my-2 bg-harbor-line" />
       <component
         :is="MenuItem"
         as-child
-        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D] focus:bg-[#FFF0EA] focus:text-[#A94332]"
+        class="min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-harbor-danger focus:bg-harbor-danger-soft focus:text-harbor-danger-strong"
       >
         <a :href="reportUrl" target="_blank" rel="noreferrer">
           <Bug class="size-4" aria-hidden="true" />

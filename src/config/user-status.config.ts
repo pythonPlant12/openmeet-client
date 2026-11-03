@@ -21,7 +21,7 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     icon: CircleCheck,
     dotClass: 'bg-[#2DA58F]',
     borderClass: 'border-[#2DA58F]',
-    chipClass: 'bg-[#EAF7F4] text-[#17645F]',
+    chipClass: 'bg-harbor-hover text-harbor-accent-hover',
   },
   {
     value: 'away',
@@ -35,9 +35,9 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     value: 'doNotDisturb',
     label: 'Do not disturb',
     icon: MinusCircle,
-    dotClass: 'bg-[#C4513D]',
-    borderClass: 'border-[#C4513D]',
-    chipClass: 'bg-[#FFF0EA] text-[#9D4636]',
+    dotClass: 'bg-harbor-danger',
+    borderClass: 'border-harbor-danger',
+    chipClass: 'bg-harbor-danger-soft text-harbor-danger-strong',
   },
   {
     value: 'sleeping',
@@ -51,9 +51,9 @@ export const USER_STATUS_OPTIONS: UserStatusOption[] = [
     value: 'offline',
     label: 'Appear offline',
     icon: Ban,
-    dotClass: 'bg-[#B8C6C5]',
-    borderClass: 'border-[#B8C6C5]',
-    chipClass: 'bg-[#F0F4F3] text-[#61777B]',
+    dotClass: 'bg-harbor-waveform',
+    borderClass: 'border-harbor-waveform',
+    chipClass: 'bg-harbor-hover text-harbor-muted',
   },
 ];
 

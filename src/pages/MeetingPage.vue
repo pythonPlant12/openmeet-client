@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useIntervalFn } from '@vueuse/core';
+import { useEventListener, useIntervalFn } from '@vueuse/core';
 import { AlertTriangle, ChevronDown, Users } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -41,6 +41,8 @@ const conversationId = computed(() => {
   return typeof conversation === 'string' && conversation.trim() ? conversation : null;
 });
 const isConversationCall = computed(() => conversationId.value !== null);
+// Audio calls from a chat open with the camera off; it can still be turned on before joining.
+const startsWithVideo = computed(() => route.query.video !== 'off');
 
 const { isAuthenticated, isCheckingSession, currentUser, accessToken } = useAuth();
 // On phones TheNavbar shows a top bar only to guests; signed-in phones use the bottom account button. The meeting's
@@ -50,7 +52,9 @@ const phoneTopRowClass = computed(() =>
   hasPhoneTopBar.value ? 'top-20' : 'top-[calc(0.75rem+env(safe-area-inset-top))]',
 );
 const phoneBelowTopRowClass = computed(() =>
-  hasPhoneTopBar.value ? 'top-[8.5rem]' : 'top-[calc(4.25rem+env(safe-area-inset-top))]',
+  hasPhoneTopBar.value
+    ? 'top-[calc(5rem+var(--meeting-control-size))]'
+    : 'top-[calc(1.25rem+var(--meeting-control-size)+env(safe-area-inset-top))]',
 );
 const meetingExitRoute = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
 
@@ -743,15 +747,29 @@ function handleFullscreenTouchEnd(event: TouchEvent) {
   areFullscreenControlsShown.value = dy < 0;
 }
 
-function handleFullscreenPointerMove(event: PointerEvent) {
-  if (!isFullscreen.value || event.pointerType !== 'mouse') return;
-  if (window.innerHeight - event.clientY > FULLSCREEN_CONTROLS_EDGE_PX) return;
-  areFullscreenControlsShown.value = true;
+// The controls stay while the mouse is near the bottom edge or over a menu, and hide a moment after it leaves.
+// Menus open in portals outside the page, so the document listens rather than the page.
+function scheduleFullscreenControlsHide() {
   window.clearTimeout(fullscreenControlsTimer);
   fullscreenControlsTimer = window.setTimeout(() => {
-    areFullscreenControlsShown.value = false;
+    if (document.querySelector('[role="menu"]')) scheduleFullscreenControlsHide();
+    else areFullscreenControlsShown.value = false;
   }, FULLSCREEN_CONTROLS_HIDE_MS);
 }
+
+function handleFullscreenPointerMove(event: PointerEvent) {
+  if (!isFullscreen.value || event.pointerType !== 'mouse') return;
+  const nearBottom = window.innerHeight - event.clientY <= FULLSCREEN_CONTROLS_EDGE_PX;
+  const overMenu = event.target instanceof Element && !!event.target.closest('[role="menu"]');
+  if (nearBottom || overMenu) {
+    areFullscreenControlsShown.value = true;
+    window.clearTimeout(fullscreenControlsTimer);
+  } else if (areFullscreenControlsShown.value) {
+    scheduleFullscreenControlsHide();
+  }
+}
+
+useEventListener(document, 'pointermove', handleFullscreenPointerMove, { passive: true });
 
 // Escape first closes an open menu, chat, or dialog; only with none open does it leave full screen.
 function handleFullscreenKeydown(event: KeyboardEvent) {
@@ -798,26 +816,29 @@ const handleReconnect = () => {
 <template>
   <div
     class="relative h-[calc(100dvh-84px)] overflow-hidden px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0"
-    :class="isFullscreen ? 'bg-[#0B0F10]' : 'bg-[#FBFCF8]'"
+    :class="isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-surface'"
     :data-fullscreen="isFullscreen ? 'true' : undefined"
     @touchstart.passive="handleFullscreenTouchStart"
     @touchend.passive="handleFullscreenTouchEnd"
-    @pointermove="handleFullscreenPointerMove"
   >
     <div
       v-if="isCheckingSession"
-      class="marketing-font h-full bg-[#102F35] flex items-center justify-center text-[#E6F4F1]"
+      class="marketing-font h-full bg-harbor-ink flex items-center justify-center text-harbor-hover"
     >
       <div class="text-center">
-        <LoadingRipple size="lg" class="mb-4 text-[#9BCFC7]" />
-        <p class="text-[#D8E7E3]">{{ t('meeting.checkingAuth') }}</p>
+        <LoadingRipple size="lg" class="mb-4 text-harbor-faint" />
+        <p class="text-harbor-line">{{ t('meeting.checkingAuth') }}</p>
       </div>
     </div>
 
-    <div v-if="!hasJoined && !isCheckingSession" class="fixed inset-0 overflow-hidden bg-[#FBFCF8]" aria-hidden="true">
-      <div class="absolute -left-28 top-16 size-96 rounded-full bg-[#9BCFC7]/45 blur-3xl" />
-      <div class="absolute -right-24 bottom-0 size-80 rounded-full bg-[#F8D8CC]/65 blur-3xl" />
-      <div class="absolute inset-x-8 top-10 h-px bg-[#9BCFC7]/50" />
+    <div
+      v-if="!hasJoined && !isCheckingSession"
+      class="fixed inset-0 overflow-hidden bg-harbor-surface"
+      aria-hidden="true"
+    >
+      <div class="absolute -left-28 top-16 size-96 rounded-full bg-harbor-faint/45 blur-3xl" />
+      <div class="absolute -right-24 bottom-0 size-80 rounded-full bg-harbor-avatar/65 blur-3xl" />
+      <div class="absolute inset-x-8 top-10 h-px bg-harbor-faint/50" />
     </div>
 
     <JoinMeetingDialog
@@ -829,15 +850,16 @@ const handleReconnect = () => {
       :access="isConversationCall ? null : meetingAccess"
       :access-error="accessError"
       :joining="isJoining"
+      :initial-video-enabled="startsWithVideo"
       @join="handleJoinMeeting"
       @cancel="handleCancelJoin"
     />
 
-    <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-[#102F35] flex flex-col">
+    <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-harbor-ink flex flex-col">
       <!-- Participant Count Badge -->
       <div
         v-if="!isFullscreen"
-        class="fixed left-7 z-50 flex h-12 items-center gap-2 rounded-xl bg-[#0B7A75] px-4 text-white shadow-lg sm:left-9 sm:top-[calc(84px+1.25rem)]"
+        class="fixed left-7 z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-white px-4 text-harbor-ink shadow-[0_1px_2px_rgba(17,27,33,0.06),0_4px_14px_rgba(17,27,33,0.1)] sm:left-9 sm:top-[calc(84px+1.25rem)]"
         :class="phoneTopRowClass"
       >
         <Users class="h-5 w-5" />
@@ -889,14 +911,14 @@ const handleReconnect = () => {
             class="pointer-events-auto flex max-w-full items-center gap-2.5 rounded-full border px-4 py-2 text-center text-sm font-semibold shadow-lg"
             :class="
               connectionBanner === 'reconnecting'
-                ? 'border-[#F2B9AE] bg-[#FDE9E4] text-[#7A2E22]'
-                : 'border-[#D8E7E3] bg-white text-[#27595D]'
+                ? 'border-harbor-danger/25 bg-harbor-danger-soft text-harbor-danger-strong'
+                : 'border-harbor-line bg-white text-harbor-ink-soft'
             "
           >
             <LoadingRipple
               size="sm"
               class="shrink-0"
-              :class="connectionBanner === 'reconnecting' ? 'text-[#D95E49]' : 'text-[#0B7A75]'"
+              :class="connectionBanner === 'reconnecting' ? 'text-harbor-danger' : 'text-harbor-accent'"
             />
             {{ t(connectionBanner === 'reconnecting' ? 'meeting.reconnecting' : 'meeting.joiningCall') }}
           </motion.div>
@@ -907,22 +929,22 @@ const handleReconnect = () => {
         v-if="hasPoorConnection && !isFullscreen"
         type="button"
         :class="phoneBelowTopRowClass"
-        class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-[#F2B9AE] bg-[#FDE9E4] px-4 py-3 text-left text-sm text-[#7A2E22] shadow-lg sm:top-[calc(84px+1.25rem)]"
+        class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-4 py-3 text-left text-sm text-harbor-danger-strong shadow-lg sm:top-[calc(84px+1.25rem)]"
         data-testid="connection-quality-warning"
         @click="showConnectionQualityDetails = !showConnectionQualityDetails"
       >
         <div class="flex items-center gap-3">
-          <span class="rounded-full bg-white/75 p-1.5 text-[#D95E49]">
+          <span class="rounded-full bg-white/75 p-1.5 text-harbor-danger">
             <AlertTriangle class="h-4 w-4" />
           </span>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <span class="font-semibold text-[#7A2E22]">{{ t('meeting.poorConnection') }}</span>
-              <span class="rounded-full bg-[#F2765F] px-2 py-0.5 text-xs font-medium text-white">
+              <span class="font-semibold text-harbor-danger-strong">{{ t('meeting.poorConnection') }}</span>
+              <span class="rounded-full bg-harbor-danger px-2 py-0.5 text-xs font-medium text-white">
                 {{ t('meeting.warning') }}
               </span>
             </div>
-            <p v-if="showConnectionQualityDetails" class="mt-1 text-xs text-[#8D4B3E]">
+            <p v-if="showConnectionQualityDetails" class="mt-1 text-xs text-harbor-danger-strong">
               {{ connectionQualityReason || t('meeting.mediaWarning') }}
               <span v-if="packetLossPercent > 0">
                 {{ t('meeting.packetLoss', { percent: packetLossPercent }) }}
@@ -930,7 +952,7 @@ const handleReconnect = () => {
             </p>
           </div>
           <ChevronDown
-            class="h-4 w-4 shrink-0 text-[#A94D3B] transition-transform"
+            class="h-4 w-4 shrink-0 text-harbor-danger-strong transition-transform"
             :class="{ 'rotate-180': showConnectionQualityDetails }"
           />
         </div>
@@ -940,53 +962,53 @@ const handleReconnect = () => {
       <div
         v-if="showConnectionStatus && !isFullscreen"
         :class="phoneBelowTopRowClass"
-        class="fixed right-7 z-50 space-y-1 rounded-lg border border-[#D8E7E3] bg-[#E6F4F1] p-3 text-xs text-[#102F35] shadow-lg sm:right-9 sm:top-[calc(84px+5.5rem)]"
+        class="fixed right-7 z-50 space-y-1 rounded-lg border border-harbor-line bg-harbor-hover p-3 text-xs text-harbor-ink shadow-lg sm:right-9 sm:top-[calc(84px+2.5rem+var(--meeting-control-size))]"
       >
         <div class="flex items-center gap-2">
-          <span class="text-[#4E6B70]">{{ t('meeting.state') }}</span>
-          <span class="font-mono text-[#0B7A75]">{{ statusLabel(String(state)) }}</span>
+          <span class="text-harbor-icon">{{ t('meeting.state') }}</span>
+          <span class="font-mono text-harbor-accent">{{ statusLabel(String(state)) }}</span>
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-[#4E6B70]">{{ t('meeting.connection') }}</span>
+          <span class="text-harbor-icon">{{ t('meeting.connection') }}</span>
           <span
             class="font-mono"
             :class="{
-              'text-[#0B7A75]': connectionState === 'connected',
-              'text-[#F2765F]':
+              'text-harbor-accent': connectionState === 'connected',
+              'text-harbor-danger':
                 connectionState === 'connecting' || connectionState === 'failed' || connectionState === 'disconnected',
-              'text-[#4E6B70]': !connectionState,
+              'text-harbor-icon': !connectionState,
             }"
           >
             {{ statusLabel(connectionState) }}
           </span>
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-[#4E6B70]">{{ t('meeting.ice') }}</span>
+          <span class="text-harbor-icon">{{ t('meeting.ice') }}</span>
           <span
             class="font-mono"
             :class="{
-              'text-[#0B7A75]': iceConnectionState === 'connected' || iceConnectionState === 'completed',
-              'text-[#F2765F]':
+              'text-harbor-accent': iceConnectionState === 'connected' || iceConnectionState === 'completed',
+              'text-harbor-danger':
                 iceConnectionState === 'checking' ||
                 iceConnectionState === 'new' ||
                 iceConnectionState === 'failed' ||
                 iceConnectionState === 'disconnected',
-              'text-[#4E6B70]': !iceConnectionState,
+              'text-harbor-icon': !iceConnectionState,
             }"
           >
             {{ statusLabel(iceConnectionState) }}
           </span>
         </div>
-        <div class="flex items-center gap-2 pt-1 border-t border-[#D8E7E3]">
-          <span class="text-[#4E6B70]">{{ t('meeting.participants') }}</span>
-          <span class="font-mono text-[#0B7A75] font-bold">{{ participantCount }}</span>
+        <div class="flex items-center gap-2 pt-1 border-t border-harbor-line">
+          <span class="text-harbor-icon">{{ t('meeting.participants') }}</span>
+          <span class="font-mono text-harbor-accent font-bold">{{ participantCount }}</span>
         </div>
       </div>
 
       <div v-if="isInitializingMedia" class="flex-1 flex items-center justify-center">
         <div class="text-center">
-          <LoadingRipple size="lg" class="mb-4 text-[#0B7A75]" />
-          <p class="text-[#27595D]">{{ t('meeting.settingUpMedia') }}</p>
+          <LoadingRipple size="lg" class="mb-4 text-harbor-accent" />
+          <p class="text-harbor-ink-soft">{{ t('meeting.settingUpMedia') }}</p>
         </div>
       </div>
 

@@ -6,9 +6,16 @@ import type { HTMLAttributes } from 'vue';
 
 import { cn } from '@/lib/utils';
 
-const props = defineProps<DropdownMenuItemProps & { class?: HTMLAttributes['class']; inset?: boolean }>();
+const props = defineProps<
+  DropdownMenuItemProps & {
+    class?: HTMLAttributes['class'];
+    inset?: boolean;
+    /** `danger` paints a destructive action red. */
+    variant?: 'default' | 'danger';
+  }
+>();
 
-const delegatedProps = reactiveOmit(props, 'class');
+const delegatedProps = reactiveOmit(props, 'class', 'variant');
 
 const forwardedProps = useForwardProps(delegatedProps);
 </script>
@@ -18,7 +25,8 @@ const forwardedProps = useForwardProps(delegatedProps);
     v-bind="forwardedProps"
     :class="
       cn(
-        'relative flex cursor-default select-none items-center rounded-sm gap-2 px-2 py-1.5 text-sm outline-none transition-colors focus:bg-[#E6F4F1] focus:text-[#102F35] data-[highlighted]:bg-[#E6F4F1] data-[highlighted]:text-[#102F35] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0',
+        'harbor-menu-item relative flex select-none items-center outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        variant === 'danger' && 'harbor-context-menu-danger',
         inset && 'pl-8',
         props.class,
       )

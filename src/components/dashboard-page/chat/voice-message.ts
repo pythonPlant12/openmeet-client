@@ -169,3 +169,9 @@ export function claimVoicePlayback(audio: HTMLAudioElement) {
 export function releaseVoicePlayback(audio: HTMLAudioElement) {
   if (activeAudio === audio) activeAudio = null;
 }
+
+/** The sender's picture beside a voice message, or their initials while it is missing. */
+export interface SenderAvatar {
+  url?: string;
+  initials: string;
+}

@@ -39,11 +39,11 @@ async function confirm() {
 <template>
   <Dialog :open="pending !== null" @update:open="setOpen"
     ><HarborDialogContent
-      overlay-class="bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] sm:w-full"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
       ><DialogHeader
         ><DialogTitle>{{ pending?.change === 'remove' ? 'Remove friend?' : 'Send friend request?' }}</DialogTitle
-        ><DialogDescription class="text-[#61777B]">{{
+        ><DialogDescription class="text-harbor-muted">{{
           pending?.change === 'remove'
             ? `Remove ${pending.member.name} from your friends? You can send another request later.`
             : `Send a friend request to ${pending?.member.name}?`
@@ -52,7 +52,7 @@ async function confirm() {
       <div class="mt-2 flex justify-end gap-2">
         <Button
           variant="outline"
-          class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+          class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
           :disabled="isChanging"
           @click="setOpen(false)"
           >Cancel</Button
@@ -60,7 +60,7 @@ async function confirm() {
         <Button
           v-if="pending?.change === 'remove'"
           data-confirm-friend-change
-          class="rounded-full bg-[#C4513D] text-white hover:bg-[#9D4636]"
+          class="rounded-full bg-harbor-danger text-white hover:bg-harbor-danger-strong"
           :disabled="isChanging"
           @click="confirm"
           ><LoadingRipple v-if="isChanging" size="sm" />Remove friend</Button
@@ -68,7 +68,7 @@ async function confirm() {
         <Button
           v-else
           data-confirm-friend-change
-          class="harbor-primary-action rounded-full bg-[#0B7A75] text-white"
+          class="harbor-primary-action rounded-full bg-harbor-accent text-white"
           :disabled="isChanging"
           @click="confirm"
           ><LoadingRipple v-if="isChanging" size="sm" />Send request</Button

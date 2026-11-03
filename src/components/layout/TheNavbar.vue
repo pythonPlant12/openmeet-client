@@ -105,13 +105,13 @@ const dashboardPanel = ref<DashboardPanelState>(null);
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
 const isMeetingPage = computed(() => route.name === 'meeting');
 const isDashboardPage = computed(() => route.name === 'dashboard');
-// In a meeting the account button sits 12px above the centered control bar (16px offset + 58px bar on phones).
-// Elsewhere the account sheet opens 12px above the workspace tabs (their offset plus the 56px bar).
+// In a meeting the account button sits 12px above the centered control bar; elsewhere the account sheet opens
+// 12px above the workspace tabs. Both bars scale with the screen, so the offsets read their size variables.
 const mobileNavBottomClass = computed(() =>
   isMeetingPage.value
-    ? 'bottom-[5.375rem]'
+    ? 'bottom-[calc(var(--meeting-control-size)+2.5rem)]'
     : showWorkspaceTabs.value
-      ? 'bottom-[calc(max(1rem,env(safe-area-inset-bottom))+4.25rem)]'
+      ? 'bottom-[calc(max(1rem,env(safe-area-inset-bottom))+var(--liquid-bar-height)+12px)]'
       : isDashboardPage.value
         ? 'bottom-4'
         : 'bottom-6',
@@ -679,7 +679,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
       </LiquidTabBar>
     </div>
     <motion.nav
-      class="marketing-font pointer-events-none fixed right-4 z-[1030] w-12 text-[#102F35]"
+      class="marketing-font pointer-events-none fixed right-4 z-[1030] w-12 text-harbor-ink"
       :class="mobileNavBottomClass"
     >
       <!-- The sheet grows out of this button and shrinks back into it, so the button stays hidden for the whole open and close sequence.
@@ -687,12 +687,12 @@ watch(mobileAccountActionsRef, (element, previous) => {
       <div v-if="!mobileMenuOpen && !showWorkspaceTabs" class="pointer-events-auto flex">
         <button
           type="button"
-          class="liquid-glass-surface relative flex size-12 shrink-0 items-center justify-center rounded-full p-1.5 transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+          class="liquid-glass-surface relative flex size-[var(--meeting-control-size)] shrink-0 items-center justify-center rounded-full p-1.5 transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
           :aria-label="t('nav.accountInformation')"
           :aria-expanded="mobileMenuOpen"
           @click="handleToggleMobileMenu"
         >
-          <span class="flex size-full items-center justify-center overflow-hidden rounded-full bg-[#E6F4F1]">
+          <span class="flex size-full items-center justify-center overflow-hidden rounded-full bg-harbor-hover">
             <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
             <CircleUserRound v-else class="size-5" />
           </span>
@@ -708,9 +708,9 @@ watch(mobileAccountActionsRef, (element, previous) => {
       <Dialog :open="mobileMenuExpanded" @update:open="handleMobileAccountSheetOpen">
         <HarborDialogContent
           hide-close
-          overlay-class="harbor-mobile-account-overlay bg-[#102F35]/20 backdrop-blur-[2px]"
+          overlay-class="harbor-mobile-account-overlay bg-harbor-ink/20 backdrop-blur-[2px]"
           :class="[
-            'marketing-font harbor-mobile-account-sheet fixed right-4 left-auto top-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.75rem] border border-[#D8E7E3] bg-[#FBFCF8] p-4 shadow-[0_-16px_42px_rgba(16,47,53,0.16)]',
+            'marketing-font harbor-mobile-account-sheet fixed right-4 left-auto top-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.75rem] border border-harbor-line bg-white p-4 shadow-[0_-16px_42px_rgba(17,27,33,0.16)]',
             mobileNavBottomClass,
             { 'harbor-mobile-account-sheet-closing': isClosingMobileMenu },
           ]"
@@ -719,10 +719,10 @@ watch(mobileAccountActionsRef, (element, previous) => {
           <DialogTitle class="sr-only">Account navigation</DialogTitle>
           <div
             data-mobile-account-sheet-handle
-            class="mx-auto mb-3 h-1.5 w-10 shrink-0 rounded-full bg-[#BBDDD6]"
+            class="mx-auto mb-3 h-1.5 w-10 shrink-0 rounded-full bg-[#D1D7DB]"
             aria-hidden="true"
           />
-          <div data-mobile-account-sheet-header class="flex items-center gap-3 border-b border-[#D8E7E3] pb-4">
+          <div data-mobile-account-sheet-header class="flex items-center gap-3 border-b border-harbor-line pb-4">
             <button
               type="button"
               class="harbor-ghost-action relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 p-0"
@@ -734,7 +734,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
               <CircleUserRound v-else class="size-5" />
               <span
                 v-if="ownStatus"
-                class="absolute bottom-1 right-1 size-3 rounded-full border-2 border-[#FBFCF8]"
+                class="absolute bottom-1 right-1 size-3 rounded-full border-2 border-white"
                 :class="ownStatusOption.dotClass"
               />
             </button>
@@ -743,16 +743,16 @@ watch(mobileAccountActionsRef, (element, previous) => {
             <div class="flex min-w-0 flex-1 flex-col items-start gap-0.5">
               <button
                 type="button"
-                class="harbor-ghost-action -mx-1.5 max-w-[calc(100%+0.75rem)] rounded-lg px-1.5 py-0.5 text-left leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                class="harbor-ghost-action -mx-1.5 max-w-[calc(100%+0.75rem)] rounded-lg px-1.5 py-0.5 text-left leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                 @click="handleGoToPage('/account')"
               >
-                <span class="block truncate font-semibold text-[#102F35]">{{ accountName }}</span>
+                <span class="block truncate font-semibold text-harbor-ink">{{ accountName }}</span>
               </button>
               <button
                 v-if="nickname"
                 type="button"
                 data-copy-nickname
-                class="harbor-ghost-action -mx-1.5 inline-flex max-w-[calc(100%+0.75rem)] items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-medium leading-tight text-[#61777B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                class="harbor-ghost-action -mx-1.5 inline-flex max-w-[calc(100%+0.75rem)] items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-medium leading-tight text-harbor-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                 :aria-label="
                   isNicknameCopied ? t('nav.nicknameCopied') : t('nav.copyNickname', { nickname: `@${nickname}` })
                 "
@@ -764,7 +764,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
             </div>
             <button
               type="button"
-              class="harbor-ghost-action flex size-10 shrink-0 items-center justify-center rounded-full text-[#27595D]"
+              class="harbor-ghost-action flex size-10 shrink-0 items-center justify-center rounded-full text-harbor-ink-soft"
               :aria-label="t('common.close')"
               @click="closeMobileMenu()"
             >
@@ -775,24 +775,24 @@ watch(mobileAccountActionsRef, (element, previous) => {
             <div class="space-y-1">
               <button
                 type="button"
-                class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                 @click="handleGoToPage('/dashboard')"
               >
                 {{ t('common.dashboard') }}
               </button>
               <button
                 type="button"
-                class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                 @click="handleGoToFriends"
               >
                 {{ t('nav.friends') }}
               </button>
             </div>
-            <div v-if="ownStatus" ref="mobileStatusRef" class="mt-4 border-t border-[#D8E7E3] pt-4">
+            <div v-if="ownStatus" ref="mobileStatusRef" class="mt-4 border-t border-harbor-line pt-4">
               <button
                 type="button"
                 data-mobile-status-toggle
-                class="harbor-ghost-action flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-[#102F35] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                class="harbor-ghost-action flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-harbor-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                 :aria-expanded="isMobileStatusOpen"
                 aria-controls="mobile-status-options"
                 @click="isMobileStatusOpen = !isMobileStatusOpen"
@@ -803,7 +803,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                   >{{ ownStatus ? ownStatusOption.label : t('nav.status') }}</span
                 >
                 <ChevronDown
-                  class="size-4 shrink-0 text-[#61777B] transition-transform duration-200"
+                  class="size-4 shrink-0 text-harbor-muted transition-transform duration-200"
                   :class="{ 'rotate-180': isMobileStatusOpen }"
                 />
               </button>
@@ -827,31 +827,32 @@ watch(mobileAccountActionsRef, (element, previous) => {
                       :aria-checked="option.value === ownStatus"
                       :data-status-option="option.value"
                       class="harbor-ghost-action flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left"
-                      :class="option.value === ownStatus ? 'bg-[#E6F4F1]' : ''"
+                      :class="option.value === ownStatus ? 'bg-harbor-hover' : ''"
                       @click="selectMobileStatus(option.value)"
                     >
                       <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
-                      <span class="min-w-0 flex-1 text-sm font-semibold text-[#102F35]">{{ option.label }}</span>
-                      <Check v-if="option.value === ownStatus" class="size-4 shrink-0 text-[#0B7A75]" />
+                      <span class="min-w-0 flex-1 text-sm font-semibold text-harbor-ink">{{ option.label }}</span>
+                      <Check v-if="option.value === ownStatus" class="size-4 shrink-0 text-harbor-icon" />
                     </button>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div data-mobile-account-sheet-footer class="space-y-2 border-t border-[#D8E7E3] pt-4">
+          <div data-mobile-account-sheet-footer class="space-y-2 border-t border-harbor-line pt-4">
             <Button
               type="button"
-              class="liquid-glass-primary min-h-11 w-full rounded-full"
+              :variant="isMeetingPage ? 'pill-danger' : 'pill'"
+              class="min-h-11 w-full"
               :disabled="isAuthBusy"
               @click="isMeetingPage ? handleQuitMeeting() : handleStartMeeting()"
             >
-              <LogOut v-if="isMeetingPage" class="size-4" /><Video v-else class="size-4" />
+              <LogOut v-if="isMeetingPage" class="size-4" /><Video v-else class="size-4 !text-harbor-accent" />
               {{ isMeetingPage ? t('common.quitMeeting') : t('common.startMeeting') }}
             </Button>
             <button
               type="button"
-              class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-[#9D4636] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+              class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
               :disabled="isAuthBusy"
               @click="handleLogout"
             >
@@ -875,7 +876,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
        meeting action for guests and meetings. Below 1280px guests and meetings keep the glass capsule. -->
   <div
     v-if="showDesktopLiquidBar && !isMeetingFullscreen"
-    class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] flex justify-center px-4 text-[#102F35]"
+    class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] flex justify-center px-4 text-harbor-ink"
   >
     <LiquidTabBar
       class="pointer-events-auto"
@@ -895,9 +896,9 @@ watch(mobileAccountActionsRef, (element, previous) => {
             aria-hidden="true"
           >
             <Video class="size-4" :stroke-width="2.25" />
-            <span class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white bg-[#5AC878]" />
+            <span class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white bg-harbor-faint" />
           </span>
-          <span class="text-base font-semibold tracking-[-0.03em] text-[#102F35]">{{ branding.appName }}</span>
+          <span class="text-base font-semibold tracking-[-0.03em] text-harbor-ink">{{ branding.appName }}</span>
         </RouterLink>
       </template>
       <template #item-why="{ attrs }">
@@ -919,23 +920,25 @@ watch(mobileAccountActionsRef, (element, previous) => {
           <DropdownMenuContent
             align="start"
             :side-offset="12"
-            class="harbor-floating-menu w-max min-w-80 max-w-[min(25rem,calc(100vw-2rem))] rounded-[1.5rem] border-white/80 bg-white/95 p-2.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14),0_2px_8px_rgba(16,47,53,0.07)] backdrop-blur-xl"
+            class="harbor-floating-menu w-max min-w-80 max-w-[min(25rem,calc(100vw-2rem))]"
           >
             <div @mouseenter="handleMenuEnter('why')" @mouseleave="handleMenuLeave">
               <DropdownMenuItem
                 v-for="item in whyOpenMeetItems"
                 :key="item.title"
-                class="harbor-floating-menu-item cursor-pointer gap-4 rounded-2xl p-3 focus:bg-[#E6F4F1] focus:text-[#102F35]"
+                class="harbor-floating-menu-item cursor-pointer gap-4 rounded-2xl p-3 focus:bg-harbor-hover focus:text-harbor-ink"
                 @select="handleGoToPage(item.path)"
               >
-                <span class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#E6F4F1] text-[#0B7A75]">
+                <span
+                  class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-harbor-hover text-harbor-icon"
+                >
                   <component :is="item.icon" class="size-5" />
                 </span>
                 <span class="min-w-0 flex-1">
                   <strong class="block text-sm">{{ item.title }}</strong>
-                  <span class="mt-0.5 block text-xs leading-5 text-[#61777B]">{{ item.description }}</span>
+                  <span class="mt-0.5 block text-xs leading-5 text-harbor-muted">{{ item.description }}</span>
                 </span>
-                <ArrowRight class="size-4 text-[#9BB4B5]" />
+                <ArrowRight class="size-4 text-harbor-faint" />
               </DropdownMenuItem>
             </div>
           </DropdownMenuContent>
@@ -959,10 +962,10 @@ watch(mobileAccountActionsRef, (element, previous) => {
           <DropdownMenuContent
             align="start"
             :side-offset="12"
-            class="harbor-floating-menu w-max min-w-80 max-w-[min(24rem,calc(100vw-2rem))] rounded-[1.5rem] border-white/80 bg-white/95 p-2.5 text-[#102F35] shadow-[0_16px_42px_rgba(16,47,53,0.14),0_2px_8px_rgba(16,47,53,0.07)] backdrop-blur-xl"
+            class="harbor-floating-menu w-max min-w-80 max-w-[min(24rem,calc(100vw-2rem))]"
           >
             <div @mouseenter="handleMenuEnter('deploy')" @mouseleave="handleMenuLeave">
-              <div class="px-3 pb-2 pt-2 text-xs font-semibold uppercase tracking-[0.13em] text-[#0B7A75]">
+              <div class="px-3 pb-2 pt-2 text-xs font-semibold uppercase tracking-[0.13em] text-harbor-icon">
                 {{ t('nav.guidesComingNext') }}
               </div>
               <DropdownMenuItem
@@ -971,19 +974,21 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 disabled
                 class="harbor-floating-menu-item gap-4 rounded-2xl p-3 opacity-100 data-[disabled]:opacity-100"
               >
-                <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#EDF3F2] text-[#61777B]">
+                <span
+                  class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-harbor-hover text-harbor-muted"
+                >
                   <component :is="item.icon" class="size-5" />
                 </span>
                 <span class="min-w-0 flex-1">
                   <span class="flex items-center gap-2">
                     <strong class="text-sm">{{ item.title }}</strong>
                     <span
-                      class="rounded-full bg-[#FFF0EA] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#A94D3B]"
+                      class="rounded-full bg-harbor-hover px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-harbor-ink"
                     >
                       {{ t('common.soon') }}
                     </span>
                   </span>
-                  <span class="mt-0.5 block text-xs leading-5 text-[#61777B]">{{ item.description }}</span>
+                  <span class="mt-0.5 block text-xs leading-5 text-harbor-muted">{{ item.description }}</span>
                 </span>
               </DropdownMenuItem>
             </div>
@@ -1038,7 +1043,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
   <motion.nav
     v-if="(!isAuthenticated || (!isMobile && !showWorkspaceTabs)) && !isDesktop && !isMeetingFullscreen"
     layout-root
-    class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] text-[#102F35]"
+    class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] text-harbor-ink"
     :aria-label="t('nav.navigationTitle')"
   >
     <div
@@ -1073,7 +1078,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
           <div class="flex w-full shrink-0 items-center justify-between">
             <RouterLink
               :to="homePath"
-              class="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+              class="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
               @click="handleBrandNavigation"
             >
               <span
@@ -1081,14 +1086,16 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 aria-hidden="true"
               >
                 <Video class="size-5" :stroke-width="2.25" />
-                <span class="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-[#5AC878]" />
+                <span
+                  class="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-harbor-faint"
+                />
               </span>
               <span class="text-lg font-semibold tracking-[-0.03em]">{{ branding.appName }}</span>
             </RouterLink>
 
             <button
               type="button"
-              class="inline-flex size-10 items-center justify-center rounded-full bg-transparent text-[#173E42] transition-colors hover:bg-[#E6F4F1] hover:text-[#102F35] active:bg-[#D8E7E3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+              class="inline-flex size-10 items-center justify-center rounded-full bg-transparent text-harbor-ink-soft transition-colors hover:bg-harbor-hover hover:text-harbor-ink active:bg-harbor-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
               :aria-label="mobileMenuOpen ? t('common.close') : t('nav.openNavigation')"
               :aria-expanded="mobileMenuOpen"
               @click="handleToggleMobileMenu"
@@ -1131,7 +1138,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                     >
                       <button
                         type="button"
-                        class="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                        class="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                         :aria-label="t('nav.accountInformation')"
                         @click="handleGoToPage('/account')"
                       />
@@ -1148,17 +1155,17 @@ watch(mobileAccountActionsRef, (element, previous) => {
                         <CircleUserRound v-else class="size-5" />
                         <span
                           v-if="ownStatus"
-                          class="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-[#FBFCF8]"
+                          class="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-white"
                           :class="ownStatusOption.dotClass"
                         />
                       </span>
                       <span class="pointer-events-none min-w-0 flex-1">
-                        <span class="block truncate font-semibold text-[#102F35]">{{ accountName }}</span>
+                        <span class="block truncate font-semibold text-harbor-ink">{{ accountName }}</span>
                         <button
                           v-if="nickname"
                           type="button"
                           data-copy-nickname
-                          class="pointer-events-auto relative mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-xs font-medium text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                          class="pointer-events-auto relative mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-xs font-medium text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                           :aria-label="
                             isNicknameCopied
                               ? t('nav.nicknameCopied')
@@ -1171,13 +1178,13 @@ watch(mobileAccountActionsRef, (element, previous) => {
                           <Copy v-else class="size-3 shrink-0" />
                         </button>
                       </span>
-                      <ChevronRight class="pointer-events-none size-4 text-[#61777B]" />
+                      <ChevronRight class="pointer-events-none size-4 text-harbor-muted" />
                     </div>
                     <div v-if="ownStatus" ref="mobileStatusRef" data-mobile-status class="mt-2 px-1">
                       <button
                         type="button"
                         data-mobile-status-toggle
-                        class="flex min-h-11 w-full items-center gap-2 rounded-xl border border-[#D8E7E3] bg-white px-3 text-left text-sm font-semibold text-[#102F35]"
+                        class="flex min-h-11 w-full items-center gap-2 rounded-xl border border-harbor-line bg-white px-3 text-left text-sm font-semibold text-harbor-ink"
                         :aria-expanded="isMobileStatusOpen"
                         aria-controls="mobile-status-options"
                         @click="isMobileStatusOpen = !isMobileStatusOpen"
@@ -1188,7 +1195,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                           >{{ ownStatus ? ownStatusOption.label : t('nav.status') }}</span
                         >
                         <ChevronDown
-                          class="size-4 shrink-0 text-[#61777B] transition-transform duration-200"
+                          class="size-4 shrink-0 text-harbor-muted transition-transform duration-200"
                           :class="{ 'rotate-180': isMobileStatusOpen }"
                         />
                       </button>
@@ -1202,7 +1209,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                             data-mobile-status-options
                             role="radiogroup"
                             :aria-label="t('nav.status')"
-                            class="mt-1 space-y-0.5 rounded-xl border border-[#D8E7E3] bg-white p-1"
+                            class="mt-1 space-y-0.5 rounded-xl border border-harbor-line bg-white p-1"
                           >
                             <button
                               v-for="option in USER_STATUS_OPTIONS"
@@ -1212,14 +1219,14 @@ watch(mobileAccountActionsRef, (element, previous) => {
                               :aria-checked="option.value === ownStatus"
                               :data-status-option="option.value"
                               class="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left"
-                              :class="option.value === ownStatus ? 'bg-[#E6F4F1]' : ''"
+                              :class="option.value === ownStatus ? 'bg-harbor-hover' : ''"
                               @click="selectMobileStatus(option.value)"
                             >
                               <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
-                              <span class="min-w-0 flex-1 text-sm font-semibold text-[#102F35]">{{
+                              <span class="min-w-0 flex-1 text-sm font-semibold text-harbor-ink">{{
                                 option.label
                               }}</span>
-                              <Check v-if="option.value === ownStatus" class="size-4 shrink-0 text-[#0B7A75]" />
+                              <Check v-if="option.value === ownStatus" class="size-4 shrink-0 text-harbor-icon" />
                             </button>
                           </div>
                         </div>
@@ -1229,7 +1236,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                   <motion.div v-bind="mobileMenuItemMotion(0.14, accountMenuLastItemDelay)">
                     <button
                       type="button"
-                      class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                       @click="handleGoToPage('/dashboard')"
                     >
                       {{ t('common.dashboard') }}
@@ -1238,7 +1245,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                   <motion.div v-bind="mobileMenuItemMotion(0.2, accountMenuLastItemDelay)">
                     <button
                       type="button"
-                      class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-[#27595D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                       @click="handleGoToFriends"
                     >
                       {{ t('nav.friends') }}
@@ -1249,7 +1256,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                   <div data-mobile-public-navigation class="flex min-h-full flex-col justify-center gap-7 px-2 py-6">
                     <div>
                       <motion.div v-bind="mobileMenuItemMotion(0.08)">
-                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-harbor-icon">
                           {{ t('nav.why', { appName: branding.appName }) }}
                         </p>
                       </motion.div>
@@ -1261,7 +1268,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                         >
                           <button
                             type="button"
-                            class="harbor-ghost-action flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-lg font-semibold text-[#102F35] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                            class="harbor-ghost-action flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-lg font-semibold text-harbor-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                             @click="handleGoToPage(item.path)"
                           >
                             {{ item.title }}
@@ -1272,7 +1279,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
 
                     <div>
                       <motion.div v-bind="mobileMenuItemMotion(0.38)">
-                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#0B7A75]">
+                        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-harbor-icon">
                           {{ t('nav.howToDeploy') }}
                         </p>
                       </motion.div>
@@ -1285,10 +1292,10 @@ watch(mobileAccountActionsRef, (element, previous) => {
                           <button
                             type="button"
                             disabled
-                            class="flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-lg font-semibold text-[#61777B]"
+                            class="flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-lg font-semibold text-harbor-muted"
                           >
                             {{ item.title }}
-                            <span class="text-xs font-medium uppercase tracking-[0.12em] text-[#9BB4B5]">{{
+                            <span class="text-xs font-medium uppercase tracking-[0.12em] text-harbor-faint">{{
                               t('common.soon')
                             }}</span>
                           </button>
@@ -1299,12 +1306,12 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 </template>
               </div>
 
-              <div class="shrink-0 space-y-3 border-t border-[#D8E7E3] pt-5">
+              <div class="shrink-0 space-y-3 border-t border-harbor-line pt-5">
                 <div v-if="isAuthenticated && !isCheckingSession" class="space-y-2">
                   <motion.div v-bind="mobileMenuItemMotion(0.26, accountMenuLastItemDelay)">
                     <button
                       type="button"
-                      class="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left font-semibold text-[#9D4636] transition-colors hover:bg-[#FFF0EA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      class="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left font-semibold text-harbor-ink-soft transition-colors hover:bg-harbor-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                       :disabled="isAuthBusy"
                       @click="handleLogout"
                     >
@@ -1318,7 +1325,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                   <motion.div v-if="!isAuthenticated" v-bind="mobileMenuItemMotion(0.62)" class="flex-1">
                     <Button
                       data-mobile-login
-                      class="harbor-ghost-action min-h-11 w-full rounded-full border border-[#D8E7E3] bg-white text-[#27595D]"
+                      class="harbor-ghost-action min-h-11 w-full rounded-full border border-harbor-line bg-white text-harbor-ink-soft"
                       :disabled="isAuthBusy"
                       @click="handleGoToLogin"
                     >
@@ -1334,7 +1341,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                       href="https://github.com/pythonPlant12/openmeet"
                       target="_blank"
                       rel="noreferrer"
-                      class="inline-flex size-11 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75] transition-colors hover:bg-[#D8E7E3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B7A75]"
+                      class="inline-flex size-11 items-center justify-center rounded-full bg-harbor-hover text-harbor-icon transition-colors hover:bg-harbor-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                       :aria-label="t('nav.openSource')"
                     >
                       <Github class="size-5" />
@@ -1347,7 +1354,8 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 >
                   <Button
                     type="button"
-                    class="liquid-glass-primary min-h-11 w-full rounded-full"
+                    variant="pill-danger"
+                    class="min-h-11 w-full"
                     :disabled="isAuthBusy"
                     @click="handleQuitMeeting"
                   >
@@ -1361,11 +1369,12 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 >
                   <Button
                     type="button"
-                    class="liquid-glass-primary min-h-11 w-full rounded-full"
+                    variant="pill"
+                    class="min-h-11 w-full"
                     :disabled="isAuthBusy"
                     @click="handleStartMeeting"
                   >
-                    <Video class="size-4" />
+                    <Video class="size-4 !text-harbor-accent" />
                     {{ t('common.startMeeting') }}
                   </Button>
                 </motion.div>

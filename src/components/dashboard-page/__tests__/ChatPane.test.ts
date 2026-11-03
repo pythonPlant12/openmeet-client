@@ -117,8 +117,49 @@ describe('ChatPane', () => {
     const avatar = wrapper.get('header .relative > span').element as HTMLElement;
 
     expect(avatar.classList).toContain('border-2');
-    expect(avatar.classList).toContain('border-[#B8C6C5]');
+    expect(avatar.classList).toContain('border-harbor-waveform');
     expect(wrapper.find('[data-presence-dot]').exists()).toBe(false);
+  });
+
+  it('starts video and audio calls from the header actions', async () => {
+    const wrapper = mountPane({
+      conversation,
+      selectedFriend: {
+        id: 'friend-1',
+        name: 'Friend',
+        nickname: 'friend',
+        email: 'friend@example.com',
+        isOnline: true,
+        status: 'available',
+      },
+    });
+
+    await wrapper.get('[aria-label="Start a video call"]').trigger('click');
+    await wrapper.get('[aria-label="Start an audio call"]').trigger('click');
+    expect(wrapper.emitted('call')).toEqual([[{ video: true }], [{ video: false }]]);
+  });
+
+  it("shows the sender's avatar beside a voice message", () => {
+    const voice: ConversationMessage = {
+      ...message,
+      content: '',
+      attachments: [
+        {
+          id: 'voice-1',
+          fileName: 'voice-message.webm',
+          contentType: 'audio/webm',
+          byteSize: 2048,
+          url: '/attachments/voice-1',
+        },
+      ],
+    };
+    const wrapper = mountPane({
+      conversation,
+      messages: [voice],
+      senderAvatar: () => ({ url: '/avatars/friend.jpg', initials: 'F' }),
+    });
+
+    expect(wrapper.get('[data-voice-avatar] img').attributes('src')).toBe('/avatars/friend.jpg');
   });
 
   it('quotes a message in the composer and cancels the reply', async () => {

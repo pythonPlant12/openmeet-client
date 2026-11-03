@@ -370,19 +370,19 @@ onBeforeUnmount(() => {
     data-voice-recorder-bar
     :data-visible="active"
     :inert="!active"
-    class="absolute inset-y-0 left-0 right-[3.25rem] z-20 flex items-end bg-white transition-[opacity,visibility] duration-150 ease-out motion-reduce:transition-none"
+    class="absolute inset-y-0 left-0 right-[3.25rem] z-20 flex items-end bg-harbor-canvas transition-[opacity,visibility] duration-150 ease-out motion-reduce:transition-none"
     :class="active ? 'visible opacity-100' : 'pointer-events-none invisible opacity-0'"
   >
     <div
       v-show="state !== 'preview'"
-      class="flex h-11 min-w-0 flex-1 items-center gap-2.5 overflow-hidden rounded-xl bg-[#F3F5F4] pl-3 pr-2 text-sm text-[#102F35]"
+      class="flex h-11 min-w-0 flex-1 items-center gap-2.5 overflow-hidden rounded-full border border-harbor-line bg-harbor-surface pl-4 pr-2 text-sm text-harbor-ink"
       role="status"
       :aria-label="
         recording ? `Recording voice message, ${formatVoiceDuration(recorder.elapsedSeconds.value * 1000)}` : undefined
       "
     >
       <span
-        class="size-2 shrink-0 rounded-full bg-[#C4513D]"
+        class="size-2 shrink-0 rounded-full bg-harbor-danger"
         :class="{ 'animate-pulse': recording && !prefersReducedMotion }"
         aria-hidden="true"
       />
@@ -399,13 +399,13 @@ onBeforeUnmount(() => {
         v-show="state !== 'locked'"
         ref="slideHint"
         data-voice-slide-hint
-        class="ml-auto flex shrink-0 items-center gap-0.5 whitespace-nowrap font-medium text-[#4E6B70] will-change-transform"
+        class="ml-auto flex shrink-0 items-center gap-0.5 whitespace-nowrap font-medium text-harbor-icon will-change-transform"
         ><ChevronLeft class="size-4" />Slide to cancel</span
       >
       <button
         v-show="state === 'locked'"
         type="button"
-        class="harbor-ghost-action ml-auto shrink-0 rounded-lg px-2 py-1 font-semibold text-[#C4513D]"
+        class="harbor-ghost-action ml-auto shrink-0 rounded-lg px-2 py-1 font-semibold text-harbor-danger"
         @click="cancelRecording"
       >
         Cancel
@@ -414,7 +414,7 @@ onBeforeUnmount(() => {
     <div v-show="state === 'preview'" class="flex h-11 min-w-0 flex-1 items-center gap-2">
       <button
         type="button"
-        class="harbor-soft-action flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8E7E3] bg-[#F3F5F4] text-[#C4513D]"
+        class="harbor-round-button size-11 shrink-0 text-harbor-danger"
         aria-label="Delete voice message"
         title="Delete voice message"
         @pointerdown.prevent
@@ -425,11 +425,11 @@ onBeforeUnmount(() => {
       <div
         data-voice-preview
         :data-visible="state === 'preview'"
-        class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#D8E7E3] bg-[#F3F5F4] pl-1.5 pr-3"
+        class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-harbor-line bg-harbor-surface pl-1.5 pr-4"
       >
         <button
           type="button"
-          class="harbor-ghost-action flex size-8 shrink-0 items-center justify-center rounded-full text-[#0B7A75]"
+          class="harbor-ghost-action flex size-8 shrink-0 items-center justify-center rounded-full text-harbor-accent"
           :aria-label="playback.playing.value ? 'Pause voice message' : 'Play voice message'"
           @pointerdown.prevent
           @click="togglePreviewPlayback"
@@ -444,12 +444,12 @@ onBeforeUnmount(() => {
           :progress="playback.progress.value"
           :playing="playback.playing.value"
           seekable
-          played-class="bg-[#0B7A75]"
-          unplayed-class="bg-[#B8C6C5]"
+          played-class="bg-harbor-accent"
+          unplayed-class="bg-harbor-waveform"
           class="h-6"
           @seek="playback.seek"
         />
-        <span class="shrink-0 text-xs font-semibold tabular-nums text-[#27595D]">{{ previewClock }}</span>
+        <span class="shrink-0 text-xs font-semibold tabular-nums text-harbor-ink-soft">{{ previewClock }}</span>
       </div>
     </div>
   </div>
@@ -469,7 +469,7 @@ onBeforeUnmount(() => {
     >
       <div
         ref="lockHint"
-        class="flex flex-col items-center gap-1 rounded-xl border border-[#D8E7E3] bg-[#F3F5F4] py-2.5 text-[#27595D] will-change-transform"
+        class="flex flex-col items-center gap-1 rounded-full bg-harbor-surface py-3 text-harbor-ink-soft shadow-harbor-raised will-change-transform"
       >
         <Lock class="size-5" />
         <ChevronUp class="size-4" />
@@ -480,7 +480,7 @@ onBeforeUnmount(() => {
       data-voice-stop
       :data-visible="state === 'locked'"
       :inert="state !== 'locked'"
-      class="harbor-soft-action absolute bottom-[calc(100%+2rem)] left-0 z-30 flex size-11 items-center justify-center rounded-xl border border-[#D8E7E3] bg-[#F3F5F4] text-[#27595D] transition-[opacity,transform,visibility] duration-150 ease-out motion-reduce:transition-none"
+      class="harbor-round-button absolute bottom-[calc(100%+2rem)] left-0 z-30 flex size-11 text-harbor-ink-soft transition-[opacity,transform,visibility] duration-150 ease-out motion-reduce:transition-none"
       :class="layer(state === 'locked')"
       aria-label="Stop recording and listen"
       title="Stop and listen"
@@ -504,10 +504,10 @@ onBeforeUnmount(() => {
           tabindex="-1"
           data-voice-send-locked
           :inert="state !== 'locked'"
-          class="harbor-soft-action flex size-full items-center justify-center rounded-xl bg-[#F3F5F4] transition-colors duration-150"
+          class="flex size-full items-center justify-center rounded-full text-white shadow-harbor-raised transition-colors duration-150"
           :class="[
             state === 'locked' ? 'pointer-events-auto' : 'pointer-events-none',
-            cancelArmed ? 'text-[#C4513D]' : 'text-[#0B7A75]',
+            cancelArmed ? 'bg-harbor-danger' : 'bg-harbor-accent',
           ]"
           aria-label="Send voice message"
           @pointerdown.prevent
@@ -521,13 +521,8 @@ onBeforeUnmount(() => {
     <button
       type="button"
       data-voice-record-button
-      class="flex size-11 touch-none select-none items-center justify-center text-[#0B7A75] transition-opacity duration-150 [-webkit-touch-callout:none] disabled:opacity-50"
-      :class="[
-        state === 'preview'
-          ? 'harbor-soft-action rounded-xl border border-[#D8E7E3] bg-[#F3F5F4]'
-          : 'harbor-ghost-action rounded-full',
-        { 'opacity-0': recording },
-      ]"
+      class="harbor-primary-action flex size-11 touch-none select-none items-center justify-center rounded-full bg-harbor-accent text-white shadow-harbor-soft transition-opacity duration-150 [-webkit-touch-callout:none] disabled:opacity-50"
+      :class="{ 'opacity-0': recording }"
       :disabled="disabled && state === 'idle'"
       :aria-label="state === 'preview' || state === 'locked' ? 'Send voice message' : 'Record a voice message'"
       :title="state === 'preview' || state === 'locked' ? 'Send voice message' : 'Hold to record'"

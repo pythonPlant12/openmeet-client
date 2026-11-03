@@ -5,7 +5,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import ChatThread from '@/components/dashboard-page/chat/ChatThread.vue';
-import { Button } from '@/components/ui/button';
+import { RoundButton } from '@/components/ui/round-button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   type SystemNotificationPermission,
@@ -142,29 +142,31 @@ watch(
       data-dismiss-guard
       :side="sheetSide"
       :show-overlay="false"
-      class="harbor-chat-panel marketing-font top-auto flex h-[75vh] w-full flex-col gap-0 overflow-hidden rounded-xl border border-[#D8E7E3] bg-white p-0 text-[#102F35] data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"
+      class="harbor-chat-panel marketing-font top-auto flex h-[75vh] w-full flex-col gap-0 overflow-hidden rounded-[1.5rem] border-0 bg-white p-0 text-harbor-ink shadow-harbor-float data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"
       @interact-outside="handleInteractOutside"
       @close-auto-focus="restoreChatTriggerFocus"
     >
-      <SheetHeader class="min-h-16 flex-row items-center gap-3 space-y-0 border-b border-[#E5EFEC] py-3 pl-4 pr-12">
-        <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]">
-          <MessageCircleMore class="size-4" />
+      <SheetHeader class="min-h-16 flex-row items-center gap-3 space-y-0 border-b border-harbor-line py-3 pl-4 pr-14">
+        <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-harbor-avatar text-harbor-icon">
+          <MessageCircleMore class="size-5" />
         </span>
         <div class="min-w-0 flex-1 text-left">
-          <SheetTitle class="truncate text-base font-semibold text-[#102F35]">{{ t('meeting.chat.title') }}</SheetTitle>
-          <SheetDescription class="truncate text-xs text-[#61777B]">{{ t('meeting.chat.subtitle') }}</SheetDescription>
+          <SheetTitle class="truncate text-base font-semibold text-harbor-ink">{{
+            t('meeting.chat.title')
+          }}</SheetTitle>
+          <SheetDescription class="truncate text-xs text-harbor-muted">{{
+            t('meeting.chat.subtitle')
+          }}</SheetDescription>
         </div>
-        <Button
+        <RoundButton
           v-if="notificationPermission === 'default'"
-          variant="ghost"
           size="sm"
-          class="harbor-ghost-action shrink-0 rounded-full text-[#0B7A75]"
           :aria-label="t('notifications.enableChat')"
           :title="t('notifications.enableChat')"
           @click="enableNotifications"
         >
-          <BellRing class="size-4" />
-        </Button>
+          <BellRing />
+        </RoundButton>
       </SheetHeader>
 
       <ChatThread

@@ -105,8 +105,8 @@ describe('MeetingActionMenu', () => {
     expect(document.body.textContent).toContain('Close chat');
     expect(document.body.textContent).toContain('Unmute microphone');
     expect(document.body.textContent).toContain('Turn camera on');
-    expect(actionItem('Unmute microphone')?.classList).toContain('bg-[#FFF0EA]');
-    expect(actionItem('Turn camera on')?.classList).toContain('bg-[#FFF0EA]');
+    expect(actionItem('Unmute microphone')?.classList).not.toContain('harbor-context-menu-danger');
+    expect(actionItem('Turn camera on')?.classList).not.toContain('harbor-context-menu-danger');
   });
 
   it('shows pin actions only in speaker view and keeps reports privacy-safe', async () => {

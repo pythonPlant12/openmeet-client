@@ -47,16 +47,8 @@ const isAuthBusy = computed(
 </script>
 
 <template>
-  <DropdownMenuContent
-    :side="side"
-    :align="align"
-    :side-offset="12"
-    class="marketing-font harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
-  >
-    <DropdownMenuItem
-      class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-      @select="router.push('/account')"
-    >
+  <DropdownMenuContent :side="side" :align="align" :side-offset="12" class="marketing-font min-w-52">
+    <DropdownMenuItem @select="router.push('/account')">
       <span class="min-w-0 flex-1">
         <span class="block truncate font-semibold">{{ accountName }}</span>
         <button
@@ -64,7 +56,7 @@ const isAuthBusy = computed(
           type="button"
           tabindex="-1"
           data-copy-nickname
-          class="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-xs font-medium text-[#27595D] hover:text-[#08635F]"
+          class="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-xs font-medium text-harbor-ink-soft hover:text-harbor-ink"
           :aria-label="isNicknameCopied ? t('nav.nicknameCopied') : t('nav.copyNickname', { nickname: `@${nickname}` })"
           :title="isNicknameCopied ? t('nav.nicknameCopied') : undefined"
           @click.stop="emit('copy-nickname')"
@@ -75,48 +67,32 @@ const isAuthBusy = computed(
         </button>
       </span>
     </DropdownMenuItem>
-    <DropdownMenuItem
-      class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-      @select="router.push('/dashboard')"
-    >
+    <DropdownMenuItem @select="router.push('/dashboard')">
       {{ t('common.dashboard') }}
     </DropdownMenuItem>
-    <DropdownMenuItem
-      class="harbor-floating-menu-item cursor-pointer rounded-xl px-3 py-2.5"
-      @select="router.push({ path: '/dashboard', query: { panel: 'friends' } })"
-    >
+    <DropdownMenuItem @select="router.push({ path: '/dashboard', query: { panel: 'friends' } })">
       {{ t('nav.friends') }}
     </DropdownMenuItem>
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger
-        data-status-submenu
-        class="harbor-floating-menu-item cursor-pointer gap-2 rounded-xl px-3 py-2.5 font-semibold"
-      >
+      <DropdownMenuSubTrigger data-status-submenu>
         <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
         <span class="flex-1">{{ t('nav.status') }}</span>
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent
-        class="marketing-font harbor-action-menu min-w-56 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35] shadow-[0_20px_55px_rgba(16,47,53,0.16)]"
-      >
+      <DropdownMenuSubContent class="marketing-font min-w-56">
         <DropdownMenuItem
           v-for="option in USER_STATUS_OPTIONS"
           :key="option.value"
           :data-status-option="option.value"
-          class="harbor-floating-menu-item cursor-pointer gap-3 rounded-xl px-3 py-2.5"
           @select="emit('set-status', option.value)"
         >
           <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
-          <span class="min-w-0 flex-1 font-semibold">{{ option.label }}</span>
-          <Check v-if="option.value === ownStatus" class="size-4 text-[#0B7A75]" />
+          <span class="min-w-0 flex-1">{{ option.label }}</span>
+          <Check v-if="option.value === ownStatus" class="size-4 text-harbor-icon" />
         </DropdownMenuItem>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
-    <DropdownMenuSeparator class="my-1 bg-[#E5EFEC]" />
-    <DropdownMenuItem
-      class="cursor-pointer rounded-xl px-3 py-2.5 text-[#9D4636] focus:bg-[#FFF0EA] focus:text-[#9D4636]"
-      :disabled="isAuthBusy"
-      @select="send({ type: AuthEventType.LOGOUT })"
-    >
+    <DropdownMenuSeparator />
+    <DropdownMenuItem :disabled="isAuthBusy" @select="send({ type: AuthEventType.LOGOUT })">
       <LoadingRipple v-if="isLoggingOut" size="sm" />
       <LogOut v-else class="size-4" />
       {{ t('common.logOut') }}

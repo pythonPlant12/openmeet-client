@@ -1,9 +1,23 @@
 <script setup lang="ts">
-import { Check, CircleUserRound, Phone, Search, UserCheck, UserMinus, UsersRound, X } from 'lucide-vue-next';
+import { useMediaQuery } from '@vueuse/core';
+import {
+  Check,
+  CircleUserRound,
+  Ellipsis,
+  MessageCircle,
+  Phone,
+  Search,
+  UserCheck,
+  UserMinus,
+  UserPlus,
+  UsersRound,
+  X,
+} from 'lucide-vue-next';
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
+import PaneHeader from '@/components/dashboard-page/PaneHeader.vue';
 import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
-import { Button } from '@/components/ui/button';
+import { Avatar } from '@/components/ui/avatar';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -12,9 +26,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Input } from '@/components/ui/input';
+import { ListHeading, ListRow } from '@/components/ui/list-row';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
+import { RoundButton } from '@/components/ui/round-button';
+import { SearchPill } from '@/components/ui/search-pill';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { userStatusOption } from '@/config/user-status.config';
 import type { Friend, FriendRequest, UserSearchResult } from '@/services/social-api';
@@ -55,7 +71,8 @@ const emit = defineEmits<{
 }>();
 const query = defineModel<string>('query', { required: true });
 const SWIPE_ACTION_WIDTH = 80;
-const input = ref<{ focus: (options?: FocusOptions) => void } | null>(null);
+const hasHover = useMediaQuery('(hover: hover) and (pointer: fine)');
+const input = ref<InstanceType<typeof SearchPill> | null>(null);
 let longPressTimer: number | undefined;
 let suppressClick = false;
 watch(
@@ -63,16 +80,33 @@ watch(
   (open) => open && nextTick(() => input.value?.focus({ preventScroll: true })),
 );
 
-// Opening search also expands the panel. iOS keeps the keyboard only for focus inside the tap itself, and
-// scrolling to an input that is still expanding overshoots, so focus without scrolling now and again once the
-// 300ms expansion settles.
-function toggleSearch() {
-  const open = !props.searchOpen;
-  emit('update:searchOpen', open);
-  if (!open) return;
-  input.value?.focus({ preventScroll: true });
-  window.setTimeout(() => input.value?.focus({ preventScroll: true }), 320);
+// The search field is always shown; it counts as open while focused or holding a query.
+function handleSearchFocus() {
+  if (!props.searchOpen) emit('update:searchOpen', true);
 }
+
+function handleSearchBlur() {
+  if (!query.value && props.searchOpen) emit('update:searchOpen', false);
+}
+
+// "+" and the empty state both start a people search. iOS keeps the keyboard only for focus inside the tap itself.
+function findPeople() {
+  emit('update:searchOpen', true);
+  input.value?.focus({ preventScroll: true });
+}
+
+// The hover action opens the row's own context menu beside it, so both share one menu.
+function openRowMenu(event: MouseEvent, friend: Friend) {
+  const button = event.currentTarget as HTMLElement;
+  const row = button.closest('.group\\/row')?.querySelector<HTMLElement>('[data-friend-row]');
+  if (!row) return;
+  const rect = button.getBoundingClientRect();
+  emit('context-activate', `friend-${friend.id}`);
+  row.dispatchEvent(
+    new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: rect.left, clientY: rect.bottom + 4 }),
+  );
+}
+
 function initials(name: string) {
   return name
     .trim()
@@ -110,323 +144,277 @@ function openRequesterProfile(request: FriendRequest) {
 onBeforeUnmount(clearLongPress);
 </script>
 <template>
-  <section
-    class="flex min-h-0 flex-col overflow-hidden border-t border-[#E5EFEC] px-3 pt-3 transition-[flex-basis,flex-grow,opacity,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
-    :class="expanded ? 'flex-1 opacity-100' : 'basis-20 shrink-0 opacity-100'"
-    aria-labelledby="friends-heading"
-  >
-    <div class="flex h-9 items-center justify-between gap-2 px-2">
-      <h2
-        id="friends-heading"
-        class="flex flex-1 items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#61777B]"
-      >
-        <span>Friends</span><SectionBadge :count="badge" singular="friend request" plural="friend requests" />
-      </h2>
-      <Button
-        size="icon"
-        variant="ghost"
-        class="harbor-ghost-action size-9 rounded-full text-[#0B7A75]"
-        :class="{ 'bg-[#E6F4F1] !text-[#102F35]': searchOpen }"
-        :aria-expanded="searchOpen"
-        aria-controls="people-search"
-        aria-label="Search friends and people"
-        @click="toggleSearch"
-        ><Search class="size-4"
-      /></Button>
-    </div>
+  <section class="flex min-h-0 flex-1 flex-col overflow-hidden" aria-labelledby="friends-heading">
+    <PaneHeader title="Friends" heading-id="friends-heading">
+      <template #badge><SectionBadge :count="badge" singular="friend request" plural="friend requests" /></template>
+      <template #trailing>
+        <RoundButton tone="accent" aria-label="Add a friend" title="Add a friend" @click="findPeople"
+          ><UserPlus
+        /></RoundButton>
+      </template>
+      <SearchPill
+        id="people-search"
+        ref="input"
+        v-model="query"
+        label="Search friends and people"
+        clear-label="Clear friend search"
+        placeholder="Search friends and people"
+        @focus="handleSearchFocus"
+        @blur="handleSearchBlur"
+      />
+    </PaneHeader>
     <div
       class="flex min-h-0 flex-1 flex-col overflow-hidden"
       :class="expanded ? 'opacity-100' : 'pointer-events-none h-0 flex-none opacity-0'"
       :aria-hidden="!expanded"
     >
-      <div
-        id="people-search"
-        class="grid px-2 transition-[grid-template-rows,margin] duration-300 ease-out motion-reduce:transition-none"
-        :class="searchOpen ? 'mt-2 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]'"
-      >
-        <div class="min-h-0 overflow-hidden">
-          <label class="relative block"
-            ><span class="sr-only">Search friends and people</span
-            ><Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#809697]" /><Input
-              ref="input"
-              v-model="query"
-              type="search"
-              placeholder="Search friends and people"
-              class="h-9 rounded-xl border-[#D8E7E3] bg-white pl-9 pr-9 text-xs text-[#102F35] focus-visible:ring-0" /><button
-              v-if="query"
-              type="button"
-              class="harbor-ghost-action absolute right-1.5 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md p-1 text-[#61777B]"
-              aria-label="Clear friend search"
-              @click="
-                query = '';
-                input?.focus();
-              "
-            >
-              <X class="size-3.5" /></button
-          ></label>
-          <p v-if="query.trim() && query.replace(/\s/g, '').length < 2" class="mt-2 text-xs text-[#61777B]">
+      <!-- On phones the workspace tabs float over the list, so its end scrolls clear of them. -->
+      <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-[calc(0.75rem+var(--sidebar-bottom-inset,0px))] pt-1">
+        <template v-if="peopleSearchActive || (query.trim() && query.replace(/\s/g, '').length < 2)">
+          <p v-if="query.trim() && query.replace(/\s/g, '').length < 2" class="px-3 py-2 text-sm text-harbor-muted">
             Keep typing to search people outside your friend list.
           </p>
           <div v-else-if="isSearching" class="flex h-16 items-center justify-center">
-            <LoadingRipple class="size-4 text-[#0B7A75]" />
+            <LoadingRipple class="size-5 text-harbor-icon" />
             <span class="sr-only">Searching people</span>
           </div>
-          <div v-else-if="peopleSearchActive" class="mt-2 space-y-1">
-            <button
-              v-for="friend in friends"
-              :key="friend.id"
-              type="button"
-              class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left"
-              @click="emit('open', friend)"
-            >
-              <span
-                class="flex size-7 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
-                ><img
-                  v-if="friendAvatarUrls[friend.id]"
+          <template v-else>
+            <ListRow v-for="friend in friends" :key="friend.id" @click="emit('open', friend)">
+              <template #avatar
+                ><Avatar
                   :src="friendAvatarUrls[friend.id]"
-                  alt=""
-                  class="size-full object-cover"
-                /><LoadingRipple v-else-if="isAvatarLoading(friend.id)" class="size-3.5 text-[#0B7A75]" /><template
-                  v-else
-                  >{{ initials(friend.name) }}</template
-                ></span
-              ><span class="min-w-0 flex-1"
-                ><span class="block truncate text-xs font-semibold">{{ friend.name }}</span
-                ><span class="block truncate text-[11px] text-[#61777B]">{{
-                  friend.nickname ? `@${friend.nickname}` : friend.email
-                }}</span></span
-              ><span
-                data-friend-icon
-                role="img"
-                aria-label="Friend"
-                title="Friend"
-                class="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
-                ><UserCheck class="size-3.5"
-              /></span>
-            </button>
-            <div
-              v-for="result in results"
-              :key="result.id"
-              data-people-result
-              class="flex items-center gap-2 rounded-xl bg-[#F0F7F5] px-2 py-2"
-            >
-              <button
-                type="button"
-                class="harbor-ghost-action flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
-                :aria-label="`View ${result.name}'s profile`"
-                @click="emit('open-result', result)"
-              >
-                <span
-                  class="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-[10px] font-semibold text-[#0B7A75]"
-                  ><img
-                    v-if="resultAvatarUrls[result.id]"
-                    :src="resultAvatarUrls[result.id]"
-                    alt=""
-                    class="size-full object-cover"
-                  /><template v-else>{{ initials(result.name) }}</template></span
-                ><span class="min-w-0 flex-1"
-                  ><span class="block truncate text-xs font-semibold">{{ result.name }}</span
-                  ><span class="block truncate text-[11px] text-[#61777B]">@{{ result.nickname }}</span></span
+                  :loading="isAvatarLoading(friend.id)"
+                  :initials="initials(friend.name)"
+              /></template>
+              {{ friend.name }}
+              <template #subtitle>{{ friend.nickname ? `@${friend.nickname}` : friend.email }}</template>
+              <template #trailing
+                ><span
+                  data-friend-icon
+                  role="img"
+                  aria-label="Friend"
+                  title="Friend"
+                  class="flex size-6 shrink-0 items-center justify-center rounded-full bg-harbor-hover text-harbor-icon"
+                  ><UserCheck class="size-3.5" /></span
+              ></template>
+            </ListRow>
+            <div v-for="result in results" :key="result.id" data-people-result>
+              <ListRow :aria-label="`View ${result.name}'s profile`" @click="emit('open-result', result)">
+                <template #avatar
+                  ><Avatar :src="resultAvatarUrls[result.id]" :initials="initials(result.name)"
+                /></template>
+                {{ result.name }}
+                <template #subtitle>@{{ result.nickname }}</template>
+                <template #actions
+                  ><button
+                    type="button"
+                    :disabled="isAdding"
+                    class="harbor-pill-button !h-8 px-4 text-sm disabled:opacity-50"
+                    @click="emit('add', result)"
+                  >
+                    {{ isAdding ? 'Adding...' : 'Add' }}
+                  </button></template
                 >
-              </button>
-              <Button
-                size="sm"
-                :disabled="isAdding"
-                class="harbor-primary-action h-7 rounded-full bg-[#0B7A75] px-2 text-xs text-white"
-                @click="emit('add', result)"
-                >{{ isAdding ? 'Adding...' : 'Add' }}</Button
-              >
+              </ListRow>
             </div>
-            <p v-if="!friends.length && !results.length" class="px-2 py-2 text-xs text-[#61777B]">
+            <p v-if="!friends.length && !results.length" class="px-3 py-6 text-center text-sm text-harbor-muted">
               No registered accounts found.
             </p>
-          </div>
-        </div>
-      </div>
-      <!-- On phones the workspace tabs float over the list, so its end scrolls clear of them. -->
-      <div class="min-h-0 flex-1 overflow-y-auto pb-[calc(0.75rem+var(--sidebar-bottom-inset,0px))]">
-        <div v-if="incomingRequests.length" class="mt-2 space-y-1 border-b border-[#E5EFEC] px-2 pb-2">
-          <p class="px-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#61777B]">Requests</p>
-          <div
-            v-for="request in incomingRequests"
-            :key="request.id"
-            role="button"
-            tabindex="0"
-            :aria-label="`View ${request.user.name}'s profile`"
-            class="harbor-ghost-action flex cursor-pointer items-center gap-2 rounded-xl bg-[#EAF7F4] px-2 py-2 text-left"
-            @click="openRequesterProfile(request)"
-            @keydown.enter.prevent="openRequesterProfile(request)"
-            @keydown.space.prevent="openRequesterProfile(request)"
-          >
-            <span class="relative shrink-0"
-              ><span
-                class="flex size-8 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                :class="[
-                  'border-2',
-                  userStatusOption(request.user.isOnline ? request.user.status : 'offline').borderClass,
-                ]"
-                ><img
-                  v-if="friendAvatarUrls[request.user.id]"
-                  :src="friendAvatarUrls[request.user.id]"
-                  alt=""
-                  class="size-full object-cover"
-                /><LoadingRipple v-else-if="isAvatarLoading(request.user.id)" class="size-4 text-[#0B7A75]" /><template
-                  v-else
-                  >{{ initials(request.user.name) }}</template
-                ></span
-              ><PresenceDot
-                surface="friends"
-                :online="request.user.isOnline"
-                :status="request.user.status"
-                class="size-2.5 border-[3px] border-[#FBFCF8]" /></span
-            ><span class="min-w-0 flex-1 truncate text-xs font-semibold">{{ request.user.name }}</span
-            ><Button
-              size="icon"
-              variant="ghost"
-              class="harbor-ghost-action size-8 rounded-full text-[#0B7A75]"
-              :disabled="isResponding !== null"
-              @click.stop="emit('respond', request, true)"
-              ><Check class="size-4" /></Button
-            ><Button
-              size="icon"
-              variant="ghost"
-              class="size-8 rounded-full text-[#9D4636] hover:bg-[#FFF0EA]"
-              :disabled="isResponding !== null"
-              @click.stop="emit('respond', request, false)"
-              ><X class="size-4"
-            /></Button>
-          </div>
-        </div>
-        <div v-if="!peopleSearchActive && friends.length" class="mt-2 space-y-1 px-2">
-          <SwipeableRow
-            v-for="friend in friends"
-            :id="`friend-${friend.id}`"
-            :key="friend.id"
-            class="rounded-xl"
-            :leading-width="SWIPE_ACTION_WIDTH"
-            :trailing-width="SWIPE_ACTION_WIDTH"
-            full-swipe-leading
-            @full-swipe-leading="emit('call', friend)"
-          >
-            <template #leading="{ armed, close }">
-              <button
-                type="button"
-                data-swipe-action
-                class="flex h-full w-full items-center justify-start text-white transition-colors"
-                :class="armed ? 'bg-[#08635F]' : 'bg-[#0B7A75]'"
-                :aria-label="`Call ${friend.name}`"
-                @click="
-                  close();
-                  emit('call', friend);
-                "
-              >
-                <span
-                  class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
-                  ><Phone class="size-4" />Call</span
-                >
-              </button>
-            </template>
-            <template #trailing="{ close }">
-              <button
-                type="button"
-                data-swipe-action
-                class="flex h-full w-full items-center justify-end bg-[#E6F4F1] text-[#102F35]"
-                :aria-label="`View ${friend.name}'s profile`"
-                @click="
-                  close();
-                  emit('profile', friend);
-                "
-              >
-                <span
-                  class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
-                  ><CircleUserRound class="size-4" />Profile</span
-                >
-              </button>
-            </template>
-            <ContextMenu
-              :key="contextMenuKey(`friend-${friend.id}`)"
-              :press-open-delay="500"
-              @update:open="emit('context-open', `friend-${friend.id}`, $event)"
-              ><ContextMenuTrigger as-child
-                ><button
+          </template>
+        </template>
+        <template v-else>
+          <section v-if="incomingRequests.length" class="mb-2">
+            <ListHeading class="pt-1">Requests</ListHeading>
+            <ListRow
+              v-for="request in incomingRequests"
+              :key="request.id"
+              as="div"
+              role="button"
+              tabindex="0"
+              class="cursor-pointer"
+              :aria-label="`View ${request.user.name}'s profile`"
+              @click="openRequesterProfile(request)"
+              @keydown.enter.prevent="openRequesterProfile(request)"
+              @keydown.space.prevent="openRequesterProfile(request)"
+            >
+              <template #avatar
+                ><span class="relative block"
+                  ><Avatar
+                    :src="friendAvatarUrls[request.user.id]"
+                    :loading="isAvatarLoading(request.user.id)"
+                    :initials="initials(request.user.name)"
+                    :class="[
+                      'border-2',
+                      userStatusOption(request.user.isOnline ? request.user.status : 'offline').borderClass,
+                    ]" /><PresenceDot
+                    surface="friends"
+                    :online="request.user.isOnline"
+                    :status="request.user.status"
+                    class="size-3.5 border-[3px] border-harbor-surface" /></span
+              ></template>
+              {{ request.user.name }}
+              <template #subtitle>Wants to be your friend</template>
+              <template #end
+                ><span class="flex shrink-0 gap-2 pl-1"
+                  ><RoundButton
+                    tone="soft"
+                    size="sm"
+                    class="text-harbor-accent"
+                    :aria-label="`Accept ${request.user.name}`"
+                    :disabled="isResponding !== null"
+                    @click.stop="emit('respond', request, true)"
+                    ><Check /></RoundButton
+                  ><RoundButton
+                    tone="soft"
+                    size="sm"
+                    class="text-harbor-danger"
+                    :aria-label="`Decline ${request.user.name}`"
+                    :disabled="isResponding !== null"
+                    @click.stop="emit('respond', request, false)"
+                    ><X /></RoundButton></span
+              ></template>
+            </ListRow>
+          </section>
+          <section v-if="friends.length">
+            <ListHeading v-if="incomingRequests.length" class="pt-1">All friends</ListHeading>
+            <SwipeableRow
+              v-for="friend in friends"
+              :id="`friend-${friend.id}`"
+              :key="friend.id"
+              :leading-width="SWIPE_ACTION_WIDTH"
+              :trailing-width="SWIPE_ACTION_WIDTH"
+              full-swipe-leading
+              @full-swipe-leading="emit('call', friend)"
+            >
+              <template #leading="{ armed, close }">
+                <button
                   type="button"
-                  class="harbor-ghost-action flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-2 text-left"
-                  :disabled="isOpening !== null"
-                  @click="openFriend(friend)"
-                  @contextmenu="emit('context-activate', `friend-${friend.id}`)"
-                  @pointerdown="startLongPress($event, friend)"
-                  @pointermove="clearLongPress"
-                  @pointerup="clearLongPress"
-                  @pointercancel="clearLongPress"
+                  data-swipe-action
+                  class="flex h-full w-full items-center justify-start text-white transition-colors"
+                  :class="armed ? 'bg-harbor-accent-hover' : 'bg-harbor-accent'"
+                  :aria-label="`Call ${friend.name}`"
+                  @click="
+                    close();
+                    emit('call', friend);
+                  "
                 >
-                  <span class="relative shrink-0"
-                    ><span
-                      class="flex size-8 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xs font-semibold text-[#0B7A75]"
-                      :class="['border-2', userStatusOption(friend.isOnline ? friend.status : 'offline').borderClass]"
-                      ><img
-                        v-if="friendAvatarUrls[friend.id]"
-                        :src="friendAvatarUrls[friend.id]"
-                        alt=""
-                        class="size-full object-cover"
-                      /><LoadingRipple v-else-if="isAvatarLoading(friend.id)" class="size-4 text-[#0B7A75]" /><template
-                        v-else
-                        >{{ initials(friend.name) }}</template
-                      ></span
-                    ><PresenceDot
-                      surface="friends"
-                      :online="friend.isOnline"
-                      :status="friend.status"
-                      class="size-2.5 border-[3px] border-[#FBFCF8]" /></span
-                  ><span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
-                    ><span class="truncate">{{ friend.name }}</span
-                    ><span v-if="friend.nickname" class="shrink-0 text-xs text-[#61777B]"
-                      >@{{ friend.nickname }}</span
-                    ></span
-                  ><LoadingRipple
-                    v-if="isOpening === friend.id"
-                    class="size-4 text-[#0B7A75]"
-                  /></button></ContextMenuTrigger
-              ><ContextMenuContent
-                class="harbor-action-menu min-w-52 rounded-[1.25rem] border-[#D8E7E3] bg-white p-2 text-[#102F35]"
-                ><ContextMenuLabel class="px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#61777B]">{{
-                  friend.name
-                }}</ContextMenuLabel
-                ><ContextMenuSeparator class="mx-1 my-2 bg-[#E5EFEC]" /><ContextMenuItem
-                  class="harbor-context-menu-item harbor-floating-menu-item min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold"
-                  @select="emit('profile', friend)"
-                  ><CircleUserRound class="size-4" />View profile</ContextMenuItem
-                ><ContextMenuItem
-                  class="harbor-context-menu-danger min-h-11 cursor-pointer rounded-xl px-3 py-2.5 font-semibold text-[#C4513D]"
-                  @select="emit('remove', friend)"
-                  ><UserMinus class="size-4" />Remove friend</ContextMenuItem
-                ></ContextMenuContent
-              ></ContextMenu
-            ></SwipeableRow
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                    ><Phone class="size-4" />Call</span
+                  >
+                </button>
+              </template>
+              <template #trailing="{ close }">
+                <button
+                  type="button"
+                  data-swipe-action
+                  class="flex h-full w-full items-center justify-end bg-harbor-line text-harbor-ink"
+                  :aria-label="`View ${friend.name}'s profile`"
+                  @click="
+                    close();
+                    emit('profile', friend);
+                  "
+                >
+                  <span
+                    class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                    ><CircleUserRound class="size-4" />Profile</span
+                  >
+                </button>
+              </template>
+              <ContextMenu
+                :key="contextMenuKey(`friend-${friend.id}`)"
+                :press-open-delay="500"
+                @update:open="emit('context-open', `friend-${friend.id}`, $event)"
+                ><ContextMenuTrigger as-child
+                  ><ListRow
+                    data-friend-row
+                    :disabled="isOpening !== null"
+                    :selected="activeContextMenuId === `friend-${friend.id}`"
+                    :actions-visible="activeContextMenuId === `friend-${friend.id}`"
+                    @click="openFriend(friend)"
+                    @contextmenu="emit('context-activate', `friend-${friend.id}`)"
+                    @pointerdown="startLongPress($event, friend)"
+                    @pointermove="clearLongPress"
+                    @pointerup="clearLongPress"
+                    @pointercancel="clearLongPress"
+                  >
+                    <template #avatar
+                      ><span class="relative block"
+                        ><Avatar
+                          data-friend-avatar
+                          :src="friendAvatarUrls[friend.id]"
+                          :loading="isAvatarLoading(friend.id)"
+                          :initials="initials(friend.name)"
+                          :class="[
+                            'border-2',
+                            userStatusOption(friend.isOnline ? friend.status : 'offline').borderClass,
+                          ]" /><PresenceDot
+                          surface="friends"
+                          :online="friend.isOnline"
+                          :status="friend.status"
+                          class="size-3.5 border-[3px] border-harbor-surface" /></span
+                    ></template>
+                    {{ friend.name }}
+                    <template #subtitle>{{ friend.nickname ? `@${friend.nickname}` : friend.email }}</template>
+                    <template v-if="isOpening === friend.id" #meta
+                      ><LoadingRipple class="size-4 text-harbor-icon"
+                    /></template>
+                    <!-- Desktop only: quick actions on hover; touch uses swipes and long press. -->
+                    <template #actions
+                      ><RoundButton
+                        tone="plain"
+                        size="sm"
+                        :aria-label="`Call ${friend.name}`"
+                        title="Call"
+                        @click.stop="emit('call', friend)"
+                        ><Phone /></RoundButton
+                      ><RoundButton
+                        tone="plain"
+                        size="sm"
+                        :aria-label="`More options for ${friend.name}`"
+                        title="More options"
+                        @click.stop="openRowMenu($event, friend)"
+                        ><Ellipsis /></RoundButton
+                    ></template> </ListRow></ContextMenuTrigger
+                ><ContextMenuContent
+                  ><ContextMenuLabel>{{ friend.name }}</ContextMenuLabel
+                  ><ContextMenuSeparator /><!-- Desktop shows these on hover, so only touch keeps them here. --><template
+                    v-if="!hasHover"
+                    ><ContextMenuItem @select="emit('open', friend)"><MessageCircle />Send message</ContextMenuItem
+                    ><ContextMenuItem @select="emit('call', friend)"><Phone />Call</ContextMenuItem></template
+                  ><ContextMenuItem @select="emit('profile', friend)"><CircleUserRound />View profile</ContextMenuItem
+                  ><ContextMenuSeparator /><ContextMenuItem variant="danger" @select="emit('remove', friend)"
+                    ><UserMinus />Remove friend</ContextMenuItem
+                  ></ContextMenuContent
+                ></ContextMenu
+              ></SwipeableRow
+            >
+          </section>
+          <div v-else-if="isLoading || isRefreshing" class="flex h-16 items-center justify-center">
+            <LoadingRipple class="size-5 text-harbor-icon" />
+          </div>
+          <div
+            v-else
+            data-friends-empty
+            class="mx-1 mt-2 flex flex-col items-center rounded-2xl bg-harbor-app px-4 py-8 text-center"
           >
-        </div>
-        <div v-else-if="isLoading || isRefreshing" class="flex h-16 items-center justify-center">
-          <LoadingRipple class="size-4 text-[#0B7A75]" />
-        </div>
-        <div
-          v-else-if="!peopleSearchActive"
-          data-friends-empty
-          class="mx-2 mt-2 flex flex-col items-center rounded-2xl border border-dashed border-[#D8E7E3] bg-white px-4 py-6 text-center"
-        >
-          <span class="flex size-11 items-center justify-center rounded-full bg-[#E6F4F1] text-[#0B7A75]"
-            ><UsersRound class="size-5"
-          /></span>
-          <p class="mt-3 text-sm font-semibold text-[#102F35]">No friends yet</p>
-          <p class="mt-1 text-xs leading-5 text-[#61777B]">
-            Search by name or @nickname to find people and send a friend request.
-          </p>
-          <Button
-            size="sm"
-            variant="ghost"
-            class="harbor-ghost-action mt-3 rounded-full bg-[#E6F4F1] px-4 text-[#0B7A75]"
-            @click="emit('update:searchOpen', true)"
-            ><Search class="size-4" />Find people</Button
-          >
-        </div>
+            <span
+              class="flex size-12 items-center justify-center rounded-full bg-harbor-surface text-harbor-icon shadow-harbor-soft"
+              ><UsersRound class="size-5"
+            /></span>
+            <p class="mt-3 text-sm font-semibold text-harbor-ink">No friends yet</p>
+            <p class="mt-1 text-xs leading-5 text-harbor-muted">
+              Search by name or @nickname to find people and send a friend request.
+            </p>
+            <button
+              type="button"
+              class="harbor-ghost-action mt-4 inline-flex h-9 items-center gap-2 rounded-full bg-harbor-surface px-4 text-sm font-semibold text-harbor-ink shadow-harbor-soft"
+              @click="findPeople"
+            >
+              <Search class="size-4" />Find people
+            </button>
+          </div>
+        </template>
       </div>
     </div>
   </section>

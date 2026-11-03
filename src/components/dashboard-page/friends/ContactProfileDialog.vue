@@ -98,8 +98,8 @@ async function copyNickname(nickname: string) {
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
-      overlay-class="!z-[1040] bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font !z-[1040] flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] min-h-[min(34rem,calc(100dvh-6rem))] w-[calc(100%-2rem)] max-w-3xl flex-col rounded-[1.75rem] border-[#D8E7E3] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="!z-[1040] bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font !z-[1040] flex top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] min-h-[min(34rem,calc(100dvh-6rem))] w-[calc(100%-2rem)] max-w-3xl flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       @open-auto-focus="$event.preventDefault()"
       @close-auto-focus="$event.preventDefault()"
       ><DialogHeader
@@ -109,25 +109,25 @@ async function copyNickname(nickname: string) {
       <!-- Render the fallback profile immediately and update it in place: swapping a spinner for the
            loaded body changes the centered dialog's height and makes it jump vertically. -->
       <div v-if="loading && !profile" class="flex min-h-64 items-center justify-center">
-        <LoadingRipple class="size-7 text-[#0B7A75]" />
+        <LoadingRipple class="size-7 text-harbor-accent" />
       </div>
       <div v-else-if="profile" class="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1" :aria-busy="loading">
         <p
           v-if="error"
-          class="rounded-xl border border-[#F2C7BE] bg-[#FFF4F0] px-4 py-3 text-sm text-[#9D4636]"
+          class="rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-4 py-3 text-sm text-harbor-danger-strong"
           role="alert"
         >
           {{ error }}
         </p>
         <section
-          class="flex flex-col items-center justify-center gap-5 rounded-2xl border border-[#D8E7E3] bg-white p-5 text-center sm:p-6"
+          class="flex flex-col items-center justify-center gap-5 rounded-2xl border border-harbor-line bg-white p-5 text-center sm:p-6"
         >
           <span class="relative shrink-0">
             <button
               v-if="avatarUrls[profile.id]"
               type="button"
               data-profile-avatar
-              class="harbor-ghost-action flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] p-0"
+              class="harbor-ghost-action flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar p-0"
               :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
               :aria-label="`View ${profile.name}'s profile picture`"
               @click="isAvatarPreviewOpen = true"
@@ -141,15 +141,15 @@ async function copyNickname(nickname: string) {
             <span
               v-else-if="profile.avatarUrl && avatarLoading"
               data-profile-avatar
-              class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED]"
+              class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar"
               :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
             >
-              <LoadingRipple class="size-6 text-[#0B7A75]" />
+              <LoadingRipple class="size-6 text-harbor-accent" />
             </span>
             <span
               v-else
               data-profile-avatar
-              class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-[#DDF1ED] text-xl font-semibold text-[#0B7A75]"
+              class="flex size-20 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar text-xl font-semibold text-harbor-accent"
               :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
               >{{ initials(profile.name) }}</span
             >
@@ -159,21 +159,21 @@ async function copyNickname(nickname: string) {
               role="img"
               :aria-label="statusLabel(profile.status)"
               :title="statusLabel(profile.status)"
-              class="absolute bottom-0 right-0 size-4 rounded-full border-[3px] border-[#FBFCF8]"
+              class="absolute bottom-0 right-0 size-4 rounded-full border-[3px] border-harbor-surface"
               :class="userStatusOption(profile.status).dotClass"
             />
           </span>
           <div class="min-w-0 max-w-full">
             <h3 class="truncate text-xl font-semibold tracking-[-0.025em]">{{ profile.name }}</h3>
             <div
-              class="mt-1 flex items-center justify-center gap-1 text-sm text-[#61777B]"
+              class="mt-1 flex items-center justify-center gap-1 text-sm text-harbor-muted"
               :class="{ invisible: !profile.nickname }"
               :aria-hidden="!profile.nickname"
             >
               <span class="truncate">@{{ profile.nickname || 'nickname' }}</span>
               <button
                 type="button"
-                class="harbor-ghost-action shrink-0 rounded-md p-1 text-[#0B7A75]"
+                class="harbor-ghost-action shrink-0 rounded-md p-1 text-harbor-accent"
                 :aria-label="copiedNickname ? 'Nickname copied' : 'Copy nickname'"
                 :title="copiedNickname ? 'Copied' : 'Copy nickname'"
                 @click="copyNickname(profile.nickname)"
@@ -195,19 +195,15 @@ async function copyNickname(nickname: string) {
                     <ChevronDown class="size-3.5" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="center"
-                  class="harbor-action-menu min-w-52 rounded-2xl border-[#D8E7E3] bg-white p-2 text-[#102F35]"
-                >
+                <DropdownMenuContent align="center" class="min-w-52">
                   <DropdownMenuItem
                     v-for="option in USER_STATUS_OPTIONS"
                     :key="option.value"
-                    class="harbor-floating-menu-item cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                     @select="emit('update-status', option.value)"
                   >
                     <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
                     <span class="flex-1 font-semibold">{{ option.label }}</span>
-                    <Check v-if="option.value === profile.status" class="size-4 text-[#0B7A75]" />
+                    <Check v-if="option.value === profile.status" class="size-4 text-harbor-accent" />
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -218,17 +214,17 @@ async function copyNickname(nickname: string) {
                 ><component :is="statusIcon(profile.status)" class="size-3.5" />{{ statusLabel(profile.status) }}</span
               ><span
                 v-else
-                class="inline-flex items-center gap-1.5 rounded-full bg-[#F0F4F3] px-3 py-1.5 text-xs font-semibold text-[#61777B]"
+                class="inline-flex items-center gap-1.5 rounded-full bg-harbor-hover px-3 py-1.5 text-xs font-semibold text-harbor-muted"
                 ><Lock class="size-3.5" />Status shared with friends</span
               ><span
                 v-if="profileFriend"
-                class="inline-flex items-center gap-1.5 rounded-full bg-[#E6F4F1] px-3 py-1.5 text-xs font-semibold text-[#102F35]"
+                class="inline-flex items-center gap-1.5 rounded-full bg-harbor-hover px-3 py-1.5 text-xs font-semibold text-harbor-ink"
                 ><UserCheck class="size-3.5" />Friend</span
               >
             </div>
             <p
               class="mx-auto mt-4 max-w-md text-sm leading-6"
-              :class="profile.statusMessage ? 'text-[#4E6B70]' : 'text-[#809697]'"
+              :class="profile.statusMessage ? 'text-harbor-icon' : 'text-harbor-subtle'"
             >
               {{
                 profile.statusMessage
@@ -247,7 +243,8 @@ async function copyNickname(nickname: string) {
         >
           <Button
             data-accept-friend-request
-            class="harbor-primary-action group size-11 rounded-full bg-[#0B7A75] p-0 text-white sm:w-auto sm:px-4"
+            variant="pill"
+            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
             :disabled="respondingId !== null"
             aria-label="Accept friend request"
             title="Accept friend request"
@@ -255,8 +252,8 @@ async function copyNickname(nickname: string) {
             ><Check class="size-4" /><span class="hidden sm:inline">Accept</span></Button
           ><Button
             data-decline-friend-request
-            variant="ghost"
-            class="group size-11 rounded-full bg-[#FFF0EA] p-0 text-[#9D4636] hover:bg-[#F9DED6] sm:w-auto sm:px-4"
+            variant="pill-danger"
+            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
             :disabled="respondingId !== null"
             aria-label="Decline friend request"
             title="Decline friend request"
@@ -271,7 +268,8 @@ async function copyNickname(nickname: string) {
         >
           <Button
             data-add-friend
-            class="harbor-primary-action group size-11 rounded-full bg-[#0B7A75] p-0 text-white sm:w-auto sm:px-4"
+            variant="pill"
+            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
             aria-label="Add friend"
             title="Add friend"
             @click="emit('add-friend')"
@@ -286,8 +284,8 @@ async function copyNickname(nickname: string) {
           aria-label="Profile actions"
         >
           <Button
-            variant="ghost"
-            class="group size-11 rounded-full bg-[#FFF0EA] p-0 text-[#9D4636] hover:bg-[#F9DED6] sm:w-auto sm:px-4"
+            variant="pill-danger"
+            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
             :disabled="removingId !== null"
             aria-label="Remove friend"
             title="Remove friend"
@@ -296,7 +294,8 @@ async function copyNickname(nickname: string) {
               class="size-4 transition-transform duration-200 group-hover:scale-90 group-hover:rotate-6 motion-reduce:transition-none"
             /><span class="hidden sm:inline">Remove friend</span></Button
           ><Button
-            class="harbor-ghost-action group size-11 rounded-full bg-[#E6F4F1] p-0 text-[#0B7A75] hover:bg-[#D8E7E3] hover:text-[#102F35] sm:w-auto sm:px-4"
+            variant="pill"
+            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
             :disabled="opening !== null || callActive"
             aria-label="Start direct call"
             title="Start direct call"
@@ -306,36 +305,36 @@ async function copyNickname(nickname: string) {
             /><span class="hidden sm:inline">Start direct call</span></Button
           >
         </section>
-        <section class="grid gap-3 rounded-2xl border border-[#D8E7E3] bg-white p-4 text-sm sm:grid-cols-3">
-          <div class="inline-flex min-w-0 items-center gap-2 text-[#61777B]">
-            <Mail class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
+        <section class="grid gap-3 rounded-2xl border border-harbor-line bg-white p-4 text-sm sm:grid-cols-3">
+          <div class="inline-flex min-w-0 items-center gap-2 text-harbor-muted">
+            <Mail class="size-4 shrink-0 text-harbor-accent" /><span class="min-w-0"
               ><span class="block text-xs">Email</span
-              ><strong class="block truncate font-semibold text-[#102F35]">{{
+              ><strong class="block truncate font-semibold text-harbor-ink">{{
                 profile.relationship === 'none' ? 'Shared with friends' : profile.email
               }}</strong></span
             >
           </div>
-          <div class="inline-flex items-center gap-2 text-[#61777B]">
-            <CalendarDays class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
+          <div class="inline-flex items-center gap-2 text-harbor-muted">
+            <CalendarDays class="size-4 shrink-0 text-harbor-accent" /><span class="min-w-0"
               ><span class="block text-xs">Joined</span
-              ><strong class="block font-semibold text-[#102F35]">{{ formatDate(profile.createdAt) }}</strong></span
+              ><strong class="block font-semibold text-harbor-ink">{{ formatDate(profile.createdAt) }}</strong></span
             >
           </div>
-          <div class="inline-flex items-center gap-2 text-[#61777B]">
-            <Clock3 class="size-4 shrink-0 text-[#0B7A75]" /><span class="min-w-0"
+          <div class="inline-flex items-center gap-2 text-harbor-muted">
+            <Clock3 class="size-4 shrink-0 text-harbor-accent" /><span class="min-w-0"
               ><span class="block text-xs">Last active</span
-              ><strong class="block font-semibold text-[#102F35]">{{ formatDate(profile.lastSeenAt) }}</strong></span
+              ><strong class="block font-semibold text-harbor-ink">{{ formatDate(profile.lastSeenAt) }}</strong></span
             >
           </div>
         </section>
-        <section class="rounded-2xl border border-[#D8E7E3] bg-[#F0F7F5] p-4">
+        <section class="rounded-2xl border border-harbor-line bg-harbor-hover p-4">
           <p class="text-sm font-semibold">Shared media</p>
         </section>
       </div></HarborDialogContent
     ></Dialog
   ><Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
     ><HarborDialogContent
-      overlay-class="!z-[1050] bg-[#102F35]/50 backdrop-blur-lg"
+      overlay-class="!z-[1050] bg-harbor-ink/50 backdrop-blur-lg"
       hide-close
       class="!z-[1050] w-auto max-w-[min(88dvw,42rem)] border-0 bg-transparent p-0 shadow-none"
       ><DialogTitle class="sr-only">{{ profile?.name }} profile picture</DialogTitle
@@ -348,22 +347,22 @@ async function copyNickname(nickname: string) {
     </HarborDialogContent> </Dialog
   ><Dialog :open="confirmationOpen" @update:open="emit('update:confirmationOpen', $event)"
     ><HarborDialogContent
-      overlay-class="!z-[1050] bg-[#102F35]/30 backdrop-blur-md"
-      class="marketing-font !z-[1050] w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-[#F2C7BE] bg-[#FBFCF8] p-5 text-[#102F35] shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      overlay-class="!z-[1050] bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font !z-[1050] w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-danger/25 bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
       ><DialogHeader
         ><DialogTitle>Remove friend?</DialogTitle
-        ><DialogDescription class="text-[#61777B]"
+        ><DialogDescription class="text-harbor-muted"
           >Remove {{ profileFriend?.name }} from your friends? You can send another request later.</DialogDescription
         ></DialogHeader
       ><DialogFooter class="gap-2"
         ><Button
           variant="outline"
-          class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+          class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
           :disabled="removingId !== null"
           @click="emit('update:confirmationOpen', false)"
           >Cancel</Button
         ><Button
-          class="rounded-full bg-[#C4513D] text-white hover:bg-[#9D4636]"
+          class="rounded-full bg-harbor-danger text-white hover:bg-harbor-danger-strong"
           :disabled="!profileFriend || removingId !== null"
           @click="emit('remove')"
           ><LoadingRipple v-if="removingId === profileFriend?.id" size="sm" /><UserMinus v-else class="size-4" />{{

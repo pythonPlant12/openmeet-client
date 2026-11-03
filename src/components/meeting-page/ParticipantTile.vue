@@ -123,7 +123,7 @@ const objectFitClass = computed(() => {
   if (props.fit) return props.fit === 'cover' ? 'object-cover' : 'object-contain';
   return props.size === 'full' ? 'object-contain' : 'object-cover';
 });
-const surfaceClass = computed(() => (props.dark ? 'bg-[#161C1E]' : 'bg-[#E2E8F0]'));
+const surfaceClass = computed(() => (props.dark ? 'bg-[#161C1E]' : 'bg-harbor-line'));
 
 const attachStream = async () => {
   await nextTick();
@@ -178,11 +178,13 @@ onMounted(async () => {
       bleed ? 'rounded-none border-0' : 'rounded-[1.4rem] border-2 shadow-[0_16px_40px_rgba(16,47,53,0.12)]',
       surfaceClass,
       speaking
-        ? 'border-[#0B7A75] shadow-[0_0_0_3px_rgba(11,122,117,0.22),0_16px_40px_rgba(16,47,53,0.12)]'
+        ? 'border-harbor-accent shadow-[0_0_0_3px_rgba(11,122,117,0.22),0_16px_40px_rgba(16,47,53,0.12)]'
         : dark
           ? 'border-transparent'
-          : 'border-[#E2E8F0]',
-      interactive ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BCFC7]' : '',
+          : 'border-harbor-line',
+      interactive
+        ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-faint'
+        : '',
       sizeClasses,
     ]"
     data-testid="participant-tile"
@@ -234,7 +236,7 @@ onMounted(async () => {
     >
       <div
         :class="[
-          'flex items-center justify-center overflow-hidden rounded-full bg-[#0B7A75] font-bold text-white shadow-[0_8px_24px_rgba(16,47,53,0.25)]',
+          'flex items-center justify-center overflow-hidden rounded-full bg-harbor-accent font-bold text-white shadow-[0_8px_24px_rgba(16,47,53,0.25)]',
           size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-28 h-28 text-4xl',
         ]"
       >
@@ -248,12 +250,12 @@ onMounted(async () => {
     <div
       v-if="isMediaLoading"
       data-participant-loading
-      class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[#0B7A75] backdrop-blur-[2px]"
-      :class="dark ? 'bg-[#161C1E]/70' : 'bg-[#E2E8F0]/70'"
+      class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-harbor-accent backdrop-blur-[2px]"
+      :class="dark ? 'bg-[#161C1E]/70' : 'bg-harbor-line/70'"
       role="status"
     >
       <LoadingRipple :size="isCompact ? 'sm' : 'lg'" />
-      <span v-if="!isCompact" class="text-sm font-semibold text-[#27595D]">{{
+      <span v-if="!isCompact" class="text-sm font-semibold text-harbor-ink-soft">{{
         t('meeting.participant.connecting')
       }}</span>
       <span v-else class="sr-only">{{ t('meeting.participant.connecting') }}</span>
@@ -274,7 +276,7 @@ onMounted(async () => {
         <span
           data-participant-mini-avatar
           :class="[
-            'flex items-center justify-center overflow-hidden rounded-[28%] bg-[#0B7A75] font-semibold text-white',
+            'flex items-center justify-center overflow-hidden rounded-[28%] bg-harbor-accent font-semibold text-white',
             isCompact ? 'size-4 text-[7px]' : 'size-5 text-[8px]',
           ]"
           aria-hidden="true"
@@ -287,13 +289,13 @@ onMounted(async () => {
           v-if="statusOption"
           data-participant-status
           :data-status="status"
-          class="absolute -bottom-px -right-px size-2 rounded-full ring-[1.5px] ring-[#102F35]"
+          class="absolute -bottom-px -right-px size-2 rounded-full ring-[1.5px] ring-harbor-ink"
           :class="statusOption.dotClass"
           aria-hidden="true"
         />
       </span>
       <span class="truncate font-medium">{{ participant.name }}</span>
-      <span v-if="participant.isLocal" class="shrink-0 text-[#66D0C8]">{{ t('meeting.you') }}</span>
+      <span v-if="participant.isLocal" class="shrink-0 text-white/60">{{ t('meeting.you') }}</span>
       <span v-if="statusOption" class="sr-only">{{ t('meeting.participant.status', { status: statusLabel }) }}</span>
     </div>
 
@@ -311,10 +313,10 @@ onMounted(async () => {
 
     <!-- Audio/Video Status Indicators -->
     <div :class="['absolute right-2 flex gap-1', size === 'sidebar' || size === 'mobile' ? 'top-1' : 'top-4']">
-      <div v-if="!participant.audioEnabled" class="p-1.5 bg-[#F2765F] rounded-full">
+      <div v-if="!participant.audioEnabled" class="p-1.5 bg-harbor-danger rounded-full">
         <MicOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
       </div>
-      <div v-if="!participant.videoEnabled" class="p-1.5 bg-[#F2765F] rounded-full">
+      <div v-if="!participant.videoEnabled" class="p-1.5 bg-harbor-danger rounded-full">
         <VideoOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
       </div>
     </div>

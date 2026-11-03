@@ -27,7 +27,7 @@ describe('PresenceDot', () => {
       '[data-presence-dot]',
     );
 
-    expect(dot.classes()).toContain('bg-[#C4513D]');
+    expect(dot.classes()).toContain('bg-harbor-danger');
     expect(dot.attributes('aria-label')).toBe('Do not disturb');
   });
 

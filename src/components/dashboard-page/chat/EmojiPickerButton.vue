@@ -94,8 +94,8 @@ onBeforeUnmount(() => {
         type="button"
         size="icon"
         variant="ghost"
-        class="harbor-ghost-action size-11 shrink-0 rounded-xl text-[#0B7A75]"
-        :class="{ 'bg-[#E6F4F1] !text-[#102F35]': isOpen }"
+        class="harbor-ghost-action size-[2.625rem] shrink-0 rounded-full text-harbor-icon [&_svg]:size-[1.375rem]"
+        :class="{ 'bg-harbor-hover !text-harbor-ink': isOpen }"
         aria-label="Choose emoji"
         title="Choose emoji"
         :disabled="disabled"
@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
         align="end"
         :side-offset="8"
         :collision-padding="12"
-        class="z-[2000] flex max-h-[var(--reka-popover-content-available-height)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-[#D8E7E3] bg-white p-1 shadow-[0_18px_48px_rgba(16,47,53,0.18)] focus:outline-none"
+        class="z-[2000] flex max-h-[var(--reka-popover-content-available-height)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-harbor-line bg-white p-1 shadow-[0_18px_48px_rgba(16,47,53,0.18)] focus:outline-none"
         :class="
           prefersReducedMotion
             ? ''
@@ -121,14 +121,14 @@ onBeforeUnmount(() => {
         @focus-outside.prevent
       >
         <div v-if="isLoading" class="flex min-h-64 items-center justify-center">
-          <LoadingRipple class="size-6 text-[#0B7A75]" />
+          <LoadingRipple class="size-6 text-harbor-accent" />
         </div>
         <div v-else-if="error" class="flex min-h-48 flex-col items-center justify-center gap-3 px-5 text-center">
-          <p class="text-sm leading-5 text-[#9D4636]">{{ error }}</p>
+          <p class="text-sm leading-5 text-harbor-danger-strong">{{ error }}</p>
           <Button
             type="button"
             variant="outline"
-            class="rounded-full border-[#D8E7E3] bg-white text-[#27595D]"
+            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
             @click="ensurePicker"
           >
             Retry

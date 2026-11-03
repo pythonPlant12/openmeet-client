@@ -8,7 +8,7 @@ import { useMeetingRoomSummary } from '@/composables/useMeetingRoomSummary';
 import { formatDuration, meetingDuration, participantCountLabel } from '@/lib/meetings';
 import type { MeetingReference } from '@/lib/message-links';
 
-const props = defineProps<{ reference: MeetingReference; local: boolean }>();
+const props = defineProps<{ reference: MeetingReference }>();
 
 const route = useRoute();
 const router = useRouter();
@@ -50,24 +50,15 @@ function openMeeting() {
     type="button"
     data-meeting-card
     :data-meeting-status="summary?.status ?? state.status"
-    class="mt-1.5 flex w-full min-w-[13rem] items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors"
-    :class="
-      local
-        ? 'bg-white/[0.14] text-white [@media(hover:hover)]:hover:bg-white/20'
-        : 'bg-[#F1F4F3] text-[#102F35] [@media(hover:hover)]:hover:bg-[#EAEFED]'
-    "
+    class="mt-1.5 flex w-full min-w-[13rem] items-center gap-2.5 rounded-xl bg-harbor-ink/[0.05] px-2.5 py-2 text-left text-harbor-ink transition-colors [@media(hover:hover)]:hover:bg-harbor-ink/[0.08]"
     :aria-label="[`${actionLabel} OpenMeet meeting`, statusLabel, details].filter(Boolean).join('. ')"
     @click="openMeeting"
   >
-    <span
-      class="relative flex size-9 shrink-0 items-center justify-center rounded-full"
-      :class="local ? 'bg-white text-[#0B7A75]' : 'bg-[#0B7A75] text-white'"
-    >
+    <span class="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-harbor-accent text-white">
       <Video class="size-4" />
       <span
         v-if="isLive"
-        class="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 bg-[#2DA58F]"
-        :class="local ? 'border-[#0B7A75]' : 'border-[#F1F4F3]'"
+        class="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-white bg-[#2DA58F]"
         aria-hidden="true"
       />
     </span>
@@ -77,26 +68,13 @@ function openMeeting() {
         <span
           v-if="statusLabel"
           class="rounded-full px-1.5 py-px text-[0.625rem] font-bold uppercase tracking-wide"
-          :class="
-            isLive
-              ? local
-                ? 'bg-white text-[#0B7A75]'
-                : 'bg-[#EAF7F4] text-[#17645F]'
-              : local
-                ? 'bg-white/20 text-white'
-                : 'bg-[#E5EFEC] text-[#4E6B70]'
-          "
+          :class="isLive ? 'bg-harbor-hover text-harbor-accent-hover' : 'bg-harbor-line text-harbor-icon'"
           >{{ statusLabel }}</span
         >
       </span>
-      <span class="mt-0.5 block truncate text-xs" :class="local ? 'text-white/80' : 'text-[#61777B]'">{{
-        details
-      }}</span>
+      <span class="mt-0.5 block truncate text-xs text-harbor-muted">{{ details }}</span>
     </span>
-    <span
-      class="flex shrink-0 items-center gap-0.5 text-xs font-bold"
-      :class="local ? 'text-white' : 'text-[#0B7A75]'"
-      aria-hidden="true"
+    <span class="flex shrink-0 items-center gap-0.5 text-xs font-bold text-harbor-accent" aria-hidden="true"
       >{{ actionLabel }}<ChevronRight class="size-3.5"
     /></span>
   </button>

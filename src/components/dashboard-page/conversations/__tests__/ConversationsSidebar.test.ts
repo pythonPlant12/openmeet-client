@@ -78,13 +78,12 @@ describe('ConversationsSidebar', () => {
     expect(avatar.classList).toContain('border-2');
     expect(avatar.classList).toContain('border-[#2DA58F]');
     expect(dot.classes()).toContain('border-[3px]');
-    expect(dot.classes()).toContain('border-[#FBFCF8]');
+    expect(dot.classes()).toContain('border-white');
     const offline = mountSidebar({ isDirectOnline: () => false });
-    const offlineAvatar = offline.findAll('span').find((element) => element.classes().includes('size-10'))!
-      .element as HTMLElement;
+    const offlineAvatar = offline.get('[data-conversation-avatar]').element as HTMLElement;
 
     expect(offlineAvatar.classList).toContain('border-2');
-    expect(offlineAvatar.classList).toContain('border-[#B8C6C5]');
+    expect(offlineAvatar.classList).toContain('border-harbor-waveform');
     expect(offline.find('[data-presence-dot]').exists()).toBe(false);
   });
 
@@ -101,6 +100,19 @@ describe('ConversationsSidebar', () => {
       conversations: [{ ...conversation, kind: 'group', title: 'Team', role: 'creator', otherUserId: null }],
     });
     expect(labels(creatorGroup)).toEqual(['Info']);
+  });
+
+  it('shows the last activity time and opens the row menu from the hover arrow', async () => {
+    const wrapper = mountSidebar({ activityTime: () => 'Yesterday' });
+
+    expect(wrapper.get('[data-conversation-time]').text()).toBe('Yesterday');
+    const menuButton = wrapper.get('[data-conversation-menu-button]');
+    expect(menuButton.attributes('aria-label')).toBe('More options for Alex');
+    let opened = false;
+    wrapper.get('[data-conversation-row]').element.addEventListener('contextmenu', () => (opened = true));
+    await menuButton.trigger('click');
+    expect(opened).toBe(true);
+    expect(wrapper.emitted('context-activate')?.[0]).toEqual(['conversation-conversation-1']);
   });
 
   it('marks manually unread conversations without an unread count', () => {

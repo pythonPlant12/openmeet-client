@@ -295,7 +295,7 @@ describe('TheNavbar', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const accountNavigation = wrapper.get('section[aria-label="Account navigation"]');
-    expect(accountNavigation.classes()).toContain('bottom-[5.375rem]');
+    expect(accountNavigation.classes()).toContain('bottom-[calc(var(--meeting-control-size)+2.5rem)]');
     expect(accountNavigation.text()).toContain('common.quitMeeting');
     expect(accountNavigation.text()).toContain('common.logOut');
     await wrapper.get('[data-mobile-status-toggle]').trigger('click');
@@ -605,8 +605,7 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     expect(wrapper.get('[data-own-status-dot]').attributes('aria-label')).toBe('Online');
-    expect(wrapper.get('[data-status-submenu]').classes()).toContain('font-semibold');
-    expect(wrapper.findAll('.harbor-action-menu').every((menu) => menu.classes().includes('marketing-font'))).toBe(
+    expect(wrapper.findAll('.harbor-menu-surface').every((menu) => menu.classes().includes('marketing-font'))).toBe(
       true,
     );
 

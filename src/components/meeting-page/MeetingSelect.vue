@@ -18,13 +18,18 @@ const selected = computed(() => props.options.find((option) => option.value === 
 
 <template>
   <div
-    class="relative flex h-9 w-full min-w-0 items-center gap-2 rounded-lg border border-[#D8E7E3] bg-white pl-3 pr-8 text-xs text-[#102F35] focus-within:ring-2 focus-within:ring-[#0B7A75]/40 sm:text-sm"
+    class="relative flex h-10 w-full min-w-0 items-center gap-2 rounded-full border border-harbor-line bg-harbor-surface pl-4 pr-9 text-xs text-harbor-ink focus-within:ring-2 focus-within:ring-harbor-subtle/40 sm:text-sm"
     :class="{ 'opacity-50': disabled }"
     data-meeting-select
   >
-    <component :is="selected.icon" v-if="selected?.icon" class="size-3.5 shrink-0 text-[#0B7A75]" aria-hidden="true" />
+    <component
+      :is="selected.icon"
+      v-if="selected?.icon"
+      class="size-3.5 shrink-0 text-harbor-icon"
+      aria-hidden="true"
+    />
     <span class="truncate" aria-hidden="true">{{ selected?.label ?? placeholder }}</span>
-    <ChevronDown class="pointer-events-none absolute right-2 size-4 text-[#4E6B70]" aria-hidden="true" />
+    <ChevronDown class="pointer-events-none absolute right-3 size-4 text-harbor-icon" aria-hidden="true" />
     <select
       v-model="model"
       v-bind="$attrs"

@@ -23,7 +23,7 @@ const passwordPlaceholder = computed(() =>
 
 <template>
   <div class="space-y-1.5" data-meeting-access-picker>
-    <Label for="meeting-privacy" class="text-xs text-[#4E6B70]">Privacy</Label>
+    <Label for="meeting-privacy" class="text-xs text-harbor-icon">Privacy</Label>
     <MeetingSelect
       id="meeting-privacy"
       v-model="policy"
@@ -31,9 +31,9 @@ const passwordPlaceholder = computed(() =>
       :disabled="disabled"
       data-access-select
     />
-    <p class="text-xs leading-snug text-[#61777B]" data-access-description>{{ selectedOption.description }}</p>
+    <p class="text-xs leading-snug text-harbor-muted" data-access-description>{{ selectedOption.description }}</p>
     <div v-if="policy === 'password'" class="space-y-1.5 pt-1">
-      <Label for="meeting-access-password" class="text-xs text-[#4E6B70]">Meeting password</Label>
+      <Label for="meeting-access-password" class="text-xs text-harbor-icon">Meeting password</Label>
       <Input
         id="meeting-access-password"
         v-model="password"
@@ -42,7 +42,7 @@ const passwordPlaceholder = computed(() =>
         maxlength="256"
         :disabled="disabled"
         :placeholder="passwordPlaceholder"
-        class="h-9 rounded-lg border-[#D8E7E3] bg-white text-sm focus-visible:ring-0"
+        class="h-9 rounded-lg border-harbor-line bg-white text-sm focus-visible:ring-0"
       />
     </div>
   </div>
