@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
+import { RoundButton } from '@/components/ui/round-button';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
@@ -378,25 +379,23 @@ watch(
               role="group"
               aria-label="Group actions"
             >
-              <button
-                type="button"
-                data-tone="accent"
-                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+              <RoundButton
+                tone="accent"
+                class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
                 :aria-label="groupAddActionLabel(info.accessPolicy)"
                 :title="groupAddActionLabel(info.accessPolicy)"
                 @click="emit('add-members')"
               >
-                <UserPlus class="size-5" /></button
-              ><button
-                type="button"
+                <UserPlus /></RoundButton
+              ><RoundButton
                 data-group-security
-                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
                 aria-label="Security"
                 title="Change group access and password"
                 @click="emit('group-settings')"
               >
-                <LockKeyhole class="size-5" />
-              </button>
+                <LockKeyhole />
+              </RoundButton>
             </div>
           </div>
           <input ref="avatarInput" type="file" accept="image/*" class="sr-only" @change="uploadAvatar" />

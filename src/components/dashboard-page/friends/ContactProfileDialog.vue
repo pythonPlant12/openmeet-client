@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
+import { RoundButton } from '@/components/ui/round-button';
 import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
 import { USER_STATUS_OPTIONS, userStatusOption } from '@/config/user-status.config';
@@ -247,29 +248,27 @@ async function copyNickname(nickname: string) {
               role="group"
               aria-label="Friend request actions"
             >
-              <button
-                type="button"
+              <RoundButton
                 data-accept-friend-request
-                data-tone="accent"
-                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                tone="accent"
+                class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
                 :disabled="respondingId !== null"
                 aria-label="Accept friend request"
                 title="Accept friend request"
                 @click="emit('accept-request', pendingRequest)"
               >
-                <Check class="size-5" /></button
-              ><button
-                type="button"
+                <Check /></RoundButton
+              ><RoundButton
                 data-decline-friend-request
-                data-tone="danger"
-                class="harbor-round-button size-12 text-harbor-danger-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                tone="danger"
+                class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
                 :disabled="respondingId !== null"
                 aria-label="Decline friend request"
                 title="Decline friend request"
                 @click="emit('decline-request', pendingRequest)"
               >
-                <X class="size-5" />
-              </button>
+                <X />
+              </RoundButton>
             </div>
             <div
               v-else-if="profile.relationship === 'none' && !profileFriend"
@@ -277,17 +276,16 @@ async function copyNickname(nickname: string) {
               role="group"
               aria-label="Profile actions"
             >
-              <button
-                type="button"
+              <RoundButton
                 data-add-friend
-                data-tone="accent"
-                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                tone="accent"
+                class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
                 aria-label="Add friend"
                 title="Add friend"
                 @click="emit('add-friend')"
               >
-                <UserPlus class="size-5" />
-              </button>
+                <UserPlus />
+              </RoundButton>
             </div>
             <div
               v-else-if="profileFriend"
@@ -295,30 +293,28 @@ async function copyNickname(nickname: string) {
               role="group"
               aria-label="Profile actions"
             >
-              <button
-                type="button"
+              <RoundButton
                 data-start-call
-                data-tone="accent"
-                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                tone="accent"
+                class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
                 :disabled="opening !== null || callActive"
                 aria-label="Start direct call"
                 title="Start direct call"
                 @click="emit('call')"
               >
-                <Phone class="size-5" />
-              </button>
-              <button
-                type="button"
+                <Phone />
+              </RoundButton>
+              <RoundButton
                 data-remove-friend
-                data-tone="destructive"
-                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                tone="destructive"
+                class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
                 :disabled="removingId !== null"
                 aria-label="Remove friend"
                 title="Remove friend"
                 @click="emit('update:confirmationOpen', true)"
               >
-                <UserMinus class="size-5" />
-              </button>
+                <UserMinus />
+              </RoundButton>
             </div>
           </div>
         </section>
