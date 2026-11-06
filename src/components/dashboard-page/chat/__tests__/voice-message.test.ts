@@ -7,6 +7,9 @@ import {
   formatVoiceDuration,
   isVoiceMessageFileName,
   levelFromTimeDomain,
+  recordedVoiceMessageDetails,
+  rememberVoiceMessageDetails,
+  storedWaveformLevels,
   voiceMessageFile,
   waveformBars,
 } from '../voice-message';
@@ -35,6 +38,27 @@ describe('voice messages', () => {
     expect(waveformBars([0.1, 0.5, 0.25, 0.5], 2)).toEqual([1, 1]);
     expect(waveformBars([0, 0.2, 0.4, 0.1], 4)).toEqual([0.08, 0.5, 1, 0.25]);
     expect(waveformBars([], 3)).toEqual([0.08, 0.08, 0.08]);
+  });
+
+  it('keeps a recording waveform as at most 64 bars from 0 to 255 for the upload', () => {
+    const file = voiceMessageFile([new Blob(['audio'])], 'audio/webm');
+    const levels = Array.from({ length: 200 }, (_, index) => (index % 10) / 10);
+    rememberVoiceMessageDetails(file, 3_210.6, levels);
+
+    const details = recordedVoiceMessageDetails(file)!;
+    expect(details.durationMs).toBe(3_211);
+    expect(details.waveform).toHaveLength(64);
+    expect(Math.max(...details.waveform)).toBe(255);
+    expect(details.waveform.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)).toBe(true);
+    expect(storedWaveformLevels({ durationMs: 1, waveform: [0, 255] })).toEqual([0, 1]);
+
+    const short = voiceMessageFile([new Blob(['audio'])], 'audio/webm');
+    rememberVoiceMessageDetails(short, 900, [0.2, 0.4]);
+    expect(recordedVoiceMessageDetails(short)?.waveform).toHaveLength(2);
+
+    const silent = voiceMessageFile([new Blob(['audio'])], 'audio/webm');
+    rememberVoiceMessageDetails(silent, 900, []);
+    expect(recordedVoiceMessageDetails(silent)).toBeUndefined();
   });
 
   it('reads silence as zero and a loud signal as a high level', () => {

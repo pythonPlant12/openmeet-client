@@ -704,7 +704,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
       <div
         ref="pane"
         class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
-        :class="{ '!pt-[4.5rem]': overlayHeader }"
+        :class="{ '!pt-[var(--chat-messages-top,4.5rem)]': overlayHeader }"
         aria-label="Message history"
         @scroll.passive="onPaneScroll"
         @wheel.passive="scrollHaptics.cancel()"

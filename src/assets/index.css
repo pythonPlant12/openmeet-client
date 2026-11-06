@@ -88,6 +88,11 @@
     scrollbar-color: rgb(11 122 117 / var(--scrollbar-thumb-opacity)) transparent;
   }
 
+  /* Icons are never focus targets, but animated icons can still take focus from a click on them. */
+  svg:focus {
+    outline: none;
+  }
+
   [data-scrolling] {
     --scrollbar-thumb-opacity: 1;
     transition: --scrollbar-thumb-opacity 150ms ease-out;
@@ -1256,6 +1261,11 @@
     box-shadow: none;
   }
 
+  .harbor-round-button[data-tone='destructive']:not(:disabled):hover {
+    color: rgb(var(--harbor-danger-strong));
+    background: rgb(var(--harbor-danger-soft));
+  }
+
   .harbor-round-button[data-tone='danger']:not(:disabled):hover {
     color: #ffffff;
     background: rgb(var(--harbor-danger-strong));
@@ -1279,6 +1289,12 @@
   color: rgb(var(--harbor-ink));
   background: transparent;
   box-shadow: none;
+}
+
+/* The destructive variant: the white disc with a red icon, for actions that remove something after a
+   confirmation, beside a primary action that should keep the visual weight. */
+.harbor-round-button[data-tone='destructive'] {
+  color: rgb(var(--harbor-danger-strong));
 }
 
 /* The danger variant: red with a white icon, for ending or declining a call. */
@@ -1372,25 +1388,49 @@
 
 /* The chat header floats over the messages: they fade and blur as they scroll under it. */
 .harbor-chat-header-fade {
+  /* A progressive blur: a light blur reaches far below the header, a stronger one stays near the top. The
+     element itself has no filter or mask, so each layer blurs the messages and not only this element. */
   background: linear-gradient(
     to bottom,
-    rgb(255 255 255 / 0.92),
-    rgb(255 255 255 / 0.7) calc(55% + 2px),
+    rgb(255 255 255 / 0.94),
+    rgb(255 255 255 / 0.86) 30%,
+    rgb(255 255 255 / 0.6) 55%,
+    rgb(255 255 255 / 0.28) 78%,
+    rgb(255 255 255 / 0.08) 92%,
     rgb(255 255 255 / 0)
   );
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(55% + 2px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(55% + 2px), transparent);
+}
+
+.harbor-chat-header-fade::before,
+.harbor-chat-header-fade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.harbor-chat-header-fade::before {
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, rgb(0 0 0 / 0.55) 75%, transparent);
+  mask-image: linear-gradient(to bottom, #000 45%, rgb(0 0 0 / 0.55) 75%, transparent);
+}
+
+.harbor-chat-header-fade::after {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, rgb(0 0 0 / 0.4) 50%, transparent 68%);
+  mask-image: linear-gradient(to bottom, #000 30%, rgb(0 0 0 / 0.4) 50%, transparent 68%);
 }
 
 @media (prefers-reduced-transparency: reduce) {
   .harbor-chat-header-fade {
     background: rgb(var(--harbor-surface));
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    -webkit-mask-image: none;
-    mask-image: none;
+  }
+
+  .harbor-chat-header-fade::before,
+  .harbor-chat-header-fade::after {
+    content: none;
   }
 }
 

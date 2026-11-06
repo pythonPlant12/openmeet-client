@@ -9,6 +9,8 @@ const props = defineProps<{
   attachments: ConversationMessageAttachment[];
   activeIndex: number;
   attachmentUrls: Record<string, string>;
+  /** Opens above another raised dialog, such as profile info. */
+  elevated?: boolean;
 }>();
 const emit = defineEmits<{
   (event: 'close'): void;
@@ -48,7 +50,8 @@ function handlePointerUp(event: PointerEvent) {
   <Dialog :open="attachments.length > 0" @update:open="(open) => !open && emit('close')">
     <HarborDialogContent
       hide-close
-      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      :overlay-class="['bg-harbor-ink/30 backdrop-blur-md', { '!z-[1060]': elevated }]"
+      :class="{ '!z-[1060]': elevated }"
       class="marketing-font flex h-[min(82dvh,48rem)] w-[calc(100%-2rem)] max-w-5xl flex-col overflow-hidden rounded-[1.75rem] border-harbor-line bg-harbor-surface p-0 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)]"
     >
       <DialogTitle class="sr-only">Media preview</DialogTitle>

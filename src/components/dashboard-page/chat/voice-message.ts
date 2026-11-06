@@ -1,3 +1,5 @@
+import type { VoiceMessageDetails } from '@/services/social-api';
+
 // Voice messages are ordinary audio attachments. The recorder names them with this prefix so quotes
 // and file chips can call them voice messages instead of showing a generated file name.
 export const VOICE_MESSAGE_FILE_PREFIX = 'voice-message-';
@@ -39,6 +41,30 @@ export function voiceMessageFile(chunks: Blob[], mimeType: string, recordedAt = 
     `${pad(recordedAt.getHours())}${pad(recordedAt.getMinutes())}${pad(recordedAt.getSeconds())}`;
   const extension = FILE_EXTENSIONS[type] ?? 'webm';
   return new File(chunks, `${VOICE_MESSAGE_FILE_PREFIX}${stamp}-${recordingSequence++}.${extension}`, { type });
+}
+
+// Recorded details stay beside each recording until it is sent, so the upload can carry its waveform.
+const recordedVoiceDetails = new WeakMap<File, VoiceMessageDetails>();
+// Matches the server limit; enough for a smooth waveform at any bubble width.
+const STORED_WAVEFORM_BARS = 64;
+
+/** Keeps a recording's length and loudness so every device draws the same waveform without decoding. */
+export function rememberVoiceMessageDetails(file: File, durationMs: number, levels: number[]) {
+  if (durationMs <= 0 || !levels.length) return;
+  const bars = waveformBars(levels, Math.min(STORED_WAVEFORM_BARS, levels.length));
+  recordedVoiceDetails.set(file, {
+    durationMs: Math.round(durationMs),
+    waveform: bars.map((level) => Math.round(level * 255)),
+  });
+}
+
+export function recordedVoiceMessageDetails(file: File) {
+  return recordedVoiceDetails.get(file);
+}
+
+/** Stored loudness bars as levels from 0 to 1, as the waveform expects. */
+export function storedWaveformLevels(details: VoiceMessageDetails) {
+  return details.waveform.map((value) => value / 255);
 }
 
 export function isAudioAttachment(contentType: string) {

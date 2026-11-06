@@ -229,6 +229,9 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 .liquid-tab-icon {
   display: inline-flex;
   flex: none;
+  /* Clicks land on the tab itself. Otherwise the animated icon's SVG takes focus and shows the browser's
+     blue outline. */
+  pointer-events: none;
   transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
 }
 

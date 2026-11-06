@@ -140,6 +140,8 @@ const sortedMembers = computed(() => sortGroupMembers(props.members));
 const currentRole = computed(() => props.info?.role ?? props.group.role);
 const canManage = computed(() => currentRole.value === 'creator' || currentRole.value === 'admin');
 const isCreator = computed(() => currentRole.value === 'creator');
+// The owner can leave once someone else can take the group over; alone, they remove it instead.
+const canQuit = computed(() => !isCreator.value || (props.info?.memberCount ?? 0) > 1);
 const groupPolicy = computed(() => props.info?.accessPolicy ?? props.group.accessPolicy);
 const usesInvitations = computed(() => groupPolicy.value === 'password');
 const addActionLabel = computed(() => groupAddActionLabel(groupPolicy.value));
@@ -515,7 +517,7 @@ async function updateMemberRole(member: GroupMember, role: GroupMemberRole) {
 }
 
 async function leaveGroup() {
-  if (quitConfirmation.value.toLocaleLowerCase() !== 'quit' || isLeaving.value || isCreator.value) return;
+  if (quitConfirmation.value.toLocaleLowerCase() !== 'quit' || isLeaving.value || !canQuit.value) return;
   const groupId = props.group.id;
   const mutationToken = props.beginMutation(groupId);
   if (!mutationToken) return;
@@ -638,8 +640,8 @@ defineExpose({
           <Button
             variant="ghost"
             class="h-auto min-h-20 flex-col gap-2 rounded-2xl bg-harbor-danger-soft px-2 py-3 text-harbor-danger-strong hover:bg-harbor-danger/25"
-            :disabled="isCreator || mutationBusy"
-            :title="isCreator ? 'Creator must transfer ownership before quitting.' : 'Quit group'"
+            :disabled="!canQuit || mutationBusy"
+            :title="canQuit ? 'Quit group' : 'You are the only member. Remove the group instead.'"
             @click="setQuitOpen(true)"
           >
             <LogOut class="size-5" />
@@ -1053,7 +1055,11 @@ defineExpose({
       <DialogHeader
         ><DialogTitle>Quit group?</DialogTitle
         ><DialogDescription class="text-harbor-muted"
-          >Type <strong>quit</strong> to leave. Group messages will disappear from your workspace.</DialogDescription
+          >Type <strong>quit</strong> to leave. Group messages will disappear from your workspace.<template
+            v-if="isCreator"
+          >
+            The group passes to its longest-standing admin, or to its longest-standing member.</template
+          ></DialogDescription
         ></DialogHeader
       >
       <Input

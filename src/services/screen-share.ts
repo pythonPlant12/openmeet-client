@@ -1,3 +1,4 @@
+import { type CroppedTrack, type ScreenArea, cropVideoTrack } from './screen-crop';
 import { SignalingService } from './signaling';
 import { SCREEN_LEVELS, type VideoQuality, captureConstraints } from './video-quality';
 import { WebRTCServiceSFU } from './webrtc-sfu';
@@ -12,6 +13,11 @@ export interface ScreenShareOptions {
   presenterName: string;
   password: string | null;
   quality: VideoQuality;
+  /**
+   * Asks which part of the captured picture to send, after the browser's own picker. Resolves with an area,
+   * with 'whole' for everything, or with null to cancel the share.
+   */
+  chooseArea?: (stream: MediaStream) => Promise<ScreenArea | 'whole' | null>;
 }
 
 /**
@@ -22,6 +28,9 @@ export class ScreenShareSession {
   private signaling: SignalingService | null = null;
   private webrtc: WebRTCServiceSFU | null = null;
   private ended = false;
+  private captured: MediaStream | null = null;
+  private cropped: CroppedTrack | null = null;
+  /** What is sent: the capture itself, or its selected area. */
   stream: MediaStream | null = null;
   onEnded: ((reason: ScreenShareEndReason) => void) | null = null;
   onLevelChange: ((height: number) => void) | null = null;
@@ -40,6 +49,7 @@ export class ScreenShareSession {
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'include',
     } as DisplayMediaStreamOptions);
+    this.captured = stream;
     this.stream = stream;
     const video = stream.getVideoTracks()[0];
     if (video) {
@@ -47,6 +57,20 @@ export class ScreenShareSession {
       video.contentHint = 'detail';
       // The browser's own "Stop sharing" button ends the track.
       video.addEventListener('ended', () => this.stop('stopped'));
+    }
+    if (video && options.chooseArea) {
+      const area = await options.chooseArea(stream);
+      if (this.ended) throw new DOMException('Screen share ended while choosing an area', 'AbortError');
+      if (area === null) {
+        this.stop('stopped');
+        // Like closing the browser's picker: a choice, not a failure.
+        throw new DOMException('Screen share cancelled', 'NotAllowedError');
+      }
+      if (area !== 'whole') {
+        this.cropped = cropVideoTrack(video, area);
+        this.cropped.track.contentHint = 'detail';
+        this.stream = new MediaStream([this.cropped.track, ...stream.getAudioTracks()]);
+      }
     }
 
     try {
@@ -67,7 +91,7 @@ export class ScreenShareSession {
       const webrtc = new WebRTCServiceSFU(signaling, undefined, 'screen');
       this.webrtc = webrtc;
       webrtc.onVideoLevelChange = (height) => this.onLevelChange?.(height);
-      webrtc.useLocalStream(stream, options.quality);
+      webrtc.useLocalStream(this.stream, options.quality);
       signaling.joinRoom(options.roomId, options.presenterName, options.password, options.presenterId);
       const connection = webrtc.createPeerConnection();
       connection.onconnectionstatechange = () => {
@@ -78,7 +102,7 @@ export class ScreenShareSession {
       this.stop('error');
       throw error;
     }
-    return stream;
+    return this.stream;
   }
 
   async setQuality(quality: VideoQuality) {
@@ -92,7 +116,8 @@ export class ScreenShareSession {
   stop(reason: ScreenShareEndReason = 'stopped') {
     if (this.ended) return;
     this.ended = true;
-    this.stream?.getTracks().forEach((track) => track.stop());
+    this.cropped?.stop();
+    this.captured?.getTracks().forEach((track) => track.stop());
     this.webrtc?.cleanup();
     this.signaling?.disconnect();
     this.webrtc = null;

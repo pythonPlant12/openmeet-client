@@ -257,6 +257,23 @@ describe('socialApi', () => {
     expect(form.get('content')).toBe('Sprint board');
     expect(form.get('replyToSequence')).toBe('7');
     expect(form.get('file')).toBe(image);
+    expect(form.has('voice')).toBe(false);
+  });
+
+  it('sends a recorded waveform right after the voice message file it describes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const voice = new File(['audio'], 'voice-message-1.webm', { type: 'audio/webm' });
+    const details = { durationMs: 3200, waveform: [12, 255, 40] };
+
+    await socialApi.createConversationMessageWithAttachments('token', 'chat-1', '', [voice], undefined, (file) =>
+      file === voice ? details : undefined,
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const form = request.body as FormData;
+    expect([...form.keys()]).toEqual(['content', 'file', 'voice']);
+    expect(JSON.parse(form.get('voice') as string)).toEqual(details);
   });
 
   it('sends friend requests by user ID', async () => {

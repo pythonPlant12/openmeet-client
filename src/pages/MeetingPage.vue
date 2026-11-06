@@ -12,6 +12,7 @@ import JoinMeetingDialog, { type JoinSettings } from '@/components/meeting-page/
 import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
 import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.vue';
+import ScreenAreaPicker from '@/components/meeting-page/ScreenAreaPicker.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
@@ -295,9 +296,10 @@ watch(localParticipantId, (current, previous) => {
   if (previous && current !== previous) screenShare.stop();
 });
 
-async function handleStartScreenShare() {
+async function handleStartScreenShare(options?: { selectArea: boolean }) {
   if (!localParticipantId.value) return;
   await screenShare.start({
+    selectArea: options?.selectArea,
     roomId: sfuRoomId.value ?? meetingId.value,
     presenterId: localParticipantId.value,
     presenterName: participantName.value,
@@ -1093,6 +1095,8 @@ const handleReconnect = () => {
       @access-updated="meetingAccess = $event"
     />
 
+    <ScreenAreaPicker />
+
     <!-- Connection Error Dialog -->
     <ConnectionErrorDialog
       :open="showConnectionError"
@@ -1106,23 +1110,34 @@ const handleReconnect = () => {
 </template>
 
 <style>
-/* Full screen controls slide up from the bottom and back down. */
+/* Full screen controls slide up from the bottom and back down. Only the bar's own layers fade: an ancestor
+   below full opacity would stop the glass from blurring the video behind it until the fade ended, which mobile
+   browsers show as the blur popping in. */
 .meeting-controls-enter-active,
 .meeting-controls-leave-active {
-  transition:
-    opacity 0.24s ease,
-    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.meeting-controls-enter-active .liquid-surface > *,
+.meeting-controls-leave-active .liquid-surface > * {
+  transition: opacity 0.24s ease;
 }
 
 .meeting-controls-enter-from,
 .meeting-controls-leave-to {
-  opacity: 0;
   transform: translateY(1.5rem);
+}
+
+.meeting-controls-enter-from .liquid-surface > *,
+.meeting-controls-leave-to .liquid-surface > * {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .meeting-controls-enter-active,
-  .meeting-controls-leave-active {
+  .meeting-controls-leave-active,
+  .meeting-controls-enter-active .liquid-surface > *,
+  .meeting-controls-leave-active .liquid-surface > * {
     transition: none;
   }
 }

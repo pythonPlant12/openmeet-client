@@ -90,7 +90,8 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.text()).toContain('Friend');
     expect(wrapper.text()).toContain('“Building OpenMeet”');
     expect(wrapper.text()).toContain('alex@example.com');
-    expect(wrapper.find('[aria-label="Profile actions"]').text()).toContain('Start direct call');
+    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Start direct call"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Remove friend"]').exists()).toBe(true);
   });
 
   it('shows only public details and an Add friend action to people who are not friends', async () => {
