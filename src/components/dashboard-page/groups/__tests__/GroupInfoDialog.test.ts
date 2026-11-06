@@ -261,6 +261,16 @@ describe('GroupInfoDialog', () => {
     ]);
   });
 
+  it('lets the owner quit when someone can take the group over', () => {
+    const owner = mountDialog({ info: { ...groupInfo, role: 'creator', memberCount: 3 } });
+    expect(owner.find('[data-quit-group]').exists()).toBe(true);
+    expect(owner.find('[data-remove-group]').exists()).toBe(true);
+
+    const alone = mountDialog({ info: { ...groupInfo, role: 'creator', memberCount: 1 } });
+    expect(alone.find('[data-quit-group]').exists()).toBe(false);
+    expect(alone.find('[data-remove-group]').exists()).toBe(true);
+  });
+
   it('only offers icon changes to group managers', () => {
     expect(mountDialog().find('[aria-label="Manage Harbor group icon"]').exists()).toBe(false);
 

@@ -8,7 +8,7 @@ import { playHaptic } from '@/services/haptics';
 import type { ConversationMessageAttachment } from '@/services/social-api';
 
 import VoiceWaveform from './VoiceWaveform.vue';
-import { type SenderAvatar, decodeVoiceMessage, formatVoiceDuration } from './voice-message';
+import { type SenderAvatar, decodeVoiceMessage, formatVoiceDuration, storedWaveformLevels } from './voice-message';
 
 // A voice message inside a chat bubble.
 const props = defineProps<{
@@ -22,6 +22,8 @@ const props = defineProps<{
   formatTime?: (value: string) => string;
   /** The sender's picture, with a microphone badge like a recorded note. */
   avatar?: SenderAvatar;
+  /** Stretches across its row instead of keeping the chat bubble width. */
+  fill?: boolean;
 }>();
 const emit = defineEmits<{ (event: 'load'): void }>();
 
@@ -40,9 +42,16 @@ const clock = computed(() =>
 watch(
   () => props.url,
   async (url) => {
+    decodeFailed.value = false;
+    // Measured while recording and stored with the message: no download or decoding needed.
+    const stored = props.attachment.voice;
+    if (stored) {
+      durationMs.value = stored.durationMs;
+      levels.value = storedWaveformLevels(stored);
+      return;
+    }
     durationMs.value = 0;
     levels.value = [];
-    decodeFailed.value = false;
     if (!url) return;
     try {
       const decoded = await decodeVoiceMessage(url, props.attachment.url);
@@ -68,7 +77,12 @@ function togglePlayback() {
 </script>
 
 <template>
-  <div data-voice-message class="flex w-64 max-w-full items-center gap-2 py-0.5 sm:w-80 lg:w-96">
+  <!-- The clock hangs below the waveform, outside the row, so the waveform lines up with the play button. -->
+  <div
+    data-voice-message
+    class="flex max-w-full items-center gap-2 pb-4 pt-0.5"
+    :class="fill ? 'w-full' : 'w-64 sm:w-80 lg:w-96'"
+  >
     <button
       type="button"
       class="flex size-10 shrink-0 items-center justify-center rounded-full text-harbor-icon transition-transform active:scale-95"
@@ -86,7 +100,7 @@ function togglePlayback() {
       <Pause v-else-if="playback.playing.value" class="size-6 fill-current" />
       <Play v-else class="ml-0.5 size-6 fill-current" />
     </button>
-    <div class="min-w-0 flex-1">
+    <div class="relative min-w-0 flex-1">
       <VoiceWaveform
         :levels="levels"
         :progress="playback.progress.value"
@@ -96,16 +110,18 @@ function togglePlayback() {
         unplayed-class="bg-harbor-waveform"
         @seek="playback.seek"
       />
-      <p class="mt-0.5 flex items-baseline justify-between gap-2 text-[0.6875rem] tabular-nums text-harbor-muted">
+      <p
+        class="absolute inset-x-0 top-full mt-0.5 flex items-baseline justify-between gap-2 text-[0.6875rem] tabular-nums text-harbor-muted"
+      >
         <span class="min-w-0 truncate">
           <template v-if="error">Could not load. Tap to retry.</template>
           <template v-else-if="decodeFailed">Voice message</template>
-          <template v-else>{{ url && durationMs ? clock : '0:00' }}</template>
+          <template v-else>{{ durationMs ? clock : '0:00' }}</template>
         </span>
         <time v-if="sentAt && formatTime" :datetime="sentAt" class="shrink-0">{{ formatTime(sentAt) }}</time>
       </p>
     </div>
-    <span v-if="avatar" data-voice-avatar class="relative ml-1 shrink-0" aria-hidden="true">
+    <span v-if="avatar" data-voice-avatar class="relative -mb-4 ml-1 shrink-0" aria-hidden="true">
       <span
         class="flex size-12 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-sm font-semibold text-harbor-icon"
         ><img v-if="avatar.url" :src="avatar.url" alt="" class="size-full object-cover" /><template v-else>{{

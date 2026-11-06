@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MonitorOff, MonitorUp } from 'lucide-vue-next';
+import { Crop, MonitorOff, MonitorUp } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -23,11 +23,12 @@ import MeetingQualityOptions from './MeetingQualityOptions.vue';
 defineProps<{ disabled?: boolean }>();
 const emit = defineEmits<{
   (event: 'start'): void;
+  (event: 'start-area'): void;
   (event: 'stop'): void;
   (event: 'open-change', open: boolean): void;
 }>();
 const { t } = useI18n();
-const { session, isStarting, quality, sentHeight, setQuality } = useScreenShare();
+const { session, isStarting, canSelectArea, quality, sentHeight, setQuality } = useScreenShare();
 const qualityLabel = computed(() =>
   quality.value === 'auto' ? `Auto${sentHeight.value ? ` · ${sentHeight.value}p` : ''}` : quality.value,
 );
@@ -60,6 +61,18 @@ const qualityLabel = computed(() =>
           <span class="min-w-0">
             <span class="block">{{ t('meeting.controls.startPresenting') }}</span>
             <span class="block text-xs font-normal text-harbor-muted">{{ t('meeting.controls.presentHint') }}</span>
+          </span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          v-if="!session && canSelectArea"
+          :disabled="isStarting"
+          data-start-presenting-area
+          @select="emit('start-area')"
+        >
+          <LiquidMenuIcon class="mr-2" :fallback="Crop" />
+          <span class="min-w-0">
+            <span class="block">{{ t('meeting.controls.presentArea') }}</span>
+            <span class="block text-xs font-normal text-harbor-muted">{{ t('meeting.controls.presentAreaHint') }}</span>
           </span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

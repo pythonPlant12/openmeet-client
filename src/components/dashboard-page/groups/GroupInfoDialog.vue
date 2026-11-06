@@ -24,6 +24,7 @@ import FriendshipChangeDialog, {
   type FriendshipChange,
   type PendingFriendshipChange,
 } from '@/components/dashboard-page/groups/FriendshipChangeDialog.vue';
+import SharedMediaPanel from '@/components/dashboard-page/shared-media/SharedMediaPanel.vue';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { Dialog, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
@@ -370,6 +371,33 @@ watch(
                 ><component :is="roleIcon(info.role)" class="size-3.5" />{{ roleLabel(info.role) }}</span
               >
             </div>
+            <!-- Group management sits under the name; leaving or removing the group lives apart at the bottom. -->
+            <div
+              v-if="info.isMember && canManage(info.role)"
+              class="mt-5 flex items-center justify-center gap-3"
+              role="group"
+              aria-label="Group actions"
+            >
+              <button
+                type="button"
+                data-tone="accent"
+                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                :aria-label="groupAddActionLabel(info.accessPolicy)"
+                :title="groupAddActionLabel(info.accessPolicy)"
+                @click="emit('add-members')"
+              >
+                <UserPlus class="size-5" /></button
+              ><button
+                type="button"
+                data-group-security
+                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                aria-label="Security"
+                title="Change group access and password"
+                @click="emit('group-settings')"
+              >
+                <LockKeyhole class="size-5" />
+              </button>
+            </div>
           </div>
           <input ref="avatarInput" type="file" accept="image/*" class="sr-only" @change="uploadAvatar" />
         </section>
@@ -400,65 +428,6 @@ watch(
               <Check v-if="copiedGroupId" class="size-4" /><Copy v-else class="size-4" />
             </button>
           </div>
-        </section>
-        <section
-          v-if="info.isMember"
-          class="flex flex-wrap items-center justify-center gap-2"
-          aria-label="Group actions"
-        >
-          <Button
-            v-if="canManage(info.role)"
-            variant="ghost"
-            class="group size-11 rounded-full bg-harbor-hover p-0 text-harbor-accent hover:bg-harbor-line hover:text-harbor-accent-hover sm:w-auto sm:px-2"
-            :aria-label="groupAddActionLabel(info.accessPolicy)"
-            :title="groupAddActionLabel(info.accessPolicy)"
-            @click="emit('add-members')"
-          >
-            <UserPlus
-              class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 motion-reduce:transition-none"
-            />
-            <span class="hidden sm:inline">{{ groupAddActionLabel(info.accessPolicy) }}</span>
-          </Button>
-          <Button
-            v-if="canManage(info.role)"
-            data-group-security
-            variant="ghost"
-            class="group size-11 rounded-full bg-harbor-hover p-0 text-harbor-accent hover:bg-harbor-line hover:text-harbor-ink sm:w-auto sm:px-4"
-            aria-label="Security"
-            title="Change group access and password"
-            @click="emit('group-settings')"
-          >
-            <LockKeyhole
-              class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 motion-reduce:transition-none"
-            />
-            <span class="hidden sm:inline">Security</span>
-          </Button>
-          <Button
-            v-if="info.role !== 'creator'"
-            variant="ghost"
-            class="group size-11 rounded-full bg-harbor-danger-soft p-0 text-harbor-danger-strong hover:bg-harbor-danger/25 sm:w-auto sm:px-4"
-            aria-label="Quit group"
-            title="Quit group"
-            @click="emit('quit-group')"
-          >
-            <LogOut
-              class="size-4 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transition-none"
-            />
-            <span class="hidden sm:inline">Quit group</span>
-          </Button>
-          <Button
-            v-if="canManage(info.role)"
-            variant="ghost"
-            class="group size-11 rounded-full bg-harbor-danger-soft p-0 text-harbor-danger-strong hover:bg-harbor-danger/25 sm:w-auto sm:px-4"
-            aria-label="Remove group"
-            title="Remove group"
-            @click="emit('remove-group')"
-          >
-            <Trash2
-              class="size-4 transition-transform duration-200 group-hover:scale-90 group-hover:rotate-6 motion-reduce:transition-none"
-            />
-            <span class="hidden sm:inline">Remove group</span>
-          </Button>
         </section>
         <section v-if="info.isMember">
           <div class="mb-3 flex items-baseline justify-between gap-3">
@@ -635,6 +604,31 @@ watch(
           >
             No participants are listed for this group.
           </p>
+        </section>
+        <SharedMediaPanel
+          v-if="info.isMember"
+          :conversation-id="info.id"
+          :access-token="accessToken"
+          :user-id="currentUserId"
+        />
+        <section v-if="info.isMember" class="flex flex-col gap-2 sm:flex-row" aria-label="Leave or remove group">
+          <button
+            v-if="info.role !== 'creator' || info.memberCount > 1"
+            type="button"
+            data-quit-group
+            class="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-harbor-line bg-white px-4 text-sm font-semibold text-harbor-danger-strong transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle [@media(hover:hover)]:hover:bg-harbor-danger-soft"
+            @click="emit('quit-group')"
+          >
+            <LogOut class="size-4" />Quit group</button
+          ><button
+            v-if="canManage(info.role)"
+            type="button"
+            data-remove-group
+            class="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-harbor-line bg-white px-4 text-sm font-semibold text-harbor-danger-strong transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle [@media(hover:hover)]:hover:bg-harbor-danger-soft"
+            @click="emit('remove-group')"
+          >
+            <Trash2 class="size-4" />Remove group
+          </button>
         </section>
       </div></HarborDialogContent
     ></Dialog

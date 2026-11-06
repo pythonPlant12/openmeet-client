@@ -44,7 +44,7 @@ interface Emits {
   (e: 'invite'): void;
   /** A microphone or camera switch replaced a local track. */
   (e: 'media-changed'): void;
-  (e: 'start-screen-share'): void;
+  (e: 'start-screen-share', options?: { selectArea: boolean }): void;
   (e: 'stop-screen-share'): void;
 }
 
@@ -209,6 +209,7 @@ const shareOnTelegram = () => {
         data-liquid-key="present"
         @open-change="setMenuOpen('present', $event)"
         @start="emit('start-screen-share')"
+        @start-area="emit('start-screen-share', { selectArea: true })"
         @stop="emit('stop-screen-share')"
       />
 

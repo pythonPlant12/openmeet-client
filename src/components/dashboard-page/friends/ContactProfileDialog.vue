@@ -11,9 +11,11 @@ import {
   UserCheck,
   UserMinus,
   UserPlus,
+  X,
 } from 'lucide-vue-next';
 import { ref } from 'vue';
 
+import SharedMediaPanel from '@/components/dashboard-page/shared-media/SharedMediaPanel.vue';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -50,6 +52,10 @@ const props = defineProps<{
   avatarUrls: Record<string, string>;
   avatarLoading: boolean;
   formatDate: (value: string | null) => string;
+  /** The direct chat with this person, whose shared media the profile lists. */
+  sharedConversationId?: string | null;
+  accessToken?: string;
+  currentUserId?: string | null;
 }>();
 const isAvatarPreviewOpen = ref(false);
 const fullAvatarUrl = useFullAvatar(
@@ -234,76 +240,87 @@ async function copyNickname(nickname: string) {
                     : 'No status message.'
               }}
             </p>
+            <!-- Actions sit under the name, like a contact card. Removing a friend asks for confirmation first. -->
+            <div
+              v-if="pendingRequest"
+              class="mt-5 flex items-center justify-center gap-3"
+              role="group"
+              aria-label="Friend request actions"
+            >
+              <button
+                type="button"
+                data-accept-friend-request
+                data-tone="accent"
+                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                :disabled="respondingId !== null"
+                aria-label="Accept friend request"
+                title="Accept friend request"
+                @click="emit('accept-request', pendingRequest)"
+              >
+                <Check class="size-5" /></button
+              ><button
+                type="button"
+                data-decline-friend-request
+                data-tone="danger"
+                class="harbor-round-button size-12 text-harbor-danger-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                :disabled="respondingId !== null"
+                aria-label="Decline friend request"
+                title="Decline friend request"
+                @click="emit('decline-request', pendingRequest)"
+              >
+                <X class="size-5" />
+              </button>
+            </div>
+            <div
+              v-else-if="profile.relationship === 'none' && !profileFriend"
+              class="mt-5 flex items-center justify-center gap-3"
+              role="group"
+              aria-label="Profile actions"
+            >
+              <button
+                type="button"
+                data-add-friend
+                data-tone="accent"
+                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                aria-label="Add friend"
+                title="Add friend"
+                @click="emit('add-friend')"
+              >
+                <UserPlus class="size-5" />
+              </button>
+            </div>
+            <div
+              v-else-if="profileFriend"
+              class="mt-5 flex items-center justify-center gap-3"
+              role="group"
+              aria-label="Profile actions"
+            >
+              <button
+                type="button"
+                data-start-call
+                data-tone="accent"
+                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                :disabled="opening !== null || callActive"
+                aria-label="Start direct call"
+                title="Start direct call"
+                @click="emit('call')"
+              >
+                <Phone class="size-5" />
+              </button>
+              <button
+                type="button"
+                data-remove-friend
+                data-tone="destructive"
+                class="harbor-round-button size-12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle focus-visible:ring-offset-2"
+                :disabled="removingId !== null"
+                aria-label="Remove friend"
+                title="Remove friend"
+                @click="emit('update:confirmationOpen', true)"
+              >
+                <UserMinus class="size-5" />
+              </button>
+            </div>
           </div>
-        </section>
-        <section
-          v-if="pendingRequest"
-          class="flex flex-wrap items-center justify-center gap-2"
-          aria-label="Friend request actions"
-        >
-          <Button
-            data-accept-friend-request
-            variant="pill"
-            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
-            :disabled="respondingId !== null"
-            aria-label="Accept friend request"
-            title="Accept friend request"
-            @click="emit('accept-request', pendingRequest)"
-            ><Check class="size-4" /><span class="hidden sm:inline">Accept</span></Button
-          ><Button
-            data-decline-friend-request
-            variant="pill-danger"
-            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
-            :disabled="respondingId !== null"
-            aria-label="Decline friend request"
-            title="Decline friend request"
-            @click="emit('decline-request', pendingRequest)"
-            ><UserMinus class="size-4" /><span class="hidden sm:inline">Decline</span></Button
-          >
-        </section>
-        <section
-          v-else-if="profile.relationship === 'none' && !profileFriend"
-          class="flex flex-wrap items-center justify-center gap-2"
-          aria-label="Profile actions"
-        >
-          <Button
-            data-add-friend
-            variant="pill"
-            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
-            aria-label="Add friend"
-            title="Add friend"
-            @click="emit('add-friend')"
-            ><UserPlus
-              class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 motion-reduce:transition-none"
-            /><span class="hidden sm:inline">Add friend</span></Button
-          >
-        </section>
-        <section
-          v-else-if="profileFriend"
-          class="flex flex-wrap items-center justify-center gap-2"
-          aria-label="Profile actions"
-        >
-          <Button
-            variant="pill-danger"
-            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
-            :disabled="removingId !== null"
-            aria-label="Remove friend"
-            title="Remove friend"
-            @click="emit('update:confirmationOpen', true)"
-            ><UserMinus
-              class="size-4 transition-transform duration-200 group-hover:scale-90 group-hover:rotate-6 motion-reduce:transition-none"
-            /><span class="hidden sm:inline">Remove friend</span></Button
-          ><Button
-            variant="pill"
-            class="group size-11 rounded-full p-0 sm:w-auto sm:px-5"
-            :disabled="opening !== null || callActive"
-            aria-label="Start direct call"
-            title="Start direct call"
-            @click="emit('call')"
-            ><Phone
-              class="size-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:scale-110 motion-reduce:transition-none"
-            /><span class="hidden sm:inline">Start direct call</span></Button
-          >
         </section>
         <section class="grid gap-3 rounded-2xl border border-harbor-line bg-white p-4 text-sm sm:grid-cols-3">
           <div class="inline-flex min-w-0 items-center gap-2 text-harbor-muted">
@@ -327,11 +344,12 @@ async function copyNickname(nickname: string) {
             >
           </div>
         </section>
-        <section class="rounded-2xl border border-harbor-line bg-harbor-hover p-4">
-          <p class="text-sm font-semibold">Shared media</p>
-        </section>
-      </div></HarborDialogContent
-    ></Dialog
+        <SharedMediaPanel
+          v-if="sharedConversationId && profile.relationship !== 'owner'"
+          :conversation-id="sharedConversationId"
+          :access-token="accessToken"
+          :user-id="currentUserId"
+        /></div></HarborDialogContent></Dialog
   ><Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
     ><HarborDialogContent
       overlay-class="!z-[1050] bg-harbor-ink/50 backdrop-blur-lg"

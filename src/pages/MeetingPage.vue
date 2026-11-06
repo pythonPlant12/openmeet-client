@@ -12,6 +12,7 @@ import JoinMeetingDialog, { type JoinSettings } from '@/components/meeting-page/
 import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
 import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.vue';
+import ScreenAreaPicker from '@/components/meeting-page/ScreenAreaPicker.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
@@ -295,9 +296,10 @@ watch(localParticipantId, (current, previous) => {
   if (previous && current !== previous) screenShare.stop();
 });
 
-async function handleStartScreenShare() {
+async function handleStartScreenShare(options?: { selectArea: boolean }) {
   if (!localParticipantId.value) return;
   await screenShare.start({
+    selectArea: options?.selectArea,
     roomId: sfuRoomId.value ?? meetingId.value,
     presenterId: localParticipantId.value,
     presenterName: participantName.value,
@@ -1092,6 +1094,8 @@ const handleReconnect = () => {
       :access="meetingAccess"
       @access-updated="meetingAccess = $event"
     />
+
+    <ScreenAreaPicker />
 
     <!-- Connection Error Dialog -->
     <ConnectionErrorDialog

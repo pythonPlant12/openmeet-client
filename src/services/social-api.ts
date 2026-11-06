@@ -345,6 +345,34 @@ export interface ConversationMessageAttachment {
   contentType: string;
   byteSize: number;
   url: string;
+  /** Present on voice messages recorded with a measured waveform. */
+  voice?: VoiceMessageDetails;
+}
+
+export type SharedMediaKind = 'media' | 'files' | 'voice' | 'links' | 'gifs';
+
+export interface SharedMediaItem {
+  sequence: number;
+  senderId: string;
+  senderName: string;
+  createdAt: string;
+  /** Set for every kind except links. */
+  attachment?: ConversationMessageAttachment;
+  /** The message text, set for links only. */
+  content?: string;
+}
+
+export interface SharedMediaPage {
+  items: SharedMediaItem[];
+  nextBefore?: number | null;
+}
+
+export type SharedMediaCounts = Record<SharedMediaKind, number>;
+
+export interface VoiceMessageDetails {
+  durationMs: number;
+  /** Loudness bars from 0 to 255, oldest first. */
+  waveform: number[];
 }
 
 export interface ConversationMessage {
@@ -905,6 +933,16 @@ export const socialApi = {
     return request<ConversationMessagesResponse>(`/conversations/${conversationId}/messages${query}`, accessToken);
   },
 
+  listSharedMedia(accessToken: string, conversationId: string, kind: SharedMediaKind, before?: number) {
+    const params = new URLSearchParams({ kind });
+    if (before !== undefined) params.set('before', String(before));
+    return request<SharedMediaPage>(`/conversations/${conversationId}/shared?${params.toString()}`, accessToken);
+  },
+
+  getSharedMediaCounts(accessToken: string, conversationId: string) {
+    return request<SharedMediaCounts>(`/conversations/${conversationId}/shared/counts`, accessToken);
+  },
+
   markConversationRead(accessToken: string, conversationId: string) {
     return request<void>(`/conversations/${conversationId}/read`, accessToken, { method: 'POST' });
   },
@@ -926,11 +964,17 @@ export const socialApi = {
     content: string,
     attachments: File[],
     replyToSequence?: number,
+    voiceDetails?: (file: File) => VoiceMessageDetails | undefined,
   ) {
     const body = new FormData();
     body.append('content', content);
     if (replyToSequence !== undefined) body.append('replyToSequence', String(replyToSequence));
-    attachments.forEach((attachment) => body.append('file', attachment));
+    attachments.forEach((attachment) => {
+      body.append('file', attachment);
+      // The server reads `voice` as describing the file just before it.
+      const voice = voiceDetails?.(attachment);
+      if (voice) body.append('voice', JSON.stringify(voice));
+    });
     return request<ConversationMessage>(`/conversations/${conversationId}/messages/attachments`, accessToken, {
       method: 'POST',
       body,

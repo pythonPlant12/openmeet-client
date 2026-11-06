@@ -8,7 +8,11 @@ import JoinRoomDialog from '@/components/dashboard-page/actions/JoinRoomDialog.v
 import CallDetailsDialog from '@/components/dashboard-page/calls/CallDetailsDialog.vue';
 import CallsSidebar from '@/components/dashboard-page/calls/CallsSidebar.vue';
 import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
-import { isVoiceMessageFileName, shareDecodedVoiceMessage } from '@/components/dashboard-page/chat/voice-message';
+import {
+  isVoiceMessageFileName,
+  recordedVoiceMessageDetails,
+  shareDecodedVoiceMessage,
+} from '@/components/dashboard-page/chat/voice-message';
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
 import DetailsPane from '@/components/dashboard-page/details/DetailsPane.vue';
 import ContactProfileDialog from '@/components/dashboard-page/friends/ContactProfileDialog.vue';
@@ -514,6 +518,13 @@ function userInitials(name?: string | null) {
   );
 }
 
+const contactProfileConversationId = computed(
+  () =>
+    conversations.value.find(
+      (conversation) => conversation.kind === 'direct' && conversation.otherUserId === contactProfile.value?.id,
+    )?.id ?? null,
+);
+
 function formatProfileDate(value: string | null) {
   if (!value) return 'No activity recorded';
 
@@ -670,7 +681,16 @@ function showPendingVoiceMessage(conversationId: string, file: File, replyTo: Co
         }
       : null,
     reactions: [],
-    attachments: [{ id: path, fileName: file.name, contentType: file.type, byteSize: file.size, url: path }],
+    attachments: [
+      {
+        id: path,
+        fileName: file.name,
+        contentType: file.type,
+        byteSize: file.size,
+        url: path,
+        voice: recordedVoiceMessageDetails(file),
+      },
+    ],
   });
   return { sequence, path };
 }
@@ -823,6 +843,7 @@ async function sendMessage() {
           content,
           attachments,
           replyToSequence,
+          recordedVoiceMessageDetails,
         )
       : await socialApi.createConversationMessage(token, conversationId, content, replyToSequence);
     if (selectedConversation.value?.id !== conversationId) {
@@ -2690,6 +2711,9 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       :avatar-urls="contactProfileAvatarUrls"
       :avatar-loading="isContactProfileAvatarLoading"
       :format-date="formatProfileDate"
+      :shared-conversation-id="contactProfileConversationId"
+      :access-token="accessToken ?? undefined"
+      :current-user-id="currentUser?.id"
       @update:open="setContactProfileDialogOpen"
       @update:confirmation-open="setContactRemoveConfirmationOpen"
       @call="startContactProfileCall"

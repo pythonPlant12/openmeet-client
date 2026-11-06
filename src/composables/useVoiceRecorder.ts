@@ -3,6 +3,7 @@ import { onBeforeUnmount, ref } from 'vue';
 import {
   levelFromTimeDomain,
   pickRecordingMimeType,
+  rememberVoiceMessageDetails,
   voiceMessageFile,
 } from '@/components/dashboard-page/chat/voice-message';
 
@@ -195,7 +196,9 @@ export function useVoiceRecorder(options: {
     const mimeType = activeRecorder.mimeType;
     release();
     if (!recordedChunks.length) return null;
-    return { file: voiceMessageFile(recordedChunks, mimeType), durationMs, levels: recordedLevels };
+    const file = voiceMessageFile(recordedChunks, mimeType);
+    rememberVoiceMessageDetails(file, durationMs, recordedLevels);
+    return { file, durationMs, levels: recordedLevels };
   }
 
   function cancel() {
