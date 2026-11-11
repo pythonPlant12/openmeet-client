@@ -60,4 +60,14 @@ describe('useHorizontalSwipe', () => {
     );
     expect(onSwipe).toHaveBeenCalledWith('next');
   });
+
+  it('does not report a two-finger pinch as a swipe', async () => {
+    const { wrapper, onSwipe } = await mountSwipe();
+    const span = wrapper.get('span').element;
+    span.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 150, clientY: 100, pointerId: 1 }));
+    span.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 250, clientY: 100, pointerId: 2 }));
+    span.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 120, clientY: 100, pointerId: 2 }));
+    span.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 50, clientY: 100, pointerId: 1 }));
+    expect(onSwipe).not.toHaveBeenCalled();
+  });
 });

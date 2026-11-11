@@ -24,6 +24,10 @@ const emit = defineEmits<{
 }>();
 
 const stageRef = ref<HTMLElement | null>(null);
+const mediaRef = ref<HTMLImageElement | null>(null);
+// Where the last press on the stage started; a drag that ends there is not a backdrop click.
+let pressStart: { x: number; y: number } | null = null;
+const CLICK_SLOP = 10;
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 // The direction of the last move, so the next item slides in from the side the user swiped toward.
 const direction = ref<1 | -1>(1);
@@ -38,7 +42,10 @@ const isPdf = computed(() => activeAttachment.value?.contentType === 'applicatio
 const hasPrevious = computed(() => props.activeIndex > 0);
 const hasNext = computed(() => props.activeIndex < props.attachments.length - 1);
 
-const { zoom, isZoomed, reset } = usePinchZoom(stageRef, { disabled: () => !isImage.value });
+const { zoom, isZoomed, reset } = usePinchZoom(stageRef, {
+  disabled: () => !isImage.value,
+  media: () => mediaRef.value,
+});
 const imageTransform = computed(() => `translate(${zoom.value.x}px, ${zoom.value.y}px) scale(${zoom.value.scale})`);
 
 function move(offset: 1 | -1) {
@@ -60,9 +67,16 @@ useEventListener(document, 'keydown', (event: KeyboardEvent) => {
   else if (event.key === 'ArrowLeft') move(-1);
 });
 
-// Only a press on the empty backdrop closes; presses on the media itself zoom, pan, or swipe.
+function handleStagePointerDown(event: PointerEvent) {
+  pressStart = { x: event.clientX, y: event.clientY };
+}
+
+// Only a press and release in place on the empty backdrop closes; presses on the media zoom, pan, or swipe,
+// and a mouse drag that ends on the backdrop still fires a click.
 function handleStageClick(event: MouseEvent) {
-  if (event.target === event.currentTarget) emit('close');
+  const moved = pressStart && Math.hypot(event.clientX - pressStart.x, event.clientY - pressStart.y) > CLICK_SLOP;
+  pressStart = null;
+  if (event.target === event.currentTarget && !moved) emit('close');
 }
 
 // Each item slides in from the side it was swiped toward and pops up slightly, like the avatar preview.
@@ -125,6 +139,7 @@ const slideTransition = computed(() => ({
         ref="stageRef"
         data-media-stage
         class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+        @pointerdown="handleStagePointerDown"
         @click="handleStageClick"
       >
         <AnimatePresence mode="popLayout" :initial="false">
@@ -138,6 +153,7 @@ const slideTransition = computed(() => ({
           >
             <img
               v-if="isImage && activeUrl"
+              ref="mediaRef"
               :src="activeUrl"
               :alt="activeAttachment?.fileName"
               draggable="false"

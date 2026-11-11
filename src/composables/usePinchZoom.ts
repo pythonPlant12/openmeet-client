@@ -1,7 +1,7 @@
 import { useEventListener } from '@vueuse/core';
 import { type Ref, computed, readonly, ref, watch } from 'vue';
 
-import { DOUBLE_TAP_ZOOM, IDENTITY_ZOOM, type ZoomState, clampPan, zoomAt } from '@/lib/zoom';
+import { DOUBLE_TAP_ZOOM, IDENTITY_ZOOM, type Size, type ZoomState, clampPan, zoomAt } from '@/lib/zoom';
 
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_DISTANCE = 24;
@@ -11,9 +11,13 @@ const WHEEL_SPEED = 0.002;
 
 /**
  * Pinch, wheel, and double-tap zoom for `target`, with one-finger panning while zoomed. The caller applies
- * `zoom` as `translate(x, y) scale(scale)` around the element's center.
+ * `zoom` as `translate(x, y) scale(scale)` around the element's center. `media` is the zoomed element, centered
+ * in `target`; panning stops at its edges. Without it, the media is taken to fill `target`.
  */
-export function usePinchZoom(target: Ref<HTMLElement | null>, options: { disabled?: () => boolean } = {}) {
+export function usePinchZoom(
+  target: Ref<HTMLElement | null>,
+  options: { disabled?: () => boolean; media?: () => HTMLElement | null | undefined } = {},
+) {
   const zoom = ref<ZoomState>({ ...IDENTITY_ZOOM });
   const isZoomed = computed(() => zoom.value.scale > 1);
   const pointers = new Map<number, { x: number; y: number }>();
@@ -24,13 +28,16 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, options: { disable
   // The page must not scroll or zoom under the gestures; the viewport already disables page zoom.
   watch(target, (element) => element?.style.setProperty('touch-action', 'none'), { immediate: true });
 
-  function box() {
+  // The media's untransformed layout size, then the stage's size.
+  function bounds(): [Size, Size] {
     const rect = target.value!.getBoundingClientRect();
-    return { rect, size: { width: rect.width, height: rect.height } };
+    const stage = { width: rect.width, height: rect.height };
+    const media = options.media?.();
+    return [media?.offsetWidth ? { width: media.offsetWidth, height: media.offsetHeight } : stage, stage];
   }
 
   function fromCenter(clientX: number, clientY: number) {
-    const { rect } = box();
+    const rect = target.value!.getBoundingClientRect();
     return { x: clientX - rect.left - rect.width / 2, y: clientY - rect.top - rect.height / 2 };
   }
 
@@ -61,12 +68,12 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, options: { disable
     if (pinch && pointers.size === 2 && pinch.distance > 0) {
       const [a, b] = [...pointers.values()];
       const center = fromCenter((a!.x + b!.x) / 2, (a!.y + b!.y) / 2);
-      zoom.value = zoomAt(pinch.from, pinch.from.scale * (pinchDistance() / pinch.distance), center, box().size);
+      zoom.value = zoomAt(pinch.from, pinch.from.scale * (pinchDistance() / pinch.distance), center, ...bounds());
     } else if (pointers.size === 1 && isZoomed.value) {
       const { x, y } = zoom.value;
       zoom.value = clampPan(
         { ...zoom.value, x: x + event.clientX - previous.x, y: y + event.clientY - previous.y },
-        box().size,
+        ...bounds(),
       );
     }
   });
@@ -89,11 +96,12 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, options: { disable
     lastTap = null;
     zoom.value = isZoomed.value
       ? { ...IDENTITY_ZOOM }
-      : zoomAt(zoom.value, DOUBLE_TAP_ZOOM, fromCenter(event.clientX, event.clientY), box().size);
+      : zoomAt(zoom.value, DOUBLE_TAP_ZOOM, fromCenter(event.clientX, event.clientY), ...bounds());
   }
 
-  useEventListener(target, 'pointerup', release);
-  useEventListener(target, 'pointercancel', release);
+  // A mouse released outside the stage must still end its drag, or the image would pan on plain hover.
+  useEventListener(window, 'pointerup', release);
+  useEventListener(window, 'pointercancel', release);
 
   useEventListener(
     target,
@@ -102,7 +110,7 @@ export function usePinchZoom(target: Ref<HTMLElement | null>, options: { disable
       if (options.disabled?.()) return;
       event.preventDefault();
       const factor = Math.exp(-event.deltaY * WHEEL_SPEED);
-      zoom.value = zoomAt(zoom.value, zoom.value.scale * factor, fromCenter(event.clientX, event.clientY), box().size);
+      zoom.value = zoomAt(zoom.value, zoom.value.scale * factor, fromCenter(event.clientX, event.clientY), ...bounds());
     },
     { passive: false },
   );

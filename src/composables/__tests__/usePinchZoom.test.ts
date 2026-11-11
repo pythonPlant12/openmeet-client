@@ -78,4 +78,18 @@ describe('usePinchZoom', () => {
     element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 150, pointerId: 2 }));
     expect(onSwipe).not.toHaveBeenCalled();
   });
+
+  it('stops panning after a release outside the stage', async () => {
+    const { element, api } = await mountZoom();
+    element.dispatchEvent(
+      new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -500, clientX: 200, clientY: 150 }),
+    );
+    element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 150, pointerId: 3 }));
+    document.body.dispatchEvent(
+      new PointerEvent('pointerup', { bubbles: true, clientX: 200, clientY: 150, pointerId: 3 }),
+    );
+    const before = { ...api.zoom.value };
+    element.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 300, clientY: 150, pointerId: 3 }));
+    expect(api.zoom.value).toEqual(before);
+  });
 });

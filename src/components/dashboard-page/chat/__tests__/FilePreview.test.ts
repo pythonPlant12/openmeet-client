@@ -105,4 +105,11 @@ describe('FilePreview', () => {
     await mountPreview();
     expect(document.querySelector('.harbor-media-viewer')?.className).toContain('z-[1060]');
   });
+
+  it('stays open after a mouse drag on the backdrop', async () => {
+    const wrapper = await mountPreview();
+    stage().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 10, clientY: 10, pointerId: 1 }));
+    stage().dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 200, clientY: 10 }));
+    expect(wrapper.emitted('close')).toBeUndefined();
+  });
 });
