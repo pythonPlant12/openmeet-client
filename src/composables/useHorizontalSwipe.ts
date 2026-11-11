@@ -1,0 +1,32 @@
+import { useEventListener } from '@vueuse/core';
+import type { Ref } from 'vue';
+
+export type SwipeDirection = 'next' | 'previous';
+
+// Drags that start on these keep their own gestures: typing, text selection, and media scrubbing.
+const IGNORED_TARGETS = 'input, textarea, video, iframe, [data-no-swipe]';
+
+/** Reports a horizontal drag over `target`: a leftward one is `next`, a rightward one is `previous`. */
+export function useHorizontalSwipe(
+  target: Ref<HTMLElement | null>,
+  options: { onSwipe: (direction: SwipeDirection) => void; disabled?: () => boolean; threshold?: number },
+) {
+  const threshold = options.threshold ?? 48;
+  let start: { id: number; x: number; y: number } | null = null;
+
+  useEventListener(target, 'pointerdown', (event: PointerEvent) => {
+    const ignored = (event.target as Element | null)?.closest(IGNORED_TARGETS);
+    start = options.disabled?.() || ignored ? null : { id: event.pointerId, x: event.clientX, y: event.clientY };
+  });
+
+  useEventListener(target, 'pointerup', (event: PointerEvent) => {
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    start = null;
+    if (options.disabled?.() || Math.abs(dx) <= threshold || Math.abs(dx) <= 1.5 * Math.abs(dy)) return;
+    options.onSwipe(dx < 0 ? 'next' : 'previous');
+  });
+
+  useEventListener(target, 'pointercancel', () => (start = null));
+}
