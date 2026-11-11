@@ -19,7 +19,7 @@ const { t } = useI18n();
 <template>
   <!-- The one place a ringing call shows in the app, on every page, until it is answered, declined, or stops. -->
   <div
-    class="marketing-font pointer-events-none fixed inset-x-0 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1040] flex justify-center px-4 sm:top-[calc(var(--liquid-bar-height-sm)+1.5rem)]"
+    class="marketing-font pointer-events-none fixed inset-x-0 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1070] flex justify-center px-4 sm:top-[calc(var(--liquid-bar-height-sm)+1.5rem)]"
   >
     <div
       data-incoming-call
