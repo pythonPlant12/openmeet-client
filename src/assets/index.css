@@ -127,6 +127,19 @@
       background-color: #08635f;
     }
   }
+
+  /* Mobile layouts and touch screens scroll by dragging, so they hide scrollbars; content still scrolls. */
+  @media (max-width: 639px), (pointer: coarse) {
+    *,
+    [data-scrolling] {
+      scrollbar-width: none;
+    }
+
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   body {
     background-color: #fbfcf8;
     color: #102f35;
