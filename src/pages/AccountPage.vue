@@ -21,6 +21,7 @@ import { toast } from '@/components/ui/toast/store';
 import { useAuth } from '@/composables/useAuth';
 import { useFullAvatar } from '@/composables/useFullAvatar';
 import { USER_STATUS_OPTIONS } from '@/config/user-status.config';
+import { hasNativeMediaPicker, pickNativeMedia } from '@/services/media-picker';
 import { type UserStatus, socialApi } from '@/services/social-api';
 
 const router = useRouter();
@@ -191,13 +192,37 @@ async function loadAvatar(path: string | null) {
   }
 }
 
+async function chooseAvatar() {
+  if (!hasNativeMediaPicker()) {
+    avatarInput.value?.click();
+    return;
+  }
+  try {
+    const { files, oversized } = await pickNativeMedia({ kind: 'image', multiple: false, maxBytes: MAX_AVATAR_BYTES });
+    if (oversized > 0) rejectLargeAvatar();
+    else if (files[0]) await uploadAvatar(files[0]);
+  } catch (error) {
+    console.error('[Account] Failed to pick avatar:', error);
+    toast({ title: 'Could not open your photos.', variant: 'destructive' });
+  }
+}
+
 async function handleAvatarChange(event: Event) {
-  const avatar = (event.target as HTMLInputElement).files?.[0];
-  if (!avatar || !accessToken.value) return;
+  const input = event.target as HTMLInputElement;
+  const avatar = input.files?.[0];
+  input.value = '';
+  if (avatar) await uploadAvatar(avatar);
+}
+
+function rejectLargeAvatar() {
+  profileError.value = 'Avatar must be 5 MiB or smaller.';
+  toast({ title: 'Avatar is too large', description: profileError.value, variant: 'destructive' });
+}
+
+async function uploadAvatar(avatar: File) {
+  if (!accessToken.value) return;
   if (avatar.size > MAX_AVATAR_BYTES) {
-    profileError.value = 'Avatar must be 5 MiB or smaller.';
-    toast({ title: 'Avatar is too large', description: profileError.value, variant: 'destructive' });
-    (event.target as HTMLInputElement).value = '';
+    rejectLargeAvatar();
     return;
   }
   isSaving.value = true;
@@ -221,7 +246,6 @@ async function handleAvatarChange(event: Event) {
     toast({ title: 'Could not update avatar', description: profileError.value, variant: 'destructive' });
   } finally {
     isSaving.value = false;
-    (event.target as HTMLInputElement).value = '';
   }
 }
 
@@ -303,7 +327,7 @@ onBeforeUnmount(() => {
                   <Eye class="size-4" />View
                 </DropdownMenuItem>
                 <DropdownMenuSeparator v-if="avatarUrl" class="mx-1 my-2 bg-harbor-line" />
-                <DropdownMenuItem :disabled="isSaving" @select="avatarInput?.click()">
+                <DropdownMenuItem :disabled="isSaving" @select="chooseAvatar">
                   <Camera class="size-4" />Change avatar
                 </DropdownMenuItem>
                 <DropdownMenuItem v-if="avatarUrl" variant="danger" :disabled="isSaving" @select="removeAvatar">
