@@ -5,7 +5,7 @@ import {
   LogOutAnimated,
   MessageSquareAnimated,
   PhoneAnimated,
-  UserRoundCheckAnimated,
+  PlusAnimated,
 } from '@respeak/lucide-motion-vue';
 import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
@@ -134,8 +134,8 @@ const workspaceTabs = computed<LiquidTab[]>(() => [
   },
   {
     key: 'friends',
-    label: t('nav.friends'),
-    icon: UserRoundCheckAnimated,
+    label: t('nav.new'),
+    icon: PlusAnimated,
     to: { path: '/dashboard', query: { panel: 'friends' } },
   },
   { key: 'calls', label: t('nav.calls'), icon: PhoneAnimated, to: { path: '/dashboard', query: { panel: 'calls' } } },

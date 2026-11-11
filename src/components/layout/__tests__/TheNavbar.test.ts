@@ -118,6 +118,7 @@ vi.mock('@respeak/lucide-motion-vue', async () => {
     LogOutAnimated: iconStub('log-out'),
     MessageSquareAnimated: iconStub('message-square'),
     PhoneAnimated: iconStub('phone'),
+    PlusAnimated: iconStub('plus'),
     UserRoundCheckAnimated: iconStub('user-round-check'),
     UsersAnimated: iconStub('users'),
   };
@@ -275,14 +276,16 @@ describe('TheNavbar', () => {
     expect(wrapper.get('.harbor-nav-layout').attributes('data-layout')).toBeUndefined();
   });
 
-  it('marks the Friends tab with the friend icon, apart from the group icon', async () => {
+  it('shows the Friends pane tab as New with a plus icon', async () => {
     media.desktop = true;
     auth.authenticated = true;
     social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
     const { wrapper } = await mountNavbar('/dashboard');
     await flushPromises();
 
-    expect(wrapper.get('[data-tab="friends"] svg').attributes('data-icon')).toBe('user-round-check');
+    const tab = wrapper.get('[data-tab="friends"]');
+    expect(tab.get('svg').attributes('data-icon')).toBe('plus');
+    expect(tab.text()).toContain('nav.new');
   });
 
   it('uses a persistent profile trigger and bottom sheet for authenticated phones', async () => {
