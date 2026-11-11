@@ -123,4 +123,42 @@ describe('CallsSidebar', () => {
     expect(wrapper.find('[data-pane-search]').exists()).toBe(true);
     expect(wrapper.get('input').attributes('placeholder')).toBe('Search calls');
   });
+
+  describe('call pictures', () => {
+    const bob = meetings[0]!.participants[0]!;
+    const person = (name: string) => ({ ...bob, userId: name, name });
+    const row = (meeting: MeetingSession, props: Record<string, unknown> = {}) =>
+      mountSidebar({ panel: 'top', meetings: [meeting], ...props }).get('[data-call-item]');
+
+    it('shows your own picture and Me when nobody else joined', () => {
+      const item = row({ ...meetings[0]!, participants: [], participantCount: 1 }, { selfAvatarUrl: '/me.jpg' });
+      expect(item.get('img').attributes('src')).toBe('/me.jpg');
+      expect(item.text()).toContain('Me');
+    });
+
+    it("shows the other person's picture in a direct call", () => {
+      const item = row(meetings[0]!, { avatarFor: () => '/bob.jpg' });
+      expect(item.get('img').attributes('src')).toBe('/bob.jpg');
+      expect(item.find('[data-mosaic-tile]').exists()).toBe(false);
+    });
+
+    it('puts up to four people in one circle', () => {
+      const participants = ['Ada', 'Cy', 'Dee', 'Eve', 'Fay'].map(person);
+      const item = row({ ...meetings[0]!, participants, participantCount: 6 });
+      expect(item.findAll('[data-mosaic-tile]')).toHaveLength(4);
+    });
+
+    it('shows the group picture for a group call', () => {
+      const participants = ['Ada', 'Cy'].map(person);
+      const item = row(
+        { ...meetings[0]!, conversationId: 'group-1', participants, participantCount: 3 },
+        {
+          callGroup: (meeting: MeetingSession) =>
+            meeting.conversationId === 'group-1' ? { avatarUrl: '/group.jpg' } : null,
+        },
+      );
+      expect(item.get('img').attributes('src')).toBe('/group.jpg');
+      expect(item.find('[data-mosaic-tile]').exists()).toBe(false);
+    });
+  });
 });

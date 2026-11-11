@@ -557,6 +557,14 @@ function conversationActivityTime(conversation: Conversation) {
 
 const { avatarUrl: ownAvatarUrl } = useOwnProfile();
 
+// Calls started from a group conversation show the group's picture in the call history.
+function callGroup(meeting: MeetingSession) {
+  const conversation = meeting.conversationId
+    ? conversations.value.find((item) => item.id === meeting.conversationId)
+    : undefined;
+  return conversation?.kind === 'group' ? { avatarUrl: groupAvatarUrls.value[conversation.id] } : null;
+}
+
 function messageSenderAvatar(message: ConversationMessage) {
   const url = isLocalMessage(message)
     ? ownAvatarUrl.value
@@ -2511,6 +2519,8 @@ async function startConversationCall(conversation: Conversation, options?: { vid
           :panel="callsPanel"
           :badge="badges.calls"
           :meetings="callHistory.meetings.value"
+          :self-avatar-url="ownAvatarUrl ?? undefined"
+          :call-group="callGroup"
           :is-loading="callHistory.isLoading.value"
           :error="callHistory.error.value"
           :has-more="callHistory.nextBefore.value !== null"

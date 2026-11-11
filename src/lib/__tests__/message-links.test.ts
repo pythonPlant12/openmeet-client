@@ -80,6 +80,6 @@ describe('meeting formatting', () => {
     });
     expect(meetingTitle([person('Ada'), person('Bob')], 3)).toBe('Ada and Bob');
     expect(meetingTitle([person('Ada'), person('Bob'), person('Cy')], 5)).toBe('Ada, Bob +2');
-    expect(meetingTitle([], 1)).toBe('Only you');
+    expect(meetingTitle([], 1)).toBe('Me');
   });
 });

@@ -22,11 +22,26 @@ export function meetingDuration(startedAt: string, endedAt: string | null, now: 
 /** Names the other people in a meeting, the way a call list identifies a call. */
 export function meetingTitle(people: MeetingPerson[], participantCount: number) {
   const others = people.filter((person) => !person.isYou);
-  if (!others.length) return participantCount > 1 ? 'Meeting' : 'Only you';
+  if (!others.length) return participantCount > 1 ? 'Meeting' : 'Me';
   const names = others.slice(0, 2).map((person) => person.name);
   // participantCount includes you, so the remainder excludes you and the named people.
   const remaining = participantCount - 1 - names.length;
   return remaining > 0 ? `${names.join(', ')} +${remaining}` : names.join(' and ');
+}
+
+/** How many people a call's avatar shows together. History previews list at most this many others. */
+export const CALL_AVATAR_PEOPLE = 4;
+
+export type CallAvatar = { kind: 'self' } | { kind: 'group' } | { kind: 'people'; people: MeetingPerson[] };
+
+/**
+ * A call's picture in lists: the group for group calls, you when nobody else joined, otherwise the other
+ * people, up to four in one circle.
+ */
+export function callAvatar(meeting: Pick<MeetingSession, 'participants'>, isGroupCall: boolean): CallAvatar {
+  if (isGroupCall) return { kind: 'group' };
+  const others = meeting.participants.filter((person) => !person.isYou);
+  return others.length ? { kind: 'people', people: others.slice(0, CALL_AVATAR_PEOPLE) } : { kind: 'self' };
 }
 
 /** Conversation calls are calls; meetings are named by who could join them. */
