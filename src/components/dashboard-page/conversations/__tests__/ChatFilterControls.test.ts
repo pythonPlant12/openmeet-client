@@ -4,18 +4,15 @@ import { describe, expect, it } from 'vitest';
 import ChatFilterControls from '@/components/dashboard-page/conversations/ChatFilterControls.vue';
 
 describe('ChatFilterControls', () => {
-  it('labels the buttons for the current view', () => {
+  it('is one switch labelled with the next view', () => {
     const wrapper = mount(ChatFilterControls, { props: { filter: 'groups' } });
     const labels = wrapper.findAll('button').map((button) => button.attributes('aria-label'));
-    expect(labels).toEqual(['Create group', 'Show friends chats']);
+    expect(labels).toEqual(['Show friends chats']);
   });
 
-  it('emits the action and the next view', async () => {
+  it('emits the next view', async () => {
     const wrapper = mount(ChatFilterControls, { props: { filter: 'groups' } });
-    const [action, toggle] = wrapper.findAll('button');
-    await action!.trigger('click');
-    await toggle!.trigger('click');
-    expect(wrapper.emitted('action')).toEqual([['create-group']]);
+    await wrapper.get('button').trigger('click');
     expect(wrapper.emitted('switch')).toEqual([['direct']]);
   });
 });

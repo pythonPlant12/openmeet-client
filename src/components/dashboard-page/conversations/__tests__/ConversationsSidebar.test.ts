@@ -166,9 +166,10 @@ describe('ConversationsSidebar', () => {
   it('shows the view title, search label and controls', () => {
     const wrapper = mountSidebar({ filter: 'groups' });
     expect(wrapper.get('h1').text()).toContain('Group chats');
-    expect(wrapper.get('label').text()).toContain('Search group chats');
     expect(wrapper.get('input').attributes('placeholder')).toBe('Search group chats');
-    expect(wrapper.find('button[aria-label="Create group"]').exists()).toBe(true);
+    // One white switch, no teal action.
+    expect(wrapper.find('[data-tone="accent"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label="Show friends chats"]').exists()).toBe(true);
   });
 
   it('switches views from the switch button', async () => {
@@ -210,9 +211,10 @@ describe('ConversationsSidebar', () => {
     expect(mountSidebar({ filter: 'direct', conversations: [] }).text()).toContain('No friends chats yet.');
   });
 
-  it('emits add-friend from the teal action in friends chats', async () => {
-    const wrapper = mountSidebar({ filter: 'direct' });
-    await wrapper.get('button[aria-label="Add friend"]').trigger('click');
-    expect(wrapper.emitted('add-friend')).toHaveLength(1);
+  it('offers Create group at the top of group chats only', async () => {
+    expect(mountSidebar().find('[data-create-group]').exists()).toBe(false);
+    const wrapper = mountSidebar({ filter: 'groups' });
+    await wrapper.get('[data-create-group]').trigger('click');
+    expect(wrapper.emitted('create-group')).toHaveLength(1);
   });
 });

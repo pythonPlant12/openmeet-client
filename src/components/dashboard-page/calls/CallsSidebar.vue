@@ -8,7 +8,6 @@ import { Avatar } from '@/components/ui/avatar';
 import { ListHeading, ListRow } from '@/components/ui/list-row';
 import { LoadingRipple } from '@/components/ui/loading';
 import { RoundButton } from '@/components/ui/round-button';
-import { SearchPill } from '@/components/ui/search-pill';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { formatListTime } from '@/lib/list-time';
 import { callAgainTargets, formatDuration, meetingDuration, meetingTitle, meetingType } from '@/lib/meetings';
@@ -77,7 +76,7 @@ function initials(name: string) {
     class="flex min-h-0 flex-1 flex-col overflow-hidden"
     aria-labelledby="calls-heading"
   >
-    <PaneHeader title="Calls" heading-id="calls-heading">
+    <PaneHeader v-model:query="query" title="Calls" heading-id="calls-heading" search-label="Search calls">
       <template #badge><SectionBadge :count="badge" singular="missed call" plural="missed calls" /></template>
       <template #trailing>
         <RoundButton
@@ -89,12 +88,6 @@ function initials(name: string) {
           ><Plus
         /></RoundButton>
       </template>
-      <SearchPill
-        v-model="query"
-        label="Search calls"
-        clear-label="Clear call search"
-        placeholder="Name or @nickname"
-      />
     </PaneHeader>
     <!-- On phones the workspace tabs float over the list, so its end scrolls clear of them. -->
     <div

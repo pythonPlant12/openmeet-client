@@ -8,6 +8,7 @@ import {
   LogOut,
   Mail,
   MailOpen,
+  Plus,
   Trash2,
   UserPlus,
   UsersRound,
@@ -22,7 +23,6 @@ import ChatFilterControls from '@/components/dashboard-page/conversations/ChatFi
 import {
   CHAT_FILTER_VIEWS,
   type ChatFilter,
-  type ChatFilterAction,
   nextChatFilter,
   previousChatFilter,
 } from '@/components/dashboard-page/conversations/chat-filter';
@@ -38,7 +38,6 @@ import { ListHeading, ListRow } from '@/components/ui/list-row';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { RoundButton } from '@/components/ui/round-button';
-import { SearchPill } from '@/components/ui/search-pill';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { useHorizontalSwipe } from '@/composables/useHorizontalSwipe';
 import { userStatusOption } from '@/config/user-status.config';
@@ -77,7 +76,6 @@ const emit = defineEmits<{
   (event: 'create-group'): void;
   (event: 'join-group'): void;
   (event: 'start-meeting'): void;
-  (event: 'add-friend'): void;
   (event: 'join-meeting'): void;
   (event: 'select', conversation: Conversation): void;
   (event: 'details', conversation: Conversation): void;
@@ -116,13 +114,7 @@ useHorizontalSwipe(headerRef, {
   onSwipe: (direction) =>
     (filter.value = direction === 'next' ? nextChatFilter(filter.value) : previousChatFilter(filter.value)),
 });
-
-function runAction(action: ChatFilterAction) {
-  if (action === 'start-meeting') emit('start-meeting');
-  else if (action === 'create-group') emit('create-group');
-  else emit('add-friend');
-}
-const searchInput = ref<InstanceType<typeof SearchPill> | null>(null);
+const searchInput = ref<InstanceType<typeof PaneHeader> | null>(null);
 let longPressTimer: number | undefined;
 let suppressClick = false;
 
@@ -192,7 +184,15 @@ onBeforeUnmount(clearLongPress);
 <template>
   <!-- Vertical pans stay with the page; horizontal ones are the view swipe. -->
   <div ref="headerRef" class="touch-pan-y">
-    <PaneHeader :title="view.title">
+    <PaneHeader
+      ref="searchInput"
+      v-model:query="query"
+      :title="view.title"
+      :search-label="view.searchLabel"
+      search-id="conversation-search"
+      @search-focus="handleSearchFocus"
+      @search-blur="handleSearchBlur"
+    >
       <template #title
         ><AnimatePresence mode="popLayout" :initial="false"
           ><motion.span :key="filter" v-bind="titleMotion" class="inline-block">{{
@@ -204,18 +204,8 @@ onBeforeUnmount(clearLongPress);
         ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention"
       /></template>
       <template #trailing>
-        <ChatFilterControls :filter="filter" @action="runAction" @switch="filter = $event" />
+        <ChatFilterControls :filter="filter" @switch="filter = $event" />
       </template>
-      <SearchPill
-        id="conversation-search"
-        ref="searchInput"
-        v-model="query"
-        :label="view.searchLabel"
-        :placeholder="view.searchLabel"
-        clear-label="Clear conversation search"
-        @focus="handleSearchFocus"
-        @blur="handleSearchBlur"
-      />
     </PaneHeader>
   </div>
   <div
@@ -229,6 +219,18 @@ onBeforeUnmount(clearLongPress);
       class="h-full min-h-0 overflow-y-auto px-2 pb-[calc(0.5rem+var(--sidebar-bottom-inset,0px))] pt-1"
       aria-live="polite"
     >
+      <ListRow
+        v-if="filter === 'groups'"
+        data-create-group
+        class="mb-1 text-harbor-accent"
+        @click="emit('create-group')"
+      >
+        <template #avatar
+          ><Avatar class="bg-harbor-accent-soft text-harbor-accent"><Plus /></Avatar
+        ></template>
+        Create group
+        <template #subtitle>Start a new group chat</template>
+      </ListRow>
       <section v-if="filter !== 'direct' && groupInvitations.length" class="mb-2">
         <ListHeading class="pt-1">Group invitations</ListHeading>
         <ListRow

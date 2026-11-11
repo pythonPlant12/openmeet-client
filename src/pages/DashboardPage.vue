@@ -395,6 +395,7 @@ const showNotificationPermissionWarning = computed(
 const canRequestNotificationPermission = computed(() => notificationPermission.value === 'default');
 
 const friendById = computed(() => new Map(friends.value.map((friend) => [friend.id, friend])));
+const groupConversations = computed(() => conversations.value.filter((conversation) => conversation.kind === 'group'));
 const filteredConversations = computed(() =>
   filterConversations(conversations.value, chatFilter.value, searchQuery.value, conversationName),
 );
@@ -2448,7 +2449,6 @@ async function startConversationCall(conversation: Conversation, options?: { vid
             :unread-count="unreadCount"
             @update:search-open="setConversationSearchOpen"
             @create-group="setCreateGroupDialogOpen(true)"
-            @add-friend="setPeopleSearchOpen(true)"
             @join-group="isJoinGroupDialogOpen = true"
             @start-meeting="createMeeting"
             @join-meeting="isJoinRoomDialogOpen = true"
@@ -2490,7 +2490,12 @@ async function startConversationCall(conversation: Conversation, options?: { vid
           :results="newPeopleSearchResults"
           :result-avatar-urls="peopleResultAvatarUrls"
           :search-open="isPeopleSearchOpen"
+          :groups="groupConversations"
+          :group-avatar-urls="groupAvatarUrls"
+          :is-group-avatar-loading="isGroupAvatarLoading"
           @update:search-open="setPeopleSearchOpen"
+          @open-group="selectConversation"
+          @create-group="setCreateGroupDialogOpen(true)"
           @open="openFriendConversation"
           @profile="(friend) => openContactProfile(friend.id, friend.name)"
           @call="startFriendCall"

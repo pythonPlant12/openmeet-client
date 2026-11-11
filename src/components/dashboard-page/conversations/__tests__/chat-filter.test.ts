@@ -41,6 +41,6 @@ describe('chat filter', () => {
     expect(CHAT_FILTER_VIEWS.direct.title).toBe('Friends chats');
     expect(CHAT_FILTER_VIEWS.groups.searchLabel).toBe('Search group chats');
     expect(CHAT_FILTER_VIEWS.direct.noMatchText).toBe('No friends chats match your search.');
-    expect(CHAT_FILTER_VIEWS.direct.action).toBe('add-friend');
+    expect(CHAT_FILTER_VIEWS.direct.switchLabel).toBe('Show all chats');
   });
 });

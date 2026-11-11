@@ -117,4 +117,10 @@ describe('CallsSidebar', () => {
     await wrapper.get('[aria-label="Mark call unread"]').trigger('click');
     expect(wrapper.emitted('toggle-read')?.[0]).toEqual([{ ...missedCall, unread: false }]);
   });
+
+  it('searches from the round button beside the title', () => {
+    const wrapper = mountSidebar();
+    expect(wrapper.find('[data-pane-search]').exists()).toBe(true);
+    expect(wrapper.get('input').attributes('placeholder')).toBe('Search calls');
+  });
 });
