@@ -34,10 +34,10 @@ const activeTechnology = computed(
 </script>
 
 <template>
-  <div class="marketing-font -mt-[84px] flex min-h-[calc(100svh-60px)] flex-col bg-[#102F35] text-white">
+  <div class="marketing-font flex sm:-mt-[84px] min-h-[calc(100svh-60px)] flex-col bg-[#102F35] text-white">
     <main class="flex-1">
       <section
-        class="relative overflow-hidden px-5 pb-20 pt-[164px] sm:px-8 sm:pb-28 sm:pt-[196px] lg:px-12 lg:pb-32 lg:pt-[212px]"
+        class="relative overflow-hidden px-5 pb-20 pt-24 sm:px-8 sm:pb-28 sm:pt-[196px] lg:px-12 lg:pb-32 lg:pt-[212px]"
       >
         <div
           class="pointer-events-none absolute -right-40 -top-44 size-[32rem] rounded-full bg-[#0B7A75]/25 blur-3xl"

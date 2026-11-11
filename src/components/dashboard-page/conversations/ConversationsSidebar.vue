@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMediaQuery } from '@vueuse/core';
 import {
   Check,
   ChevronDown,
@@ -11,13 +12,20 @@ import {
   Trash2,
   UserPlus,
   UsersRound,
-  Video,
   X,
 } from 'lucide-vue-next';
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { AnimatePresence, motion } from 'motion-v';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import PaneHeader from '@/components/dashboard-page/PaneHeader.vue';
 import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
+import ChatFilterControls from '@/components/dashboard-page/conversations/ChatFilterControls.vue';
+import {
+  CHAT_FILTER_VIEWS,
+  type ChatFilter,
+  nextChatFilter,
+  previousChatFilter,
+} from '@/components/dashboard-page/conversations/chat-filter';
 import { Avatar } from '@/components/ui/avatar';
 import {
   ContextMenu,
@@ -26,18 +34,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { ListHeading, ListRow } from '@/components/ui/list-row';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { RoundButton } from '@/components/ui/round-button';
-import { SearchPill } from '@/components/ui/search-pill';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { useHorizontalSwipe } from '@/composables/useHorizontalSwipe';
 import { userStatusOption } from '@/config/user-status.config';
 import type { Conversation, DirectMessageRequest, GroupInvitation, UserStatus } from '@/services/social-api';
 
@@ -92,7 +94,27 @@ const emit = defineEmits<{
 const SWIPE_ACTION_WIDTH = 80;
 
 const query = defineModel<string>('query', { required: true });
-const searchInput = ref<InstanceType<typeof SearchPill> | null>(null);
+const filter = defineModel<ChatFilter>('filter', { required: true });
+const view = computed(() => CHAT_FILTER_VIEWS[filter.value]);
+const headerRef = ref<HTMLElement | null>(null);
+const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+const titleMotion = computed(() =>
+  prefersReducedMotion.value
+    ? {}
+    : {
+        initial: { opacity: 0, y: 6 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -6 },
+        transition: { duration: 0.2 },
+      },
+);
+
+// A horizontal swipe over the header moves between Chats, Group chats, and Friends chats.
+useHorizontalSwipe(headerRef, {
+  onSwipe: (direction) =>
+    (filter.value = direction === 'next' ? nextChatFilter(filter.value) : previousChatFilter(filter.value)),
+});
+const searchInput = ref<InstanceType<typeof PaneHeader> | null>(null);
 let longPressTimer: number | undefined;
 let suppressClick = false;
 
@@ -160,37 +182,32 @@ onBeforeUnmount(clearLongPress);
 </script>
 
 <template>
-  <PaneHeader title="Chats">
-    <template #badge
-      ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention"
-    /></template>
-    <template #trailing>
-      <DropdownMenu :modal="false">
-        <DropdownMenuTrigger as-child>
-          <RoundButton
-            tone="accent"
-            aria-label="Start a meeting or create a group"
-            title="Start a meeting or create a group"
-            class="[&_svg]:!size-6"
-            ><Plus
-          /></RoundButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" :side-offset="8">
-          <DropdownMenuItem @select="emit('start-meeting')"><Video />Start meeting</DropdownMenuItem>
-          <DropdownMenuItem @select="emit('create-group')"><UsersRound />Create group</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </template>
-    <SearchPill
-      id="conversation-search"
+  <!-- Vertical pans stay with the page; horizontal ones are the view swipe. -->
+  <div ref="headerRef" class="touch-pan-y">
+    <PaneHeader
       ref="searchInput"
-      v-model="query"
-      label="Search conversations"
-      clear-label="Clear conversation search"
-      @focus="handleSearchFocus"
-      @blur="handleSearchBlur"
-    />
-  </PaneHeader>
+      v-model:query="query"
+      :title="view.title"
+      :search-label="view.searchLabel"
+      search-id="conversation-search"
+      @search-focus="handleSearchFocus"
+      @search-blur="handleSearchBlur"
+    >
+      <template #title
+        ><AnimatePresence mode="popLayout" :initial="false"
+          ><motion.span :key="filter" v-bind="titleMotion" class="inline-block">{{
+            view.title
+          }}</motion.span></AnimatePresence
+        ></template
+      >
+      <template #badge
+        ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention"
+      /></template>
+      <template #trailing>
+        <ChatFilterControls :filter="filter" @switch="filter = $event" />
+      </template>
+    </PaneHeader>
+  </div>
   <div
     class="flex min-h-0 flex-col overflow-hidden transition-[flex-grow,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
     :class="expanded ? 'flex-1 opacity-100' : 'pointer-events-none flex-none basis-0 opacity-0'"
@@ -202,7 +219,19 @@ onBeforeUnmount(clearLongPress);
       class="h-full min-h-0 overflow-y-auto px-2 pb-[calc(0.5rem+var(--sidebar-bottom-inset,0px))] pt-1"
       aria-live="polite"
     >
-      <section v-if="groupInvitations.length" class="mb-2">
+      <ListRow
+        v-if="filter === 'groups'"
+        data-create-group
+        class="mb-1 text-harbor-accent"
+        @click="emit('create-group')"
+      >
+        <template #avatar
+          ><Avatar class="bg-harbor-accent-soft text-harbor-accent"><Plus /></Avatar
+        ></template>
+        Create group
+        <template #subtitle>Start a new group chat</template>
+      </ListRow>
+      <section v-if="filter !== 'direct' && groupInvitations.length" class="mb-2">
         <ListHeading class="pt-1">Group invitations</ListHeading>
         <ListRow
           v-for="invitation in groupInvitations"
@@ -241,7 +270,7 @@ onBeforeUnmount(clearLongPress);
           ></template>
         </ListRow>
       </section>
-      <section v-if="directRequests.length" class="mb-2">
+      <section v-if="filter !== 'groups' && directRequests.length" class="mb-2">
         <ListHeading class="pt-1">Message requests</ListHeading>
         <ListRow v-for="request in directRequests" :key="request.id" as="div">
           <template #avatar
@@ -275,7 +304,7 @@ onBeforeUnmount(clearLongPress);
         <LoadingRipple class="size-6 text-harbor-icon" /><span class="sr-only">Loading conversations</span>
       </div>
       <p v-else-if="!conversations.length" class="px-3 py-8 text-center text-sm text-harbor-muted">
-        {{ query ? 'No conversations match your search.' : 'No conversations yet.' }}
+        {{ query ? view.noMatchText : view.emptyText }}
       </p>
       <nav v-else aria-label="Persistent conversations">
         <SwipeableRow

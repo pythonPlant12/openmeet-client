@@ -14,6 +14,7 @@ import {
   shareDecodedVoiceMessage,
 } from '@/components/dashboard-page/chat/voice-message';
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
+import { type ChatFilter, filterConversations } from '@/components/dashboard-page/conversations/chat-filter';
 import DetailsPane from '@/components/dashboard-page/details/DetailsPane.vue';
 import ContactProfileDialog from '@/components/dashboard-page/friends/ContactProfileDialog.vue';
 import FriendsSidebar from '@/components/dashboard-page/friends/FriendsSidebar.vue';
@@ -134,6 +135,7 @@ const directRequests = ref<DirectMessageRequest[]>([]);
 const groupInvitations = ref<GroupInvitation[]>([]);
 const activeGroupInvitation = ref<GroupInvitation | null>(null);
 const searchQuery = ref('');
+const chatFilter = ref<ChatFilter>('all');
 const isConversationSearchOpen = ref(false);
 const peopleSearchQuery = ref('');
 const isPeopleSearchOpen = ref(false);
@@ -393,14 +395,10 @@ const showNotificationPermissionWarning = computed(
 const canRequestNotificationPermission = computed(() => notificationPermission.value === 'default');
 
 const friendById = computed(() => new Map(friends.value.map((friend) => [friend.id, friend])));
-const filteredConversations = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase();
-  if (!query) return conversations.value;
-
-  return conversations.value.filter((conversation) =>
-    conversationName(conversation).toLocaleLowerCase().includes(query),
-  );
-});
+const groupConversations = computed(() => conversations.value.filter((conversation) => conversation.kind === 'group'));
+const filteredConversations = computed(() =>
+  filterConversations(conversations.value, chatFilter.value, searchQuery.value, conversationName),
+);
 const filteredFriends = computed(() => {
   const query = peopleSearchQuery.value.trim().toLocaleLowerCase();
 
@@ -558,6 +556,14 @@ function conversationActivityTime(conversation: Conversation) {
 }
 
 const { avatarUrl: ownAvatarUrl } = useOwnProfile();
+
+// Calls started from a group conversation show the group's picture in the call history.
+function callGroup(meeting: MeetingSession) {
+  const conversation = meeting.conversationId
+    ? conversations.value.find((item) => item.id === meeting.conversationId)
+    : undefined;
+  return conversation?.kind === 'group' ? { avatarUrl: groupAvatarUrls.value[conversation.id] } : null;
+}
 
 function messageSenderAvatar(message: ConversationMessage) {
   const url = isLocalMessage(message)
@@ -2426,6 +2432,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         <div v-show="activeSidebarSection === 'messages'" class="flex min-h-0 flex-1 flex-col">
           <ConversationsSidebar
             v-model:query="searchQuery"
+            v-model:filter="chatFilter"
             :active-context-menu-id="activeContextMenuId"
             :conversations="filteredConversations"
             :context-menu-key="contextMenuKey"
@@ -2491,7 +2498,12 @@ async function startConversationCall(conversation: Conversation, options?: { vid
           :results="newPeopleSearchResults"
           :result-avatar-urls="peopleResultAvatarUrls"
           :search-open="isPeopleSearchOpen"
+          :groups="groupConversations"
+          :group-avatar-urls="groupAvatarUrls"
+          :is-group-avatar-loading="isGroupAvatarLoading"
           @update:search-open="setPeopleSearchOpen"
+          @open-group="selectConversation"
+          @create-group="setCreateGroupDialogOpen(true)"
           @open="openFriendConversation"
           @profile="(friend) => openContactProfile(friend.id, friend.name)"
           @call="startFriendCall"
@@ -2507,6 +2519,8 @@ async function startConversationCall(conversation: Conversation, options?: { vid
           :panel="callsPanel"
           :badge="badges.calls"
           :meetings="callHistory.meetings.value"
+          :self-avatar-url="ownAvatarUrl ?? undefined"
+          :call-group="callGroup"
           :is-loading="callHistory.isLoading.value"
           :error="callHistory.error.value"
           :has-more="callHistory.nextBefore.value !== null"

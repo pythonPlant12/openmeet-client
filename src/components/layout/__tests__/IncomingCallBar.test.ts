@@ -30,4 +30,9 @@ describe('IncomingCallBar', () => {
     expect(wrapper.find('[data-incoming-accept]').exists()).toBe(false);
     expect(wrapper.find('[data-incoming-decline]').exists()).toBe(false);
   });
+
+  it('stays above the full-screen media viewer', () => {
+    // The media viewer sits at z-[1060], above the navigation bars.
+    expect(mountBar().get('div').classes()).toContain('z-[1070]');
+  });
 });

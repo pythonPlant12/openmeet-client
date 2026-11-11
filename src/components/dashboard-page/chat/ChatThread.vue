@@ -18,6 +18,7 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { RoundButton } from '@/components/ui/round-button';
 import { toast } from '@/components/ui/toast';
 import { playHaptic } from '@/services/haptics';
+import { hasNativeMediaPicker, pickNativeMedia } from '@/services/media-picker';
 import type {
   ConversationMessage,
   ConversationMessageAttachment,
@@ -349,18 +350,36 @@ function handleComposerKeydown(event: KeyboardEvent) {
   }
 }
 
-function chooseAttachments(kind: 'file' | 'media') {
+async function chooseAttachments(kind: 'file' | 'media') {
   if (props.sending) return;
+  if (kind === 'media' && hasNativeMediaPicker()) {
+    try {
+      const { files, oversized } = await pickNativeMedia({
+        kind: 'media',
+        multiple: true,
+        maxBytes: MAX_ATTACHMENT_BYTES,
+      });
+      addFiles(files, oversized > 0);
+    } catch (error) {
+      console.error('[ChatThread] Failed to pick photos and videos:', error);
+      toast({ title: 'Could not open your photos.', variant: 'destructive' });
+    }
+    return;
+  }
   (kind === 'file' ? fileInput.value : mediaInput.value)?.click();
 }
 
 function addAttachments(event: Event) {
-  if (props.sending) return;
   const input = event.target as HTMLInputElement;
   const selected = [...(input.files ?? [])];
   input.value = '';
+  addFiles(selected);
+}
+
+function addFiles(selected: File[], rejectedForSizeAlready = false) {
+  if (props.sending) return;
   let totalSize = attachments.value.reduce((sum, attachment) => sum + attachment.size, 0);
-  let rejectedForSize = false;
+  let rejectedForSize = rejectedForSizeAlready;
   let rejectedForTotal = false;
   const allowed = selected.filter((file) => {
     if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) {

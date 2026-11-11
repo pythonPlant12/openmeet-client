@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { CheckCheck, EyeOff, Info, Phone, PhoneMissed, Plus, UserRound, UsersRound, Video } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { type Component, computed, ref } from 'vue';
 
 import PaneHeader from '@/components/dashboard-page/PaneHeader.vue';
 import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
-import { Avatar } from '@/components/ui/avatar';
+import { Avatar, AvatarMosaic, type MosaicFace } from '@/components/ui/avatar';
 import { ListHeading, ListRow } from '@/components/ui/list-row';
 import { LoadingRipple } from '@/components/ui/loading';
 import { RoundButton } from '@/components/ui/round-button';
-import { SearchPill } from '@/components/ui/search-pill';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { formatListTime } from '@/lib/list-time';
-import { callAgainTargets, formatDuration, meetingDuration, meetingTitle, meetingType } from '@/lib/meetings';
+import {
+  callAgainTargets,
+  callAvatar,
+  formatDuration,
+  meetingDuration,
+  meetingTitle,
+  meetingType,
+} from '@/lib/meetings';
 import type { CallsPanel } from '@/pages/dashboard-group-state';
 import type { MeetingPerson, MeetingSession } from '@/services/social-api';
 
@@ -27,6 +33,10 @@ const props = defineProps<{
   now: number;
   avatarFor: (person: MeetingPerson) => string | undefined;
   callingId: string | null;
+  /** Your own picture, shown for calls nobody else joined. */
+  selfAvatarUrl?: string;
+  /** The group a call was started from, so group calls show the group's picture; null for other calls. */
+  callGroup?: (meeting: MeetingSession) => { avatarUrl?: string } | null;
 }>();
 const emit = defineEmits<{
   (event: 'open', meeting: MeetingSession): void;
@@ -50,9 +60,33 @@ const visibleMeetings = computed(() => {
   );
 });
 
-function otherPeople(meeting: MeetingSession) {
-  return meeting.participants.filter((person) => !person.isYou);
+interface SinglePicture {
+  src?: string;
+  initials?: string;
+  icon: Component;
 }
+
+// Each row's picture: the group's, yours, or the other person's; several people share one circle instead.
+const pictures = computed(() => {
+  const mosaics = new Map<string, MosaicFace[]>();
+  const singles = new Map<string, SinglePicture>();
+  for (const meeting of visibleMeetings.value) {
+    const group = props.callGroup?.(meeting) ?? null;
+    const picture = callAvatar(meeting, !!group);
+    if (picture.kind === 'group') singles.set(meeting.id, { src: group?.avatarUrl, icon: UsersRound });
+    else if (picture.kind === 'self') singles.set(meeting.id, { src: props.selfAvatarUrl, icon: UserRound });
+    else if (picture.people.length > 1)
+      mosaics.set(
+        meeting.id,
+        picture.people.map((person) => ({ src: props.avatarFor(person), initials: initials(person.name) })),
+      );
+    else {
+      const [person] = picture.people;
+      singles.set(meeting.id, { src: props.avatarFor(person!), initials: initials(person!.name), icon: UserRound });
+    }
+  }
+  return { mosaics, singles };
+});
 
 function detailOf(meeting: MeetingSession) {
   return `${meetingType(meeting).label} · ${formatDuration(meetingDuration(meeting.startedAt, meeting.endedAt, props.now))}`;
@@ -77,7 +111,7 @@ function initials(name: string) {
     class="flex min-h-0 flex-1 flex-col overflow-hidden"
     aria-labelledby="calls-heading"
   >
-    <PaneHeader title="Calls" heading-id="calls-heading">
+    <PaneHeader v-model:query="query" title="Calls" heading-id="calls-heading" search-label="Search calls">
       <template #badge><SectionBadge :count="badge" singular="missed call" plural="missed calls" /></template>
       <template #trailing>
         <RoundButton
@@ -89,12 +123,6 @@ function initials(name: string) {
           ><Plus
         /></RoundButton>
       </template>
-      <SearchPill
-        v-model="query"
-        label="Search calls"
-        clear-label="Clear call search"
-        placeholder="Name or @nickname"
-      />
     </PaneHeader>
     <!-- On phones the workspace tabs float over the list, so its end scrolls clear of them. -->
     <div
@@ -198,11 +226,15 @@ function initials(name: string) {
           </template>
           <ListRow data-call-item @click="emit('open', meeting)">
             <template #avatar
-              ><Avatar v-if="otherPeople(meeting).length > 1"><UsersRound /></Avatar
-              ><Avatar
-                v-else-if="otherPeople(meeting)[0]"
-                :src="avatarFor(otherPeople(meeting)[0]!)"
-                :initials="initials(otherPeople(meeting)[0]!.name)" /><Avatar v-else><UserRound /></Avatar
+              ><AvatarMosaic
+                v-if="pictures.mosaics.has(meeting.id)"
+                :faces="pictures.mosaics.get(meeting.id)!" /><Avatar
+                v-else
+                :src="pictures.singles.get(meeting.id)?.src"
+                :initials="pictures.singles.get(meeting.id)?.initials"
+                ><component
+                  :is="pictures.singles.get(meeting.id)?.icon"
+                  v-if="!pictures.singles.get(meeting.id)?.initials" /></Avatar
             ></template>
             <span :class="{ 'text-harbor-danger': meeting.missed }">{{
               meetingTitle(meeting.participants, meeting.participantCount)

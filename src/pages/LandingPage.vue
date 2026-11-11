@@ -71,7 +71,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="marketing-font -mt-[84px] overflow-hidden bg-[#FBFCF8] text-[#102F35]">
+  <div class="marketing-font overflow-hidden sm:-mt-[84px] bg-[#FBFCF8] text-[#102F35]">
     <main>
       <section class="relative bg-[#FBFCF8] px-5 pb-20 pt-24 sm:px-8 sm:pb-28 sm:pt-28 lg:px-12 lg:pb-32">
         <div

@@ -1,7 +1,14 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FriendsSidebar from '@/components/dashboard-page/friends/FriendsSidebar.vue';
+import type { Conversation } from '@/services/social-api';
+
+function group(id: string, title: string, groupCode: string) {
+  return { id, kind: 'group', title, groupCode, role: 'member' } as Conversation;
+}
+
+const groups = [group('g1', 'Design team', 'AbC123'), group('g2', 'Climbing', 'XyZ789')];
 
 function mountSidebar(props: Record<string, unknown> = {}) {
   return mount(FriendsSidebar, {
@@ -25,11 +32,26 @@ function mountSidebar(props: Record<string, unknown> = {}) {
       resultAvatarUrls: {},
       searchOpen: true,
       contextMenuKey: (id: string) => id,
+      groups,
+      groupAvatarUrls: {},
+      isGroupAvatarLoading: () => false,
       ...props,
     },
     global: { stubs: { LoadingRipple: { template: '<span />' } } },
   });
 }
+
+// motion-v watches visibility for its animations; jsdom has no IntersectionObserver.
+beforeEach(() => {
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
 
 describe('FriendsSidebar', () => {
   it('shows incoming friend requests beside the title, also while collapsed', () => {
@@ -126,5 +148,46 @@ describe('FriendsSidebar', () => {
     expect(wrapper.get('[data-friends-empty]').text()).toContain('No friends yet');
     await wrapper.get('[data-friends-empty] button').trigger('click');
     expect(wrapper.emitted('update:searchOpen')).toEqual([[true]]);
+  });
+
+  it('shows one white switch to groups and the friends search', () => {
+    const wrapper = mountSidebar({ query: '' });
+    expect(wrapper.find('[data-tone="accent"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label="Show groups"]').exists()).toBe(true);
+    expect(wrapper.get('input').attributes('placeholder')).toBe('Search friends');
+  });
+
+  it('switches to the groups view with its own search and Create group', async () => {
+    const wrapper = mountSidebar({ query: '' });
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    expect(wrapper.get('h1').text()).toContain('Groups');
+    expect(wrapper.get('input').attributes('placeholder')).toBe('Search groups');
+    expect(wrapper.findAll('[data-group-row]').map((row) => row.text())).toEqual([
+      expect.stringContaining('Design team'),
+      expect.stringContaining('Climbing'),
+    ]);
+    await wrapper.get('[data-create-group]').trigger('click');
+    expect(wrapper.emitted('create-group')).toHaveLength(1);
+  });
+
+  it('searches groups by name or group ID without touching the friends query', async () => {
+    const wrapper = mountSidebar({ query: '' });
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    await wrapper.get('input').setValue('xyz7');
+    expect(wrapper.findAll('[data-group-row]').map((row) => row.text())).toEqual([expect.stringContaining('Climbing')]);
+    await wrapper.get('input').setValue('design');
+    expect(wrapper.findAll('[data-group-row]').map((row) => row.text())).toEqual([
+      expect.stringContaining('Design team'),
+    ]);
+    expect(wrapper.emitted('update:query')).toBeUndefined();
+  });
+
+  it('opens a group from the groups view and switches back to friends', async () => {
+    const wrapper = mountSidebar({ query: '' });
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    await wrapper.get('[data-group-row]').trigger('click');
+    expect(wrapper.emitted('open-group')).toEqual([[groups[0]]]);
+    await wrapper.get('button[aria-label="Show friends"]').trigger('click');
+    expect(wrapper.get('h1').text()).toContain('Friends');
   });
 });

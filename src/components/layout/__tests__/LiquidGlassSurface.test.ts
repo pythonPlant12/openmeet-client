@@ -10,7 +10,15 @@ function mountSurface(targetKey: string | null) {
     slots: {
       default: ({ targetKey: current }: { targetKey: string | null }) =>
         ['chat', 'share'].map((key) =>
-          h('button', { 'data-liquid-key': key, 'data-current': String(current === key) }, key),
+          h(
+            'button',
+            {
+              'data-liquid-key': key,
+              'data-liquid-accent': key === 'share' ? 'true' : undefined,
+              'data-current': String(current === key),
+            },
+            key,
+          ),
         ),
     },
   });
@@ -43,5 +51,14 @@ describe('LiquidGlassSurface', () => {
 
     await wrapper.trigger('pointerleave');
     expect(wrapper.get('[data-liquid-key="chat"]').attributes('data-current')).toBe('true');
+  });
+
+  it('turns the drop teal on an accent item', async () => {
+    const wrapper = mountSurface('chat');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.attributes('data-accent')).toBeUndefined();
+
+    await wrapper.setProps({ targetKey: 'share' });
+    expect(wrapper.attributes('data-accent')).toBe('true');
   });
 });

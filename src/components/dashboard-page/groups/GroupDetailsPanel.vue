@@ -55,6 +55,7 @@ import {
   groupAddActionLabel,
   sortGroupMembers,
 } from '@/pages/dashboard-group-state';
+import { hasNativeMediaPicker, pickNativeMedia } from '@/services/media-picker';
 import {
   type Conversation,
   type Friend,
@@ -359,11 +360,28 @@ function showError(title: string, error: unknown) {
   });
 }
 
+async function chooseAvatar() {
+  if (!hasNativeMediaPicker()) {
+    avatarInput.value?.click();
+    return;
+  }
+  try {
+    const { files, oversized } = await pickNativeMedia({ kind: 'image', multiple: false, maxBytes: MAX_AVATAR_SIZE });
+    if (oversized > 0) toast({ title: 'Avatar must be 5 MiB or smaller.', variant: 'destructive' });
+    else if (files[0]) await uploadAvatarFile(files[0]);
+  } catch (error) {
+    showError('Could not open your photos.', error);
+  }
+}
+
 async function uploadAvatar(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = '';
-  if (!file) return;
+  if (file) await uploadAvatarFile(file);
+}
+
+async function uploadAvatarFile(file: File) {
   if (file.size > MAX_AVATAR_SIZE) {
     toast({ title: 'Avatar must be 5 MiB or smaller.', variant: 'destructive' });
     return;
@@ -874,7 +892,7 @@ defineExpose({
             variant="outline"
             class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
             :disabled="isUploadingAvatar || mutationBusy"
-            @click="avatarInput?.click()"
+            @click="chooseAvatar"
           >
             <LoadingRipple v-if="isUploadingAvatar" size="sm" />
             <Camera v-else class="size-4" />

@@ -5,7 +5,7 @@ import {
   LogOutAnimated,
   MessageSquareAnimated,
   PhoneAnimated,
-  UsersAnimated,
+  PlusAnimated,
 } from '@respeak/lucide-motion-vue';
 import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
@@ -133,9 +133,10 @@ const workspaceTabs = computed<LiquidTab[]>(() => [
     to: { path: '/dashboard', query: { panel: 'messages' } },
   },
   {
+    // The Friends pane is where people and groups are added, so its tab reads New.
     key: 'friends',
-    label: t('nav.friends'),
-    icon: UsersAnimated,
+    label: t('nav.new'),
+    icon: PlusAnimated,
     to: { path: '/dashboard', query: { panel: 'friends' } },
   },
   { key: 'calls', label: t('nav.calls'), icon: PhoneAnimated, to: { path: '/dashboard', query: { panel: 'calls' } } },
@@ -842,12 +843,12 @@ watch(mobileAccountActionsRef, (element, previous) => {
           <div data-mobile-account-sheet-footer class="space-y-2 border-t border-harbor-line pt-4">
             <Button
               type="button"
-              :variant="isMeetingPage ? 'pill-danger' : 'pill'"
-              class="min-h-11 w-full"
+              :variant="isMeetingPage ? 'pill-danger' : 'default'"
+              :class="['min-h-11 w-full', !isMeetingPage && 'liquid-glass-primary rounded-full']"
               :disabled="isAuthBusy"
               @click="isMeetingPage ? handleQuitMeeting() : handleStartMeeting()"
             >
-              <LogOut v-if="isMeetingPage" class="size-4" /><Video v-else class="size-4 !text-harbor-accent" />
+              <LogOut v-if="isMeetingPage" class="size-4" /><Video v-else class="size-4" />
               {{ isMeetingPage ? t('common.quitMeeting') : t('common.startMeeting') }}
             </Button>
             <button
@@ -1369,12 +1370,11 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 >
                   <Button
                     type="button"
-                    variant="pill"
-                    class="min-h-11 w-full"
+                    class="liquid-glass-primary min-h-11 w-full rounded-full"
                     :disabled="isAuthBusy"
                     @click="handleStartMeeting"
                   >
-                    <Video class="size-4 !text-harbor-accent" />
+                    <Video class="size-4" />
                     {{ t('common.startMeeting') }}
                   </Button>
                 </motion.div>

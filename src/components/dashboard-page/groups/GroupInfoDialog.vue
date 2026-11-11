@@ -43,7 +43,10 @@ import { toast } from '@/components/ui/toast';
 import { useFullAvatar } from '@/composables/useFullAvatar';
 import { userStatusOption } from '@/config/user-status.config';
 import { type GroupMutationToken, groupAddActionLabel } from '@/pages/dashboard-group-state';
+import { hasNativeMediaPicker, pickNativeMedia } from '@/services/media-picker';
 import { type Friend, type GroupInfo, type GroupMember, type GroupMemberRole, socialApi } from '@/services/social-api';
+
+const MAX_ICON_BYTES = 5 * 1024 * 1024;
 
 const props = defineProps<{
   open: boolean;
@@ -223,12 +226,31 @@ async function updateMemberRole(member: GroupMember, role: GroupMemberRole) {
   }
 }
 
+async function chooseAvatar() {
+  if (!hasNativeMediaPicker()) {
+    avatarInput.value?.click();
+    return;
+  }
+  try {
+    const { files, oversized } = await pickNativeMedia({ kind: 'image', multiple: false, maxBytes: MAX_ICON_BYTES });
+    if (oversized > 0) toast({ title: 'Icon must be 5 MiB or smaller.', variant: 'destructive' });
+    else if (files[0]) await uploadAvatarFile(files[0]);
+  } catch (error) {
+    console.error('[GroupInfoDialog] Failed to pick group icon:', error);
+    toast({ title: 'Could not open your photos.', variant: 'destructive' });
+  }
+}
+
 async function uploadAvatar(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = '';
-  if (!file || !props.accessToken || !props.info || isUploadingAvatar.value) return;
-  if (file.size > 5 * 1024 * 1024) {
+  if (file) await uploadAvatarFile(file);
+}
+
+async function uploadAvatarFile(file: File) {
+  if (!props.accessToken || !props.info || isUploadingAvatar.value) return;
+  if (file.size > MAX_ICON_BYTES) {
     toast({ title: 'Icon must be 5 MiB or smaller.', variant: 'destructive' });
     return;
   }
@@ -332,7 +354,7 @@ watch(
                 <Eye class="size-4" />View
               </DropdownMenuItem>
               <DropdownMenuSeparator v-if="avatarUrl" class="mx-1 my-2 bg-harbor-line" />
-              <DropdownMenuItem :disabled="isUploadingAvatar || mutationBusy" @select="avatarInput?.click()">
+              <DropdownMenuItem :disabled="isUploadingAvatar || mutationBusy" @select="chooseAvatar">
                 <Camera class="size-4" />Change avatar
               </DropdownMenuItem>
               <DropdownMenuItem
