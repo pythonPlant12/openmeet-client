@@ -14,6 +14,7 @@ import {
   shareDecodedVoiceMessage,
 } from '@/components/dashboard-page/chat/voice-message';
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
+import { type ChatFilter, filterConversations } from '@/components/dashboard-page/conversations/chat-filter';
 import DetailsPane from '@/components/dashboard-page/details/DetailsPane.vue';
 import ContactProfileDialog from '@/components/dashboard-page/friends/ContactProfileDialog.vue';
 import FriendsSidebar from '@/components/dashboard-page/friends/FriendsSidebar.vue';
@@ -134,6 +135,7 @@ const directRequests = ref<DirectMessageRequest[]>([]);
 const groupInvitations = ref<GroupInvitation[]>([]);
 const activeGroupInvitation = ref<GroupInvitation | null>(null);
 const searchQuery = ref('');
+const chatFilter = ref<ChatFilter>('all');
 const isConversationSearchOpen = ref(false);
 const peopleSearchQuery = ref('');
 const isPeopleSearchOpen = ref(false);
@@ -393,14 +395,9 @@ const showNotificationPermissionWarning = computed(
 const canRequestNotificationPermission = computed(() => notificationPermission.value === 'default');
 
 const friendById = computed(() => new Map(friends.value.map((friend) => [friend.id, friend])));
-const filteredConversations = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase();
-  if (!query) return conversations.value;
-
-  return conversations.value.filter((conversation) =>
-    conversationName(conversation).toLocaleLowerCase().includes(query),
-  );
-});
+const filteredConversations = computed(() =>
+  filterConversations(conversations.value, chatFilter.value, searchQuery.value, conversationName),
+);
 const filteredFriends = computed(() => {
   const query = peopleSearchQuery.value.trim().toLocaleLowerCase();
 
@@ -2426,6 +2423,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         <div v-show="activeSidebarSection === 'messages'" class="flex min-h-0 flex-1 flex-col">
           <ConversationsSidebar
             v-model:query="searchQuery"
+            v-model:filter="chatFilter"
             :active-context-menu-id="activeContextMenuId"
             :conversations="filteredConversations"
             :context-menu-key="contextMenuKey"
@@ -2450,6 +2448,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
             :unread-count="unreadCount"
             @update:search-open="setConversationSearchOpen"
             @create-group="setCreateGroupDialogOpen(true)"
+            @add-friend="setPeopleSearchOpen(true)"
             @join-group="isJoinGroupDialogOpen = true"
             @start-meeting="createMeeting"
             @join-meeting="isJoinRoomDialogOpen = true"
