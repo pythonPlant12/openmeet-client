@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
 import type { Conversation } from '@/services/social-api';
@@ -20,10 +20,12 @@ const conversation: Conversation = {
   updatedAt: '2026-10-04T12:00:00Z',
 };
 
-function mountSidebar(props: Record<string, unknown> = {}) {
+function mountSidebar(props: Record<string, unknown> = {}, options: { attachTo?: HTMLElement } = {}) {
   return mount(ConversationsSidebar, {
+    ...options,
     props: {
       query: '',
+      filter: 'all',
       activeContextMenuId: null,
       conversations: [conversation],
       directRequests: [],
@@ -49,6 +51,18 @@ function mountSidebar(props: Record<string, unknown> = {}) {
     global: { stubs: { LoadingRipple: { template: '<span data-loading />' } } },
   });
 }
+
+// motion-v watches visibility for its animations; jsdom has no IntersectionObserver.
+beforeEach(() => {
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
 
 describe('ConversationsSidebar', () => {
   it('shows conversations that need attention beside the title, also while collapsed', () => {
@@ -147,5 +161,57 @@ describe('ConversationsSidebar', () => {
 
     await wrapper.get('[aria-label="Join Harbor Crew"]').trigger('click');
     expect(wrapper.emitted('accept-group-invitation')?.[0]).toEqual([invitation]);
+  });
+
+  it('shows the view title, search label and controls', () => {
+    const wrapper = mountSidebar({ filter: 'groups' });
+    expect(wrapper.get('h1').text()).toContain('Group chats');
+    expect(wrapper.get('label').text()).toContain('Search group chats');
+    expect(wrapper.find('button[aria-label="Create group"]').exists()).toBe(true);
+  });
+
+  it('switches views from the switch button', async () => {
+    const wrapper = mountSidebar();
+    await wrapper.get('button[aria-label="Show group chats"]').trigger('click');
+    expect(wrapper.emitted('update:filter')).toEqual([['groups']]);
+  });
+
+  it('switches views with a header swipe', async () => {
+    const wrapper = mountSidebar({}, { attachTo: document.body });
+    await wrapper.vm.$nextTick();
+    const title = wrapper.get('h1').element;
+    title.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 300, clientY: 20, pointerId: 1 }));
+    title.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 20, pointerId: 1 }));
+    expect(wrapper.emitted('update:filter')).toEqual([['groups']]);
+    wrapper.unmount();
+  });
+
+  it('does not switch views from a drag in the search field', async () => {
+    const wrapper = mountSidebar({}, { attachTo: document.body });
+    await wrapper.vm.$nextTick();
+    const input = wrapper.get('input').element;
+    input.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 300, clientY: 60, pointerId: 1 }));
+    input.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 60, pointerId: 1 }));
+    expect(wrapper.emitted('update:filter')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('keeps the query when switching views', async () => {
+    const wrapper = mountSidebar({ query: 'al' });
+    await wrapper.get('button[aria-label="Show group chats"]').trigger('click');
+    expect(wrapper.emitted('update:query')).toBeUndefined();
+  });
+
+  it("shows the view's empty text", () => {
+    expect(mountSidebar({ filter: 'groups', conversations: [], query: 'x' }).text()).toContain(
+      'No group chats match your search.',
+    );
+    expect(mountSidebar({ filter: 'direct', conversations: [] }).text()).toContain('No friends chats yet.');
+  });
+
+  it('emits add-friend from the teal action in friends chats', async () => {
+    const wrapper = mountSidebar({ filter: 'direct' });
+    await wrapper.get('button[aria-label="Add friend"]').trigger('click');
+    expect(wrapper.emitted('add-friend')).toHaveLength(1);
   });
 });

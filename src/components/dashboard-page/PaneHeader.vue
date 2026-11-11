@@ -12,7 +12,8 @@ defineProps<{ title: string; headingId?: string }>();
         :id="headingId"
         class="pointer-events-none absolute inset-x-0 flex items-center justify-center gap-2 text-[1.0625rem] font-semibold text-harbor-ink"
       >
-        <span>{{ title }}</span
+        <slot name="title"
+          ><span>{{ title }}</span></slot
         ><slot name="badge" />
       </h1>
       <div class="relative z-[1] flex"><slot name="trailing" /></div>
