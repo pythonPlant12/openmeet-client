@@ -75,6 +75,7 @@ function itemAttrs(item: LiquidTab, targetKey: string | null) {
     'data-tab': item.key,
     'data-liquid-key': item.key,
     'data-variant': item.variant,
+    'data-liquid-accent': item.variant === 'primary' ? 'true' : undefined,
     'data-targeted': item.key === targetKey ? 'true' : undefined,
     'data-pressed': pressedKey.value === item.key ? 'true' : undefined,
     'aria-current': item.key === props.activeKey ? 'page' : undefined,
@@ -185,14 +186,14 @@ onUnmounted(() => window.clearTimeout(pressTimer));
   color: #111b21;
 }
 
-/* Primary actions read like the other items, set apart by a gray glass rim. The rim is strongest at rest and
+/* Primary actions read like the other items, set apart by a teal glass rim. The rim is strongest at rest and
    fades while the drop sits on the item, so the drop takes over as its highlight. */
 .liquid-tab[data-variant='primary'] {
   margin-left: 4px;
-  color: #111b21;
-  background: rgb(255 255 255 / 0.55);
+  color: rgb(var(--harbor-accent));
+  background: rgb(var(--harbor-accent-soft) / 0.35);
   box-shadow:
-    inset 0 0 0 1.5px rgb(134 150 160 / 0.45),
+    inset 0 0 0 1.5px rgb(var(--harbor-accent) / 0.55),
     inset 0 1px 1px rgb(255 255 255 / 0.85);
   transition:
     color 0.25s,
@@ -201,9 +202,9 @@ onUnmounted(() => window.clearTimeout(pressTimer));
 }
 
 .liquid-tab[data-variant='primary'][data-targeted='true'] {
-  color: #111b21;
+  color: rgb(var(--harbor-accent-hover));
   background: transparent;
-  box-shadow: inset 0 0 0 1px rgb(134 150 160 / 0.22);
+  box-shadow: inset 0 0 0 1px rgb(var(--harbor-accent) / 0.22);
 }
 
 .liquid-tab:disabled {

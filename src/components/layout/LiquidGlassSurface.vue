@@ -47,6 +47,8 @@ const hoveredKey = ref<string | null>(null);
 // Where the drop sits: the hovered item, else the parent's target.
 const effectiveKey = computed(() => hoveredKey.value ?? props.targetKey);
 const hasTarget = ref(false);
+// Items marked `data-liquid-accent` (primary actions) give the drop a teal rim.
+const hasAccent = ref(false);
 
 const state = createLiquidState();
 let glc: LiquidGl | null = null;
@@ -112,6 +114,8 @@ function measure() {
   const root = rootRef.value;
   const item = findItem(effectiveKey.value);
   hasTarget.value = !!item;
+  hasAccent.value = item?.dataset.liquidAccent === 'true';
+  state.accentTarget = hasAccent.value;
   if (!root || !item) {
     state.ready = false;
     return;
@@ -227,6 +231,7 @@ onUnmounted(() => {
     :data-gl="glMode"
     :data-refract="refraction ? 'on' : 'off'"
     :data-idle="hasTarget ? undefined : 'true'"
+    :data-accent="hasAccent ? 'true' : undefined"
     @pointermove="handlePointerMove"
     @pointerleave="handlePointerLeave"
     @pointerdown="handlePointerDown"
@@ -306,6 +311,17 @@ onUnmounted(() => {
     inset 0 1px 1px rgb(255 255 255 / 0.2),
     inset 0 0 0 1px rgb(255 255 255 / 0.14),
     0 6px 16px -6px rgb(0 0 0 / 0.5);
+}
+
+.liquid-surface[data-accent='true']:not([data-tone='dark']) .liquid-surface-drop {
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.85), rgb(255 255 255 / 0) 55%),
+    rgb(var(--harbor-accent-soft) / 0.8);
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.95),
+    inset 0 -2px 6px rgb(17 27 33 / 0.12),
+    inset 0 0 0 1.5px rgb(var(--harbor-accent) / 0.55),
+    0 6px 16px -6px rgb(var(--harbor-accent) / 0.35);
 }
 
 .liquid-surface[data-gl='off'] .liquid-surface-water {

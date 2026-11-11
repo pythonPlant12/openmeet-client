@@ -39,6 +39,9 @@ export interface LiquidState {
   reduce: boolean;
   /** Over a dark stage the drop dims, so the active item does not glare. */
   dark: boolean;
+  /** On a primary item the drop's rim and body turn teal: 0 is gray, 1 is teal, eased toward `accentTarget`. */
+  accent: number;
+  accentTarget: boolean;
 }
 
 export function createLiquidState(): LiquidState {
@@ -58,6 +61,8 @@ export function createLiquidState(): LiquidState {
     time: 0,
     reduce: false,
     dark: false,
+    accent: 0,
+    accentTarget: false,
   };
 }
 
@@ -139,11 +144,13 @@ export function stepLiquid(s: LiquidState, dt: number) {
   s.rips.forEach((ripple) => (ripple.age += dt));
   s.rips = s.rips.filter((ripple) => ripple.age < 2.4);
   s.mouse.s += ((s.mouse.on ? 1 : 0) - s.mouse.s) * Math.min(1, dt * 7);
+  const accent = s.accentTarget ? 1 : 0;
+  s.accent = s.reduce ? accent : s.accent + (accent - s.accent) * Math.min(1, dt * 8);
 }
 
 /** True while something still moves, so the render loop can stop when the surface is idle. */
 export function isLiquidActive(s: LiquidState) {
-  return s.moving || s.rips.length > 0 || s.mouse.s > 0.01;
+  return s.moving || s.rips.length > 0 || s.mouse.s > 0.01 || Math.abs((s.accentTarget ? 1 : 0) - s.accent) > 0.01;
 }
 
 /** Current drop geometry for the CSS fallback pill. */
@@ -162,7 +169,7 @@ const VERTEX_SHADER = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}'
 // Colors in linear 0-1 RGB: shadow #111B21, rim #8696A0, body a pale gray.
 const FRAGMENT_SHADER = `precision highp float;
 uniform vec2 uRes;uniform float uDpr;uniform float uTime;uniform vec4 uPill;
-uniform vec4 uBlob[6];uniform float uSy[6];uniform vec4 uRip[6];uniform vec3 uMouse;uniform float uAmb;uniform float uDark;
+uniform vec4 uBlob[6];uniform float uSy[6];uniform vec4 uRip[6];uniform vec3 uMouse;uniform float uAmb;uniform float uDark;uniform float uAccent;
 float sdRB(vec2 p,vec2 b,float r){vec2 q=abs(p)-b+r;return length(max(q,0.))+min(max(q.x,q.y),0.)-r;}
 float sdCap(vec2 p,vec4 B,float sy){p-=B.xy;p.y/=sy;p.x=max(abs(p.x)-B.z,0.);return(length(p)-B.w)*min(1.,sy);}
 float smin(float a,float b,float k){float h=clamp(.5+.5*(b-a)/k,0.,1.);return mix(b,a,h)-k*h*(1.-h);}
@@ -191,12 +198,12 @@ void main(){
  c=mix(vec3(1.),irid,.35*fres)*pa+c*(1.-pa);a=pa+a*(1.-pa);
  float th=lens(dd,11.);
  float cs=caus((p+n.xy*th*18.)*.085,uTime*.9);
- vec3 tint=vec3(.92,.93,.94);
+ vec3 tint=mix(vec3(.92,.93,.94),vec3(.85,.96,.94),uAccent);
  float rim=dm*(1.-smoothstep(0.,8.,-dd));
  float cres=dm*smoothstep(.12,.55,dot(n.xy,normalize(vec2(.55,.85))))*smoothstep(0.,3.,-dd);
  float body=.5+.5*clamp(-n.y*3.,-1.,1.);
  float da=dm*(.3+.14*body);vec3 dc=mix(tint,vec3(1.),body*.6);
- float la=rim*.24;vec3 lc=vec3(.525,.588,.627);dc=lc*la+dc*da*(1.-la);da=la+da*(1.-la);
+ float la=rim*(.24+.16*uAccent);vec3 lc=mix(vec3(.525,.588,.627),vec3(.043,.478,.459),uAccent);dc=lc*la+dc*da*(1.-la);da=la+da*(1.-la);
  la=clamp(cres*.7+smoothstep(.6,1.,cs)*.28*th*dm,0.,1.);dc=vec3(1.)*la+dc*(1.-la);da=la+da*(1.-la);
  la=clamp(dm*(spec*1.2+spec2*.5),0.,1.);dc=vec3(1.)*la+dc*(1.-la);da=la+da*(1.-la);
  la=dm*smoothstep(-2.,0.,dd)*.4;dc=mix(vec3(1.),irid,.25)*la+dc*(1.-la);da=la+da*(1.-la);
@@ -205,7 +212,7 @@ void main(){
  gl_FragColor=vec4(c,a);
 }`;
 
-const UNIFORMS = ['uRes', 'uDpr', 'uTime', 'uPill', 'uBlob', 'uSy', 'uRip', 'uMouse', 'uAmb', 'uDark'];
+const UNIFORMS = ['uRes', 'uDpr', 'uTime', 'uPill', 'uBlob', 'uSy', 'uRip', 'uMouse', 'uAmb', 'uDark', 'uAccent'];
 
 export function initLiquidGl(canvas: HTMLCanvasElement): LiquidGl | null {
   const gl = canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
@@ -259,6 +266,7 @@ export function renderLiquid(s: LiquidState, glc: LiquidGl, dpr: number) {
   gl.uniform3f(u.uMouse!, s.mouse.x, s.mouse.y, s.mouse.s);
   gl.uniform1f(u.uAmb!, s.reduce ? 0 : 1);
   gl.uniform1f(u.uDark!, s.dark ? 1 : 0);
+  gl.uniform1f(u.uAccent!, s.accent);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
