@@ -190,7 +190,8 @@ onBeforeUnmount(clearLongPress);
 </script>
 
 <template>
-  <div ref="headerRef">
+  <!-- Vertical pans stay with the page; horizontal ones are the view swipe. -->
+  <div ref="headerRef" class="touch-pan-y">
     <PaneHeader :title="view.title">
       <template #title
         ><AnimatePresence mode="popLayout" :initial="false"
@@ -210,6 +211,7 @@ onBeforeUnmount(clearLongPress);
         ref="searchInput"
         v-model="query"
         :label="view.searchLabel"
+        :placeholder="view.searchLabel"
         clear-label="Clear conversation search"
         @focus="handleSearchFocus"
         @blur="handleSearchBlur"

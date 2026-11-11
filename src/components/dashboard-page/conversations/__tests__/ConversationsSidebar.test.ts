@@ -167,6 +167,7 @@ describe('ConversationsSidebar', () => {
     const wrapper = mountSidebar({ filter: 'groups' });
     expect(wrapper.get('h1').text()).toContain('Group chats');
     expect(wrapper.get('label').text()).toContain('Search group chats');
+    expect(wrapper.get('input').attributes('placeholder')).toBe('Search group chats');
     expect(wrapper.find('button[aria-label="Create group"]').exists()).toBe(true);
   });
 

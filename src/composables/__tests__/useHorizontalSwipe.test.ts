@@ -50,4 +50,14 @@ describe('useHorizontalSwipe', () => {
     drag(wrapper.get('video').element, 200, 100);
     expect(onSwipe).not.toHaveBeenCalled();
   });
+
+  it('reports a swipe that ends outside the target', async () => {
+    const { wrapper, onSwipe } = await mountSwipe();
+    const span = wrapper.get('span').element;
+    span.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 200, clientY: 100, pointerId: 1 }));
+    document.body.dispatchEvent(
+      new PointerEvent('pointerup', { bubbles: true, clientX: 20, clientY: 100, pointerId: 1 }),
+    );
+    expect(onSwipe).toHaveBeenCalledWith('next');
+  });
 });

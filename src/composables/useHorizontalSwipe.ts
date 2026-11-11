@@ -19,7 +19,8 @@ export function useHorizontalSwipe(
     start = options.disabled?.() || ignored ? null : { id: event.pointerId, x: event.clientX, y: event.clientY };
   });
 
-  useEventListener(target, 'pointerup', (event: PointerEvent) => {
+  // The release is watched on the window: a mouse that leaves the target before release still swiped.
+  useEventListener(window, 'pointerup', (event: PointerEvent) => {
     if (!start || start.id !== event.pointerId) return;
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
@@ -28,5 +29,5 @@ export function useHorizontalSwipe(
     options.onSwipe(dx < 0 ? 'next' : 'previous');
   });
 
-  useEventListener(target, 'pointercancel', () => (start = null));
+  useEventListener(window, 'pointercancel', () => (start = null));
 }
