@@ -118,6 +118,7 @@ vi.mock('@respeak/lucide-motion-vue', async () => {
     LogOutAnimated: iconStub('log-out'),
     MessageSquareAnimated: iconStub('message-square'),
     PhoneAnimated: iconStub('phone'),
+    UserRoundCheckAnimated: iconStub('user-round-check'),
     UsersAnimated: iconStub('users'),
   };
 });
@@ -272,6 +273,16 @@ describe('TheNavbar', () => {
     expect(shell.classes()).toContain('w-[min(340px,calc(100vw-1.5rem))]');
 
     expect(wrapper.get('.harbor-nav-layout').attributes('data-layout')).toBeUndefined();
+  });
+
+  it('marks the Friends tab with the friend icon, apart from the group icon', async () => {
+    media.desktop = true;
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    expect(wrapper.get('[data-tab="friends"] svg').attributes('data-icon')).toBe('user-round-check');
   });
 
   it('uses a persistent profile trigger and bottom sheet for authenticated phones', async () => {

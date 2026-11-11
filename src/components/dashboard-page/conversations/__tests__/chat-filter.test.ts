@@ -1,3 +1,4 @@
+import { MessageSquareAnimated, UserRoundAnimated, UsersRoundAnimated } from '@respeak/lucide-motion-vue';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -42,5 +43,11 @@ describe('chat filter', () => {
     expect(CHAT_FILTER_VIEWS.groups.searchLabel).toBe('Search group chats');
     expect(CHAT_FILTER_VIEWS.direct.noMatchText).toBe('No friends chats match your search.');
     expect(CHAT_FILTER_VIEWS.direct.switchLabel).toBe('Show all chats');
+  });
+
+  it('shows the icon of the view each switch leads to: groups, one person, all chats', () => {
+    expect(CHAT_FILTER_VIEWS.all.switchIcon).toBe(UsersRoundAnimated);
+    expect(CHAT_FILTER_VIEWS.groups.switchIcon).toBe(UserRoundAnimated);
+    expect(CHAT_FILTER_VIEWS.direct.switchIcon).toBe(MessageSquareAnimated);
   });
 });

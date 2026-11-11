@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { UsersAnimated } from '@respeak/lucide-motion-vue';
+import { UserRoundCheckAnimated, UsersRoundAnimated } from '@respeak/lucide-motion-vue';
 import { useMediaQuery } from '@vueuse/core';
 import {
   Check,
@@ -191,9 +191,9 @@ onBeforeUnmount(clearLongPress);
           :title="view === 'friends' ? 'Show groups' : 'Show friends'"
           @click="toggleView"
         >
-          <UsersAnimated v-if="view === 'friends'" :size="20" :stroke-width="1.9" aria-hidden="true" /><UserCheck
-            v-else
-          />
+          <!-- The icon of the view the button leads to: groups, or friends (the friend badge's icon). -->
+          <UsersRoundAnimated v-if="view === 'friends'" :size="20" :stroke-width="1.9" aria-hidden="true" />
+          <UserRoundCheckAnimated v-else :size="20" :stroke-width="1.9" aria-hidden="true" />
         </RoundButton>
       </template>
     </PaneHeader>
