@@ -759,7 +759,7 @@
 }
 
 @media (max-width: 639px) {
-  .harbor-dialog-content:not(.harbor-mobile-account-sheet) {
+  .harbor-dialog-content:not(.harbor-mobile-account-sheet, .harbor-media-viewer) {
     top: 50% !important;
     max-height: calc(100dvh - 2rem) !important;
   }
