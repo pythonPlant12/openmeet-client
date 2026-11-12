@@ -720,9 +720,11 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
     <div class="relative flex min-h-0 flex-1 flex-col">
+      <!-- A scroller resets touch-action, so the history keeps horizontal pans away from the browser itself;
+        otherwise a sideways touch where no message row covers it (an empty chat) never reaches swipe-back. -->
       <div
         ref="pane"
-        class="harbor-chat-canvas min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5"
+        class="harbor-chat-canvas min-h-0 flex-1 touch-pan-y overflow-y-auto px-3 py-4 sm:px-6 sm:py-5 lg:touch-auto"
         :class="{ '!pt-[var(--chat-messages-top,4.5rem)]': overlayHeader }"
         aria-label="Message history"
         @scroll.passive="onPaneScroll"
