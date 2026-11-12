@@ -527,8 +527,8 @@
   color: #e9edef !important;
 }
 
-/* Leaving, and a muted microphone or camera, stay clear like the other controls and warn with a red rim and
-   icon. The rim softens while the liquid drop sits on the button, so hover moves as smoothly as elsewhere. */
+/* A muted microphone or camera stays clear like the other controls and warns with a red rim and icon. The
+   rim softens while the liquid drop sits on the button, so hover moves as smoothly as elsewhere. */
 .meeting-control-alert,
 .meeting-control-alert:hover,
 .meeting-control-alert:active,
