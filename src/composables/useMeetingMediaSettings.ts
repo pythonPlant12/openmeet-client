@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { toast } from '@/components/ui/toast';
 import { useMediaDevices } from '@/composables/useMediaDevices';
 import { useWebrtc } from '@/composables/useWebrtc';
+import { saveCallSettings } from '@/lib/call-settings';
 import { loadVideoQuality, saveVideoQuality } from '@/lib/video-quality';
 import type { VideoQuality } from '@/services/video-quality';
 import { getServices } from '@/xstate/machines/webrtc/actors';
@@ -40,6 +41,7 @@ export function useMeetingMediaSettings(kind: MediaKind) {
     busy.value = true;
     try {
       await switchDevice(kind, deviceId);
+      saveCallSettings(kind === 'audio' ? { microphoneId: deviceId } : { cameraId: deviceId });
       return true;
     } catch (error) {
       console.error('[useMeetingMediaSettings] Failed to switch device:', error);

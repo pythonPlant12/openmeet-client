@@ -23,6 +23,7 @@ import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
+import { saveCallSettings } from '@/lib/call-settings';
 import { layoutAfterTileClick } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
 import { playHaptic } from '@/services/haptics';
@@ -661,6 +662,7 @@ const handleToggleMute = () => {
   });
 
   isMuted.value = newMutedState;
+  saveCallSettings({ micOn: !newMutedState });
   toggleParticipantAudio(localParticipantId.value, !newMutedState);
 };
 
