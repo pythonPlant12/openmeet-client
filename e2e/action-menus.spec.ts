@@ -53,6 +53,7 @@ test.describe('action menus', () => {
   });
 
   test('meeting menu stays synchronized with media, chat, layout, and context actions', async ({ page }) => {
+    // A guest without a saved name is asked only for the name; the call starts with the microphone off.
     await page.goto(`/room/action-menu-${Date.now()}`);
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
     await page.getByLabel('Your Name').fill('Action Tester');
@@ -61,9 +62,9 @@ test.describe('action menus', () => {
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
     await expect(page.getByRole('menuitem', { name: 'Open chat' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Mute microphone' })).toBeVisible();
-    await page.getByRole('menuitem', { name: 'Mute microphone' }).click();
-    await expect(page.getByRole('button', { name: 'Unmute microphone' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Unmute microphone' })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Unmute microphone' }).click();
+    await expect(page.getByRole('button', { name: 'Mute microphone' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
     await page.getByRole('menuitem', { name: 'Open chat' }).click();
@@ -75,7 +76,7 @@ test.describe('action menus', () => {
 
     await page.getByTestId('meeting-video-canvas').click({ button: 'right', position: { x: 20, y: 20 } });
     await expect(page.getByRole('menuitem', { name: 'Close chat' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Unmute microphone' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Mute microphone' })).toBeVisible();
     const reportHref = await page.getByRole('menuitem', { name: 'Report a bug' }).getAttribute('href');
     expect(reportHref).toContain('Area%3A+meeting');
     expect(reportHref).not.toContain('action-menu-');

@@ -13,9 +13,12 @@ import {
 } from './video-quality';
 
 export interface DeviceConstraints {
+  /** Preferred devices; one that is gone falls back to the system default. */
   audioDeviceId?: string | null;
   videoDeviceId?: string | null;
   videoQuality?: VideoQuality;
+  /** Enter with the camera off: it is captured only to ask permission, then released. */
+  cameraOff?: boolean;
 }
 
 export type { VideoQuality };
@@ -188,40 +191,58 @@ export class WebRTCServiceSFU {
   }
 
   async initializeMedia(deviceConstraints?: DeviceConstraints): Promise<MediaStream> {
+    this.videoQuality = deviceConstraints?.videoQuality ?? 'auto';
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      ...(deviceConstraints?.audioDeviceId ? { deviceId: { ideal: deviceConstraints.audioDeviceId } } : {}),
+    };
+    const videoConstraints: MediaTrackConstraints = {
+      ...captureConstraints(CAMERA_LEVELS, this.videoQuality),
+      ...(deviceConstraints?.videoDeviceId ? { deviceId: { ideal: deviceConstraints.videoDeviceId } } : {}),
+    };
+    const cameraOff = deviceConstraints?.cameraOff ?? false;
+    // The camera is captured at entry only to ask for permission; once it is allowed, an entry with the camera
+    // off never opens it, so its light does not flash.
+    const skipCamera = cameraOff && (await this.isCameraAllowed());
+
     try {
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
-
-      this.videoQuality = deviceConstraints?.videoQuality ?? 'auto';
-      const videoConstraints = captureConstraints(CAMERA_LEVELS, this.videoQuality);
-
-      // Apply device ID constraints if provided
-      if (deviceConstraints?.audioDeviceId) {
-        audioConstraints.deviceId = { exact: deviceConstraints.audioDeviceId };
-      }
-      if (deviceConstraints?.videoDeviceId) {
-        videoConstraints.deviceId = { exact: deviceConstraints.videoDeviceId };
-      }
-
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
+        video: skipCamera ? false : videoConstraints,
         audio: audioConstraints,
       });
-
-      console.log('[WebRTCServiceSFU] Media initialized:', {
-        audioTracks: this.localStream.getAudioTracks().length,
-        videoTracks: this.localStream.getVideoTracks().length,
-        audioDevice: deviceConstraints?.audioDeviceId || 'default',
-        videoDevice: deviceConstraints?.videoDeviceId || 'default',
-      });
-
-      return this.localStream;
     } catch (error) {
       console.error('[WebRTCServiceSFU] Failed to initialize media:', error);
       throw new Error(i18n.global.t('errors.mediaAccess', { message: mediaErrorMessage(error) }));
+    }
+
+    if (cameraOff) {
+      const camera = this.localStream.getVideoTracks()[0];
+      if (camera) {
+        this.releasedCameraId = camera.getSettings().deviceId ?? null;
+        this.localStream.removeTrack(camera);
+        camera.stop();
+      } else if (skipCamera) {
+        this.releasedCameraId = deviceConstraints?.videoDeviceId ?? null;
+      }
+    }
+
+    console.log('[WebRTCServiceSFU] Media initialized:', {
+      audioTracks: this.localStream.getAudioTracks().length,
+      videoTracks: this.localStream.getVideoTracks().length,
+      cameraOff,
+    });
+    return this.localStream;
+  }
+
+  private async isCameraAllowed(): Promise<boolean> {
+    try {
+      const status = await navigator.permissions?.query({ name: 'camera' as PermissionName });
+      return status?.state === 'granted';
+    } catch {
+      // Browsers that cannot report the camera permission capture it once at entry instead.
+      return false;
     }
   }
 
@@ -501,7 +522,8 @@ export class WebRTCServiceSFU {
   private async captureCamera(deviceId: string | null): Promise<MediaStreamTrack> {
     const constraints = captureConstraints(CAMERA_LEVELS, this.videoQuality);
     try {
-      const video = deviceId ? { ...constraints, deviceId: { exact: deviceId } } : constraints;
+      // A remembered camera that is gone falls back to the system default.
+      const video = deviceId ? { ...constraints, deviceId: { ideal: deviceId } } : constraints;
       return (await navigator.mediaDevices.getUserMedia({ video })).getVideoTracks()[0]!;
     } catch (error) {
       console.error('[WebRTCServiceSFU] Failed to open the camera:', error);

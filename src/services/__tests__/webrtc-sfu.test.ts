@@ -80,7 +80,9 @@ describe('WebRTCServiceSFU camera', () => {
     getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) =>
       constraints.audio
         ? new FakeStream([microphone, camera])
-        : new FakeStream([new FakeTrack('video', (constraints.video as { deviceId: { exact: string } }).deviceId.exact)]),
+        : new FakeStream([
+            new FakeTrack('video', (constraints.video as { deviceId?: { ideal: string } }).deviceId?.ideal ?? 'cam-1'),
+          ]),
     );
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
     vi.stubGlobal('MediaStream', FakeStream);
@@ -129,7 +131,7 @@ describe('WebRTCServiceSFU camera', () => {
     expect(restarted.readyState).toBe('live');
     expect(restarted).not.toBe(camera);
     expect(getUserMedia).toHaveBeenLastCalledWith({
-      video: expect.objectContaining({ deviceId: { exact: 'cam-1' } }),
+      video: expect.objectContaining({ deviceId: { ideal: 'cam-1' } }),
     });
     expect(videoSender().track).toBe(restarted);
     expect(peerConnection.senders).toHaveLength(2);
@@ -168,7 +170,58 @@ describe('WebRTCServiceSFU camera', () => {
 
     await service.setCameraEnabled(true);
     expect(getUserMedia).toHaveBeenLastCalledWith({
-      video: expect.objectContaining({ deviceId: { exact: 'cam-2' } }),
+      video: expect.objectContaining({ deviceId: { ideal: 'cam-2' } }),
+    });
+  });
+
+  function stubCameraPermission(state: PermissionState) {
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia },
+      permissions: { query: vi.fn(async () => ({ state })) },
+    });
+  }
+
+  it('enters with one capture of both devices and the camera already off', async () => {
+    stubCameraPermission('prompt');
+    const service = new WebRTCServiceSFU(signaling(), []);
+
+    await service.initializeMedia({ cameraOff: true });
+    service.createPeerConnection();
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: expect.anything(), video: expect.anything() }));
+    expect(camera.stop).toHaveBeenCalled();
+    expect(service.isCameraOn()).toBe(false);
+    expect(service.hasCamera()).toBe(true);
+    expect(peerConnection.transceiverKinds).toEqual(['video']);
+  });
+
+  it('does not open the camera at entry once the camera is allowed', async () => {
+    stubCameraPermission('granted');
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) =>
+      constraints.video
+        ? new FakeStream([new FakeTrack('video', (constraints.video as { deviceId: { ideal: string } }).deviceId.ideal)])
+        : new FakeStream([microphone]),
+    );
+    const service = new WebRTCServiceSFU(signaling(), []);
+
+    await service.initializeMedia({ cameraOff: true, videoDeviceId: 'cam-2' });
+    expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ video: false }));
+    expect(service.hasCamera()).toBe(true);
+
+    service.createPeerConnection();
+    await service.setCameraEnabled(true);
+    expect(service.getActiveDeviceId('video')).toBe('cam-2');
+  });
+
+  it('prefers the saved devices without requiring them', async () => {
+    const service = new WebRTCServiceSFU(signaling(), []);
+
+    await service.initializeMedia({ audioDeviceId: 'mic-9', videoDeviceId: 'cam-9' });
+
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: expect.objectContaining({ deviceId: { ideal: 'mic-9' } }),
+      video: expect.objectContaining({ deviceId: { ideal: 'cam-9' } }),
     });
   });
 

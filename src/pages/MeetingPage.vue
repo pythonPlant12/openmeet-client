@@ -8,9 +8,9 @@ import { useRoute, useRouter } from 'vue-router';
 
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
 import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
-import JoinMeetingDialog, { type JoinSettings } from '@/components/meeting-page/JoinMeetingDialog.vue';
 import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
+import MeetingEntryDialog, { type EntrySettings } from '@/components/meeting-page/MeetingEntryDialog.vue';
 import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.vue';
 import ScreenAreaPicker from '@/components/meeting-page/ScreenAreaPicker.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
@@ -23,7 +23,7 @@ import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
-import { saveCallSettings } from '@/lib/call-settings';
+import { loadCallSettings, saveCallSettings } from '@/lib/call-settings';
 import { layoutAfterTileClick } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
 import { followAudioOutput } from '@/services/audio-output';
@@ -45,8 +45,6 @@ const conversationId = computed(() => {
   return typeof conversation === 'string' && conversation.trim() ? conversation : null;
 });
 const isConversationCall = computed(() => conversationId.value !== null);
-// Audio calls from a chat open with the camera off; it can still be turned on before joining.
-const startsWithVideo = computed(() => route.query.video !== 'off');
 
 const { isAuthenticated, isCheckingSession, currentUser, accessToken } = useAuth();
 // On phones TheNavbar shows a top bar only to guests; signed-in phones use the bottom account button. The meeting's
@@ -154,7 +152,7 @@ const pendingRoomId = ref<string | null>(null);
 const sfuRoomId = ref<string | null>(null);
 const pendingMediaSettings = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
 
-const showJoinDialog = ref(false);
+const showEntryDialog = ref(false);
 const showConnectionError = ref(false);
 const participantName = ref<string>('');
 const initialDialogName = ref<string>('');
@@ -392,22 +390,18 @@ watch(
     if (newState === 'error' && webrtcError.value) {
       console.error('[MeetingRoom] WebRTC error:', webrtcError.value.message);
 
-      // The room refused the join (wrong password, access changed): ask again in the join dialog.
+      // The room refused the join (wrong password, access changed): ask for the password again.
       if (MEETING_ACCESS_ERRORS.includes(webrtcError.value.message)) {
         accessError.value = webrtcError.value.message;
         joinPassword = null;
+        participantName.value = '';
         void loadMeetingAccess();
-        showJoinDialog.value = true;
+        showEntryDialog.value = true;
         isJoining.value = false;
         return;
       }
 
-      if (localParticipantId.value || connectionState.value || iceConnectionState.value) {
-        showConnectionError.value = true;
-      } else {
-        showJoinDialog.value = true;
-        participantName.value = '';
-      }
+      showConnectionError.value = true;
     }
   },
 );
@@ -426,12 +420,7 @@ watch(
         });
         isMuted.value = !audioEnabled;
 
-        // A camera that starts off is released before the peer connection exists; its sender stays.
-        if (!videoEnabled) {
-          void setCameraEnabled(false).catch((error) =>
-            console.error('[MeetingRoom] Failed to turn the camera off:', error),
-          );
-        }
+        // The camera was already released when media started; its sender stays for turning it on.
         isVideoOff.value = !videoEnabled;
 
         // Store for sending after joining if not default (both enabled)
@@ -450,6 +439,10 @@ watch(
 
     // Send initial media state to other participants after joining
     if (newState === 'inCall') {
+      if (!hasPlayedJoinedHaptic) {
+        hasPlayedJoinedHaptic = true;
+        playHaptic('success');
+      }
       if (pendingInitialMediaState.value && localParticipantId.value) {
         const { audioEnabled, videoEnabled } = pendingInitialMediaState.value;
         toggleParticipantAudio(localParticipantId.value, audioEnabled);
@@ -506,24 +499,23 @@ const initializeMeeting = async () => {
     }
   }
 
-  if (!isConversationCall.value) void loadMeetingAccess();
+  if (!isConversationCall.value) await loadMeetingAccess();
 
-  const storedName = sessionStorage.getItem('participantName');
+  // Signed-in people and guests who already gave their name enter directly. Only a missing name or a room
+  // password needs asking first.
+  const name = isAuthenticated.value
+    ? currentUser.value?.name || t('meeting.fallbackUser')
+    : (sessionStorage.getItem('participantName') ?? '');
+  initialDialogName.value = name;
+  showNameInput.value = !isAuthenticated.value;
 
-  // Always show the join dialog for media settings
-  // Pre-fill name for authenticated users or from session storage
-  if (isAuthenticated.value) {
-    initialDialogName.value = currentUser.value?.name || t('meeting.fallbackUser');
-    showNameInput.value = false; // Don't show name input for logged-in users
-  } else if (storedName) {
-    initialDialogName.value = storedName;
-    showNameInput.value = true;
-  } else {
-    initialDialogName.value = '';
-    showNameInput.value = true;
+  const access = isConversationCall.value ? null : meetingAccess.value;
+  const needsAsking = !name || !!access?.requiresPassword || (!!access && !access.canJoin);
+  if (needsAsking) {
+    showEntryDialog.value = true;
+    return;
   }
-
-  showJoinDialog.value = true;
+  enterCall(name);
 };
 
 watch(isCheckingSession, (checking) => {
@@ -599,40 +591,35 @@ async function loadMeetingAccess() {
   }
 }
 
-async function prepareAccess(settings: JoinSettings) {
-  const token = accessToken.value ?? '';
-  if (settings.accessSettings && meetingAccess.value?.isOwner) {
-    meetingAccess.value = await socialApi.updateMeetingRoom(token, meetingId.value, settings.accessSettings);
-  }
-  if (settings.password !== undefined) {
-    await socialApi.checkMeetingRoomPassword(meetingId.value, settings.password);
-    joinPassword = settings.password;
-  }
-}
-
-const handleJoinMeeting = async (settings: JoinSettings) => {
-  void resumeAudioAnalysis().catch(() => undefined);
+const handleEntry = async (settings: EntrySettings) => {
   accessError.value = '';
-  if (!isConversationCall.value && (settings.password !== undefined || settings.accessSettings)) {
+  if (!isConversationCall.value && settings.password !== undefined) {
     isJoining.value = true;
     try {
-      await prepareAccess(settings);
+      await socialApi.checkMeetingRoomPassword(meetingId.value, settings.password);
+      joinPassword = settings.password;
     } catch (error) {
       accessError.value = error instanceof SocialApiError ? error.message : t('meeting.join.accessFailed');
-      isJoining.value = false;
       return;
+    } finally {
+      isJoining.value = false;
     }
-    isJoining.value = false;
   }
+  enterCall(settings.name);
+};
 
-  participantName.value = settings.name;
-  showJoinDialog.value = false;
+let hasPlayedJoinedHaptic = false;
 
-  // Store media settings to apply after media is initialized
-  pendingMediaSettings.value = {
-    audioEnabled: settings.audioEnabled,
-    videoEnabled: settings.videoEnabled,
-  };
+// Every meeting and call starts the same way: one capture asks for microphone and camera permission, the saved
+// devices and mic state come back, and the camera always starts off.
+function enterCall(name: string) {
+  void resumeAudioAnalysis().catch(() => undefined);
+  participantName.value = name;
+  showEntryDialog.value = false;
+  hasPlayedJoinedHaptic = false;
+
+  const saved = loadCallSettings();
+  pendingMediaSettings.value = { audioEnabled: saved.micOn, videoEnabled: false };
 
   if (meetingId.value) {
     // In SFU architecture, everyone just "joins" the room
@@ -644,13 +631,13 @@ const handleJoinMeeting = async (settings: JoinSettings) => {
     retry();
   }
 
-  // Pass device constraints to initMedia
   initMedia(participantName.value, {
-    audioDeviceId: settings.audioDeviceId,
-    videoDeviceId: settings.videoDeviceId,
+    audioDeviceId: saved.microphoneId,
+    videoDeviceId: saved.cameraId,
     videoQuality: loadVideoQuality(),
+    cameraOff: true,
   });
-};
+}
 
 const handleCancelJoin = () => {
   router.push(meetingExitRoute.value);
@@ -871,8 +858,8 @@ const handleReconnect = () => {
       <div class="absolute inset-x-8 top-10 h-px bg-harbor-faint/50" />
     </div>
 
-    <JoinMeetingDialog
-      v-if="showJoinDialog"
+    <MeetingEntryDialog
+      v-if="showEntryDialog"
       open
       :meeting-id="meetingId"
       :initial-name="initialDialogName"
@@ -880,8 +867,7 @@ const handleReconnect = () => {
       :access="isConversationCall ? null : meetingAccess"
       :access-error="accessError"
       :joining="isJoining"
-      :initial-video-enabled="startsWithVideo"
-      @join="handleJoinMeeting"
+      @join="handleEntry"
       @cancel="handleCancelJoin"
     />
 

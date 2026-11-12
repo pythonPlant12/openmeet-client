@@ -78,7 +78,10 @@ test.use({
 });
 
 test.describe('multi-participant media', () => {
-  test('navigates away from prejoin without transition warnings or stale viewport locks', async ({ page, baseURL }) => {
+  test('navigates away from the name step without transition warnings or stale viewport locks', async ({
+    page,
+    baseURL,
+  }) => {
     const transitionWarnings: string[] = [];
     page.on('console', (message) => {
       if (message.type() === 'warning' && message.text().includes('Component inside <Transition>')) {
@@ -102,6 +105,45 @@ test.describe('multi-participant media', () => {
       )
       .toEqual({ bodyOverflow: '', bodyPointerEvents: '', htmlOverflow: '' });
     expect(transitionWarnings).toEqual([]);
+  });
+
+  test('enters without a join dialog with mic and camera off, and turning each on reaches the other', async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'direct-entry-e2e', 'stun+turn', {
+      knownName: true,
+      turnOnMedia: false,
+    });
+
+    try {
+      await waitForParticipantCount(session.pages, twoParticipantCount);
+      await waitForAllConnections(session.pages);
+      for (const page of session.pages) {
+        await expect(page.getByRole('heading', { name: 'Join Meeting' })).toHaveCount(0);
+        await expect(page.locator('[data-media-control="audio"] [data-media-toggle]')).toHaveAttribute(
+          'data-media-off',
+          'true',
+        );
+        await expect(page.locator('[data-media-control="video"] [data-media-toggle]')).toHaveAttribute(
+          'data-media-off',
+          'true',
+        );
+        await expect.poll(() => liveLocalVideoTracks(page)).toBe(0);
+        await expect(page.locator(remoteVideoSelector)).toBeHidden();
+      }
+
+      for (const page of session.pages) await turnOnMicAndCamera(page);
+
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
   });
 
   test('two participants exchange remote audio and video', async ({ browser, baseURL }) => {
@@ -312,11 +354,11 @@ test.describe('multi-participant media', () => {
         await session.pages[0].waitForTimeout(15_000);
       }
 
-      // The second participant reloads mid-call, the way a dropped user rejoins.
+      // The second participant reloads mid-call, the way a dropped user rejoins. The name is remembered for the
+      // tab, so the reload enters directly, with mic and camera off.
       await session.pages[1].reload({ waitUntil: 'domcontentloaded' });
-      await session.pages[1].locator('#participant-name').fill('User 2');
-      await expect(session.pages[1].getByRole('button', { name: 'Join Meeting' })).toBeEnabled({ timeout: 30_000 });
-      await session.pages[1].getByRole('button', { name: 'Join Meeting' }).click();
+      await expect(session.pages[1].getByTestId('participant-video').first()).toBeAttached({ timeout: 30_000 });
+      await turnOnMicAndCamera(session.pages[1]);
 
       await waitForParticipantCount(session.pages, count);
       await waitForAllConnections(session.pages);
@@ -448,6 +490,9 @@ async function joinParticipants(
   count: number,
   roomPrefix: string,
   network: NetworkMode = 'stun+turn',
+  // A known name (a signed-in person, or a guest who gave it before) enters with no dialog at all. Everyone
+  // enters with mic and camera off, so most tests turn both on once they are in.
+  { knownName = false, turnOnMedia = true }: { knownName?: boolean; turnOnMedia?: boolean } = {},
 ): Promise<ParticipantSession> {
   const roomUrl =
     process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
@@ -458,6 +503,9 @@ async function joinParticipants(
   for (let index = 0; index < count; index += 1) {
     const context = await browser.newContext({ permissions: ['camera', 'microphone'] });
     contexts.push(context);
+    if (knownName) {
+      await context.addInitScript((name: string) => sessionStorage.setItem('participantName', name), `User ${index + 1}`);
+    }
 
     await context.addInitScript((mode: NetworkMode) => {
       window.__openmeetPeerConnections = [];
@@ -502,16 +550,30 @@ async function joinParticipants(
 
   for (const [index, page] of pages.entries()) {
     await page.goto(roomUrl, { waitUntil: 'domcontentloaded' });
-    await page.locator('#participant-name').fill(`User ${index + 1}`);
-    await expect(page.getByRole('button', { name: 'Join Meeting' })).toBeEnabled({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Join Meeting' }).click();
+    if (!knownName) await enterName(page, `User ${index + 1}`);
     await expect(page.getByTestId('participant-video').first()).toBeAttached({ timeout: 30_000 });
+    if (turnOnMedia) await turnOnMicAndCamera(page);
   }
 
   return { contexts, pages, roomUrl, diagnostics };
 }
 
 const remoteVideoSelector = '[data-testid="participant-video"]:not([data-participant-local="true"])';
+
+async function enterName(page: Page, name: string) {
+  await page.locator('#participant-name').fill(name);
+  await expect(page.getByRole('button', { name: 'Join Meeting' })).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Join Meeting' }).click();
+}
+
+async function turnOnMicAndCamera(page: Page) {
+  const mic = page.locator('[data-media-control="audio"] [data-media-toggle]');
+  const camera = page.locator('[data-media-control="video"] [data-media-toggle]');
+  if ((await mic.getAttribute('data-media-off')) === 'true') await mic.click();
+  if ((await camera.getAttribute('data-media-off')) === 'true') await toggleOwnCamera(page);
+  await expect(mic).toHaveAttribute('data-media-off', 'false');
+  await expect(camera).toHaveAttribute('data-media-off', 'false');
+}
 
 async function toggleOwnCamera(page: Page) {
   await page.locator('[data-media-control="video"] [data-media-toggle]').click();

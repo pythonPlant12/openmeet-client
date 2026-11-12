@@ -349,6 +349,7 @@
     "join": {
       "title": "Join Meeting",
       "description": "Configure your settings before joining",
+      "entryDescription": "Enter your name to join the meeting",
       "cameraBlocked": "Camera blocked",
       "cameraOff": "Camera is off",
       "micOn": "Mic On",
