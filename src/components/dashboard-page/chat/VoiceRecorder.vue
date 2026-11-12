@@ -2,6 +2,7 @@
 import { ArrowUp, ChevronLeft, ChevronUp, Lock, Mic, Pause, Play, Trash2 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 
+import { RoundButton } from '@/components/ui/round-button';
 import { toast } from '@/components/ui/toast';
 import { useVoicePlayback } from '@/composables/useVoicePlayback';
 import { type VoiceRecorderFrame, type VoiceRecording, useVoiceRecorder } from '@/composables/useVoiceRecorder';
@@ -499,29 +500,26 @@ onBeforeUnmount(() => {
       :class="layer(recording)"
     >
       <div ref="circle" class="size-full will-change-transform">
-        <button
-          type="button"
+        <RoundButton
           tabindex="-1"
           data-voice-send-locked
           :inert="state !== 'locked'"
-          class="flex size-full items-center justify-center rounded-full text-white shadow-harbor-raised transition-colors duration-150"
-          :class="[
-            state === 'locked' ? 'pointer-events-auto' : 'pointer-events-none',
-            cancelArmed ? 'bg-harbor-danger' : 'bg-harbor-accent',
-          ]"
+          :tone="cancelArmed ? 'danger' : 'accent'"
+          class="size-full"
+          :class="state === 'locked' ? 'pointer-events-auto' : 'pointer-events-none'"
           aria-label="Send voice message"
           @pointerdown.prevent
           @click="sendRecording"
         >
           <ArrowUp v-show="state === 'locked'" class="size-5" /><Mic v-show="state !== 'locked'" class="size-5" />
-        </button>
+        </RoundButton>
       </div>
     </div>
 
-    <button
-      type="button"
+    <RoundButton
       data-voice-record-button
-      class="harbor-primary-action flex size-11 touch-none select-none items-center justify-center rounded-full bg-harbor-accent text-white shadow-harbor-soft transition-opacity duration-150 [-webkit-touch-callout:none] disabled:opacity-50"
+      tone="accent"
+      class="touch-none select-none [-webkit-touch-callout:none]"
       :class="{ 'opacity-0': recording }"
       :disabled="disabled && state === 'idle'"
       :aria-label="state === 'preview' || state === 'locked' ? 'Send voice message' : 'Record a voice message'"
@@ -534,6 +532,6 @@ onBeforeUnmount(() => {
       @click="onButtonClick"
     >
       <ArrowUp v-show="state === 'preview'" class="size-5" /><Mic v-show="state !== 'preview'" class="size-5" />
-    </button>
+    </RoundButton>
   </div>
 </template>

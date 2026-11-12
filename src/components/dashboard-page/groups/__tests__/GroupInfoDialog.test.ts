@@ -137,7 +137,7 @@ describe('GroupInfoDialog', () => {
     expect(changeFriendship).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Send a friend request to Member?');
 
-    await wrapper.get('[data-confirm-friend-change]').trigger('click');
+    await wrapper.get('[data-confirm-dialog-action]').trigger('click');
     expect(changeFriendship).toHaveBeenCalledWith(expect.objectContaining({ id: 'member-1' }), 'add');
   });
 

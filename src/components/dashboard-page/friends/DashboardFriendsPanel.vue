@@ -95,7 +95,8 @@ function userInitials(name: string) {
           size="icon"
           :disabled="isAddingFriend || !friendEmail.trim()"
           :aria-label="t('dashboard.sendFriendRequest')"
-          class="size-11 shrink-0 rounded-full bg-harbor-ink text-white hover:bg-harbor-ink"
+          variant="accent"
+          class="size-11 shrink-0"
         >
           <LoadingRipple v-if="isAddingFriend" size="sm" />
           <UserPlus v-else class="size-4" />
@@ -139,7 +140,8 @@ function userInitials(name: string) {
           <Button
             size="icon"
             :aria-label="t('dashboard.acceptRequest')"
-            class="size-8 rounded-full bg-harbor-accent text-white hover:bg-harbor-accent-hover"
+            variant="accent"
+            class="size-8"
             @click="emit('answer-friend-request', request.id, true)"
           >
             <Check class="size-4" />

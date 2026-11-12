@@ -44,7 +44,7 @@ const handleClose = () => {
   <Dialog :open="open" @update:open="(val) => !val && handleClose()"
     ><HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       data-testid="connection-error-dialog"
       ><DialogHeader class="items-center text-center sm:items-start sm:text-left">
         <span
@@ -57,17 +57,14 @@ const handleClose = () => {
           <span v-else-if="errorMessage">{{ t('meeting.error.withMessage', { message: errorMessage }) }}</span>
           <span v-else>{{ t('meeting.error.lost') }}</span>
         </DialogDescription></DialogHeader
-      ><DialogFooter class="gap-2"
+      ><DialogFooter
+        ><Button type="button" variant="pill" size="pill" data-testid="connection-error-leave" @click="handleLeave">{{
+          t('meeting.error.goHome')
+        }}</Button
         ><Button
           type="button"
-          variant="outline"
-          class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-          data-testid="connection-error-leave"
-          @click="handleLeave"
-          >{{ t('meeting.error.goHome') }}</Button
-        ><Button
-          type="button"
-          class="harbor-primary-action rounded-full bg-harbor-accent text-white"
+          variant="accent"
+          size="pill"
           data-testid="connection-error-reload"
           @click="handleReload"
           >{{ t('meeting.error.reconnect') }}</Button

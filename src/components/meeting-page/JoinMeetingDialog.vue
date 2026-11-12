@@ -493,11 +493,7 @@ onUnmounted(() => {
           >
             {{ t('common.cancel') }}
           </Button>
-          <Button
-            class="meeting-primary-action w-full rounded-full bg-harbor-accent px-5 text-white shadow-harbor-soft sm:w-auto"
-            @click="handleJoin"
-            :disabled="!canJoin"
-          >
+          <Button variant="accent" class="w-full px-5 sm:w-auto" @click="handleJoin" :disabled="!canJoin">
             <LoadingRipple v-if="joining" size="sm" />
             <template v-else>{{ t('meeting.join.title') }}</template>
           </Button>

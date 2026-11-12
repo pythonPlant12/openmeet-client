@@ -1,7 +1,10 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import ContactProfileDialog from '@/components/dashboard-page/friends/ContactProfileDialog.vue';
+import { playHaptic } from '@/services/haptics';
+
+vi.mock('@/services/haptics', () => ({ playHaptic: vi.fn() }));
 
 const stubs = {
   Dialog: { props: ['open'], template: '<div v-if="open"><slot /></div>' },
@@ -262,5 +265,54 @@ describe('ContactProfileDialog', () => {
     await wrapper.get('button[aria-label="View Alex Smith\'s profile picture"]').trigger('click');
 
     expect(wrapper.findAll('img')).toHaveLength(2);
+  });
+
+  it('asks before removing a friend and removes them once confirmed', async () => {
+    const friend = { id: 'friend-1', name: 'Alex Smith', email: 'alex@example.com', isOnline: true };
+    const props = {
+      open: true,
+      confirmationOpen: false,
+      profile: {
+        id: 'friend-1',
+        name: 'Alex Smith',
+        nickname: 'alex',
+        email: 'alex@example.com',
+        avatarUrl: null,
+        status: 'available' as const,
+        statusMessage: '',
+        createdAt: '2026-08-17T12:00:00Z',
+        lastSeenAt: null,
+        isOnline: true,
+        relationship: 'friend' as const,
+      },
+      profileFriend: friend,
+      loading: false,
+      error: '',
+      removingId: null,
+      opening: null,
+      callActive: false,
+      avatarUrls: {},
+      avatarLoading: false,
+      formatDate: () => '17 Aug 2026',
+    };
+    const wrapper = mount(ContactProfileDialog, {
+      props,
+      global: { stubs },
+    });
+
+    await wrapper.get('[data-remove-friend]').trigger('click');
+    expect(wrapper.emitted('update:confirmationOpen')?.[0]).toEqual([true]);
+    expect(wrapper.emitted('remove')).toBeUndefined();
+
+    await wrapper.setProps({ confirmationOpen: true });
+    const confirmation = wrapper.get('[data-confirm-dialog-actions]');
+    expect(wrapper.text()).toContain('Remove Alex Smith?');
+    await confirmation
+      .findAll('button')
+      .find((button) => button.text().includes('Remove friend'))!
+      .trigger('click');
+
+    expect(wrapper.emitted('remove')).toHaveLength(1);
+    expect(playHaptic).toHaveBeenCalledWith('warning');
   });
 });

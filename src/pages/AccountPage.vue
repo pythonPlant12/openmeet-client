@@ -439,11 +439,7 @@ onBeforeUnmount(() => {
 
             <p v-if="profileError" role="status" class="text-sm text-harbor-danger-strong">{{ profileError }}</p>
             <div class="flex justify-end border-t border-harbor-line pt-6">
-              <Button
-                type="submit"
-                :disabled="isSaving"
-                class="harbor-primary-action h-11 rounded-full bg-harbor-accent px-6 text-white"
-              >
+              <Button type="submit" :disabled="isSaving" variant="accent" size="pill" class="px-6">
                 {{ isSaving ? t('common.loading') : t('account.save') }}
               </Button>
             </div>
