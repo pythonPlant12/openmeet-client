@@ -1,8 +1,20 @@
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import GroupDetailsPanel from '@/components/dashboard-page/groups/GroupDetailsPanel.vue';
+import { playHaptic } from '@/services/haptics';
 import type { Conversation, GroupInfo, GroupMember } from '@/services/social-api';
+
+const api = vi.hoisted(() => ({ leaveGroup: vi.fn(), deleteGroup: vi.fn() }));
+vi.mock('@/services/social-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/social-api')>()),
+  socialApi: api,
+}));
+vi.mock('@/services/haptics', () => ({ playHaptic: vi.fn() }));
+vi.mock('@/components/ui/toast', () => ({ toast: vi.fn() }));
+
+const { default: GroupDetailsPanel } = await import('@/components/dashboard-page/groups/GroupDetailsPanel.vue');
+
+afterEach(() => vi.clearAllMocks());
 
 const group: Conversation = {
   id: 'group-1',
@@ -138,5 +150,35 @@ describe('GroupDetailsPanel', () => {
       'Add friend',
       'Remove',
     ]);
+  });
+
+  function confirmAction(wrapper: ReturnType<typeof mountPanel>, label: string) {
+    return wrapper.findAll('[data-confirm-dialog-action]').find((button) => button.text().includes(label))!;
+  }
+
+  it('quits the group once the quit confirmation is confirmed', async () => {
+    api.leaveGroup.mockResolvedValue(undefined);
+    const wrapper = mountPanel();
+
+    expect(wrapper.text()).toContain('Quit Harbor?');
+    expect(wrapper.text()).toContain("You'll stop receiving its messages.");
+    await confirmAction(wrapper, 'Quit group').trigger('click');
+    await flushPromises();
+
+    expect(api.leaveGroup).toHaveBeenCalledWith('token', 'group-1');
+    expect(playHaptic).toHaveBeenCalledWith('warning');
+    expect(wrapper.emitted('removed')).toEqual([['group-1']]);
+  });
+
+  it('deletes the group once the delete confirmation is confirmed', async () => {
+    api.deleteGroup.mockResolvedValue(undefined);
+    const wrapper = mountPanel({ info: { ...info, role: 'creator' }, group: { ...group, role: 'creator' } });
+
+    expect(wrapper.text()).toContain('Delete Harbor?');
+    await confirmAction(wrapper, 'Delete group').trigger('click');
+    await flushPromises();
+
+    expect(api.deleteGroup).toHaveBeenCalledWith('token', 'group-1');
+    expect(wrapper.emitted('removed')).toEqual([['group-1']]);
   });
 });

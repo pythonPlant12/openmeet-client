@@ -118,6 +118,7 @@ function focusCancel(event: Event) {
           <Button
             v-if="button === 'cancel'"
             :ref="setCancelButton"
+            data-confirm-dialog-cancel
             type="button"
             variant="pill"
             :class="isPhone ? 'w-full' : 'px-5'"
@@ -128,6 +129,7 @@ function focusCancel(event: Event) {
           </Button>
           <Button
             v-else
+            data-confirm-dialog-action
             type="button"
             :variant="tone"
             class="h-11"

@@ -1,9 +1,8 @@
 <script setup lang="ts">
+import { UserMinus, UserPlus } from 'lucide-vue-next';
 import { ref } from 'vue';
 
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogDescription, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
-import { LoadingRipple } from '@/components/ui/loading';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { GroupMember } from '@/services/social-api';
 
 export type FriendshipChange = 'add' | 'remove';
@@ -37,43 +36,24 @@ async function confirm() {
 </script>
 
 <template>
-  <Dialog :open="pending !== null" @update:open="setOpen"
-    ><HarborDialogContent
-      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
-      ><DialogHeader
-        ><DialogTitle>{{ pending?.change === 'remove' ? 'Remove friend?' : 'Send friend request?' }}</DialogTitle
-        ><DialogDescription class="text-harbor-muted">{{
-          pending?.change === 'remove'
-            ? `Remove ${pending.member.name} from your friends? You can send another request later.`
-            : `Send a friend request to ${pending?.member.name}?`
-        }}</DialogDescription></DialogHeader
-      >
-      <div class="mt-2 flex justify-end gap-2">
-        <Button
-          variant="outline"
-          class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-          :disabled="isChanging"
-          @click="setOpen(false)"
-          >Cancel</Button
-        >
-        <Button
-          v-if="pending?.change === 'remove'"
-          data-confirm-friend-change
-          class="rounded-full bg-harbor-danger text-white hover:bg-harbor-danger-strong"
-          :disabled="isChanging"
-          @click="confirm"
-          ><LoadingRipple v-if="isChanging" size="sm" />Remove friend</Button
-        >
-        <Button
-          v-else
-          data-confirm-friend-change
-          class="harbor-primary-action rounded-full bg-harbor-accent text-white"
-          :disabled="isChanging"
-          @click="confirm"
-          ><LoadingRipple v-if="isChanging" size="sm" />Send request</Button
-        >
-      </div>
-    </HarborDialogContent></Dialog
-  >
+  <ConfirmDialog
+    :open="pending !== null"
+    :icon="pending?.change === 'remove' ? UserMinus : UserPlus"
+    :tone="pending?.change === 'remove' ? 'danger' : 'accent'"
+    :title="
+      pending?.change === 'remove'
+        ? `Remove ${pending.member.name}?`
+        : `Send a friend request to ${pending?.member.name}?`
+    "
+    :description="
+      pending?.change === 'remove'
+        ? 'They leave your friends. You can send another request later.'
+        : 'They become your friend once they accept.'
+    "
+    :action-label="pending?.change === 'remove' ? 'Remove friend' : 'Send request'"
+    :busy-label="pending?.change === 'remove' ? 'Removing...' : 'Sending...'"
+    :busy="isChanging"
+    @update:open="setOpen"
+    @confirm="confirm"
+  />
 </template>
