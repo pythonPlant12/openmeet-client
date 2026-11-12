@@ -102,7 +102,7 @@ const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 // The header shows one chat view at a time: the old title blurs out, the title and the search placeholder
 // change together at the peak of the blur, and the new title blurs in. A timer of the blur's length makes
 // the swap, so the header changes even where the animation never runs.
-const TITLE_BLUR_SECONDS = 0.12;
+const TITLE_BLUR_SECONDS = 0.2;
 const TITLE_BLURRED = { opacity: 0, filter: 'blur(6px)' };
 const TITLE_CLEAR = { opacity: 1, filter: 'blur(0px)' };
 const shownFilter = ref(filter.value);

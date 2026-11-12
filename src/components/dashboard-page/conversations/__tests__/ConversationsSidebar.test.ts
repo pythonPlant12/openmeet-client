@@ -227,7 +227,7 @@ describe('ConversationsSidebar', () => {
       await wrapper.get('button[aria-label="Show group chats"]').trigger('click');
 
       // While the old title blurs out, the header still describes the old view only.
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(180);
       expect(title(wrapper)).toContain('Chats');
       expect(title(wrapper)).not.toContain('Group chats');
       expect(placeholder(wrapper)).toBe('Search chats');
