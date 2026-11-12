@@ -202,7 +202,8 @@ watch(
           </Button>
           <Button
             data-call-again
-            class="harbor-primary-action h-10 rounded-full bg-harbor-accent px-5 text-white"
+            variant="accent"
+            class="h-10 px-5"
             :disabled="!canCallAgain || calling"
             :title="detail && !canCallAgain ? 'No registered participants to call' : undefined"
             @click="detail && emit('call', detail)"

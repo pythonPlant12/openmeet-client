@@ -438,6 +438,7 @@
   transition:
     background 0.2s,
     box-shadow 0.2s,
+    opacity 0.15s,
     transform 0.15s;
 }
 
