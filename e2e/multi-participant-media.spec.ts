@@ -167,6 +167,68 @@ test.describe('multi-participant media', () => {
     }
   });
 
+  test('a microphone switch from the chevron menu still reaches the other person', async ({ browser, baseURL }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'mic-switch-e2e');
+    const [sender] = session.pages;
+
+    try {
+      await waitForParticipantCount(session.pages, twoParticipantCount);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      const peerConnectionsBefore = await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0);
+
+      // Chrome's fake audio offers several inputs, so another microphone is always there.
+      const deviceId = await switchOwnDevice(sender, 'audio');
+      await expect.poll(() => localDeviceId(sender, 'audio')).toBe(deviceId);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+
+      expect(await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0)).toBe(peerConnectionsBefore);
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
+  test.describe('with two cameras', () => {
+    test.use({
+      launchOptions: {
+        args: [
+          '--use-fake-device-for-media-stream=device-count=2',
+          '--use-fake-ui-for-media-stream',
+          '--autoplay-policy=no-user-gesture-required',
+        ],
+      },
+    });
+
+    test('a camera switch from the chevron menu still reaches the other person', async ({ browser, baseURL }) => {
+      test.setTimeout(180_000);
+
+      const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'camera-switch-e2e');
+      const [sender] = session.pages;
+
+      try {
+        await waitForParticipantCount(session.pages, twoParticipantCount);
+        await waitForAllConnections(session.pages);
+        await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+        const peerConnectionsBefore = await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0);
+
+        const deviceId = await switchOwnDevice(sender, 'video');
+        await expect.poll(() => localDeviceId(sender, 'video')).toBe(deviceId);
+        await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+        await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+
+        expect(await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0)).toBe(peerConnectionsBefore);
+        await expectNoConnectionErrorDialog(session.pages);
+      } finally {
+        test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+        await closeContexts(session.contexts);
+      }
+    });
+  });
+
   test('transmits and renders audio/video for every participant', async ({ browser, baseURL }) => {
     test.setTimeout(180_000);
 
@@ -452,8 +514,28 @@ async function joinParticipants(
 const remoteVideoSelector = '[data-testid="participant-video"]:not([data-participant-local="true"])';
 
 async function toggleOwnCamera(page: Page) {
-  await page.locator('[data-media-control="video"] [data-media-button]').click();
-  await page.locator('[data-media-toggle-item]').click();
+  await page.locator('[data-media-control="video"] [data-media-toggle]').click();
+}
+
+/** Picks a device other than the active one from the split button's chevron menu; returns the device ID. */
+async function switchOwnDevice(page: Page, kind: 'audio' | 'video') {
+  await page.locator(`[data-media-control="${kind}"] [data-media-menu-trigger]`).click();
+  const option = page.locator('[data-media-options] [data-device-option][data-state="unchecked"]').first();
+  const deviceId = await option.getAttribute('data-device-option');
+  await option.click();
+  await page.keyboard.press('Escape');
+  return deviceId;
+}
+
+async function localDeviceId(page: Page, kind: 'audio' | 'video') {
+  return page.evaluate((trackKind) => {
+    const video = document.querySelector<HTMLVideoElement>(
+      '[data-testid="participant-video"][data-participant-local="true"]',
+    );
+    const stream = video?.srcObject instanceof MediaStream ? video.srcObject : null;
+    const track = trackKind === 'audio' ? stream?.getAudioTracks()[0] : stream?.getVideoTracks()[0];
+    return track?.getSettings().deviceId ?? null;
+  }, kind);
 }
 
 async function liveLocalVideoTracks(page: Page) {

@@ -44,6 +44,8 @@ interface Emits {
   (e: 'invite'): void;
   /** A microphone or camera switch replaced a local track. */
   (e: 'media-changed'): void;
+  /** Preview camera was chosen in the camera menu. */
+  (e: 'preview-camera'): void;
   (e: 'start-screen-share', options?: { selectArea: boolean }): void;
   (e: 'stop-screen-share'): void;
 }
@@ -253,6 +255,7 @@ const shareOnTelegram = () => {
         :available="videoAvailable"
         @toggle="emit('toggle-video')"
         @media-changed="emit('media-changed')"
+        @preview-camera="emit('preview-camera')"
       />
 
       <!-- End Call Button -->

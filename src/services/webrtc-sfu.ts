@@ -1,6 +1,7 @@
 import { i18n } from '@/i18n';
 
 import { resolveReachableTurnUrl } from './dev-networking';
+import { MicInput } from './mic-input';
 import { SignalingService } from './signaling';
 import {
   CAMERA_LEVELS,
@@ -124,6 +125,9 @@ export class WebRTCServiceSFU {
   private localSenders: Partial<Record<'audio' | 'video', RTCRtpSender>> = {};
   /** Camera to open on the next turn-on; set while the camera is off, so its light is off too. */
   private releasedCameraId: string | null | undefined;
+  /** Volume and level stage on the microphone, built the first time either is used. */
+  private micInput: MicInput | null = null;
+  private inputVolume = 1;
   private readonly videoQualityController: SenderQualityController;
   /** Called with the height the video currently sends, which auto quality changes over time. */
   onVideoLevelChange: ((height: number) => void) | null = null;
@@ -247,6 +251,9 @@ export class WebRTCServiceSFU {
         const sender = this.peerConnection.addTrack(track, stream);
         const kind = track.kind as 'audio' | 'video';
         this.localSenders[kind] ??= sender;
+      }
+      if (this.localSenders.audio && this.micInput && this.inputVolume !== 1) {
+        void this.localSenders.audio.replaceTrack(this.micInput.outputTrack);
       }
       if (!this.localSenders.video && this.releasedCameraId !== undefined) {
         this.localSenders.video = this.peerConnection.addTransceiver('video', {
@@ -538,7 +545,11 @@ export class WebRTCServiceSFU {
 
     // A muted microphone or a camera turned off stays that way on the new device.
     replacement.enabled = previous?.enabled ?? true;
-    await this.localSender(kind, previous)?.replaceTrack(replacement);
+    const sender = this.localSender(kind, previous);
+    const sendsInputVolume = kind === 'audio' && !!this.micInput && sender?.track === this.micInput.outputTrack;
+    if (kind === 'audio') this.micInput?.setSource(replacement);
+    // A microphone sent at a chosen volume keeps its processed track; only the stage's source changes.
+    if (!sendsInputVolume) await sender?.replaceTrack(replacement);
     if (previous) {
       stream.removeTrack(previous);
       previous.stop();
@@ -546,6 +557,49 @@ export class WebRTCServiceSFU {
     stream.addTrack(replacement);
     if (kind === 'video') await this.videoQualityController.apply();
     console.log('[WebRTCServiceSFU] Switched device:', { kind, deviceId });
+  }
+
+  getInputVolume(): number {
+    return this.inputVolume;
+  }
+
+  /**
+   * Sets the outgoing microphone volume from 0 to 1. Full volume sends the microphone track itself, so the call
+   * relies on Web Audio only while the volume is lowered.
+   */
+  async setInputVolume(volume: number): Promise<void> {
+    this.inputVolume = Math.min(1, Math.max(0, volume));
+    const mic = this.ensureMicInput();
+    if (!mic) return;
+    mic.setVolume(this.inputVolume);
+    await mic.resume();
+    const microphone = this.localStream?.getAudioTracks()[0];
+    // A suspended audio graph sends silence, so the microphone itself stays on the sender until it runs.
+    const outgoing = this.inputVolume === 1 || !mic.isRunning ? microphone : mic.outputTrack;
+    const sender = this.localSenders.audio;
+    if (outgoing && sender && sender.track !== outgoing) await sender.replaceTrack(outgoing);
+  }
+
+  /** Starts measuring the microphone; call from a gesture so the audio graph may run. */
+  async startInputMeter(): Promise<void> {
+    await this.ensureMicInput()?.resume();
+  }
+
+  /** Outgoing microphone level from 0 to 1, after the input volume. */
+  getInputLevel(): number {
+    return this.micInput?.isRunning ? this.micInput.level() : 0;
+  }
+
+  private ensureMicInput(): MicInput | null {
+    const microphone = this.localStream?.getAudioTracks()[0];
+    if (this.micInput || !microphone || typeof AudioContext === 'undefined') return this.micInput;
+    try {
+      this.micInput = new MicInput(microphone);
+      this.micInput.setVolume(this.inputVolume);
+    } catch (error) {
+      console.error('[WebRTCServiceSFU] Failed to start the microphone volume stage:', error);
+    }
+    return this.micInput;
   }
 
   /** Changes the outgoing camera quality; auto keeps adjusting it to the network. */
@@ -701,6 +755,9 @@ export class WebRTCServiceSFU {
     this.peerConnection = null;
     this.localSenders = {};
     this.releasedCameraId = undefined;
+    this.micInput?.close();
+    this.micInput = null;
+    this.inputVolume = 1;
     this.previousInboundPackets.clear();
     this.pendingRemoteIceCandidates = [];
   }

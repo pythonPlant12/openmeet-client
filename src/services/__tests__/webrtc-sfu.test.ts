@@ -179,3 +179,104 @@ describe('WebRTCServiceSFU camera', () => {
     expect(service.hasCamera()).toBe(true);
   });
 });
+
+class FakeAudioNode {
+  connect = vi.fn();
+  disconnect = vi.fn();
+}
+
+class FakeAudioContext {
+  static instances: FakeAudioContext[] = [];
+  state: AudioContextState = 'running';
+  processed = new FakeTrack('audio', 'processed');
+  sources: FakeStream[] = [];
+  gain = Object.assign(new FakeAudioNode(), { gain: { value: 1 } });
+  constructor() {
+    FakeAudioContext.instances.push(this);
+  }
+  createMediaStreamSource = (stream: FakeStream) => {
+    this.sources.push(stream);
+    return new FakeAudioNode();
+  };
+  createGain = () => this.gain;
+  createAnalyser = () =>
+    Object.assign(new FakeAudioNode(), {
+      fftSize: 0,
+      frequencyBinCount: 4,
+      getByteTimeDomainData: (samples: Uint8Array) => samples.fill(192),
+    });
+  createMediaStreamDestination = () => ({ stream: new FakeStream([this.processed]) });
+  resume = vi.fn(async () => {});
+  close = vi.fn(async () => {});
+}
+
+describe('WebRTCServiceSFU input volume', () => {
+  let peerConnection: FakePeerConnection;
+  let microphone: FakeTrack;
+
+  beforeEach(() => {
+    FakeAudioContext.instances = [];
+    microphone = new FakeTrack('audio', 'mic-1');
+    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) =>
+      constraints.video
+        ? new FakeStream([microphone, new FakeTrack('video', 'cam-1')])
+        : new FakeStream([new FakeTrack('audio', 'mic-2')]),
+    );
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
+    vi.stubGlobal('MediaStream', FakeStream);
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    vi.stubGlobal(
+      'RTCPeerConnection',
+      vi.fn(function RTCPeerConnection() {
+        peerConnection = new FakePeerConnection();
+        return peerConnection;
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function startCall() {
+    const service = new WebRTCServiceSFU(signaling(), []);
+    await service.initializeMedia();
+    service.createPeerConnection();
+    return service;
+  }
+
+  const audioSender = () => peerConnection.senders[0]!;
+
+  it('sends the microphone at the chosen volume, and the microphone itself at full volume', async () => {
+    const service = await startCall();
+
+    await service.setInputVolume(0.4);
+    const context = FakeAudioContext.instances[0]!;
+    expect(context.gain.gain.value).toBe(0.4);
+    expect(audioSender().track).toBe(context.processed);
+
+    await service.setInputVolume(1);
+    expect(audioSender().track).toBe(microphone);
+    expect(peerConnection.createOffer).not.toHaveBeenCalled();
+  });
+
+  it('keeps the input volume when the microphone changes', async () => {
+    const service = await startCall();
+    await service.setInputVolume(0.5);
+
+    await service.switchDevice('audio', 'mic-2');
+
+    const context = FakeAudioContext.instances[0]!;
+    expect(audioSender().track).toBe(context.processed);
+    expect(context.sources[context.sources.length - 1]!.getAudioTracks()[0]!.getSettings().deviceId).toBe('mic-2');
+  });
+
+  it('measures the outgoing microphone level', async () => {
+    const service = await startCall();
+
+    await service.startInputMeter();
+
+    expect(service.getInputLevel()).toBeGreaterThan(0);
+    expect(audioSender().track).toBe(microphone);
+  });
+});

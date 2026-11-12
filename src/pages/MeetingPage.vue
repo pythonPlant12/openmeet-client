@@ -26,6 +26,7 @@ import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { saveCallSettings } from '@/lib/call-settings';
 import { layoutAfterTileClick } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
+import { followAudioOutput } from '@/services/audio-output';
 import { playHaptic } from '@/services/haptics';
 import { showSystemNotification } from '@/services/notifications';
 import { type MeetingRoomAccess, SocialApiError, type UserStatus, socialApi } from '@/services/social-api';
@@ -545,8 +546,11 @@ function cancelRingingCall(keepalive = false) {
 }
 
 const handlePageHide = () => cancelRingingCall(true);
+// The chosen speaker applies to every participant's audio as their media appears.
+let stopFollowingAudioOutput: (() => void) | null = null;
 
 onMounted(() => {
+  stopFollowingAudioOutput = followAudioOutput();
   window.addEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   window.addEventListener('pagehide', handlePageHide);
   window.addEventListener('keydown', handleFullscreenKeydown);
@@ -556,6 +560,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  stopFollowingAudioOutput?.();
   screenShare.stop();
   window.clearTimeout(participantStatusTimer);
   window.removeEventListener('openmeet:close-meeting-chat', closeMeetingChat);
