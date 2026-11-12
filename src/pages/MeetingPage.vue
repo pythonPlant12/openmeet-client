@@ -15,6 +15,7 @@ import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.v
 import ScreenAreaPicker from '@/components/meeting-page/ScreenAreaPicker.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { LoadingRipple } from '@/components/ui/loading';
+import { toast } from '@/components/ui/toast';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
 import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
@@ -80,6 +81,7 @@ const {
   leaveRoom: endCall,
   toggleParticipantAudio,
   toggleParticipantVideo,
+  setCameraEnabled,
   sendChatMessage,
   sendChatReaction,
   retry,
@@ -209,7 +211,7 @@ watch(
     const observedTracks = new Set<MediaStreamTrack>();
     const updateAvailability = () => {
       audioAvailable.value = stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false;
-      videoAvailable.value = stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
+      videoAvailable.value = hasCamera(stream);
     };
     const observeTrack = (track: MediaStreamTrack) => {
       if (observedTracks.has(track)) return;
@@ -422,10 +424,12 @@ watch(
         });
         isMuted.value = !audioEnabled;
 
-        // Apply video setting
-        localStream.value.getVideoTracks().forEach((track) => {
-          track.enabled = videoEnabled;
-        });
+        // A camera that starts off is released before the peer connection exists; its sender stays.
+        if (!videoEnabled) {
+          void setCameraEnabled(false).catch((error) =>
+            console.error('[MeetingRoom] Failed to turn the camera off:', error),
+          );
+        }
         isVideoOff.value = !videoEnabled;
 
         // Store for sending after joining if not default (both enabled)
@@ -660,19 +664,30 @@ const handleToggleMute = () => {
   toggleParticipantAudio(localParticipantId.value, !newMutedState);
 };
 
-const handleToggleVideo = () => {
-  if (!localStream.value || !localParticipantId.value) return;
+let isTogglingCamera = false;
 
-  const videoTracks = localStream.value.getVideoTracks();
-  const newVideoOffState = !isVideoOff.value;
+const handleToggleVideo = async () => {
+  if (!localStream.value || !localParticipantId.value || isTogglingCamera) return;
 
-  videoTracks.forEach((track) => {
-    track.enabled = !newVideoOffState;
-  });
+  const turnOn = isVideoOff.value;
+  isTogglingCamera = true;
+  try {
+    await setCameraEnabled(turnOn);
+  } catch (error) {
+    console.error('[MeetingRoom] Failed to toggle the camera:', error);
+    toast({
+      title: t('meeting.controls.cameraFailed'),
+      description: error instanceof Error ? error.message : undefined,
+      variant: 'destructive',
+    });
+    return;
+  } finally {
+    isTogglingCamera = false;
+  }
 
-  console.log('Toggling video. New state:', newVideoOffState);
-  isVideoOff.value = newVideoOffState;
-  toggleParticipantVideo(localParticipantId.value, !newVideoOffState);
+  isVideoOff.value = !turnOn;
+  refreshMediaAvailability();
+  if (localParticipantId.value) toggleParticipantVideo(localParticipantId.value, turnOn);
 };
 
 const handleToggleStats = () => {
@@ -784,7 +799,13 @@ function handleFullscreenKeydown(event: KeyboardEvent) {
 function refreshMediaAvailability() {
   const stream = localStream.value;
   audioAvailable.value = stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false;
-  videoAvailable.value = stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
+  videoAvailable.value = hasCamera(stream);
+}
+
+// A camera turned off has no live track, but it is still there to turn back on.
+function hasCamera(stream: MediaStream | null | undefined) {
+  const live = stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
+  return live || (getServices().webrtcService?.hasCamera() ?? false);
 }
 
 const handleSendMessage = (message: string, replyToId?: number) => {

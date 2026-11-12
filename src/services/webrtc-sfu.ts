@@ -120,6 +120,10 @@ export class WebRTCServiceSFU {
   private previousInboundPackets = new Map<string, InboundPacketSnapshot>();
   private pendingRemoteIceCandidates: RTCIceCandidateInit[] = [];
   private videoQuality: VideoQuality = 'auto';
+  /** This participant's own senders, kept so a camera that is off can come back on the same sender. */
+  private localSenders: Partial<Record<'audio' | 'video', RTCRtpSender>> = {};
+  /** Camera to open on the next turn-on; set while the camera is off, so its light is off too. */
+  private releasedCameraId: string | null | undefined;
   private readonly videoQualityController: SenderQualityController;
   /** Called with the height the video currently sends, which auto quality changes over time. */
   onVideoLevelChange: ((height: number) => void) | null = null;
@@ -234,11 +238,22 @@ export class WebRTCServiceSFU {
       iceTransportPolicy,
     });
 
-    // Add local tracks to peer connection
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        this.peerConnection!.addTrack(track, this.localStream!);
-      });
+    // Add local tracks to peer connection. A camera that is off still gets its sender, so turning it on
+    // later only replaces the track and never renegotiates.
+    this.localSenders = {};
+    const stream = this.localStream;
+    if (stream) {
+      for (const track of stream.getTracks()) {
+        const sender = this.peerConnection.addTrack(track, stream);
+        const kind = track.kind as 'audio' | 'video';
+        this.localSenders[kind] ??= sender;
+      }
+      if (!this.localSenders.video && this.releasedCameraId !== undefined) {
+        this.localSenders.video = this.peerConnection.addTransceiver('video', {
+          direction: 'sendrecv',
+          streams: [stream],
+        }).sender;
+      }
       console.log('[WebRTCServiceSFU] ✓ Local media added to peer connection');
     }
 
@@ -429,10 +444,62 @@ export class WebRTCServiceSFU {
     return this.videoQuality;
   }
 
-  /** Device currently feeding the local track of this kind. */
+  /** Device currently feeding the local track of this kind; for a camera that is off, the one it reopens. */
   getActiveDeviceId(kind: 'audio' | 'video'): string | null {
+    if (kind === 'video' && this.releasedCameraId !== undefined) return this.releasedCameraId;
     const track = kind === 'audio' ? this.localStream?.getAudioTracks()[0] : this.localStream?.getVideoTracks()[0];
     return track?.getSettings().deviceId ?? null;
+  }
+
+  isCameraOn(): boolean {
+    return this.localStream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
+  }
+
+  /** The call has a camera, live or turned off by this participant. */
+  hasCamera(): boolean {
+    return this.isCameraOn() || this.releasedCameraId !== undefined;
+  }
+
+  /**
+   * Turning the camera off stops it, so the device's camera light goes off, and its sender sends nothing.
+   * Turning it on captures the camera again and puts the track on the same sender, so the call does not
+   * renegotiate. The microphone is muted by disabling its track instead.
+   */
+  async setCameraEnabled(enabled: boolean): Promise<void> {
+    const stream = this.localStream;
+    if (!stream) throw new Error(i18n.global.t('errors.mediaUnavailable'));
+    const current = stream.getVideoTracks()[0];
+
+    if (!enabled) {
+      if (!current) return;
+      this.releasedCameraId = current.getSettings().deviceId ?? null;
+      // The track leaves the stream before any await, so a peer connection created meanwhile keeps a sender
+      // without it.
+      stream.removeTrack(current);
+      current.stop();
+      await this.localSender('video', current)?.replaceTrack(null);
+      console.log('[WebRTCServiceSFU] Camera off');
+      return;
+    }
+
+    if (current?.readyState === 'live') return;
+    const replacement = await this.captureCamera(this.releasedCameraId ?? null);
+    this.releasedCameraId = undefined;
+    await this.localSender('video', undefined)?.replaceTrack(replacement);
+    stream.addTrack(replacement);
+    await this.videoQualityController.apply();
+    console.log('[WebRTCServiceSFU] Camera on');
+  }
+
+  private async captureCamera(deviceId: string | null): Promise<MediaStreamTrack> {
+    const constraints = captureConstraints(CAMERA_LEVELS, this.videoQuality);
+    try {
+      const video = deviceId ? { ...constraints, deviceId: { exact: deviceId } } : constraints;
+      return (await navigator.mediaDevices.getUserMedia({ video })).getVideoTracks()[0]!;
+    } catch (error) {
+      console.error('[WebRTCServiceSFU] Failed to open the camera:', error);
+      throw new Error(i18n.global.t('errors.mediaAccess', { message: mediaErrorMessage(error) }));
+    }
   }
 
   /**
@@ -442,6 +509,11 @@ export class WebRTCServiceSFU {
   async switchDevice(kind: 'audio' | 'video', deviceId: string): Promise<void> {
     const stream = this.localStream;
     if (!stream) throw new Error(i18n.global.t('errors.mediaUnavailable'));
+    // A camera that is off stays off; the chosen camera opens on the next turn-on.
+    if (kind === 'video' && this.releasedCameraId !== undefined) {
+      this.releasedCameraId = deviceId;
+      return;
+    }
     const previous = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
     if (previous?.getSettings().deviceId === deviceId) return;
 
@@ -495,6 +567,8 @@ export class WebRTCServiceSFU {
 
   private localSender(kind: 'audio' | 'video', track: MediaStreamTrack | undefined) {
     // Forwarded media arrives on receive-only transceivers, so only this participant's senders carry a track.
+    const own = this.localSenders[kind];
+    if (own) return own;
     const senders = this.peerConnection?.getSenders() ?? [];
     return (
       senders.find((sender) => track && sender.track === track) ?? senders.find((sender) => sender.track?.kind === kind)
@@ -625,6 +699,8 @@ export class WebRTCServiceSFU {
     // Clear references
     this.localStream = null;
     this.peerConnection = null;
+    this.localSenders = {};
+    this.releasedCameraId = undefined;
     this.previousInboundPackets.clear();
     this.pendingRemoteIceCandidates = [];
   }

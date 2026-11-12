@@ -132,6 +132,41 @@ test.describe('multi-participant media', () => {
     }
   });
 
+  test('turning the camera off releases it and turning it on reaches the other person again', async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'camera-off-on-e2e');
+    const [sender, viewer] = session.pages;
+
+    try {
+      await waitForParticipantCount(session.pages, twoParticipantCount);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      const peerConnectionsBefore = await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0);
+
+      await toggleOwnCamera(sender);
+      // The camera is stopped, not just disabled, so the device's camera light goes off.
+      await expect.poll(() => liveLocalVideoTracks(sender)).toBe(0);
+      await expect(viewer.locator(remoteVideoSelector)).toBeHidden();
+
+      await toggleOwnCamera(sender);
+      await expect.poll(() => liveLocalVideoTracks(sender)).toBe(1);
+      await expect(viewer.locator(remoteVideoSelector)).toBeVisible();
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+
+      // The new camera track went out on the existing connection: no reconnect and no renegotiation.
+      expect(await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0)).toBe(peerConnectionsBefore);
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
   test('transmits and renders audio/video for every participant', async ({ browser, baseURL }) => {
     test.setTimeout(180_000);
 
@@ -412,6 +447,23 @@ async function joinParticipants(
   }
 
   return { contexts, pages, roomUrl, diagnostics };
+}
+
+const remoteVideoSelector = '[data-testid="participant-video"]:not([data-participant-local="true"])';
+
+async function toggleOwnCamera(page: Page) {
+  await page.locator('[data-media-control="video"] [data-media-button]').click();
+  await page.locator('[data-media-toggle-item]').click();
+}
+
+async function liveLocalVideoTracks(page: Page) {
+  return page.evaluate(() => {
+    const video = document.querySelector<HTMLVideoElement>(
+      '[data-testid="participant-video"][data-participant-local="true"]',
+    );
+    const stream = video?.srcObject instanceof MediaStream ? video.srcObject : null;
+    return stream?.getVideoTracks().filter((track) => track.readyState === 'live').length ?? 0;
+  });
 }
 
 async function waitForParticipantCount(pages: Page[], expectedParticipants: number) {
