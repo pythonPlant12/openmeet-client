@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useMediaQuery } from '@vueuse/core';
+import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
   Check,
   ChevronDown,
@@ -14,7 +14,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-vue-next';
-import { AnimatePresence, motion } from 'motion-v';
+import { motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import PaneHeader from '@/components/dashboard-page/PaneHeader.vue';
@@ -41,6 +41,7 @@ import { RoundButton } from '@/components/ui/round-button';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { useHorizontalSwipe } from '@/composables/useHorizontalSwipe';
 import { userStatusOption } from '@/config/user-status.config';
+import { playHaptic } from '@/services/haptics';
 import type { Conversation, DirectMessageRequest, GroupInvitation, UserStatus } from '@/services/social-api';
 
 const props = defineProps<{
@@ -98,21 +99,43 @@ const filter = defineModel<ChatFilter>('filter', { required: true });
 const view = computed(() => CHAT_FILTER_VIEWS[filter.value]);
 const headerRef = ref<HTMLElement | null>(null);
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-const titleMotion = computed(() =>
-  prefersReducedMotion.value
-    ? {}
-    : {
-        initial: { opacity: 0, y: 6 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -6 },
-        transition: { duration: 0.2 },
-      },
+// The header shows one chat view at a time: the old title blurs out, the title and the search placeholder
+// change together at the peak of the blur, and the new title blurs in. A timer of the blur's length makes
+// the swap, so the header changes even where the animation never runs.
+const TITLE_BLUR_SECONDS = 0.12;
+const TITLE_BLURRED = { opacity: 0, filter: 'blur(6px)' };
+const TITLE_CLEAR = { opacity: 1, filter: 'blur(0px)' };
+const shownFilter = ref(filter.value);
+const shownView = computed(() => CHAT_FILTER_VIEWS[shownFilter.value]);
+const titleBlurred = ref(false);
+const { start: swapTitleAtPeakBlur } = useTimeoutFn(
+  () => {
+    shownFilter.value = filter.value;
+    titleBlurred.value = false;
+  },
+  TITLE_BLUR_SECONDS * 1000,
+  { immediate: false },
 );
+watch(filter, (next) => {
+  if (prefersReducedMotion.value) {
+    shownFilter.value = next;
+    return;
+  }
+  titleBlurred.value = true;
+  swapTitleAtPeakBlur();
+});
+
+// Views the user picks tick once; changes from the parent stay silent.
+function switchView(next: ChatFilter) {
+  if (next === filter.value) return;
+  filter.value = next;
+  playHaptic('selection');
+}
 
 // A horizontal swipe over the header moves between Chats, Group chats, and Friends chats.
 useHorizontalSwipe(headerRef, {
   onSwipe: (direction) =>
-    (filter.value = direction === 'next' ? nextChatFilter(filter.value) : previousChatFilter(filter.value)),
+    switchView(direction === 'next' ? nextChatFilter(filter.value) : previousChatFilter(filter.value)),
 });
 const searchInput = ref<InstanceType<typeof PaneHeader> | null>(null);
 let longPressTimer: number | undefined;
@@ -187,24 +210,26 @@ onBeforeUnmount(clearLongPress);
     <PaneHeader
       ref="searchInput"
       v-model:query="query"
-      :title="view.title"
-      :search-label="view.searchLabel"
+      :title="shownView.title"
+      :search-label="shownView.searchLabel"
       search-id="conversation-search"
       @search-focus="handleSearchFocus"
       @search-blur="handleSearchBlur"
     >
       <template #title
-        ><AnimatePresence mode="popLayout" :initial="false"
-          ><motion.span :key="filter" v-bind="titleMotion" class="inline-block">{{
-            view.title
-          }}</motion.span></AnimatePresence
+        ><motion.span
+          :initial="false"
+          :animate="titleBlurred ? TITLE_BLURRED : TITLE_CLEAR"
+          :transition="{ duration: TITLE_BLUR_SECONDS, ease: 'easeOut' }"
+          class="inline-block"
+          >{{ shownView.title }}</motion.span
         ></template
       >
       <template #badge
         ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention"
       /></template>
       <template #trailing>
-        <ChatFilterControls :filter="filter" @switch="filter = $event" />
+        <ChatFilterControls :filter="filter" @switch="switchView" />
       </template>
     </PaneHeader>
   </div>

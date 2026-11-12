@@ -1,8 +1,12 @@
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
+import type { ChatFilter } from '@/components/dashboard-page/conversations/chat-filter';
+import { playHaptic } from '@/services/haptics';
 import type { Conversation } from '@/services/social-api';
+
+vi.mock('@/services/haptics', () => ({ playHaptic: vi.fn() }));
 
 const conversation: Conversation = {
   id: 'conversation-1',
@@ -62,6 +66,12 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe('ConversationsSidebar', () => {
@@ -196,6 +206,89 @@ describe('ConversationsSidebar', () => {
     input.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 60, pointerId: 1 }));
     expect(wrapper.emitted('update:filter')).toBeUndefined();
     wrapper.unmount();
+  });
+
+  describe('changing the chat view', () => {
+    // The parent owns the view, so a test plays its part: it applies the view the sidebar asks for.
+    function mountWithView(options: { attachTo?: HTMLElement } = {}) {
+      const wrapper = mountSidebar(
+        { 'onUpdate:filter': (filter: ChatFilter) => wrapper.setProps({ filter }) },
+        options,
+      );
+      return wrapper;
+    }
+    const title = (wrapper: ReturnType<typeof mountSidebar>) => wrapper.get('h1').text();
+    const placeholder = (wrapper: ReturnType<typeof mountSidebar>) => wrapper.get('input').attributes('placeholder');
+
+    it('blurs the old title out, then shows the new title and placeholder together', async () => {
+      vi.useFakeTimers();
+      const wrapper = mountWithView();
+
+      await wrapper.get('button[aria-label="Show group chats"]').trigger('click');
+
+      // While the old title blurs out, the header still describes the old view only.
+      await vi.advanceTimersByTimeAsync(100);
+      expect(title(wrapper)).toContain('Chats');
+      expect(title(wrapper)).not.toContain('Group chats');
+      expect(placeholder(wrapper)).toBe('Search chats');
+      await vi.advanceTimersByTimeAsync(20);
+      expect(title(wrapper)).toContain('Group chats');
+      expect(placeholder(wrapper)).toBe('Search group chats');
+    });
+
+    it('swaps the title at once when reduced motion is preferred', async () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: query.includes('reduce'),
+          addEventListener() {},
+          removeEventListener() {},
+        })),
+      );
+      const wrapper = mountWithView();
+
+      await wrapper.get('button[aria-label="Show group chats"]').trigger('click');
+
+      expect(title(wrapper)).toContain('Group chats');
+      expect(title(wrapper)).not.toMatch(/^Chats/);
+      expect(placeholder(wrapper)).toBe('Search group chats');
+    });
+
+    it('plays one selection haptic for a tap on the view switch', async () => {
+      const wrapper = mountWithView();
+
+      await wrapper.get('button[aria-label="Show group chats"]').trigger('click');
+
+      expect(playHaptic).toHaveBeenCalledTimes(1);
+      expect(playHaptic).toHaveBeenCalledWith('selection');
+    });
+
+    it('plays one selection haptic for a header swipe, and none while dragging', async () => {
+      const wrapper = mountWithView({ attachTo: document.body });
+      await wrapper.vm.$nextTick();
+      const heading = wrapper.get('h1').element;
+
+      heading.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, clientX: 300, clientY: 20, pointerId: 1 }),
+      );
+      heading.dispatchEvent(
+        new PointerEvent('pointermove', { bubbles: true, clientX: 200, clientY: 20, pointerId: 1 }),
+      );
+      expect(playHaptic).not.toHaveBeenCalled();
+      heading.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 20, pointerId: 1 }));
+
+      expect(playHaptic).toHaveBeenCalledTimes(1);
+      expect(playHaptic).toHaveBeenCalledWith('selection');
+      wrapper.unmount();
+    });
+
+    it('stays silent when the parent changes the view', async () => {
+      const wrapper = mountSidebar();
+
+      await wrapper.setProps({ filter: 'direct' });
+
+      expect(playHaptic).not.toHaveBeenCalled();
+    });
   });
 
   it('keeps the query when switching views', async () => {

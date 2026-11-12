@@ -1,12 +1,15 @@
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FriendsSidebar from '@/components/dashboard-page/friends/FriendsSidebar.vue';
+import { playHaptic } from '@/services/haptics';
 import type { Conversation } from '@/services/social-api';
 
 function group(id: string, title: string, groupCode: string) {
   return { id, kind: 'group', title, groupCode, role: 'member' } as Conversation;
 }
+
+vi.mock('@/services/haptics', () => ({ playHaptic: vi.fn() }));
 
 const groups = [group('g1', 'Design team', 'AbC123'), group('g2', 'Climbing', 'XyZ789')];
 
@@ -52,6 +55,8 @@ beforeEach(() => {
     },
   );
 });
+
+afterEach(() => vi.clearAllMocks());
 
 describe('FriendsSidebar', () => {
   it('shows incoming friend requests beside the title, also while collapsed', () => {
@@ -189,5 +194,17 @@ describe('FriendsSidebar', () => {
     expect(wrapper.emitted('open-group')).toEqual([[groups[0]]]);
     await wrapper.get('button[aria-label="Show friends"]').trigger('click');
     expect(wrapper.get('h1').text()).toContain('Friends');
+  });
+
+  it('plays one selection haptic for each change from the view switch', async () => {
+    const wrapper = mountSidebar({ query: '' });
+
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    expect(playHaptic).toHaveBeenCalledTimes(1);
+    expect(playHaptic).toHaveBeenLastCalledWith('selection');
+
+    await wrapper.get('button[aria-label="Show friends"]').trigger('click');
+    expect(playHaptic).toHaveBeenCalledTimes(2);
+    expect(playHaptic).toHaveBeenLastCalledWith('selection');
   });
 });
