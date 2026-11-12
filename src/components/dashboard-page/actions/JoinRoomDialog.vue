@@ -44,7 +44,7 @@ function handleJoin() {
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       ><DialogHeader
         ><DialogTitle>{{ t('common.joinMeeting') }}</DialogTitle
         ><DialogDescription class="text-harbor-muted">{{ t('landing.joinTitle') }}</DialogDescription></DialogHeader
@@ -73,18 +73,12 @@ function handleJoin() {
           {{ error }}
         </p>
         <DialogFooter
-          ><Button
-            type="button"
-            variant="outline"
-            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-            @click="emit('update:open', false)"
-            >{{ t('common.cancel') }}</Button
-          ><Button
-            type="submit"
-            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
-            :disabled="!code.trim()"
-            >{{ t('landing.joinRoom') }}</Button
-          ></DialogFooter
+          ><Button type="button" variant="pill" size="pill" @click="emit('update:open', false)">{{
+            t('common.cancel')
+          }}</Button
+          ><Button type="submit" variant="accent" size="pill" :disabled="!code.trim()">{{
+            t('landing.joinRoom')
+          }}</Button></DialogFooter
         >
       </form></HarborDialogContent
     ></Dialog

@@ -51,7 +51,7 @@ const candidates = computed(() => {
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       ><DialogHeader
         ><DialogTitle>Create group</DialogTitle
         ><DialogDescription class="text-harbor-muted"
@@ -151,20 +151,12 @@ const candidates = computed(() => {
             >
           </div>
         </fieldset>
-        <DialogFooter class="gap-2"
-          ><Button
-            type="button"
-            variant="outline"
-            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-            :disabled="creating"
-            @click="emit('update:open', false)"
+        <DialogFooter
+          ><Button type="button" variant="pill" size="pill" :disabled="creating" @click="emit('update:open', false)"
             >Cancel</Button
-          ><Button
-            type="submit"
-            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
-            :disabled="creating"
-            >{{ creating ? 'Creating...' : 'Create group' }}</Button
-          ></DialogFooter
+          ><Button type="submit" variant="accent" size="pill" :disabled="creating">{{
+            creating ? 'Creating...' : 'Create group'
+          }}</Button></DialogFooter
         ></motion.form
       ></HarborDialogContent
     ></Dialog

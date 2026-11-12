@@ -121,7 +121,8 @@ function focusCancel(event: Event) {
             data-confirm-dialog-cancel
             type="button"
             variant="pill"
-            :class="isPhone ? 'w-full' : 'px-5'"
+            size="pill"
+            :class="isPhone && 'w-full'"
             :disabled="busy"
             @click="cancel"
           >
@@ -132,8 +133,8 @@ function focusCancel(event: Event) {
             data-confirm-dialog-action
             type="button"
             :variant="tone"
-            class="h-11"
-            :class="isPhone ? 'w-full' : 'px-5'"
+            size="pill"
+            :class="isPhone && 'w-full'"
             :disabled="busy"
             @click="confirm"
           >

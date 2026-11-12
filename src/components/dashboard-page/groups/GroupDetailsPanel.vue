@@ -860,7 +860,7 @@ defineExpose({
 
   <Dialog :open="isSettingsOpen" @update:open="setSettingsOpen">
     <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
@@ -940,18 +940,10 @@ defineExpose({
               class="mt-2 h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0" /></motion.div
         ></AnimatePresence>
         <DialogFooter
-          ><Button
-            type="button"
-            variant="outline"
-            class="rounded-full border-harbor-line bg-white"
-            @click="setSettingsOpen(false)"
-            >Cancel</Button
-          ><Button
-            type="submit"
-            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
-            :disabled="isSavingSettings || !settingsTitle.trim()"
-            >{{ isSavingSettings ? 'Saving...' : 'Save settings' }}</Button
-          ></DialogFooter
+          ><Button type="button" variant="pill" size="pill" @click="setSettingsOpen(false)">Cancel</Button
+          ><Button type="submit" variant="accent" size="pill" :disabled="isSavingSettings || !settingsTitle.trim()">{{
+            isSavingSettings ? 'Saving...' : 'Save settings'
+          }}</Button></DialogFooter
         >
       </motion.form>
     </HarborDialogContent>
@@ -959,7 +951,7 @@ defineExpose({
 
   <Dialog :open="isAddMembersOpen" @update:open="setAddMembersOpen">
     <HarborDialogContent
-      class="marketing-font flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      class="marketing-font flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
@@ -1045,10 +1037,10 @@ defineExpose({
         >
       </div>
       <DialogFooter
-        ><Button variant="outline" class="rounded-full border-harbor-line bg-white" @click="setAddMembersOpen(false)"
-          >Cancel</Button
+        ><Button variant="pill" size="pill" @click="setAddMembersOpen(false)">Cancel</Button
         ><Button
-          class="harbor-primary-action rounded-full bg-harbor-accent mb-2 text-white"
+          variant="accent"
+          size="pill"
           :disabled="!selectedCandidateIds.length || isAddingMembers"
           @click="addSelectedMembers"
           >{{
