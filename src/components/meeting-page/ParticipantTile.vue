@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { MicOff, MonitorUp, Pin, PinOff, VideoOff } from 'lucide-vue-next';
+import { MaximizeAnimated, MinimizeAnimated, PinAnimated, PinOffAnimated } from '@respeak/lucide-motion-vue';
+import { Eye, EyeOff, MicOff, MonitorUp, MoreHorizontal, Pin, PinOff, VideoOff } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { userStatusOption } from '@/config/user-status.config';
 import type { UserStatus } from '@/services/social-api';
@@ -28,6 +36,12 @@ interface Props {
   dark?: boolean;
   /** Full screen's main tile runs edge to edge, without corners, border, or shadow. */
   bleed?: boolean;
+  /** The ⋯ button with pin, full screen, and the participant's options. */
+  showActions?: boolean;
+  /** This tile is the one shown in full screen, so its menu offers to leave full screen. */
+  isFullscreen?: boolean;
+  /** The ⋯ menu can show or hide the name, for small tiles that hide it. */
+  nameToggle?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -41,6 +55,9 @@ const props = withDefaults(defineProps<Props>(), {
   fit: undefined,
   dark: false,
   bleed: false,
+  showActions: true,
+  isFullscreen: false,
+  nameToggle: false,
 });
 const { t } = useI18n();
 
@@ -48,7 +65,14 @@ const emit = defineEmits<{
   (e: 'click'): void;
   /** The video's width / height, so the layout can keep portrait and landscape cameras uncropped. */
   (e: 'aspect', aspect: number): void;
+  (e: 'togglePin'): void;
+  (e: 'toggleFullscreen'): void;
+  (e: 'toggleName'): void;
 }>();
+
+// The tile shrinks slightly while pressed, so a touch visibly lands; pointer events work on every platform.
+const pressed = ref(false);
+const isOptionsOpen = ref(false);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 // A remote camera is "loading" from joining until its first frame renders.
@@ -170,176 +194,232 @@ onMounted(async () => {
 </script>
 
 <template>
-  <component
-    :is="interactive ? 'button' : 'div'"
-    :type="interactive ? 'button' : undefined"
-    :class="[
-      'relative group overflow-hidden text-left transition-[border-color,box-shadow] duration-300',
-      bleed ? 'rounded-none border-0' : 'rounded-[1.4rem] border-2 shadow-[0_16px_40px_rgba(16,47,53,0.12)]',
-      surfaceClass,
-      speaking
-        ? 'border-harbor-accent shadow-[0_0_0_3px_rgba(11,122,117,0.22),0_16px_40px_rgba(16,47,53,0.12)]'
-        : dark
-          ? 'border-transparent'
-          : 'border-harbor-line',
-      interactive
-        ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-faint'
-        : '',
-      sizeClasses,
-    ]"
+  <div
+    :class="['group relative', sizeClasses]"
     data-testid="participant-tile"
-    :aria-label="
-      interactive
-        ? t(isExpanded ? 'meeting.participant.unpin' : 'meeting.participant.pin', { name: participant.name })
-        : undefined
-    "
-    :aria-pressed="interactive ? isExpanded : undefined"
     :data-participant-id="participant.id"
     :data-participant-local="participant.isLocal"
     :data-screen-share="isScreen"
     :data-speaking="speaking"
-    @click="interactive && emit('click')"
+    :data-pressed="pressed || undefined"
   >
-    <!-- Video element (always present for audio playback, hidden when video disabled) -->
-    <video
-      v-if="participant.stream"
-      ref="videoRef"
-      data-testid="participant-video"
-      :data-participant-id="participant.id"
-      :data-participant-local="participant.isLocal"
-      autoplay
-      playsinline
-      :muted="participant.isLocal"
-      @loadedmetadata="
-        reportAspect();
-        playAttachedVideo();
-      "
-      @canplay="playAttachedVideo"
-      @loadeddata="markVideoFrames"
-      @playing="markVideoFrames"
-      @resize="markVideoFrames"
+    <component
+      :is="interactive ? 'button' : 'div'"
+      :type="interactive ? 'button' : undefined"
       :class="[
-        'w-full h-full',
-        bleed ? 'rounded-none' : 'rounded-[1.25rem]',
+        'relative size-full overflow-hidden text-left transition-[border-color,box-shadow,transform] duration-300',
+        bleed ? 'rounded-none border-0' : 'rounded-[1.4rem] border-2 shadow-[0_16px_40px_rgba(16,47,53,0.12)]',
         surfaceClass,
-        objectFitClass,
-        { hidden: !participant.videoEnabled, '-scale-x-100': participant.isLocal && !isScreen },
+        speaking
+          ? 'border-harbor-accent ring-[3px] ring-harbor-accent/25'
+          : dark
+            ? 'border-transparent'
+            : 'border-harbor-line',
+        interactive
+          ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-faint'
+          : '',
+        pressed ? 'scale-[0.97] duration-100' : '',
       ]"
-    />
-
-    <!-- Avatar (shown when no stream or video disabled) -->
-    <div
-      v-if="!participant.stream || !participant.videoEnabled"
-      data-participant-avatar
-      class="absolute inset-0 flex items-center justify-center"
-      :class="surfaceClass"
+      data-participant-surface
+      :aria-label="
+        interactive
+          ? t(isExpanded ? 'meeting.participant.unpin' : 'meeting.participant.pin', { name: participant.name })
+          : undefined
+      "
+      :aria-pressed="interactive ? isExpanded : undefined"
+      @pointerdown="pressed = interactive"
+      @pointerup="pressed = false"
+      @pointercancel="pressed = false"
+      @pointerleave="pressed = false"
+      @click="interactive && emit('click')"
     >
-      <div
+      <!-- Video element (always present for audio playback, hidden when video disabled) -->
+      <video
+        v-if="participant.stream"
+        ref="videoRef"
+        data-testid="participant-video"
+        :data-participant-id="participant.id"
+        :data-participant-local="participant.isLocal"
+        autoplay
+        playsinline
+        :muted="participant.isLocal"
+        @loadedmetadata="
+          reportAspect();
+          playAttachedVideo();
+        "
+        @canplay="playAttachedVideo"
+        @loadeddata="markVideoFrames"
+        @playing="markVideoFrames"
+        @resize="markVideoFrames"
         :class="[
-          'flex items-center justify-center overflow-hidden rounded-full bg-harbor-accent font-bold text-white shadow-[0_8px_24px_rgba(16,47,53,0.25)]',
-          size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-28 h-28 text-4xl',
+          'w-full h-full',
+          bleed ? 'rounded-none' : 'rounded-[1.25rem]',
+          surfaceClass,
+          objectFitClass,
+          { hidden: !participant.videoEnabled, '-scale-x-100': participant.isLocal && !isScreen },
         ]"
+      />
+
+      <!-- Avatar (shown when no stream or video disabled) -->
+      <div
+        v-if="!participant.stream || !participant.videoEnabled"
+        data-participant-avatar
+        class="absolute inset-0 flex items-center justify-center"
+        :class="surfaceClass"
       >
-        <MonitorUp v-if="isScreen" :class="size === 'sidebar' || size === 'mobile' ? 'size-5' : 'size-10'" />
-        <img v-else-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
-        <template v-else>{{ initials }}</template>
-      </div>
-    </div>
-
-    <!-- Media loading: shown until a remote camera renders its first frame -->
-    <div
-      v-if="isMediaLoading"
-      data-participant-loading
-      class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-harbor-accent backdrop-blur-[2px]"
-      :class="dark ? 'bg-[#161C1E]/70' : 'bg-harbor-line/70'"
-      role="status"
-    >
-      <LoadingRipple :size="isCompact ? 'sm' : 'lg'" />
-      <span v-if="!isCompact" class="text-sm font-semibold text-harbor-ink-soft">{{
-        t('meeting.participant.connecting')
-      }}</span>
-      <span v-else class="sr-only">{{ t('meeting.participant.connecting') }}</span>
-    </div>
-
-    <!-- Name tag: kept small and tucked into the corner so it covers little of the video. -->
-    <div
-      v-if="showNameTag"
-      data-participant-name-tag
-      :class="[
-        'meeting-glass-bubble absolute flex items-center rounded-full',
-        isCompact
-          ? 'bottom-1.5 left-1.5 max-w-[calc(100%-0.75rem)] gap-1 py-0.5 pl-0.5 pr-2 text-[11px]'
-          : 'bottom-2 left-2 max-w-[calc(100%-1rem)] gap-1.5 py-0.5 pl-0.5 pr-2.5 text-xs',
-      ]"
-    >
-      <span class="relative shrink-0">
-        <span
-          data-participant-mini-avatar
+        <div
           :class="[
-            'flex items-center justify-center overflow-hidden rounded-[28%] bg-harbor-accent font-semibold text-white',
-            isCompact ? 'size-4 text-[7px]' : 'size-5 text-[8px]',
+            'flex items-center justify-center overflow-hidden rounded-full bg-harbor-accent font-bold text-white shadow-[0_8px_24px_rgba(16,47,53,0.25)]',
+            size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-28 h-28 text-4xl',
           ]"
-          aria-hidden="true"
         >
-          <MonitorUp v-if="isScreen" class="size-3" />
+          <MonitorUp v-if="isScreen" :class="size === 'sidebar' || size === 'mobile' ? 'size-5' : 'size-10'" />
           <img v-else-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
           <template v-else>{{ initials }}</template>
+        </div>
+      </div>
+
+      <!-- Media loading: shown until a remote camera renders its first frame -->
+      <div
+        v-if="isMediaLoading"
+        data-participant-loading
+        class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-harbor-accent backdrop-blur-[2px]"
+        :class="dark ? 'bg-[#161C1E]/70' : 'bg-harbor-line/70'"
+        role="status"
+      >
+        <LoadingRipple :size="isCompact ? 'sm' : 'lg'" />
+        <span v-if="!isCompact" class="text-sm font-semibold text-harbor-ink-soft">{{
+          t('meeting.participant.connecting')
+        }}</span>
+        <span v-else class="sr-only">{{ t('meeting.participant.connecting') }}</span>
+      </div>
+
+      <!-- Name tag: kept small and tucked into the corner so it covers little of the video. -->
+      <div
+        v-if="showNameTag"
+        data-participant-name-tag
+        :class="[
+          'meeting-glass-bubble absolute flex items-center rounded-full',
+          isCompact
+            ? 'bottom-1.5 left-1.5 gap-1 py-0.5 pl-0.5 pr-2 text-[11px]'
+            : 'bottom-2 left-2 gap-1.5 py-0.5 pl-0.5 pr-2.5 text-xs',
+          // Leaves room for the ⋯ button in the opposite corner.
+          isCompact
+            ? showActions
+              ? 'max-w-[calc(100%-2.75rem)]'
+              : 'max-w-[calc(100%-0.75rem)]'
+            : showActions
+              ? 'max-w-[calc(100%-3.5rem)]'
+              : 'max-w-[calc(100%-1rem)]',
+        ]"
+      >
+        <span class="relative shrink-0">
+          <span
+            data-participant-mini-avatar
+            :class="[
+              'flex items-center justify-center overflow-hidden rounded-[28%] bg-harbor-accent font-semibold text-white',
+              isCompact ? 'size-4 text-[7px]' : 'size-5 text-[8px]',
+            ]"
+            aria-hidden="true"
+          >
+            <MonitorUp v-if="isScreen" class="size-3" />
+            <img v-else-if="avatarUrl" :src="avatarUrl" alt="" class="size-full object-cover" />
+            <template v-else>{{ initials }}</template>
+          </span>
+          <span
+            v-if="statusOption"
+            data-participant-status
+            :data-status="status"
+            class="absolute -bottom-px -right-px size-2 rounded-full ring-[1.5px] ring-harbor-ink"
+            :class="statusOption.dotClass"
+            aria-hidden="true"
+          />
         </span>
-        <span
-          v-if="statusOption"
-          data-participant-status
-          :data-status="status"
-          class="absolute -bottom-px -right-px size-2 rounded-full ring-[1.5px] ring-harbor-ink"
-          :class="statusOption.dotClass"
-          aria-hidden="true"
-        />
-      </span>
-      <span class="truncate font-medium">{{ participant.name }}</span>
-      <span v-if="participant.isLocal" class="shrink-0 text-white/60">{{ t('meeting.you') }}</span>
-      <span v-if="statusOption" class="sr-only">{{ t('meeting.participant.status', { status: statusLabel }) }}</span>
-    </div>
-
-    <!-- The pinned person keeps a pin badge, so phones without hover still see who is pinned. -->
-    <div
-      v-if="isExpanded"
-      data-participant-pinned
-      :class="[
-        'meeting-glass-bubble absolute left-2 flex items-center justify-center rounded-full',
-        isCompact ? 'top-1 size-5' : 'top-4 size-7',
-      ]"
-    >
-      <Pin :class="isCompact ? 'size-3' : 'size-3.5'" aria-hidden="true" />
-    </div>
-
-    <!-- Audio/Video Status Indicators -->
-    <div :class="['absolute right-2 flex gap-1', size === 'sidebar' || size === 'mobile' ? 'top-1' : 'top-4']">
-      <div v-if="!participant.audioEnabled" class="p-1.5 bg-harbor-danger rounded-full">
-        <MicOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
+        <span class="truncate font-medium">{{ participant.name }}</span>
+        <span v-if="participant.isLocal" class="shrink-0 text-white/60">{{ t('meeting.you') }}</span>
+        <span v-if="statusOption" class="sr-only">{{ t('meeting.participant.status', { status: statusLabel }) }}</span>
       </div>
-      <div v-if="!participant.videoEnabled" class="p-1.5 bg-harbor-danger rounded-full">
-        <VideoOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
-      </div>
-    </div>
 
-    <!-- Hover Overlay with Pin Icon -->
-    <div
-      v-if="showExpandIcon"
-      class="absolute inset-0 hidden items-center justify-center rounded-[1.25rem] bg-black/0 transition-colors md:flex md:group-hover:bg-black/20"
-    >
-      <PinOff
+      <!-- The pinned person keeps a pin badge, so phones without hover still see who is pinned. -->
+      <div
         v-if="isExpanded"
+        data-participant-pinned
         :class="[
-          'text-white opacity-0 group-hover:opacity-100 transition-opacity',
-          size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
+          'meeting-glass-bubble absolute left-2 flex items-center justify-center rounded-full',
+          isCompact ? 'top-1 size-5' : 'top-4 size-7',
         ]"
-      />
-      <Pin
-        v-else
-        :class="[
-          'text-white opacity-0 group-hover:opacity-100 transition-opacity',
-          size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
-        ]"
-      />
-    </div>
-  </component>
+      >
+        <Pin :class="isCompact ? 'size-3' : 'size-3.5'" aria-hidden="true" />
+      </div>
+
+      <!-- Audio/Video Status Indicators -->
+      <div :class="['absolute right-2 flex gap-1', size === 'sidebar' || size === 'mobile' ? 'top-1' : 'top-4']">
+        <div v-if="!participant.audioEnabled" class="p-1.5 bg-harbor-danger rounded-full">
+          <MicOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
+        </div>
+        <div v-if="!participant.videoEnabled" class="p-1.5 bg-harbor-danger rounded-full">
+          <VideoOff :class="size === 'sidebar' || size === 'mobile' ? 'h-3 w-3' : 'h-4 w-4'" class="text-white" />
+        </div>
+      </div>
+
+      <!-- Hover Overlay with Pin Icon -->
+      <div
+        v-if="showExpandIcon"
+        class="absolute inset-0 hidden items-center justify-center rounded-[1.25rem] bg-black/0 transition-colors md:flex md:group-hover:bg-black/20"
+      >
+        <PinOff
+          v-if="isExpanded"
+          :class="[
+            'text-white opacity-0 group-hover:opacity-100 transition-opacity',
+            size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
+          ]"
+        />
+        <Pin
+          v-else
+          :class="[
+            'text-white opacity-0 group-hover:opacity-100 transition-opacity',
+            size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
+          ]"
+        />
+      </div>
+    </component>
+
+    <!-- Per-person actions: shown on hover where there is a pointer that hovers, always on touch. -->
+    <DropdownMenu v-if="showActions" v-model:open="isOptionsOpen" :modal="false">
+      <DropdownMenuTrigger as-child>
+        <button
+          type="button"
+          :class="[
+            'meeting-glass-bubble absolute flex items-center justify-center rounded-full transition-opacity',
+            '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',
+            isCompact ? 'bottom-1.5 right-1.5 size-6' : 'bottom-2 right-2 size-8',
+            isOptionsOpen ? '[@media(hover:hover)]:opacity-100' : '',
+          ]"
+          data-participant-options
+          :aria-label="t('meeting.participant.options', { name: participant.name })"
+          @click.stop
+        >
+          <MoreHorizontal :class="isCompact ? 'size-3.5' : 'size-4'" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" :side-offset="6" class="w-60 max-w-[calc(100vw-1.5rem)]">
+        <DropdownMenuItem @select="emit('togglePin')">
+          <LiquidMenuIcon v-if="isExpanded" :animated="PinOffAnimated" />
+          <LiquidMenuIcon v-else :animated="PinAnimated" />
+          <span class="min-w-0 flex-1 truncate">{{
+            t(isExpanded ? 'meeting.participant.unpin' : 'meeting.participant.pin', { name: participant.name })
+          }}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem @select="emit('toggleFullscreen')">
+          <LiquidMenuIcon v-if="isFullscreen" :animated="MinimizeAnimated" />
+          <LiquidMenuIcon v-else :animated="MaximizeAnimated" />
+          {{ t(isFullscreen ? 'meeting.actions.exitFullscreen' : 'meeting.actions.fullscreen') }}
+        </DropdownMenuItem>
+        <DropdownMenuItem v-if="nameToggle" @select="emit('toggleName')">
+          <LiquidMenuIcon :fallback="showNameTag ? EyeOff : Eye" />
+          {{ t(showNameTag ? 'meeting.participant.hideName' : 'meeting.participant.showName') }}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </div>
 </template>
