@@ -16,6 +16,12 @@ const SIZES: Record<RoundButtonSize, string> = {
   md: 'size-11 [&_svg]:size-5',
   lg: 'size-12 [&_svg]:size-6',
 };
+
+// Filled tones are glass drops, shared with the filled `Button` variants.
+const GLASS: Partial<Record<RoundButtonTone, string>> = {
+  accent: 'liquid-glass-primary',
+  danger: 'liquid-glass-danger',
+};
 </script>
 
 <template>
@@ -24,7 +30,7 @@ const SIZES: Record<RoundButtonSize, string> = {
     :as-child="asChild"
     :type="as === 'button' && !asChild ? 'button' : undefined"
     :data-tone="tone === 'default' ? undefined : tone"
-    :class="cn('harbor-round-button shrink-0 [&_svg]:shrink-0', SIZES[size], props.class)"
+    :class="cn('harbor-round-button shrink-0 [&_svg]:shrink-0', GLASS[tone], SIZES[size], props.class)"
   >
     <slot />
   </Primitive>

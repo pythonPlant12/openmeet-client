@@ -12,6 +12,9 @@ export const buttonVariants = cva(
         destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
         outline: 'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
+        // Filled actions are glass pills: teal for the primary action, red for a destructive one.
+        accent: 'liquid-glass-primary',
+        danger: 'liquid-glass-danger',
         ghost: 'harbor-ghost-action',
         link: 'text-primary underline-offset-4 hover:underline',
         // White pill with a soft shadow and a gray icon; `pill-danger` dims the text and icon red.
@@ -28,6 +31,7 @@ export const buttonVariants = cva(
         'icon-lg': 'size-10',
       },
     },
+    compoundVariants: [{ variant: ['accent', 'danger'], class: 'rounded-full' }],
     defaultVariants: {
       variant: 'default',
       size: 'default',

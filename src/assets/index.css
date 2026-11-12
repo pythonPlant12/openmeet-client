@@ -426,20 +426,58 @@
   background: rgb(255 255 255 / 0.95);
 }
 
-/* Primary actions are a teal drop of the same glass: a top-left sheen, a rim light, and a soft inner shade. */
-.liquid-glass-primary {
+/* Filled actions are drops of the same glass: a top-left sheen, a rim light, and a soft inner shade. Teal marks
+   the primary action and red a destructive one. Use them through the `accent` and `danger` tones of `Button` and
+   `RoundButton`, never by hand. Hover darkens only on pointer devices; touch gets the darker fill while pressed. */
+.liquid-glass-primary,
+.liquid-glass-danger {
   color: #fff;
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  backdrop-filter: blur(8px) saturate(1.4);
+  text-shadow: 0 1px 1px rgb(17 27 33 / 0.25);
+  transition:
+    background 0.2s,
+    box-shadow 0.2s,
+    transform 0.15s;
+}
+
+.liquid-glass-primary {
   background:
     radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0) 55%),
     linear-gradient(180deg, rgb(var(--harbor-accent) / 0.82), rgb(var(--harbor-accent-hover) / 0.92));
-  -webkit-backdrop-filter: blur(8px) saturate(1.4);
-  backdrop-filter: blur(8px) saturate(1.4);
   box-shadow:
     inset 0 1px 1px rgb(255 255 255 / 0.7),
     inset 0 -2px 6px rgb(17 27 33 / 0.3),
     inset 0 0 0 1px rgb(255 255 255 / 0.22),
     0 6px 16px -6px rgb(var(--harbor-accent) / 0.6);
-  text-shadow: 0 1px 1px rgb(17 27 33 / 0.25);
+}
+
+.liquid-glass-danger {
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0) 55%),
+    linear-gradient(180deg, rgb(var(--harbor-danger) / 0.82), rgb(var(--harbor-danger-strong) / 0.92));
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.7),
+    inset 0 -2px 6px rgb(17 27 33 / 0.3),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22),
+    0 6px 16px -6px rgb(var(--harbor-danger) / 0.6);
+}
+
+.liquid-glass-primary:not(:disabled):active,
+.liquid-glass-danger:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+.liquid-glass-primary:not(:disabled):active {
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
+    linear-gradient(180deg, rgb(var(--harbor-accent-hover) / 0.9), rgb(var(--harbor-accent-hover) / 0.98));
+}
+
+.liquid-glass-danger:not(:disabled):active {
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
+    linear-gradient(180deg, rgb(var(--harbor-danger-strong) / 0.9), rgb(var(--harbor-danger-strong) / 0.98));
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -449,6 +487,29 @@
       radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
       linear-gradient(180deg, rgb(var(--harbor-accent-hover) / 0.9), rgb(var(--harbor-accent-hover) / 0.98));
   }
+
+  .liquid-glass-danger:not(:disabled):hover {
+    color: #fff;
+    background:
+      radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
+      linear-gradient(180deg, rgb(var(--harbor-danger-strong) / 0.9), rgb(var(--harbor-danger-strong) / 0.98));
+  }
+}
+
+/* Over the near-black stage the sheen and rim dim and the coloured glow turns into a plain dark shadow. Dark
+   scopes may lighten the danger tokens for text, so the red glass keeps the light palette's reds for its fill. */
+:is(.meeting-immersive, .meeting-controls-dark, .liquid-surface[data-tone='dark']) .liquid-glass-primary,
+:is(.meeting-immersive, .meeting-controls-dark, .liquid-surface[data-tone='dark']) .liquid-glass-danger {
+  box-shadow:
+    inset 0 1px 1px rgb(255 255 255 / 0.35),
+    inset 0 -2px 6px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    0 6px 16px -6px rgb(0 0 0 / 0.7);
+}
+
+:is(.meeting-immersive, .meeting-controls-dark, .liquid-surface[data-tone='dark']) .liquid-glass-danger {
+  --harbor-danger: 196 81 61;
+  --harbor-danger-strong: 169 67 50;
 }
 
 /* Dark liquid glass for surfaces over the near-black full screen meeting stage. */
@@ -1218,12 +1279,16 @@
   }
 }
 
-/* Round floating controls: a white disc with a soft shadow and gray icons, used for header actions. */
+/* Round floating controls: a white disc with a soft shadow and gray icons, used for header actions. The glass
+   tones (`accent`, `danger`) take their fill, rim, and hover from `.liquid-glass-*` instead. */
 .harbor-round-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
+}
+
+.harbor-round-button:not(.liquid-glass-primary, .liquid-glass-danger) {
   color: rgb(var(--harbor-ink-soft));
   background: rgb(var(--harbor-surface));
   box-shadow: var(--harbor-shadow-soft);
@@ -1243,30 +1308,17 @@
   cursor: not-allowed;
 }
 
-.harbor-round-button[data-state='open'] {
+.harbor-round-button[data-state='open']:not(.liquid-glass-primary, .liquid-glass-danger) {
   color: rgb(var(--harbor-ink));
   background: rgb(var(--harbor-hover));
 }
 
-/* The accent variant: our teal with a white icon, for the one primary action of a header. */
-.harbor-round-button[data-tone='accent'] {
-  color: #ffffff;
-  background: rgb(var(--harbor-accent));
-  box-shadow:
-    0 1px 2px rgb(11 122 117 / 0.2),
-    0 6px 16px rgb(11 122 117 / 0.28);
-}
-
 @media (hover: hover) and (pointer: fine) {
-  .harbor-round-button:not(:disabled):hover {
+  /* The glass tones (`accent`, `danger`) keep their own hover from `.liquid-glass-*`. */
+  .harbor-round-button:not(:disabled):not(.liquid-glass-primary, .liquid-glass-danger):hover {
     color: rgb(var(--harbor-ink));
     background: rgb(var(--harbor-app));
     box-shadow: var(--harbor-shadow-raised);
-  }
-
-  .harbor-round-button[data-tone='accent']:not(:disabled):hover {
-    color: #ffffff;
-    background: rgb(var(--harbor-accent-hover));
   }
 
   .harbor-round-button[data-tone='soft']:not(:disabled):hover {
@@ -1277,11 +1329,6 @@
   .harbor-round-button[data-tone='destructive']:not(:disabled):hover {
     color: rgb(var(--harbor-danger-strong));
     background: rgb(var(--harbor-danger-soft));
-  }
-
-  .harbor-round-button[data-tone='danger']:not(:disabled):hover {
-    color: #ffffff;
-    background: rgb(var(--harbor-danger-strong));
   }
 
   .harbor-round-button[data-tone='plain']:not(:disabled):hover {
@@ -1308,15 +1355,6 @@
    confirmation, beside a primary action that should keep the visual weight. */
 .harbor-round-button[data-tone='destructive'] {
   color: rgb(var(--harbor-danger-strong));
-}
-
-/* The danger variant: red with a white icon, for ending or declining a call. */
-.harbor-round-button[data-tone='danger'] {
-  color: #ffffff;
-  background: rgb(var(--harbor-danger));
-  box-shadow:
-    0 1px 2px rgb(var(--harbor-danger) / 0.2),
-    0 6px 16px rgb(var(--harbor-danger) / 0.28);
 }
 
 /* Pill buttons: the round button's white surface and shadow with a label, for actions in details, profiles,
