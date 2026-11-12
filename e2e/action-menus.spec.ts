@@ -73,13 +73,19 @@ test.describe('action menus', () => {
     await page.getByRole('menuitemradio', { name: 'Speaker view' }).click();
     await expect(page.getByTestId('meeting-video-canvas')).toHaveAttribute('data-view-mode', 'speaker');
 
+    // The tile area's context menu is the layout menu: Grid and Speaker only.
     await page.getByTestId('meeting-video-canvas').click({ button: 'right', position: { x: 20, y: 20 } });
-    await expect(page.getByRole('menuitem', { name: 'Close chat' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Unmute microphone' })).toBeVisible();
+    await expect(page.getByRole('menuitemradio', { name: 'Grid view' })).toBeVisible();
+    await expect(page.getByRole('menuitemradio', { name: 'Speaker view' })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('menuitem', { name: 'Close chat' })).toHaveCount(0);
+    await page.getByRole('menuitemradio', { name: 'Grid view' }).click();
+    await expect(page.getByTestId('meeting-video-canvas')).toHaveAttribute('data-view-mode', 'grid');
+
+    await page.getByRole('button', { name: 'Open meeting actions' }).click();
     const reportHref = await page.getByRole('menuitem', { name: 'Report a bug' }).getAttribute('href');
+    await page.keyboard.press('Escape');
     expect(reportHref).toContain('Area%3A+meeting');
     expect(reportHref).not.toContain('action-menu-');
-    await page.keyboard.press('Escape');
 
     const participantTile = page.getByTestId('participant-tile').last();
     await participantTile.dispatchEvent('pointerdown', {
@@ -93,11 +99,11 @@ test.describe('action menus', () => {
       pointerId: 1,
       pointerType: 'touch',
     });
-    await expect(page.getByRole('menuitem', { name: 'Close chat' })).toBeVisible();
+    await expect(page.getByRole('menuitemradio', { name: 'Speaker view' })).toBeVisible();
     await page.keyboard.press('Escape');
 
     await page.getByTestId('meeting-video-canvas').focus();
     await page.keyboard.press('ContextMenu');
-    await expect(page.getByRole('menuitem', { name: 'Close chat' })).toBeVisible();
+    await expect(page.getByRole('menuitemradio', { name: 'Grid view' })).toBeVisible();
   });
 });

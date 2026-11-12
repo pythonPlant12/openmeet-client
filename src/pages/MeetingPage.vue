@@ -18,11 +18,13 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
 import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
+import { useCallFormFactor } from '@/composables/useCallFormFactor';
+import { useCallLayoutState } from '@/composables/useCallLayoutState';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
-import { layoutAfterTileClick } from '@/lib/meeting-layout';
+import { selectCallLayout } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
 import { playHaptic } from '@/services/haptics';
 import { showSystemNotification } from '@/services/notifications';
@@ -139,8 +141,27 @@ const statusLabel = (status: string | null | undefined) => {
 
 const isMuted = ref(false);
 const isVideoOff = ref(false);
-const viewMode = ref<'grid' | 'speaker'>('grid');
-const pinnedParticipantId = ref<string | null>(null);
+const {
+  viewMode,
+  pinnedParticipantId,
+  togglePin: handleTogglePin,
+  setViewMode: handleSetViewMode,
+  followScreenShare,
+  keepPinAmong,
+} = useCallLayoutState();
+const callFormFactor = useCallFormFactor();
+// The menus show the layout on screen, which follows the call's size and form factor until the person picks one.
+const shownViewMode = computed(() =>
+  selectCallLayout({
+    participants: meetingParticipants.value,
+    formFactor: callFormFactor.value,
+    viewMode: viewMode.value,
+    pinnedParticipantId: pinnedParticipantId.value,
+    activeSpeakerId: activeSpeakerId.value,
+  }).kind === 'speaker'
+    ? 'speaker'
+    : 'grid',
+);
 const audioAvailable = ref(false);
 const videoAvailable = ref(false);
 const showConnectionStatus = ref(false);
@@ -245,37 +266,20 @@ watch(isChatOpen, (isOpen) => {
 
 watch(
   () => participantsArray.value.map((participant) => participant.id),
-  (participantIds) => {
-    if (pinnedParticipantId.value && !participantIds.includes(pinnedParticipantId.value)) {
-      pinnedParticipantId.value = null;
-    }
-  },
+  (participantIds) => keepPinAmong(participantIds),
 );
 
 const hasJoined = computed(() => !!participantName.value && state.value !== 'idle');
 
 // A new screen share from someone else takes the stage, unless the viewer pinned someone themselves.
-// When it ends, the layout goes back to how it was.
-const autoPinnedScreenId = ref<string | null>(null);
+// When it ends, the automatic layout takes over again.
 watch(
   () =>
     meetingParticipants.value
       .filter((participant) => participant.screenShareOf && !participant.isLocal)
       .map((participant) => participant.id),
   (screenIds, previousIds = []) => {
-    const added = screenIds.find((id) => !previousIds.includes(id));
-    if (added && (!pinnedParticipantId.value || pinnedParticipantId.value === autoPinnedScreenId.value)) {
-      viewMode.value = 'speaker';
-      pinnedParticipantId.value = added;
-      autoPinnedScreenId.value = added;
-    }
-    if (autoPinnedScreenId.value && !screenIds.includes(autoPinnedScreenId.value)) {
-      if (!pinnedParticipantId.value || pinnedParticipantId.value === autoPinnedScreenId.value) {
-        pinnedParticipantId.value = null;
-        viewMode.value = 'grid';
-      }
-      autoPinnedScreenId.value = null;
-    }
+    if (screenIds.some((id) => !previousIds.includes(id))) followScreenShare();
   },
 );
 
@@ -692,22 +696,6 @@ const handleToggleChat = () => {
   });
 };
 
-// Every layout change ticks, including automatic ones such as a screen share taking the stage.
-watch([viewMode, pinnedParticipantId], () => playHaptic('selection'));
-
-const handleSetViewMode = (mode: 'grid' | 'speaker') => {
-  viewMode.value = mode;
-};
-
-const handleTogglePin = (participantId: string) => {
-  const layout = layoutAfterTileClick(
-    { viewMode: viewMode.value, pinnedParticipantId: pinnedParticipantId.value },
-    participantId,
-  );
-  viewMode.value = layout.viewMode;
-  pinnedParticipantId.value = layout.pinnedParticipantId;
-};
-
 // Full screen works in grid and speaker view alike: only the media shows, on a near-black background. The navbar,
 // top row, and controls hide; the controls come back with a swipe up on phones, or the mouse at the bottom edge.
 const FULLSCREEN_SWIPE_PX = 40;
@@ -881,7 +869,7 @@ const handleReconnect = () => {
           :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
           :video-available="videoAvailable"
-          :view-mode="viewMode"
+          :view-mode="shownViewMode"
           :fullscreen="isFullscreen"
           @disconnect="handleEndCall"
           @toggle-fullscreen="handleToggleFullscreen"
@@ -1024,7 +1012,7 @@ const handleReconnect = () => {
           :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
           :video-available="videoAvailable"
-          :view-mode="viewMode"
+          :view-mode="shownViewMode"
           :fullscreen="isFullscreen"
           @disconnect="handleEndCall"
           @toggle-fullscreen="handleToggleFullscreen"

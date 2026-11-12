@@ -33,12 +33,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { buildGitHubIssueUrl } from '@/lib/github-issue';
+import { playHaptic } from '@/services/haptics';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 const props = withDefaults(
   defineProps<{
     audioAvailable: boolean;
-    context?: boolean;
     isChatOpen: boolean;
     isMuted: boolean;
     isVideoOff: boolean;
@@ -46,6 +46,8 @@ const props = withDefaults(
     pinnedParticipantId: string | null;
     videoAvailable: boolean;
     viewMode: 'grid' | 'speaker';
+    /** Wraps the tile area: a right-click or long-press there opens the layout menu (Grid and Speaker). */
+    context?: boolean;
     /** Full screen hides everything but the media; it works in both grid and speaker view. */
     fullscreen?: boolean;
   }>(),
@@ -70,10 +72,14 @@ const MenuItem = computed(() => (props.context ? ContextMenuItem : DropdownMenuI
 const MenuLabel = computed(() => (props.context ? ContextMenuLabel : DropdownMenuLabel));
 const MenuSeparator = computed(() => (props.context ? ContextMenuSeparator : DropdownMenuSeparator));
 const reportUrl = buildGitHubIssueUrl('meeting');
+
+function handleOpenChange(open: boolean) {
+  if (open && props.context) playHaptic('medium');
+}
 </script>
 
 <template>
-  <component :is="MenuRoot" :modal="context ? undefined : false">
+  <component :is="MenuRoot" :modal="context ? undefined : false" @update:open="handleOpenChange">
     <component :is="MenuTrigger" as-child>
       <slot v-if="context" />
       <Button
@@ -92,51 +98,53 @@ const reportUrl = buildGitHubIssueUrl('meeting');
       v-bind="context ? {} : { align: 'end', sideOffset: 10 }"
       class="w-72 max-w-[calc(100vw-1.5rem)]"
     >
-      <component :is="MenuItem" @select="emit('toggleChat')">
-        <LiquidMenuIcon v-if="isChatOpen" :animated="MessageSquareOffAnimated" />
-        <LiquidMenuIcon v-else :animated="MessageSquareAnimated" />
-        {{ t(isChatOpen ? 'meeting.actions.closeChat' : 'meeting.actions.openChat') }}
-      </component>
+      <template v-if="!context">
+        <component :is="MenuItem" @select="emit('toggleChat')">
+          <LiquidMenuIcon v-if="isChatOpen" :animated="MessageSquareOffAnimated" />
+          <LiquidMenuIcon v-else :animated="MessageSquareAnimated" />
+          {{ t(isChatOpen ? 'meeting.actions.closeChat' : 'meeting.actions.openChat') }}
+        </component>
 
-      <component
-        :is="MenuItem"
-        :disabled="!audioAvailable"
-        :variant="isMuted && audioAvailable ? 'default' : 'danger'"
-        @select="emit('toggleMute')"
-      >
-        <LiquidMenuIcon v-if="isMuted && audioAvailable" :animated="MicAnimated" />
-        <LiquidMenuIcon v-else :animated="MicOffAnimated" />
-        {{
-          t(
-            !audioAvailable
-              ? 'meeting.actions.audioUnavailable'
-              : isMuted
-                ? 'meeting.actions.unmute'
-                : 'meeting.actions.mute',
-          )
-        }}
-      </component>
+        <component
+          :is="MenuItem"
+          :disabled="!audioAvailable"
+          :variant="isMuted && audioAvailable ? 'default' : 'danger'"
+          @select="emit('toggleMute')"
+        >
+          <LiquidMenuIcon v-if="isMuted && audioAvailable" :animated="MicAnimated" />
+          <LiquidMenuIcon v-else :animated="MicOffAnimated" />
+          {{
+            t(
+              !audioAvailable
+                ? 'meeting.actions.audioUnavailable'
+                : isMuted
+                  ? 'meeting.actions.unmute'
+                  : 'meeting.actions.mute',
+            )
+          }}
+        </component>
 
-      <component
-        :is="MenuItem"
-        :disabled="!videoAvailable"
-        :variant="isVideoOff && videoAvailable ? 'default' : 'danger'"
-        @select="emit('toggleVideo')"
-      >
-        <LiquidMenuIcon v-if="isVideoOff && videoAvailable" :fallback="Video" />
-        <LiquidMenuIcon v-else :fallback="VideoOff" />
-        {{
-          t(
-            !videoAvailable
-              ? 'meeting.actions.videoUnavailable'
-              : isVideoOff
-                ? 'meeting.actions.startVideo'
-                : 'meeting.actions.stopVideo',
-          )
-        }}
-      </component>
+        <component
+          :is="MenuItem"
+          :disabled="!videoAvailable"
+          :variant="isVideoOff && videoAvailable ? 'default' : 'danger'"
+          @select="emit('toggleVideo')"
+        >
+          <LiquidMenuIcon v-if="isVideoOff && videoAvailable" :fallback="Video" />
+          <LiquidMenuIcon v-else :fallback="VideoOff" />
+          {{
+            t(
+              !videoAvailable
+                ? 'meeting.actions.videoUnavailable'
+                : isVideoOff
+                  ? 'meeting.actions.startVideo'
+                  : 'meeting.actions.stopVideo',
+            )
+          }}
+        </component>
 
-      <component :is="MenuSeparator" />
+        <component :is="MenuSeparator" />
+      </template>
       <component :is="MenuLabel">
         {{ t('meeting.actions.layout') }}
       </component>
@@ -161,56 +169,58 @@ const reportUrl = buildGitHubIssueUrl('meeting');
         <Check v-if="viewMode === 'speaker'" class="size-4 text-harbor-ink" aria-hidden="true" />
       </component>
 
-      <component
-        :is="MenuItem"
-        role="menuitemcheckbox"
-        :aria-checked="fullscreen"
-        data-fullscreen-toggle
-        @select="emit('toggleFullscreen')"
-      >
-        <LiquidMenuIcon v-if="fullscreen" :animated="MinimizeAnimated" />
-        <LiquidMenuIcon v-else :animated="MaximizeAnimated" />
-        <span class="flex-1">{{
-          t(fullscreen ? 'meeting.actions.exitFullscreen' : 'meeting.actions.fullscreen')
-        }}</span>
-        <Check v-if="fullscreen" class="size-4 text-harbor-ink" aria-hidden="true" />
-      </component>
-
-      <template v-if="viewMode === 'speaker' && participants.length > 1">
-        <component :is="MenuLabel" class="mt-1">
-          {{ t('meeting.actions.pinParticipant') }}
-        </component>
+      <template v-if="!context">
         <component
           :is="MenuItem"
-          v-for="participant in participants"
-          :key="participant.id"
           role="menuitemcheckbox"
-          :aria-checked="pinnedParticipantId === participant.id"
-          :aria-label="
-            t(pinnedParticipantId === participant.id ? 'meeting.participant.unpin' : 'meeting.participant.pin', {
-              name: participant.name,
-            })
-          "
-          @select="emit('togglePin', participant.id)"
+          :aria-checked="fullscreen"
+          data-fullscreen-toggle
+          @select="emit('toggleFullscreen')"
         >
-          <LiquidMenuIcon v-if="pinnedParticipantId === participant.id" :animated="PinOffAnimated" />
-          <LiquidMenuIcon v-else :animated="PinAnimated" />
-          <span class="min-w-0 flex-1 truncate">{{ participant.name }}</span>
-          <Check v-if="pinnedParticipantId === participant.id" class="size-4 text-harbor-ink" aria-hidden="true" />
+          <LiquidMenuIcon v-if="fullscreen" :animated="MinimizeAnimated" />
+          <LiquidMenuIcon v-else :animated="MaximizeAnimated" />
+          <span class="flex-1">{{
+            t(fullscreen ? 'meeting.actions.exitFullscreen' : 'meeting.actions.fullscreen')
+          }}</span>
+          <Check v-if="fullscreen" class="size-4 text-harbor-ink" aria-hidden="true" />
+        </component>
+
+        <template v-if="viewMode === 'speaker' && participants.length > 1">
+          <component :is="MenuLabel" class="mt-1">
+            {{ t('meeting.actions.pinParticipant') }}
+          </component>
+          <component
+            :is="MenuItem"
+            v-for="participant in participants"
+            :key="participant.id"
+            role="menuitemcheckbox"
+            :aria-checked="pinnedParticipantId === participant.id"
+            :aria-label="
+              t(pinnedParticipantId === participant.id ? 'meeting.participant.unpin' : 'meeting.participant.pin', {
+                name: participant.name,
+              })
+            "
+            @select="emit('togglePin', participant.id)"
+          >
+            <LiquidMenuIcon v-if="pinnedParticipantId === participant.id" :animated="PinOffAnimated" />
+            <LiquidMenuIcon v-else :animated="PinAnimated" />
+            <span class="min-w-0 flex-1 truncate">{{ participant.name }}</span>
+            <Check v-if="pinnedParticipantId === participant.id" class="size-4 text-harbor-ink" aria-hidden="true" />
+          </component>
+        </template>
+
+        <component :is="MenuSeparator" />
+        <component :is="MenuItem" as-child>
+          <a :href="reportUrl" target="_blank" rel="noreferrer">
+            <LiquidMenuIcon :fallback="Bug" />
+            {{ t('meeting.actions.reportBug') }}
+          </a>
+        </component>
+        <component :is="MenuItem" variant="danger" @select="emit('disconnect')">
+          <LiquidMenuIcon :fallback="PhoneOff" />
+          {{ t('meeting.actions.disconnect') }}
         </component>
       </template>
-
-      <component :is="MenuSeparator" />
-      <component :is="MenuItem" as-child>
-        <a :href="reportUrl" target="_blank" rel="noreferrer">
-          <LiquidMenuIcon :fallback="Bug" />
-          {{ t('meeting.actions.reportBug') }}
-        </a>
-      </component>
-      <component :is="MenuItem" variant="danger" @select="emit('disconnect')">
-        <LiquidMenuIcon :fallback="PhoneOff" />
-        {{ t('meeting.actions.disconnect') }}
-      </component>
     </component>
   </component>
 </template>

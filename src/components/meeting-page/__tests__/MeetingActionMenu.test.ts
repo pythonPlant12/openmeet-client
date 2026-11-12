@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
 import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
+import { playHaptic } from '@/services/haptics';
 import type { Participant } from '@/xstate/machines/webrtc/types';
+
+vi.mock('@/services/haptics', () => ({ playHaptic: vi.fn() }));
 
 const participants: Participant[] = [
   { id: 'local', name: 'Local Person', isLocal: true, stream: null, audioEnabled: true, videoEnabled: true },
@@ -86,6 +89,8 @@ function mountMenu() {
   });
 }
 
+afterEach(() => vi.clearAllMocks());
+
 describe('MeetingActionMenu', () => {
   it('mirrors live chat and media state', async () => {
     const wrapper = mountMenu();
@@ -156,5 +161,51 @@ describe('MeetingActionMenu', () => {
 
     expect(document.body.textContent).toContain('Microphone unavailable');
     expect(document.body.textContent).toContain('Camera unavailable');
+  });
+});
+
+describe('MeetingActionMenu layout menu', () => {
+  function mountLayoutMenu() {
+    return mount(MeetingActionMenu, {
+      attachTo: document.body,
+      props: {
+        context: true,
+        audioAvailable: true,
+        isChatOpen: false,
+        isMuted: false,
+        isVideoOff: false,
+        participants,
+        pinnedParticipantId: null,
+        videoAvailable: true,
+        viewMode: 'grid',
+      },
+      slots: { default: '<div data-testid="tile-area">tiles</div>' },
+      global: { plugins: [i18n] },
+    });
+  }
+
+  it('opens on a right-click on the tile area with only Grid and Speaker, and a medium haptic', async () => {
+    const wrapper = mountLayoutMenu();
+    await wrapper.get('[data-testid="tile-area"]').trigger('contextmenu');
+    await flushPromises();
+    const menu = document.body.querySelector('[role="menu"]');
+
+    expect(
+      Array.from(menu?.querySelectorAll('[role^="menuitem"]') ?? []).map((item) => item.textContent?.trim()),
+    ).toEqual(['Grid view', 'Speaker view']);
+    expect(menu?.querySelector('[role="menuitemradio"][aria-checked="true"]')?.textContent).toContain('Grid view');
+    expect(playHaptic).toHaveBeenCalledWith('medium');
+  });
+
+  it('switches the layout from the menu', async () => {
+    const wrapper = mountLayoutMenu();
+    await wrapper.get('[data-testid="tile-area"]').trigger('contextmenu');
+    await flushPromises();
+    Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
+      .find((item) => item.textContent?.includes('Speaker view'))!
+      .click();
+    await flushPromises();
+
+    expect(wrapper.emitted('setViewMode')).toEqual([['speaker']]);
   });
 });
