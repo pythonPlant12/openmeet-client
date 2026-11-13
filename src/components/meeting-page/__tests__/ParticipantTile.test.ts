@@ -1,5 +1,5 @@
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
 import ParticipantTile from '@/components/meeting-page/ParticipantTile.vue';
@@ -124,5 +124,109 @@ describe('ParticipantTile avatar', () => {
       global: { plugins: [createI18n({ legacy: false, locale: 'en', missingWarn: false })] },
     });
     expect(tile.find('[data-participant-pinned]').exists()).toBe(true);
+  });
+});
+
+describe('ParticipantTile interactions', () => {
+  enableAutoUnmount(afterEach);
+
+  beforeEach(() => {
+    // Animated menu icons watch the viewport, which jsdom has no observer for.
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    HTMLElement.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+  });
+
+  const i18n = createI18n({
+    legacy: false,
+    locale: 'en',
+    messages: {
+      en: {
+        meeting: {
+          actions: { fullscreen: 'Full screen', exitFullscreen: 'Exit full screen' },
+          participant: {
+            pin: 'Pin {name}',
+            unpin: 'Unpin {name}',
+            options: 'Options for {name}',
+            showName: 'Show name',
+            hideName: 'Hide name',
+          },
+        },
+      },
+    },
+    missingWarn: false,
+  });
+
+  function mountInteractive(props: Record<string, unknown> = {}) {
+    return mount(ParticipantTile, {
+      attachTo: document.body,
+      props: { participant, ...props },
+      global: { plugins: [i18n] },
+    });
+  }
+
+  async function openOptions(tile: ReturnType<typeof mountInteractive>) {
+    await tile.get('button[aria-label="Options for Ada Lovelace"]').trigger('click');
+    await flushPromises();
+    return Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+  }
+
+  it('shrinks while pressed', async () => {
+    const tile = mountInteractive();
+    const surface = tile.get('[data-participant-surface]');
+    await surface.trigger('pointerdown');
+    expect(tile.attributes('data-pressed')).toBe('true');
+    await surface.trigger('pointerup');
+    expect(tile.attributes('data-pressed')).toBeUndefined();
+  });
+
+  it('rings the person speaking in the Harbor accent', () => {
+    const tile = mountInteractive({ speaking: true });
+    expect(tile.get('[data-participant-surface]').classes()).toEqual(
+      expect.arrayContaining(['border-harbor-accent', 'ring-harbor-accent/25']),
+    );
+  });
+
+  it('offers pin and full screen from the tile options', async () => {
+    const tile = mountInteractive();
+    const items = await openOptions(tile);
+    expect(items.map((item) => item.textContent?.trim())).toEqual(['Pin Ada Lovelace', 'Full screen']);
+
+    items[0]!.click();
+    await flushPromises();
+    expect(tile.emitted('togglePin')).toHaveLength(1);
+
+    (await openOptions(tile))[1]!.click();
+    await flushPromises();
+    expect(tile.emitted('toggleFullscreen')).toHaveLength(1);
+  });
+
+  it('offers unpin and leaving full screen for the pinned full screen tile', async () => {
+    const tile = mountInteractive({ isExpanded: true, isFullscreen: true });
+    const labels = (await openOptions(tile)).map((item) => item.textContent?.trim());
+    expect(labels).toEqual(['Unpin Ada Lovelace', 'Exit full screen']);
+  });
+
+  it('offers the name toggle on tiles that hide the name', async () => {
+    const tile = mountInteractive({ showNameTag: false, nameToggle: true });
+    const items = await openOptions(tile);
+    expect(items.map((item) => item.textContent?.trim())).toContain('Show name');
+    items.find((item) => item.textContent?.includes('Show name'))!.click();
+    await flushPromises();
+    expect(tile.emitted('toggleName')).toHaveLength(1);
+  });
+
+  it('shows no options button when the tile has no actions', () => {
+    expect(
+      mountInteractive({ showActions: false }).find('button[aria-label="Options for Ada Lovelace"]').exists(),
+    ).toBe(false);
   });
 });

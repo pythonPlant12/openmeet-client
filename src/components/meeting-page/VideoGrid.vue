@@ -1,22 +1,32 @@
 <script setup lang="ts">
 import { useElementSize, useMediaQuery } from '@vueuse/core';
-import { MoreHorizontal } from 'lucide-vue-next';
 import { computed, onUnmounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { DEFAULT_TILE_ASPECT, fitTilesInRows, mainVideoFills, speakerViewMainId } from '@/lib/meeting-layout';
+import { useCallFormFactor } from '@/composables/useCallFormFactor';
+import {
+  type Corner,
+  DEFAULT_TILE_ASPECT,
+  type MeetingViewMode,
+  fitGridColumns,
+  fitTilesInRows,
+  gridCells,
+  mainVideoFills,
+  nearestCorner,
+  selectCallLayout,
+} from '@/lib/meeting-layout';
+import { swallowNextClick } from '@/lib/swallow-next-click';
 import type { UserStatus } from '@/services/social-api';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 import ParticipantTile from './ParticipantTile.vue';
 
-type MeetingViewMode = 'grid' | 'speaker';
-
 const props = defineProps<{
   activeSpeakerId: string | null;
   participants: Participant[];
   pinnedParticipantId: string | null;
-  viewMode: MeetingViewMode;
+  /** The person's layout choice; null follows the automatic layout for the call's size and form factor. */
+  viewMode: MeetingViewMode | null;
   /** Statuses of registered participants, by participant ID. Guests have none. */
   participantStatuses?: Record<string, UserStatus>;
   /** Avatar image URLs of registered participants, keyed by participant ID. */
@@ -36,6 +46,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const TILE_GAP = 12;
+const PHONE_TILE_GAP = 8;
 /** Height of the strip that floats over the main video with everyone else; it shrinks to fit, then scrolls. */
 const STRIP_TILE_HEIGHT = 96;
 const WIDE_STRIP_TILE_HEIGHT = 128;
@@ -43,24 +54,52 @@ const MIN_STRIP_TILE_HEIGHT = 64;
 const STRIP_GAP = 8;
 /** Two taps this close together are a double tap, which toggles full screen instead of pinning. */
 const DOUBLE_TAP_MS = 280;
+/** A touch held this long is a long-press, which opens the layout menu instead of pinning. */
+const LONG_PRESS_MS = 500;
+/** The phone 1:1 self view: a portrait picture about a quarter of the screen wide, inset from the edges. */
+const SELF_VIEW_WIDTH_SHARE = 0.28;
+const SELF_VIEW_MIN_WIDTH = 88;
+const SELF_VIEW_MAX_WIDTH = 144;
+const SELF_VIEW_ASPECT = 3 / 4;
+const SELF_VIEW_INSET = 12;
+/** Moving the self view further than this is a drag, not a tap. */
+const DRAG_THRESHOLD_PX = 6;
 
 const isWide = useMediaQuery('(min-width: 768px)');
+const formFactor = useCallFormFactor();
 const hasParticipants = computed(() => props.participants.length > 0);
-const speakerParticipant = computed(() => {
-  const mainId = speakerViewMainId(
-    props.participants.map((participant) => participant.id),
-    props.pinnedParticipantId,
-    props.activeSpeakerId,
-  );
-  return props.participants.find((participant) => participant.id === mainId) ?? null;
-});
+const layout = computed(() =>
+  selectCallLayout({
+    participants: props.participants,
+    formFactor: formFactor.value,
+    viewMode: props.viewMode,
+    pinnedParticipantId: props.pinnedParticipantId,
+    activeSpeakerId: props.activeSpeakerId,
+  }),
+);
+const byId = computed(() => new Map(props.participants.map((participant) => [participant.id, participant])));
+const participantsOf = (ids: readonly string[]) =>
+  ids.map((id) => byId.value.get(id)).filter((participant): participant is Participant => !!participant);
+
+const speakerParticipant = computed(() =>
+  layout.value.kind === 'speaker' ? (byId.value.get(layout.value.mainId) ?? null) : null,
+);
 const secondaryParticipants = computed(() =>
-  props.participants.filter((participant) => participant.id !== speakerParticipant.value?.id),
+  layout.value.kind === 'speaker' ? participantsOf(layout.value.stripIds) : [],
+);
+const gridParticipants = computed(() => (layout.value.kind === 'grid' ? participantsOf(layout.value.ids) : []));
+const selfViewMain = computed(() =>
+  layout.value.kind === 'self-view' ? (byId.value.get(layout.value.mainId) ?? null) : null,
+);
+const selfViewSelf = computed(() =>
+  layout.value.kind === 'self-view' ? (byId.value.get(layout.value.selfId) ?? null) : null,
 );
 const isSpeaking = (participant: Participant) =>
   props.participants.length > 1 && props.activeSpeakerId === participant.id;
+const isTileFullscreen = (participant: Participant) =>
+  !!props.fullscreen && props.pinnedParticipantId === participant.id;
 
-// Each video reports its own shape, so portrait phone cameras stay portrait and screens stay landscape.
+// Each video reports its own shape, so the speaker layout keeps portrait phone cameras and screens uncropped.
 const aspects = reactive(new Map<string, number>());
 function setAspect(participantId: string, aspect: number) {
   if (Math.abs((aspects.get(participantId) ?? 0) - aspect) > 0.01) aspects.set(participantId, aspect);
@@ -70,26 +109,28 @@ const aspectOf = (participant: Participant) =>
     ? (aspects.get(participant.id) ?? DEFAULT_TILE_ASPECT)
     : DEFAULT_TILE_ASPECT;
 
-// Grid: tiles are absolutely placed in one keyed list, so a new arrangement moves them instead of remounting
-// their videos.
+// Grid: equal cells fill the area and the videos cover them, so no space is wasted. Tiles are absolutely placed
+// in one keyed list, so a new arrangement moves them instead of remounting their videos.
 const gridArea = ref<HTMLElement | null>(null);
 const { width: gridWidth, height: gridHeight } = useElementSize(gridArea);
+const gridGap = computed(() => (formFactor.value === 'phone-portrait' ? PHONE_TILE_GAP : TILE_GAP));
+const gridColumns = computed(() => {
+  if (layout.value.kind !== 'grid') return 1;
+  return (
+    layout.value.columns ??
+    fitGridColumns(gridParticipants.value.length, gridWidth.value, gridHeight.value, gridGap.value)
+  );
+});
 const gridBoxes = computed(() => {
-  const aspectList = props.participants.map(aspectOf);
-  const rows = fitTilesInRows(aspectList, gridWidth.value, gridHeight.value, TILE_GAP);
-  const boxes = new Map<string, { left: number; top: number; width: number; height: number }>();
-  const totalHeight = rows.reduce((sum, row) => sum + row.height, 0) + TILE_GAP * Math.max(rows.length - 1, 0);
-  let top = (gridHeight.value - totalHeight) / 2;
-  for (const row of rows) {
-    const widths = row.indices.map((index) => Math.floor(row.height * aspectList[index]!));
-    let left = (gridWidth.value - widths.reduce((sum, width) => sum + width, 0) - TILE_GAP * (widths.length - 1)) / 2;
-    row.indices.forEach((index, position) => {
-      boxes.set(props.participants[index]!.id, { left, top, width: widths[position]!, height: row.height });
-      left += widths[position]! + TILE_GAP;
-    });
-    top += row.height + TILE_GAP;
-  }
-  return boxes;
+  const cells = gridCells(
+    gridParticipants.value.length,
+    gridColumns.value,
+    gridWidth.value,
+    gridHeight.value,
+    gridGap.value,
+    layout.value.kind === 'grid' && layout.value.columns !== null,
+  );
+  return new Map(gridParticipants.value.map((participant, index) => [participant.id, cells[index]]));
 });
 const gridStyle = (participant: Participant) => {
   const box = gridBoxes.value.get(participant.id);
@@ -125,10 +166,90 @@ const stripStyle = (participant: Participant) => ({
   width: `${Math.floor(stripHeight.value * aspectOf(participant))}px`,
 });
 
+// Phone 1:1: the other person fills the area and your own view is a small picture in a corner. Dragging it
+// moves it with the finger; letting go snaps it to the nearest corner.
+const selfViewArea = ref<HTMLElement | null>(null);
+const { width: selfAreaWidth, height: selfAreaHeight } = useElementSize(selfViewArea);
+const selfViewCorner = ref<Corner>('bottom-right');
+const selfViewWidth = computed(() =>
+  Math.round(Math.min(SELF_VIEW_MAX_WIDTH, Math.max(SELF_VIEW_MIN_WIDTH, selfAreaWidth.value * SELF_VIEW_WIDTH_SHARE))),
+);
+const selfViewHeight = computed(() => Math.round(selfViewWidth.value / SELF_VIEW_ASPECT));
+let selfViewDrag: {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  /** Centre of the self view at the start, relative to the area. */
+  centerX: number;
+  centerY: number;
+  areaWidth: number;
+  areaHeight: number;
+} | null = null;
+const selfViewOffset = ref<{ x: number; y: number } | null>(null);
+const selfViewStyle = computed(() => {
+  const [vertical, horizontal] = selfViewCorner.value.split('-');
+  const left = horizontal === 'left' ? SELF_VIEW_INSET : selfAreaWidth.value - selfViewWidth.value - SELF_VIEW_INSET;
+  const top = vertical === 'top' ? SELF_VIEW_INSET : selfAreaHeight.value - selfViewHeight.value - SELF_VIEW_INSET;
+  const offset = selfViewOffset.value;
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${selfViewWidth.value}px`,
+    height: `${selfViewHeight.value}px`,
+    transform: offset ? `translate(${offset.x}px, ${offset.y}px)` : undefined,
+  };
+});
+
+function startSelfViewDrag(event: PointerEvent) {
+  if (event.button !== 0 || !selfViewArea.value) return;
+  // Keeps a held finger from also opening the layout menu, and the page from scrolling under the drag.
+  event.preventDefault();
+  const element = event.currentTarget as HTMLElement;
+  element.setPointerCapture?.(event.pointerId);
+  const area = selfViewArea.value.getBoundingClientRect();
+  const view = element.getBoundingClientRect();
+  selfViewDrag = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    centerX: view.left - area.left + view.width / 2,
+    centerY: view.top - area.top + view.height / 2,
+    areaWidth: area.width,
+    areaHeight: area.height,
+  };
+}
+function moveSelfView(event: PointerEvent) {
+  if (!selfViewDrag || event.pointerId !== selfViewDrag.pointerId) return;
+  const x = event.clientX - selfViewDrag.startX;
+  const y = event.clientY - selfViewDrag.startY;
+  if (selfViewOffset.value || Math.hypot(x, y) > DRAG_THRESHOLD_PX) selfViewOffset.value = { x, y };
+}
+function endSelfViewDrag(event: PointerEvent) {
+  const drag = selfViewDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  selfViewDrag = null;
+  const offset = selfViewOffset.value;
+  if (!offset) return;
+  selfViewOffset.value = null;
+  selfViewCorner.value = nearestCorner(
+    drag.centerX + offset.x,
+    drag.centerY + offset.y,
+    drag.areaWidth,
+    drag.areaHeight,
+  );
+  // A drag is not a tap: the click that follows must not pin.
+  if (event.type === 'pointerup') swallowNextClick();
+}
+
 // One tap on a tile pins or unpins that person; a double tap anywhere toggles full screen. The single tap waits
-// a moment so a double tap does not also pin. Keyboard presses (no pointer detail) act at once.
+// a moment so a double tap does not also pin. Keyboard presses (no pointer detail) act at once. A touch held
+// long enough opens the layout menu instead, so its click does nothing.
 let lastTapAt = 0;
 let pendingTap: number | undefined;
+let touchPressStartedAt = 0;
+function handleCanvasPointerDown(event: PointerEvent) {
+  touchPressStartedAt = event.pointerType === 'mouse' ? 0 : Date.now();
+}
 function handleCanvasClick(event: MouseEvent) {
   const participantId = (event.target as Element | null)?.closest<HTMLElement>('[data-testid="participant-tile"]')
     ?.dataset.participantId;
@@ -136,6 +257,9 @@ function handleCanvasClick(event: MouseEvent) {
     if (participantId) emit('togglePin', participantId);
     return;
   }
+  const wasLongPress = touchPressStartedAt > 0 && Date.now() - touchPressStartedAt >= LONG_PRESS_MS;
+  touchPressStartedAt = 0;
+  if (wasLongPress) return;
   const now = Date.now();
   if (now - lastTapAt < DOUBLE_TAP_MS) {
     window.clearTimeout(pendingTap);
@@ -155,7 +279,18 @@ function handleCanvasClick(event: MouseEvent) {
 }
 onUnmounted(() => window.clearTimeout(pendingTap));
 
-// Strip tiles on phones hide names to keep the small videos clear; the ⋯ button reveals one.
+// "Full screen" on a tile shows that person alone: it pins them, then enters full screen. On the tile already
+// shown in full screen it leaves full screen.
+function showTileFullscreen(participant: Participant) {
+  if (isTileFullscreen(participant)) {
+    emit('toggleFullscreen');
+    return;
+  }
+  if (props.pinnedParticipantId !== participant.id) emit('togglePin', participant.id);
+  if (!props.fullscreen) emit('toggleFullscreen');
+}
+
+// Strip tiles on phones hide names to keep the small videos clear; the tile's ⋯ menu reveals one.
 const revealedNames = reactive(new Set<string>());
 function toggleName(participantId: string) {
   if (revealedNames.has(participantId)) revealedNames.delete(participantId);
@@ -167,10 +302,12 @@ function toggleName(participantId: string) {
   <div
     class="relative h-full w-full flex-1 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-accent"
     data-testid="meeting-video-canvas"
-    :data-view-mode="viewMode"
+    :data-view-mode="layout.kind === 'speaker' ? 'speaker' : 'grid'"
+    :data-layout="layout.kind"
     :data-fullscreen="fullscreen ? 'true' : undefined"
     tabindex="0"
     :aria-label="t('meeting.actions.videoCanvas')"
+    @pointerdown="handleCanvasPointerDown"
     @click="handleCanvasClick"
   >
     <!-- The video area fills the space between the top row (participants and actions buttons) and the bottom
@@ -190,10 +327,10 @@ function toggleName(participantId: string) {
       "
     >
       <Transition name="meeting-layout" mode="out-in">
-        <div v-if="viewMode === 'grid'" key="grid" class="absolute inset-0 p-2 sm:p-4">
-          <div ref="gridArea" class="relative size-full">
+        <div v-if="layout.kind === 'grid'" key="grid" class="absolute inset-0 p-2 sm:p-4">
+          <div ref="gridArea" class="relative size-full" data-testid="participant-grid" :data-columns="gridColumns">
             <ParticipantTile
-              v-for="participant in participants"
+              v-for="participant in gridParticipants"
               :key="participant.id"
               class="meeting-grid-tile !absolute"
               :style="gridStyle(participant)"
@@ -202,9 +339,65 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[participant.id]"
               :speaking="isSpeaking(participant)"
               :dark="fullscreen"
+              fit="cover"
               size="grid"
+              :is-expanded="pinnedParticipantId === participant.id"
+              :is-fullscreen="isTileFullscreen(participant)"
               @aspect="setAspect(participant.id, $event)"
+              @toggle-pin="emit('togglePin', participant.id)"
+              @toggle-fullscreen="showTileFullscreen(participant)"
             />
+          </div>
+        </div>
+
+        <div
+          v-else-if="layout.kind === 'self-view'"
+          key="self-view"
+          class="absolute inset-0"
+          :class="fullscreen ? '' : 'p-2'"
+        >
+          <div ref="selfViewArea" class="relative size-full">
+            <ParticipantTile
+              v-if="selfViewMain"
+              :participant="selfViewMain"
+              :status="participantStatuses?.[selfViewMain.id]"
+              :avatar-url="participantAvatars?.[selfViewMain.id]"
+              :speaking="isSpeaking(selfViewMain)"
+              :dark="fullscreen"
+              :bleed="fullscreen"
+              fit="cover"
+              size="full"
+              :is-fullscreen="isTileFullscreen(selfViewMain)"
+              @aspect="setAspect(selfViewMain.id, $event)"
+              @toggle-pin="emit('togglePin', selfViewMain.id)"
+              @toggle-fullscreen="showTileFullscreen(selfViewMain)"
+            />
+            <div
+              v-if="selfViewSelf"
+              class="absolute z-10 touch-none select-none rounded-[1.4rem] shadow-[0_10px_28px_rgba(0,0,0,0.35)]"
+              :class="selfViewOffset ? '' : 'meeting-self-view-snap'"
+              :style="selfViewStyle"
+              data-testid="self-view"
+              :data-corner="selfViewCorner"
+              :title="t('meeting.participant.selfView')"
+              @pointerdown="startSelfViewDrag"
+              @pointermove="moveSelfView"
+              @pointerup="endSelfViewDrag"
+              @pointercancel="endSelfViewDrag"
+            >
+              <ParticipantTile
+                :participant="selfViewSelf"
+                :status="participantStatuses?.[selfViewSelf.id]"
+                :avatar-url="participantAvatars?.[selfViewSelf.id]"
+                :speaking="isSpeaking(selfViewSelf)"
+                :dark="fullscreen"
+                size="mobile"
+                fit="cover"
+                :show-name-tag="false"
+                :show-actions="false"
+                @aspect="setAspect(selfViewSelf.id, $event)"
+              />
+            </div>
           </div>
         </div>
 
@@ -222,11 +415,15 @@ function toggleName(participantId: string) {
               :bleed="fullscreen"
               size="full"
               :is-expanded="pinnedParticipantId === speakerParticipant.id"
+              :is-fullscreen="isTileFullscreen(speakerParticipant)"
               @aspect="setAspect(speakerParticipant.id, $event)"
+              @toggle-pin="emit('togglePin', speakerParticipant.id)"
+              @toggle-fullscreen="showTileFullscreen(speakerParticipant)"
             />
           </div>
 
-          <!-- Everyone else floats over the bottom of the main video, on phones and desktops alike. -->
+          <!-- Everyone else floats over the bottom of the main video, on phones and desktops alike; it scrolls
+               sideways when it does not fit. -->
           <div
             v-if="secondaryParticipants.length"
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
@@ -252,26 +449,14 @@ function toggleName(participantId: string) {
                     :dark="fullscreen"
                     size="mobile"
                     :show-name-tag="isWide || revealedNames.has(participant.id)"
+                    :name-toggle="!isWide"
                     :is-expanded="pinnedParticipantId === participant.id"
+                    :is-fullscreen="isTileFullscreen(participant)"
                     @aspect="setAspect(participant.id, $event)"
+                    @toggle-pin="emit('togglePin', participant.id)"
+                    @toggle-fullscreen="showTileFullscreen(participant)"
+                    @toggle-name="toggleName(participant.id)"
                   />
-                  <button
-                    v-if="!isWide"
-                    type="button"
-                    class="meeting-glass-bubble absolute bottom-1.5 right-1.5 flex size-6 items-center justify-center rounded-full"
-                    data-testid="participant-name-toggle"
-                    :aria-label="
-                      t(
-                        revealedNames.has(participant.id)
-                          ? 'meeting.participant.hideName'
-                          : 'meeting.participant.showName',
-                      )
-                    "
-                    :aria-pressed="revealedNames.has(participant.id)"
-                    @click.stop="toggleName(participant.id)"
-                  >
-                    <MoreHorizontal class="size-3.5" />
-                  </button>
                 </div>
               </div>
             </div>
@@ -291,6 +476,12 @@ function toggleName(participantId: string) {
     height 0.32s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.3s,
     box-shadow 0.3s;
+}
+
+.meeting-self-view-snap {
+  transition:
+    left 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .meeting-layout-enter-active,
@@ -316,6 +507,7 @@ function toggleName(participantId: string) {
 
 @media (prefers-reduced-motion: reduce) {
   .meeting-grid-tile,
+  .meeting-self-view-snap,
   .meeting-layout-enter-active,
   .meeting-layout-leave-active {
     transition: none;
