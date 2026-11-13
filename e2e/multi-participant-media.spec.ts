@@ -67,10 +67,11 @@ const haveCurrentData = 2;
 const diagnosticTags = ['[SignalingService]', '[WebRTCServiceSFU]', '[webrtcMachine]'];
 const unsafeDiagnosticPattern = /sdp|candidate|token|cookie|credential|password|turn:|turns:|bearer|vite_/i;
 
+// Two fake cameras, so the camera switch test has a second device to pick. The first stays the default.
 test.use({
   launchOptions: {
     args: [
-      '--use-fake-device-for-media-stream',
+      '--use-fake-device-for-media-stream=device-count=2',
       '--use-fake-ui-for-media-stream',
       '--autoplay-policy=no-user-gesture-required',
     ],
@@ -270,16 +271,6 @@ test.describe('multi-participant media', () => {
   });
 
   test.describe('with two cameras', () => {
-    test.use({
-      launchOptions: {
-        args: [
-          '--use-fake-device-for-media-stream=device-count=2',
-          '--use-fake-ui-for-media-stream',
-          '--autoplay-policy=no-user-gesture-required',
-        ],
-      },
-    });
-
     test('a camera switch from the chevron menu still reaches the other person', async ({ browser, baseURL }) => {
       test.setTimeout(180_000);
 
