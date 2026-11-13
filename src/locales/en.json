@@ -427,13 +427,15 @@
     "participant": {
       "focus": "Focus {name}",
       "unfocus": "Return {name} to the grid",
-      "pin": "Pin {name} in speaker view",
-      "unpin": "Unpin {name} and return to the grid",
+      "pin": "Pin {name}",
+      "unpin": "Unpin {name}",
+      "options": "Options for {name}",
       "offline": "Offline",
       "status": "Status: {status}",
       "showName": "Show name",
       "hideName": "Hide name",
-      "connecting": "Connecting…"
+      "connecting": "Connecting…",
+      "selfView": "Your view. Drag it to any corner."
     },
     "actions": {
       "open": "Open meeting actions",
