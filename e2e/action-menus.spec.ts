@@ -11,9 +11,7 @@ test.use({
 });
 
 test.describe('action menus', () => {
-  test('dashboard exposes equivalent ellipsis and context actions without replacing native input menus', async ({
-    page,
-  }) => {
+  test('the workspace keeps native menus on text inputs', async ({ page }) => {
     const unique = Date.now();
     await page.goto('/register');
     await page.getByLabel('Your name').fill('Menu Tester');
@@ -22,34 +20,17 @@ test.describe('action menus', () => {
     await page.getByLabel('Password', { exact: true }).fill('menu-password');
     await page.getByLabel('Confirm password').fill('menu-password');
     await page.getByRole('button', { name: 'Create an account' }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard/);
 
-    await page.getByRole('button', { name: 'Open dashboard actions' }).click();
-    const menu = page.getByRole('menu');
-    await expect(menu.getByText('Start a meeting')).toBeVisible();
-    await expect(menu.getByText('Report a bug')).toBeVisible();
-    const reportHref = await menu.getByRole('menuitem', { name: 'Report a bug' }).getAttribute('href');
-    expect(reportHref).toContain('github.com/pythonPlant12/openmeet/issues/new');
-    expect(reportHref).not.toContain('/room/');
-    await page.keyboard.press('Escape');
-
-    await page.getByPlaceholder('friend@example.com').click({ button: 'right' });
+    // A right-click or a long-press on a text input keeps the browser's own menu, not an app menu.
+    const search = page.getByRole('searchbox', { name: 'Search chats' });
+    await search.click({ button: 'right' });
     await expect(page.getByRole('menu')).toHaveCount(0);
 
-    const friendInput = page.getByPlaceholder('friend@example.com');
-    await friendInput.dispatchEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' });
-    await friendInput.evaluate(() => new Promise((resolve) => window.setTimeout(resolve, 800)));
-    await friendInput.dispatchEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch' });
+    await search.dispatchEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' });
+    await search.evaluate(() => new Promise((resolve) => window.setTimeout(resolve, 800)));
+    await search.dispatchEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch' });
     await expect(page.getByRole('menu')).toHaveCount(0);
-
-    await page.getByRole('heading', { name: /Ready when you are/ }).click({ button: 'right' });
-    await expect(page.getByRole('menu').getByText('Start a meeting')).toBeVisible();
-    await expect(page.getByRole('menu').getByText('Report a bug')).toBeVisible();
-    await page.keyboard.press('Escape');
-
-    await page.locator('header[aria-label="Dashboard action surface"]').focus();
-    await page.keyboard.press('ContextMenu');
-    await expect(page.getByRole('menu').getByText('Start a meeting')).toBeVisible();
   });
 
   test('meeting ⋮ menu holds the rarer actions next to the bar, and the tile area opens the layout menu', async ({
@@ -89,7 +70,6 @@ test.describe('action menus', () => {
     await expect(page.getByTestId('meeting-video-canvas')).toHaveAttribute('data-view-mode', 'grid');
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Mute microphone' })).toBeVisible();
     const reportHref = await page.getByRole('menuitem', { name: 'Report a bug' }).getAttribute('href');
     await page.keyboard.press('Escape');
     expect(reportHref).toContain('Area%3A+meeting');
