@@ -227,6 +227,19 @@ describe('WebRTCServiceSFU camera', () => {
     });
   });
 
+  it('turns the camera on with the track the camera preview already captured', async () => {
+    const service = await startCall();
+    await service.setCameraEnabled(false);
+    getUserMedia.mockClear();
+    const previewTrack = new FakeTrack('video', 'cam-2');
+
+    await service.setCameraEnabled(true, previewTrack as unknown as MediaStreamTrack);
+
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(videoSender().track).toBe(previewTrack);
+    expect(service.getLocalStream()!.getVideoTracks()).toEqual([previewTrack]);
+  });
+
   it('still counts a camera that is off as available', async () => {
     const service = await startCall();
     await service.setCameraEnabled(false);

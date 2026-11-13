@@ -418,6 +418,12 @@
       "shareText": "Join my video call: {link}",
       "shareTitle": "Join my video call"
     },
+    "preview": {
+      "title": "Camera preview",
+      "description": "Check how you look and choose your microphone and camera before others see you.",
+      "turnOn": "Turn on camera",
+      "done": "Done"
+    },
     "permission": {
       "microphoneTitle": "Allow the microphone",
       "cameraTitle": "Allow the camera",

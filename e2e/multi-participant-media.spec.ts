@@ -135,6 +135,12 @@ test.describe('multi-participant media', () => {
         await expect(page.locator(remoteVideoSelector)).toBeHidden();
       }
 
+      // The first camera turn-on on a device shows the camera preview; turning the camera on there sends it.
+      await session.pages[0].locator('[data-media-control="video"] [data-media-toggle]').click();
+      await expect(session.pages[0].locator('[data-camera-preview]')).toBeVisible();
+      await session.pages[0].locator('[data-camera-preview-confirm]').click();
+      await expect(session.pages[0].locator('[data-camera-preview]')).toHaveCount(0);
+
       for (const page of session.pages) await turnOnMicAndCamera(page);
 
       await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
@@ -619,8 +625,15 @@ async function turnOnMicAndCamera(page: Page) {
   await expect(camera).toHaveAttribute('data-media-off', 'false');
 }
 
+/** Turning the camera on for the first time on a device goes through the camera preview. */
 async function toggleOwnCamera(page: Page) {
-  await page.locator('[data-media-control="video"] [data-media-toggle]').click();
+  const toggle = page.locator('[data-media-control="video"] [data-media-toggle]');
+  const turningOn = (await toggle.getAttribute('data-media-off')) === 'true';
+  await toggle.click();
+  if (!turningOn) return;
+  const confirm = page.locator('[data-camera-preview-confirm]');
+  await expect(confirm.or(page.locator('[data-media-control="video"] [data-media-off="false"]'))).toBeVisible();
+  if (await confirm.isVisible()) await confirm.click();
 }
 
 /** Picks a device other than the active one from the split button's chevron menu; returns the device ID. */

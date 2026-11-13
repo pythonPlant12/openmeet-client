@@ -9,6 +9,7 @@ import { useRoute, useRouter } from 'vue-router';
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
 import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
 import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
+import MeetingCameraPreview from '@/components/meeting-page/MeetingCameraPreview.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
 import MeetingEntryDialog, { type EntrySettings } from '@/components/meeting-page/MeetingEntryDialog.vue';
 import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.vue';
@@ -24,7 +25,7 @@ import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
-import { loadCallSettings, saveCallSettings } from '@/lib/call-settings';
+import { loadCallSettings, needsCameraPreview, saveCallSettings } from '@/lib/call-settings';
 import { layoutAfterTileClick } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
 import { followAudioOutput } from '@/services/audio-output';
@@ -671,14 +672,31 @@ const handleToggleMute = () => {
 };
 
 let isTogglingCamera = false;
+const isCameraPreviewOpen = ref(false);
 
-const handleToggleVideo = async () => {
-  if (!localStream.value || !localParticipantId.value || isTogglingCamera) return;
+const handleToggleVideo = () => {
+  if (!localStream.value || !localParticipantId.value) return;
+  // The first camera turn-on on this device shows the camera preview first.
+  if (isVideoOff.value && needsCameraPreview()) {
+    isCameraPreviewOpen.value = true;
+    return;
+  }
+  void setCamera(isVideoOff.value);
+};
 
-  const turnOn = isVideoOff.value;
+// Turning the camera on from the camera preview sends the track it already shows.
+function handleCameraPreviewConfirm(track: MediaStreamTrack | null) {
+  if (track) void setCamera(true, track);
+}
+
+async function setCamera(turnOn: boolean, capturedTrack?: MediaStreamTrack) {
+  if (!localParticipantId.value || isTogglingCamera) {
+    capturedTrack?.stop();
+    return;
+  }
   isTogglingCamera = true;
   try {
-    await setCameraEnabled(turnOn);
+    await setCameraEnabled(turnOn, capturedTrack);
   } catch (error) {
     console.error('[MeetingRoom] Failed to toggle the camera:', error);
     toast({
@@ -694,7 +712,7 @@ const handleToggleVideo = async () => {
   isVideoOff.value = !turnOn;
   refreshMediaAvailability();
   if (localParticipantId.value) toggleParticipantVideo(localParticipantId.value, turnOn);
-};
+}
 
 const handleToggleStats = () => {
   showConnectionStatus.value = !showConnectionStatus.value;
@@ -1149,6 +1167,7 @@ const handleReconnect = () => {
             @invite="isInviteOpen = true"
             @media-changed="refreshMediaAvailability"
             @request-access="handleRequestAccess"
+            @preview-camera="isCameraPreviewOpen = true"
           />
         </Transition>
       </div>
@@ -1163,6 +1182,13 @@ const handleReconnect = () => {
         @react="handleChatReaction"
       />
     </div>
+
+    <MeetingCameraPreview
+      v-if="isCameraPreviewOpen"
+      v-model:open="isCameraPreviewOpen"
+      :camera-on="!isVideoOff"
+      @confirm="handleCameraPreviewConfirm"
+    />
 
     <MeetingPermissionSheet
       v-if="permissionSheetKind"

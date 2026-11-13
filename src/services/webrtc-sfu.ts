@@ -609,9 +609,10 @@ export class WebRTCServiceSFU {
   /**
    * Turning the camera off stops it, so the device's camera light goes off, and its sender sends nothing.
    * Turning it on captures the camera again and puts the track on the same sender, so the call does not
-   * renegotiate. The microphone is muted by disabling its track instead.
+   * renegotiate. The microphone is muted by disabling its track instead. A track the camera preview already
+   * captured can be passed in to be sent as it is.
    */
-  async setCameraEnabled(enabled: boolean): Promise<void> {
+  async setCameraEnabled(enabled: boolean, capturedTrack?: MediaStreamTrack): Promise<void> {
     const stream = this.localStream;
     if (!stream) throw new Error(i18n.global.t('errors.mediaUnavailable'));
     const current = stream.getVideoTracks()[0];
@@ -628,9 +629,14 @@ export class WebRTCServiceSFU {
       return;
     }
 
-    if (current?.readyState === 'live') return;
-    const replacement = await this.captureCamera(this.releasedCameraId ?? null);
+    if (current?.readyState === 'live') {
+      capturedTrack?.stop();
+      return;
+    }
+    // The camera preview hands over the track it already shows, so the camera is not opened twice.
+    const replacement = capturedTrack ?? (await this.captureCamera(this.releasedCameraId ?? null));
     this.releasedCameraId = undefined;
+    delete this.mediaIssues.video;
     await this.localSender('video', undefined)?.replaceTrack(replacement);
     stream.addTrack(replacement);
     this.watchTrack(replacement);
