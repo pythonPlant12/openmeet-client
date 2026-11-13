@@ -258,10 +258,10 @@ const shareOnTelegram = () => {
       <!-- End Call Button -->
       <div class="group relative" data-liquid-key="leave">
         <Button
-          variant="destructive"
+          variant="danger"
           size="icon"
           @click="emit('end-call')"
-          class="meeting-control-danger meeting-control-alert size-[var(--meeting-control-size)] rounded-full border-0 [&_svg]:size-[var(--meeting-control-icon)]"
+          class="meeting-control-danger size-[var(--meeting-control-size)] border-0 [&_svg]:size-[var(--meeting-control-icon)]"
           :aria-label="t('meeting.controls.endCall')"
         >
           <PhoneOff class="h-5 w-5" />

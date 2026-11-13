@@ -94,7 +94,7 @@ watch(
   <Dialog v-model:open="open">
     <HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:p-6"
+      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink"
       data-call-details
     >
       <DialogHeader v-if="shown">
@@ -202,7 +202,8 @@ watch(
           </Button>
           <Button
             data-call-again
-            class="harbor-primary-action h-10 rounded-full bg-harbor-accent px-5 text-white"
+            variant="accent"
+            class="h-10 px-5"
             :disabled="!canCallAgain || calling"
             :title="detail && !canCallAgain ? 'No registered participants to call' : undefined"
             @click="detail && emit('call', detail)"

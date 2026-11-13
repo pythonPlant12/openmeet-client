@@ -73,7 +73,7 @@ async function accept() {
   <Dialog :open="open" @update:open="setOpen"
     ><HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       ><DialogHeader
         ><DialogTitle>Join {{ invitation?.groupTitle }}</DialogTitle
         ><DialogDescription class="text-harbor-muted"
@@ -107,16 +107,12 @@ async function accept() {
           {{ error }}
         </p>
         <DialogFooter
-          ><Button
-            type="button"
-            variant="outline"
-            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-            :disabled="isAccepting"
-            @click="setOpen(false)"
+          ><Button type="button" variant="pill" size="pill" :disabled="isAccepting" @click="setOpen(false)"
             >Cancel</Button
           ><Button
             type="submit"
-            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
+            variant="accent"
+            size="pill"
             :disabled="isAccepting || (invitation?.accessPolicy === 'password' && !password)"
             ><LoadingRipple v-if="isAccepting" size="sm" />{{ isAccepting ? 'Joining...' : 'Join group' }}</Button
           ></DialogFooter

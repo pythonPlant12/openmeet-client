@@ -129,7 +129,8 @@ defineExpose({
       </div>
       <Button
         v-if="selectedConversation && !pendingFriend"
-        class="harbor-primary-action w-full rounded-full bg-harbor-accent text-white"
+        variant="accent"
+        class="w-full"
         :disabled="callActive"
         @click="emit('call')"
         ><Phone class="size-4" />Start call</Button
