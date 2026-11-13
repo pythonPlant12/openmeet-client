@@ -6,6 +6,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
+import CallAudioOutputButton from '@/components/meeting-page/CallAudioOutputButton.vue';
 import CallPhoneControls from '@/components/meeting-page/CallPhoneControls.vue';
 import CallPhoneTopBar from '@/components/meeting-page/CallPhoneTopBar.vue';
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
@@ -890,7 +891,9 @@ const handleReconnect = () => {
         :unread-count="unreadCount"
         @toggle-chat="handleToggleChat"
         @invite="isInviteOpen = true"
-      />
+      >
+        <template #audio-output><CallAudioOutputButton /></template>
+      </CallPhoneTopBar>
 
       <!-- Participant Count Badge -->
       <div
