@@ -13,12 +13,34 @@ import {
 } from './video-quality';
 
 export interface DeviceConstraints {
+  /** Preferred devices; one that is gone falls back to the system default. */
   audioDeviceId?: string | null;
   videoDeviceId?: string | null;
   videoQuality?: VideoQuality;
+  /** Enter with the camera off: it is captured only to ask permission, then released. */
+  cameraOff?: boolean;
 }
 
 export type { VideoQuality };
+
+/** Why the call has no microphone or camera: permission refused, or no working device. */
+export type MediaIssue = 'denied' | 'unavailable';
+type MediaKind = 'audio' | 'video';
+
+function mediaIssueOf(error: unknown): MediaIssue {
+  return error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'SecurityError')
+    ? 'denied'
+    : 'unavailable';
+}
+
+function microphoneConstraints(deviceId?: string | null): MediaTrackConstraints {
+  return {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    ...(deviceId ? { deviceId: { ideal: deviceId } } : {}),
+  };
+}
 
 export interface ConnectionQualityStats {
   quality: 'good' | 'poor';
@@ -128,6 +150,9 @@ export class WebRTCServiceSFU {
   /** Volume and level stage on the microphone, built the first time either is used. */
   private micInput: MicInput | null = null;
   private inputVolume = 1;
+  private mediaIssues: Partial<Record<MediaKind, MediaIssue>> = {};
+  /** Called when the microphone or camera stops on its own, such as a revoked permission or an unplugged device. */
+  onLocalTrackLost: ((kind: MediaKind) => void) | null = null;
   private readonly videoQualityController: SenderQualityController;
   /** Called with the height the video currently sends, which auto quality changes over time. */
   onVideoLevelChange: ((height: number) => void) | null = null;
@@ -188,41 +213,150 @@ export class WebRTCServiceSFU {
   }
 
   async initializeMedia(deviceConstraints?: DeviceConstraints): Promise<MediaStream> {
-    try {
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
+    this.videoQuality = deviceConstraints?.videoQuality ?? 'auto';
+    const audioConstraints = microphoneConstraints(deviceConstraints?.audioDeviceId);
+    const videoConstraints: MediaTrackConstraints = {
+      ...captureConstraints(CAMERA_LEVELS, this.videoQuality),
+      ...(deviceConstraints?.videoDeviceId ? { deviceId: { ideal: deviceConstraints.videoDeviceId } } : {}),
+    };
+    const cameraOff = deviceConstraints?.cameraOff ?? false;
+    // The camera is captured at entry only to ask for permission; once it is allowed, an entry with the camera
+    // off never opens it, so its light does not flash.
+    const skipCamera = cameraOff && (await this.isCameraAllowed());
 
-      this.videoQuality = deviceConstraints?.videoQuality ?? 'auto';
-      const videoConstraints = captureConstraints(CAMERA_LEVELS, this.videoQuality);
+    this.mediaIssues = {};
+    this.localStream = await this.captureLocalMedia(audioConstraints, skipCamera ? false : videoConstraints);
 
-      // Apply device ID constraints if provided
-      if (deviceConstraints?.audioDeviceId) {
-        audioConstraints.deviceId = { exact: deviceConstraints.audioDeviceId };
+    if (cameraOff) {
+      const camera = this.localStream.getVideoTracks()[0];
+      if (camera) {
+        this.releasedCameraId = camera.getSettings().deviceId ?? null;
+        this.localStream.removeTrack(camera);
+        camera.stop();
+      } else if (skipCamera) {
+        this.releasedCameraId = deviceConstraints?.videoDeviceId ?? null;
       }
-      if (deviceConstraints?.videoDeviceId) {
-        videoConstraints.deviceId = { exact: deviceConstraints.videoDeviceId };
-      }
-
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
-        audio: audioConstraints,
-      });
-
-      console.log('[WebRTCServiceSFU] Media initialized:', {
-        audioTracks: this.localStream.getAudioTracks().length,
-        videoTracks: this.localStream.getVideoTracks().length,
-        audioDevice: deviceConstraints?.audioDeviceId || 'default',
-        videoDevice: deviceConstraints?.videoDeviceId || 'default',
-      });
-
-      return this.localStream;
-    } catch (error) {
-      console.error('[WebRTCServiceSFU] Failed to initialize media:', error);
-      throw new Error(i18n.global.t('errors.mediaAccess', { message: mediaErrorMessage(error) }));
     }
+
+    this.localStream.getTracks().forEach((track) => this.watchTrack(track));
+
+    console.log('[WebRTCServiceSFU] Media initialized:', {
+      audioTracks: this.localStream.getAudioTracks().length,
+      videoTracks: this.localStream.getVideoTracks().length,
+      cameraOff,
+      issues: this.mediaIssues,
+    });
+    return this.localStream;
+  }
+
+  /**
+   * One capture asks for both permissions. When it fails the call still starts: a refusal leaves it listen-only,
+   * and a missing or busy device is retried alone so the other one still works.
+   */
+  private async captureLocalMedia(
+    audio: MediaTrackConstraints,
+    video: MediaTrackConstraints | false,
+  ): Promise<MediaStream> {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio, video });
+    } catch (error) {
+      console.warn('[WebRTCServiceSFU] Capture failed; trying each device alone:', error);
+      if (mediaIssueOf(error) === 'denied') {
+        this.mediaIssues.audio = 'denied';
+        if (video) this.mediaIssues.video = 'denied';
+        return new MediaStream();
+      }
+    }
+
+    const stream = new MediaStream();
+    for (const [kind, constraints] of [
+      ['audio', audio],
+      ['video', video],
+    ] as const) {
+      if (!constraints) continue;
+      try {
+        const track = (await navigator.mediaDevices.getUserMedia({ [kind]: constraints })).getTracks()[0];
+        if (track) stream.addTrack(track);
+      } catch (error) {
+        console.warn(`[WebRTCServiceSFU] No ${kind} for this call:`, error);
+        this.mediaIssues[kind] = mediaIssueOf(error);
+      }
+    }
+    return stream;
+  }
+
+  private async permissionState(kind: MediaKind): Promise<PermissionState | 'unknown'> {
+    try {
+      const name = (kind === 'audio' ? 'microphone' : 'camera') as PermissionName;
+      return (await navigator.permissions?.query({ name }))?.state ?? 'unknown';
+    } catch {
+      // Not every browser reports media permissions.
+      return 'unknown';
+    }
+  }
+
+  private async isCameraAllowed(): Promise<boolean> {
+    // Browsers that cannot report the camera permission capture it once at entry instead.
+    return (await this.permissionState('video')) === 'granted';
+  }
+
+  getMediaIssue(kind: MediaKind): MediaIssue | null {
+    return this.mediaIssues[kind] ?? null;
+  }
+
+  /**
+   * Asks for the microphone or camera again and sends it on the existing sender, so the call does not
+   * renegotiate. Returns why it is still missing, or null once it works. A permanently refused permission is
+   * not asked again, because the browser would refuse without showing a prompt.
+   */
+  async requestMedia(kind: MediaKind): Promise<MediaIssue | null> {
+    const stream = this.localStream;
+    if (!stream) return 'unavailable';
+    if ((await this.permissionState(kind)) === 'denied') {
+      this.mediaIssues[kind] = 'denied';
+      return 'denied';
+    }
+
+    let track: MediaStreamTrack | undefined;
+    try {
+      const constraints =
+        kind === 'audio'
+          ? { audio: microphoneConstraints() }
+          : { video: captureConstraints(CAMERA_LEVELS, this.videoQuality) };
+      track = (await navigator.mediaDevices.getUserMedia(constraints)).getTracks()[0];
+    } catch (error) {
+      console.warn(`[WebRTCServiceSFU] ${kind} is still unavailable:`, error);
+      this.mediaIssues[kind] = mediaIssueOf(error);
+      return this.mediaIssues[kind]!;
+    }
+    if (!track) return 'unavailable';
+
+    delete this.mediaIssues[kind];
+    if (kind === 'video') this.releasedCameraId = undefined;
+    if (kind === 'audio') this.micInput?.setSource(track);
+    const sendsInputVolume = kind === 'audio' && !!this.micInput && this.inputVolume !== 1 && this.micInput.isRunning;
+    await this.localSenders[kind]?.replaceTrack(sendsInputVolume ? this.micInput!.outputTrack : track);
+    stream.addTrack(track);
+    this.watchTrack(track);
+    if (kind === 'video') await this.videoQualityController.apply();
+    return null;
+  }
+
+  /** A track ends on its own when its permission is revoked or its device goes away; the app's own stop does not. */
+  private watchTrack(track: MediaStreamTrack) {
+    track.addEventListener('ended', () => void this.handleTrackLost(track), { once: true });
+  }
+
+  private async handleTrackLost(track: MediaStreamTrack) {
+    const stream = this.localStream;
+    if (!stream?.getTracks().includes(track)) return;
+    const kind = track.kind as MediaKind;
+    console.warn(`[WebRTCServiceSFU] Local ${kind} track ended`);
+    stream.removeTrack(track);
+    this.mediaIssues[kind] = 'unavailable';
+    if (kind === 'video') this.releasedCameraId = undefined;
+    this.onLocalTrackLost?.(kind);
+    await this.localSenders[kind]?.replaceTrack(null);
   }
 
   createPeerConnection(): RTCPeerConnection {
@@ -255,11 +389,16 @@ export class WebRTCServiceSFU {
       if (this.localSenders.audio && this.micInput && this.inputVolume !== 1) {
         void this.localSenders.audio.replaceTrack(this.micInput.outputTrack);
       }
-      if (!this.localSenders.video && this.releasedCameraId !== undefined) {
-        this.localSenders.video = this.peerConnection.addTransceiver('video', {
-          direction: 'sendrecv',
-          streams: [stream],
-        }).sender;
+      // A camera call keeps a sender for a microphone or camera it does not have yet, such as a camera that is
+      // off or a permission that was refused, so either can start later without renegotiation.
+      if (this.videoSource === 'camera') {
+        for (const kind of ['audio', 'video'] as const) {
+          if (this.localSenders[kind]) continue;
+          this.localSenders[kind] = this.peerConnection.addTransceiver(kind, {
+            direction: 'sendrecv',
+            streams: [stream],
+          }).sender;
+        }
       }
       console.log('[WebRTCServiceSFU] ✓ Local media added to peer connection');
     }
@@ -470,9 +609,10 @@ export class WebRTCServiceSFU {
   /**
    * Turning the camera off stops it, so the device's camera light goes off, and its sender sends nothing.
    * Turning it on captures the camera again and puts the track on the same sender, so the call does not
-   * renegotiate. The microphone is muted by disabling its track instead.
+   * renegotiate. The microphone is muted by disabling its track instead. A track the camera preview already
+   * captured can be passed in to be sent as it is.
    */
-  async setCameraEnabled(enabled: boolean): Promise<void> {
+  async setCameraEnabled(enabled: boolean, capturedTrack?: MediaStreamTrack): Promise<void> {
     const stream = this.localStream;
     if (!stream) throw new Error(i18n.global.t('errors.mediaUnavailable'));
     const current = stream.getVideoTracks()[0];
@@ -489,11 +629,17 @@ export class WebRTCServiceSFU {
       return;
     }
 
-    if (current?.readyState === 'live') return;
-    const replacement = await this.captureCamera(this.releasedCameraId ?? null);
+    if (current?.readyState === 'live') {
+      capturedTrack?.stop();
+      return;
+    }
+    // The camera preview hands over the track it already shows, so the camera is not opened twice.
+    const replacement = capturedTrack ?? (await this.captureCamera(this.releasedCameraId ?? null));
     this.releasedCameraId = undefined;
+    delete this.mediaIssues.video;
     await this.localSender('video', undefined)?.replaceTrack(replacement);
     stream.addTrack(replacement);
+    this.watchTrack(replacement);
     await this.videoQualityController.apply();
     console.log('[WebRTCServiceSFU] Camera on');
   }
@@ -501,7 +647,8 @@ export class WebRTCServiceSFU {
   private async captureCamera(deviceId: string | null): Promise<MediaStreamTrack> {
     const constraints = captureConstraints(CAMERA_LEVELS, this.videoQuality);
     try {
-      const video = deviceId ? { ...constraints, deviceId: { exact: deviceId } } : constraints;
+      // A remembered camera that is gone falls back to the system default.
+      const video = deviceId ? { ...constraints, deviceId: { ideal: deviceId } } : constraints;
       return (await navigator.mediaDevices.getUserMedia({ video })).getVideoTracks()[0]!;
     } catch (error) {
       console.error('[WebRTCServiceSFU] Failed to open the camera:', error);
@@ -555,6 +702,8 @@ export class WebRTCServiceSFU {
       previous.stop();
     }
     stream.addTrack(replacement);
+    this.watchTrack(replacement);
+    delete this.mediaIssues[kind];
     if (kind === 'video') await this.videoQualityController.apply();
     console.log('[WebRTCServiceSFU] Switched device:', { kind, deviceId });
   }
@@ -758,6 +907,7 @@ export class WebRTCServiceSFU {
     this.micInput?.close();
     this.micInput = null;
     this.inputVolume = 1;
+    this.mediaIssues = {};
     this.previousInboundPackets.clear();
     this.pendingRemoteIceCandidates = [];
   }

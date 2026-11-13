@@ -55,6 +55,7 @@ test.describe('action menus', () => {
   test('meeting ⋮ menu holds the rarer actions next to the bar, and the tile area opens the layout menu', async ({
     page,
   }) => {
+    // A guest without a saved name is asked only for the name; the call starts with the microphone off.
     await page.goto(`/room/action-menu-${Date.now()}`);
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
     await page.getByLabel('Your Name').fill('Action Tester');
@@ -63,7 +64,7 @@ test.describe('action menus', () => {
 
     // Mic, camera and chat live in the bar; the ⋮ menu holds the rarer actions.
     await page.locator('[data-media-control="audio"] [data-media-toggle]').click();
-    await expect(page.getByRole('button', { name: 'Unmute microphone' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Mute microphone' })).toBeVisible();
     await page.locator('[data-chat-trigger]').click();
     await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
     await page.keyboard.press('Escape');
@@ -88,6 +89,7 @@ test.describe('action menus', () => {
     await expect(page.getByTestId('meeting-video-canvas')).toHaveAttribute('data-view-mode', 'grid');
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Mute microphone' })).toBeVisible();
     const reportHref = await page.getByRole('menuitem', { name: 'Report a bug' }).getAttribute('href');
     await page.keyboard.press('Escape');
     expect(reportHref).toContain('Area%3A+meeting');

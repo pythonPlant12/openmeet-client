@@ -25,6 +25,9 @@ defineProps<{
   pinnedParticipantId: string | null;
   viewMode: 'grid' | 'speaker';
   showConnectionStatus: boolean;
+  /** The call could not get the microphone or camera; its button shows a warning that asks again. */
+  audioWarning?: boolean;
+  videoWarning?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -33,6 +36,7 @@ const emit = defineEmits<{
   (e: 'end-call'): void;
   (e: 'media-changed'): void;
   (e: 'preview-camera'): void;
+  (e: 'request-access', kind: 'audio' | 'video'): void;
   (e: 'start-screen-share', options?: { selectArea: boolean }): void;
   (e: 'stop-screen-share'): void;
   (e: 'set-view-mode', mode: 'grid' | 'speaker'): void;
@@ -244,14 +248,18 @@ function onLeave() {
           kind="audio"
           :off="isMuted"
           :available="audioAvailable"
+          :warning="audioWarning"
           @toggle="emit('toggle-mute')"
+          @request-access="emit('request-access', 'audio')"
           @media-changed="emit('media-changed')"
         />
         <MeetingMediaControl
           kind="video"
           :off="isVideoOff"
           :available="videoAvailable"
+          :warning="videoWarning"
           @toggle="emit('toggle-video')"
+          @request-access="emit('request-access', 'video')"
           @media-changed="emit('media-changed')"
           @preview-camera="emit('preview-camera')"
         />

@@ -84,9 +84,9 @@ const RadioItem = defineComponent({
   },
 });
 
-function mountControl(kind: 'audio' | 'video', off = false) {
+function mountControl(kind: 'audio' | 'video', off = false, warning = false) {
   return mount(MeetingMediaControl, {
-    props: { kind, off, available: true },
+    props: { kind, off, available: !warning, warning },
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
       stubs: {
@@ -214,5 +214,23 @@ describe('MeetingMediaControl', () => {
 
     expect(settings.changeDevice).toHaveBeenCalledWith('cam-2');
     expect(wrapper.emitted('media-changed')).toHaveLength(1);
+  });
+
+  it('shows a warning on a medium the call could not get, and tapping it asks again', async () => {
+    const wrapper = mountControl('audio', true, true);
+    const toggle = wrapper.get('[data-media-toggle]');
+
+    expect(wrapper.find('[data-media-warning]').exists()).toBe(true);
+    expect(toggle.attributes('disabled')).toBeUndefined();
+    expect(toggle.attributes('aria-label')).toBe('Allow the microphone');
+
+    await toggle.trigger('click');
+
+    expect(wrapper.emitted('request-access')).toHaveLength(1);
+    expect(wrapper.emitted('toggle')).toBeUndefined();
+    expect(mountControl('video', true, true).get('[data-media-toggle]').attributes('aria-label')).toBe(
+      'Allow the camera',
+    );
+    expect(mountControl('audio').find('[data-media-warning]').exists()).toBe(false);
   });
 });

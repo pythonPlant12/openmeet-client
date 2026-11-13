@@ -106,10 +106,10 @@ export function useWebrtc() {
   };
 
   /** Stops or restarts the camera on the same sender; the caller reports the new state to the room. */
-  const setCameraEnabled = async (enabled: boolean) => {
+  const setCameraEnabled = async (enabled: boolean, capturedTrack?: MediaStreamTrack) => {
     const { webrtcService } = getServices();
     if (!webrtcService) throw new Error('Media is not ready');
-    await webrtcService.setCameraEnabled(enabled);
+    await webrtcService.setCameraEnabled(enabled, capturedTrack);
   };
 
   const setVideoQuality = async (quality: VideoQuality) => {

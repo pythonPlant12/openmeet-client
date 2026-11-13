@@ -19,9 +19,9 @@ const participants: Participant[] = [
 
 // The split buttons and the share control have their own tests; here they only need to be found.
 const MediaControl = {
-  props: ['kind', 'off', 'available'],
-  emits: ['toggle'],
-  template: '<button :data-stub-media="kind" @click="$emit(\'toggle\')" />',
+  props: ['kind', 'off', 'available', 'warning'],
+  emits: ['toggle', 'request-access'],
+  template: '<button :data-stub-media="kind" @click="$emit(warning ? \'request-access\' : \'toggle\')" />',
 };
 const ShareControl = { template: '<button data-stub-share />' };
 
@@ -82,6 +82,15 @@ describe('CallPhoneControls', () => {
 
     expect(wrapper.emitted('toggle-mute')).toHaveLength(1);
     expect(wrapper.emitted('toggle-video')).toHaveLength(1);
+  });
+
+  it('passes the mic and camera warnings through and asks for access again', async () => {
+    const wrapper = mountControls({ audioWarning: true, videoWarning: true });
+
+    await wrapper.get('[data-stub-media="audio"]').trigger('click');
+    await wrapper.get('[data-stub-media="video"]').trigger('click');
+
+    expect(wrapper.emitted('request-access')).toEqual([['audio'], ['video']]);
   });
 
   it('leaves with a medium haptic', async () => {

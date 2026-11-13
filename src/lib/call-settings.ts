@@ -64,6 +64,11 @@ export function saveCallSettings(changes: Partial<CallSettings>) {
   }
 }
 
+/** The first camera turn-on on a device opens the camera preview; later ones turn the camera on directly. */
+export function needsCameraPreview(): boolean {
+  return !loadCallSettings().cameraPreviewSeen;
+}
+
 /** A saved device that is no longer connected becomes null, which means the system default. */
 export function resolveCallDevices(settings: CallSettings, devices: MediaDeviceInfo[]): CallDevices {
   const present = (key: keyof CallDevices) => {

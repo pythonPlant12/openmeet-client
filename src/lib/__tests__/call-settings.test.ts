@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadCallSettings, resolveCallDevices, saveCallSettings } from '../call-settings';
+import { loadCallSettings, needsCameraPreview, resolveCallDevices, saveCallSettings } from '../call-settings';
 
 function device(kind: MediaDeviceKind, deviceId: string) {
   return { kind, deviceId, label: deviceId, groupId: '' } as MediaDeviceInfo;
@@ -111,5 +111,13 @@ describe('call settings', () => {
       cameraPreviewSeen: false,
       micOn: false,
     });
+  });
+
+  it('asks for the camera preview only until it has been seen on this device', () => {
+    expect(needsCameraPreview()).toBe(true);
+
+    saveCallSettings({ cameraPreviewSeen: true });
+
+    expect(needsCameraPreview()).toBe(false);
   });
 });

@@ -349,6 +349,7 @@
     "join": {
       "title": "Join Meeting",
       "description": "Configure your settings before joining",
+      "entryDescription": "Enter your name to join the meeting",
       "cameraBlocked": "Camera blocked",
       "cameraOff": "Camera is off",
       "micOn": "Mic On",
@@ -409,6 +410,8 @@
       "inputLevel": "Microphone level",
       "camera": "Camera",
       "previewCamera": "Preview camera",
+      "allowMicrophone": "Allow the microphone",
+      "allowCamera": "Allow the camera",
       "quality": "Quality",
       "noMicrophones": "No microphones found",
       "noCameras": "No cameras found",
@@ -416,6 +419,22 @@
       "shareTitle": "Join my video call",
       "moreControls": "More controls",
       "audioOutput": "Audio output"
+    },
+    "preview": {
+      "title": "Camera preview",
+      "description": "Check how you look and choose your microphone and camera before others see you.",
+      "turnOn": "Turn on camera",
+      "done": "Done"
+    },
+    "permission": {
+      "microphoneTitle": "Allow the microphone",
+      "cameraTitle": "Allow the camera",
+      "browserHint": "Your browser blocks it for OpenMeet. Allow it in the site settings behind the icon next to the address, then tap the button again.",
+      "nativeHint": "OpenMeet is not allowed to use it. Allow it in the system settings, then tap the button again.",
+      "openSettings": "Open settings",
+      "close": "Got it",
+      "unavailableMicrophone": "No microphone is available",
+      "unavailableCamera": "No camera is available"
     },
     "tooltips": {
       "status": "Status",

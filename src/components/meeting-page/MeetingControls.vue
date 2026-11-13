@@ -34,6 +34,9 @@ interface Props {
   /** Full screen shows the bar as dark glass over the near-black stage. */
   dark?: boolean;
   fullscreen?: boolean;
+  /** The call could not get the microphone or camera; its button shows a warning that asks again. */
+  audioWarning?: boolean;
+  videoWarning?: boolean;
 }
 
 interface Emits {
@@ -48,6 +51,7 @@ interface Emits {
   (e: 'media-changed'): void;
   /** Preview camera was chosen in the camera menu. */
   (e: 'preview-camera'): void;
+  (e: 'request-access', kind: 'audio' | 'video'): void;
   (e: 'start-screen-share', options?: { selectArea: boolean }): void;
   (e: 'stop-screen-share'): void;
   (e: 'set-view-mode', mode: 'grid' | 'speaker'): void;
@@ -62,6 +66,8 @@ const props = withDefaults(defineProps<Props>(), {
   isPresenting: false,
   dark: false,
   fullscreen: false,
+  audioWarning: false,
+  videoWarning: false,
 });
 const emit = defineEmits<Emits>();
 const { t } = useI18n();
@@ -110,7 +116,9 @@ function onLeave() {
         @open-change="setMenuOpen('audio', $event)"
         :off="isMuted"
         :available="audioAvailable"
+        :warning="audioWarning"
         @toggle="emit('toggle-mute')"
+        @request-access="emit('request-access', 'audio')"
         @media-changed="emit('media-changed')"
       />
 
@@ -120,7 +128,9 @@ function onLeave() {
         @open-change="setMenuOpen('video', $event)"
         :off="isVideoOff"
         :available="videoAvailable"
+        :warning="videoWarning"
         @toggle="emit('toggle-video')"
+        @request-access="emit('request-access', 'video')"
         @media-changed="emit('media-changed')"
         @preview-camera="emit('preview-camera')"
       />
