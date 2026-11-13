@@ -119,6 +119,27 @@ describe('MeetingCameraPreview', () => {
     expect(wrapper.emitted('update:open')).toEqual([[false]]);
   });
 
+  it('turns the camera on when confirmed while the preview is still opening the camera', async () => {
+    let openCamera: () => void = () => {};
+    const camera = track('cam-1');
+    getUserMedia.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          openCamera = () => resolve({ getVideoTracks: () => [camera], getTracks: () => [camera] });
+        }),
+    );
+    const wrapper = mountPreview();
+    await flushPromises();
+
+    await wrapper.get('[data-camera-preview-confirm]').trigger('click');
+    openCamera();
+    await flushPromises();
+
+    expect(wrapper.emitted('confirm')).toEqual([[camera]]);
+    expect(camera.stop).not.toHaveBeenCalled();
+    expect(wrapper.emitted('update:open')).toEqual([[false]]);
+  });
+
   it('closes on a tap outside and leaves the camera off', async () => {
     const wrapper = mountPreview();
     await flushPromises();
