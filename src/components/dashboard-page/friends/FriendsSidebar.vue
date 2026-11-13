@@ -33,6 +33,7 @@ import { PresenceDot } from '@/components/ui/presence-dot';
 import { RoundButton } from '@/components/ui/round-button';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { userStatusOption } from '@/config/user-status.config';
+import { playHaptic } from '@/services/haptics';
 import type { Conversation, Friend, FriendRequest, UserSearchResult } from '@/services/social-api';
 
 const props = defineProps<{
@@ -120,8 +121,10 @@ function findPeople() {
   input.value?.focus({ preventScroll: true });
 }
 
+// Like the Chats pane's view switch, the change the user makes ticks once.
 function toggleView() {
   view.value = view.value === 'friends' ? 'groups' : 'friends';
+  playHaptic('selection');
 }
 
 // The hover action opens the row's own context menu beside it, so both share one menu.

@@ -462,6 +462,62 @@ describe('ChatPane', () => {
     expect(wrapper.emitted('back')).toHaveLength(1);
   });
 
+  describe('in a chat with no messages', () => {
+    const touch = (type: string, clientX: number) =>
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 9,
+        pointerType: 'touch',
+        clientX,
+        clientY: 100,
+      });
+    const swipeRight = (element: Element) => {
+      element.dispatchEvent(touch('pointerdown', 40));
+      element.dispatchEvent(touch('pointermove', 120));
+      element.dispatchEvent(touch('pointermove', 220));
+      element.dispatchEvent(touch('pointerup', 220));
+    };
+
+    it('goes back when the empty message history is swiped right', () => {
+      const wrapper = mountPane({ conversation, messages: [] });
+
+      swipeRight(wrapper.get('[aria-label="Message history"] p').element);
+
+      expect(wrapper.emitted('back')).toHaveLength(1);
+    });
+
+    // The history scrolls vertically; unless it keeps horizontal pans for the page, the browser takes
+    // a sideways touch there and cancels the pointer before the swipe can go back.
+    it('leaves horizontal touch pans in the message history to the swipe-back gesture', () => {
+      const wrapper = mountPane({ conversation, messages: [] });
+
+      expect(wrapper.get('[aria-label="Message history"]').classes()).toContain('touch-pan-y');
+    });
+
+    it('ignores swipes that start on the composer field or a button', () => {
+      const wrapper = mountPane({ conversation, messages: [] });
+
+      swipeRight(wrapper.get('textarea').element);
+      swipeRight(wrapper.get('[aria-label="Back to conversations"]').element);
+
+      expect(wrapper.emitted('back')).toBeUndefined();
+    });
+
+    it('does nothing for a mouse drag', () => {
+      const wrapper = mountPane({ conversation, messages: [] });
+      const history = wrapper.get('[aria-label="Message history"] p').element;
+      const mouse = (type: string, clientX: number) =>
+        new PointerEvent(type, { bubbles: true, pointerId: 1, pointerType: 'mouse', clientX, clientY: 100 });
+
+      history.dispatchEvent(mouse('pointerdown', 40));
+      history.dispatchEvent(mouse('pointermove', 220));
+      history.dispatchEvent(mouse('pointerup', 220));
+
+      expect(wrapper.emitted('back')).toBeUndefined();
+    });
+  });
+
   it('does not mount the empty conversation state on mobile', () => {
     expect(mountPane().text()).not.toContain('Choose a conversation');
   });

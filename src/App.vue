@@ -19,6 +19,7 @@ import {
 } from '@/services/social-api';
 import { type SocialAlert, type SocialEventResource, socialEventsService } from '@/services/social-events';
 import { SystemAlerts } from '@/services/system-alerts';
+import { startSystemBarSync } from '@/services/system-bars';
 
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
@@ -544,7 +545,10 @@ watch(
 
 watch(isAuthenticated, setAuthenticatedViewportLock, { immediate: true });
 
+let stopSystemBarSync = () => {};
+
 onMounted(() => {
+  stopSystemBarSync = startSystemBarSync();
   void systemAlerts.start().then(() => systemAlerts.drainActions());
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('openmeet:active-conversation', handleActiveConversation);
@@ -554,6 +558,7 @@ onMounted(() => {
   window.addEventListener('openmeet:incoming-call-resolved', handleIncomingCallResolved);
 });
 onUnmounted(() => {
+  stopSystemBarSync();
   setAuthenticatedViewportLock(false);
   stopAuthenticatedPolling();
   systemAlerts.stop();
