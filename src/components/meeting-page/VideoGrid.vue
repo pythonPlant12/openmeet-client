@@ -31,8 +31,6 @@ const props = defineProps<{
   participantStatuses?: Record<string, UserStatus>;
   /** Avatar image URLs of registered participants, keyed by participant ID. */
   participantAvatars?: Record<string, string>;
-  /** Phones show the navbar at the top (guests), so the video area starts below it and the meeting's top row. */
-  phoneTopBar?: boolean;
   /** Full screen: the media fills the whole screen on a near-black background, with nothing around it. */
   fullscreen?: boolean;
   /** Full screen controls are showing, so the strip moves up to stay above them. */
@@ -310,20 +308,14 @@ function toggleName(participantId: string) {
     @pointerdown="handleCanvasPointerDown"
     @click="handleCanvasClick"
   >
-    <!-- The video area fills the space between the top row (participants and actions buttons) and the bottom
-         control bar, so no tile hides under either. In full screen it takes the whole screen. -->
+    <!-- The video area fills the space between the call screen's top bar and its controls, which the page sets as
+         --call-area-top and --call-area-bottom, so no tile hides under either. In full screen it takes the whole
+         screen. -->
     <div
       v-if="hasParticipants"
       class="fixed inset-x-0"
       :class="
-        fullscreen
-          ? 'inset-y-0 z-[35] bg-[#0B0F10]'
-          : [
-              'bottom-[calc(var(--meeting-control-size)+2.5rem)] sm:bottom-[calc(var(--meeting-control-size)+3.5rem)] sm:top-[calc(84px+2.25rem+var(--meeting-control-size))]',
-              phoneTopBar === false
-                ? 'top-[calc(1.25rem+var(--meeting-control-size)+env(safe-area-inset-top))]'
-                : 'top-[calc(5rem+var(--meeting-control-size))]',
-            ]
+        fullscreen ? 'inset-y-0 z-[35] bg-[#0B0F10]' : 'bottom-[var(--call-area-bottom)] top-[var(--call-area-top)]'
       "
     >
       <Transition name="meeting-layout" mode="out-in">
@@ -427,11 +419,7 @@ function toggleName(participantId: string) {
           <div
             v-if="secondaryParticipants.length"
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            :class="
-              fullscreen && controlsShown
-                ? 'bottom-[calc(var(--meeting-control-size)+2.5rem)] sm:bottom-[calc(var(--meeting-control-size)+3.5rem)]'
-                : 'bottom-4 sm:bottom-6'
-            "
+            :class="fullscreen && controlsShown ? 'bottom-[var(--call-area-bottom)]' : 'bottom-4 sm:bottom-6'"
           >
             <div class="pointer-events-auto max-w-full overflow-x-auto" data-testid="participant-strip">
               <div class="flex w-max gap-2" :style="{ height: `${stripHeight}px` }">

@@ -413,7 +413,9 @@
       "noMicrophones": "No microphones found",
       "noCameras": "No cameras found",
       "shareText": "Join my video call: {link}",
-      "shareTitle": "Join my video call"
+      "shareTitle": "Join my video call",
+      "moreControls": "More controls",
+      "audioOutput": "Audio output"
     },
     "tooltips": {
       "status": "Status",
@@ -432,7 +434,9 @@
       "send": "Send message",
       "sendShort": "Send",
       "subtitle": "Everyone in this meeting",
-      "footer": "Chat is cleared when the meeting ends"
+      "footer": "Chat is cleared when the meeting ends",
+      "expand": "Expand chat",
+      "shrink": "Shrink chat"
     },
     "participant": {
       "focus": "Focus {name}",
@@ -465,7 +469,11 @@
       "pinParticipant": "Pin participant",
       "videoCanvas": "Meeting video canvas",
       "reportBug": "Report a bug",
-      "disconnect": "Disconnect"
+      "disconnect": "Disconnect",
+      "devTools": "Developer tools",
+      "participantsCount": "Participants ({count})",
+      "screenShare": "Screen share",
+      "invite": "Invite"
     },
     "error": {
       "title": "Connection Lost",
@@ -474,7 +482,8 @@
       "lost": "Your connection to the meeting was lost. This could be due to network issues.",
       "goHome": "Go Home",
       "reconnect": "Reconnect"
-    }
+    },
+    "callTitle": "Call"
   },
   "errors": {
     "generic": "An error occurred",

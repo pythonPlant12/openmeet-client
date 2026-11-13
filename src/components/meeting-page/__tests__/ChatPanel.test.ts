@@ -87,3 +87,31 @@ describe('ChatPanel', () => {
     expect(wrapper.emitted('send')).toEqual([['/giphy wave', undefined]]);
   });
 });
+
+describe('ChatPanel on a phone', () => {
+  it('opens as a half-height sheet that expands to full height and shrinks back', async () => {
+    const wrapper = mountPanel();
+    const sheet = () => wrapper.get('[data-chat-size]');
+    const expandButton = () => wrapper.get('[data-chat-expand]');
+
+    expect(sheet().attributes('data-chat-size')).toBe('half');
+    expect(expandButton().attributes('aria-expanded')).toBe('false');
+
+    await expandButton().trigger('click');
+    expect(sheet().attributes('data-chat-size')).toBe('full');
+    expect(expandButton().attributes('aria-expanded')).toBe('true');
+
+    await expandButton().trigger('click');
+    expect(sheet().attributes('data-chat-size')).toBe('half');
+  });
+
+  it('opens at half height again after it was closed expanded', async () => {
+    const wrapper = mountPanel();
+    await wrapper.get('[data-chat-expand]').trigger('click');
+
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+
+    expect(wrapper.get('[data-chat-size]').attributes('data-chat-size')).toBe('half');
+  });
+});

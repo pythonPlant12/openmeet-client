@@ -6,6 +6,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
+import CallPhoneControls from '@/components/meeting-page/CallPhoneControls.vue';
+import CallPhoneTopBar from '@/components/meeting-page/CallPhoneTopBar.vue';
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
 import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
 import JoinMeetingDialog, { type JoinSettings } from '@/components/meeting-page/JoinMeetingDialog.vue';
@@ -51,17 +53,6 @@ const isConversationCall = computed(() => conversationId.value !== null);
 const startsWithVideo = computed(() => route.query.video !== 'off');
 
 const { isAuthenticated, isCheckingSession, currentUser, accessToken } = useAuth();
-// On phones TheNavbar shows a top bar only to guests; signed-in phones use the bottom account button. The meeting's
-// top row sits right under that bar, or at the very top without it, so the video area below gets the space.
-const hasPhoneTopBar = computed(() => !isAuthenticated.value);
-const phoneTopRowClass = computed(() =>
-  hasPhoneTopBar.value ? 'top-20' : 'top-[calc(0.75rem+env(safe-area-inset-top))]',
-);
-const phoneBelowTopRowClass = computed(() =>
-  hasPhoneTopBar.value
-    ? 'top-[calc(5rem+var(--meeting-control-size))]'
-    : 'top-[calc(1.25rem+var(--meeting-control-size)+env(safe-area-inset-top))]',
-);
 const meetingExitRoute = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
 
 const {
@@ -154,6 +145,26 @@ const {
   keepPinAmong,
 } = useCallLayoutState();
 const callFormFactor = useCallFormFactor();
+// Phones, and desktop windows narrower than the phone breakpoint, get the phone call chrome: a top bar and a
+// bottom bar with a drag-up panel. The navbar steps aside for it.
+const usesPhoneChrome = computed(() => callFormFactor.value !== 'desktop');
+// The video area sits between the call screen's top chrome and its controls; VideoGrid reads these variables.
+const callAreaStyle = computed(() =>
+  usesPhoneChrome.value
+    ? {
+        '--call-area-top': 'calc(env(safe-area-inset-top) + 3.75rem)',
+        '--call-area-bottom': 'calc(max(0.5rem, env(safe-area-inset-bottom)) + var(--meeting-control-size) + 2.25rem)',
+      }
+    : {
+        '--call-area-top': 'calc(84px + 2.25rem + var(--meeting-control-size))',
+        '--call-area-bottom': 'calc(var(--meeting-control-size) + 3.5rem)',
+      },
+);
+// Banners and the connection details sit in the top row on desktop, and just below the top bar on phones.
+const belowTopRowClass = computed(() =>
+  usesPhoneChrome.value ? 'top-[var(--call-area-top)]' : 'top-[calc(84px+1.25rem)]',
+);
+const roomName = computed(() => (isConversationCall.value ? t('meeting.callTitle') : meetingId.value));
 // The menus show the layout on screen, which follows the call's size and form factor until the person picks one.
 const shownViewMode = computed(() =>
   selectCallLayout({
@@ -574,6 +585,7 @@ onUnmounted(() => {
   if (isFullscreen.value) setFullscreen(false);
   document.documentElement.classList.remove('meeting-immersive');
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: false }));
+  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-phone-chrome', { detail: false }));
   cancelRingingCall();
   window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: false }));
   endCall();
@@ -737,6 +749,13 @@ function setFullscreen(fullscreen: boolean) {
 
 const handleToggleFullscreen = () => setFullscreen(!isFullscreen.value);
 
+watch(
+  usesPhoneChrome,
+  (phoneChrome) =>
+    window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-phone-chrome', { detail: phoneChrome })),
+  { immediate: true },
+);
+
 watch(isFullscreen, (fullscreen) => {
   // Menus open in portals outside the page, so the dark theme for them hangs off the document.
   document.documentElement.classList.toggle('meeting-immersive', fullscreen);
@@ -836,6 +855,7 @@ const handleReconnect = () => {
     class="relative h-[calc(100dvh-84px)] overflow-hidden px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0"
     :class="isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-surface'"
     :data-fullscreen="isFullscreen ? 'true' : undefined"
+    :style="callAreaStyle"
     @touchstart.passive="handleFullscreenTouchStart"
     @touchend.passive="handleFullscreenTouchEnd"
   >
@@ -874,20 +894,31 @@ const handleReconnect = () => {
     />
 
     <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-harbor-ink flex flex-col">
+      <CallPhoneTopBar
+        v-if="usesPhoneChrome && showsControls"
+        :room-name="roomName"
+        :participant-count="participantCount"
+        :meeting-id="meetingId"
+        :invite-mode="inviteMode"
+        :is-chat-open="isChatOpen"
+        :unread-count="unreadCount"
+        @toggle-chat="handleToggleChat"
+        @invite="isInviteOpen = true"
+      />
+
       <!-- Participant Count Badge -->
       <div
-        v-if="!isFullscreen"
-        class="fixed left-7 z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-white px-4 text-harbor-ink shadow-[0_1px_2px_rgba(17,27,33,0.06),0_4px_14px_rgba(17,27,33,0.1)] sm:left-9 sm:top-[calc(84px+1.25rem)]"
-        :class="phoneTopRowClass"
+        v-if="!isFullscreen && !usesPhoneChrome"
+        class="fixed left-9 top-[calc(84px+1.25rem)] z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-white px-4 text-harbor-ink shadow-[0_1px_2px_rgba(17,27,33,0.06),0_4px_14px_rgba(17,27,33,0.1)]"
       >
         <Users class="h-5 w-5" />
         <span class="font-semibold">{{ participantCount }}</span>
       </div>
 
       <div
-        v-if="!isFullscreen"
-        class="fixed z-[60] transition-[right] sm:top-[calc(84px+1.25rem)]"
-        :class="[phoneTopRowClass, isChatOpen ? 'right-16' : 'right-7 sm:right-9']"
+        v-if="!isFullscreen && !usesPhoneChrome"
+        class="fixed top-[calc(84px+1.25rem)] z-[60] transition-[right]"
+        :class="isChatOpen ? 'right-16' : 'right-9'"
       >
         <MeetingActionMenu
           :audio-available="audioAvailable"
@@ -913,8 +944,8 @@ const handleReconnect = () => {
            Phones place it below the participants and menu buttons, which share the top row there. -->
       <div
         v-if="!isFullscreen"
-        class="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 sm:top-[calc(84px+1.25rem)]"
-        :class="phoneBelowTopRowClass"
+        class="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
+        :class="belowTopRowClass"
       >
         <AnimatePresence>
           <motion.div
@@ -946,8 +977,8 @@ const handleReconnect = () => {
       <button
         v-if="hasPoorConnection && !isFullscreen"
         type="button"
-        :class="phoneBelowTopRowClass"
-        class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-4 py-3 text-left text-sm text-harbor-danger-strong shadow-lg sm:top-[calc(84px+1.25rem)]"
+        :class="belowTopRowClass"
+        class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-4 py-3 text-left text-sm text-harbor-danger-strong shadow-lg"
         data-testid="connection-quality-warning"
         @click="showConnectionQualityDetails = !showConnectionQualityDetails"
       >
@@ -979,8 +1010,7 @@ const handleReconnect = () => {
       <!-- Debug Info Panel -->
       <div
         v-if="showConnectionStatus && !isFullscreen"
-        :class="phoneBelowTopRowClass"
-        class="fixed right-7 z-50 space-y-1 rounded-lg border border-harbor-line bg-harbor-hover p-3 text-xs text-harbor-ink shadow-lg sm:right-9 sm:top-[calc(84px+2.5rem+var(--meeting-control-size))]"
+        class="fixed right-7 top-[var(--call-area-top)] z-50 space-y-1 rounded-lg border border-harbor-line bg-harbor-hover p-3 text-xs text-harbor-ink shadow-lg sm:right-9"
       >
         <div class="flex items-center gap-2">
           <span class="text-harbor-icon">{{ t('meeting.state') }}</span>
@@ -1057,7 +1087,6 @@ const handleReconnect = () => {
             :participant-statuses="participantStatuses"
             :participant-avatars="participantAvatars"
             :view-mode="viewMode"
-            :phone-top-bar="hasPhoneTopBar"
             :fullscreen="isFullscreen"
             :controls-shown="areFullscreenControlsShown"
             @toggle-pin="handleTogglePin"
@@ -1066,7 +1095,30 @@ const handleReconnect = () => {
         </MeetingActionMenu>
 
         <Transition name="meeting-controls">
+          <CallPhoneControls
+            v-if="usesPhoneChrome"
+            v-show="showsControls"
+            :audio-available="audioAvailable"
+            :video-available="videoAvailable"
+            :is-muted="isMuted"
+            :is-video-off="isVideoOff"
+            :can-present="screenShare.isSupported"
+            :participants="meetingParticipants"
+            :pinned-participant-id="pinnedParticipantId"
+            :view-mode="shownViewMode"
+            :show-connection-status="showConnectionStatus"
+            @toggle-mute="handleToggleMute"
+            @toggle-video="handleToggleVideo"
+            @end-call="handleEndCall"
+            @media-changed="refreshMediaAvailability"
+            @start-screen-share="handleStartScreenShare"
+            @stop-screen-share="screenShare.stop()"
+            @set-view-mode="handleSetViewMode"
+            @toggle-pin="handleTogglePin"
+            @toggle-stats="handleToggleStats"
+          />
           <MeetingControls
+            v-else
             v-show="showsControls"
             :dark="isFullscreen"
             :audio-available="audioAvailable"

@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n';
 import ChatThread from '@/components/dashboard-page/chat/ChatThread.vue';
 import { RoundButton } from '@/components/ui/round-button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { swallowNextClick } from '@/lib/swallow-next-click';
 import {
   type SystemNotificationPermission,
   getSystemNotificationPermission,
@@ -39,6 +40,36 @@ const notificationPermission = ref<SystemNotificationPermission>(getSystemNotifi
 const isDesktop = useMediaQuery('(min-width: 640px)');
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const sheetSide = computed<'bottom' | 'right'>(() => (isDesktop.value ? 'right' : 'bottom'));
+// On phones the chat opens at half height, so the video stays visible above it, and expands to full height.
+const isExpanded = ref(false);
+const sheetSize = computed(() => (isDesktop.value ? 'side' : isExpanded.value ? 'full' : 'half'));
+const sheetSizeClass = computed(
+  () =>
+    ({
+      side: 'h-[75vh]',
+      half: 'h-[50dvh]',
+      full: 'h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)]',
+    })[sheetSize.value],
+);
+/** A swipe on the handle this long expands (up) or shrinks (down) the sheet. */
+const HANDLE_SWIPE_PX = 30;
+let handleSwipeStartY: number | null = null;
+
+function onHandlePointerDown(event: PointerEvent) {
+  handleSwipeStartY = event.clientY;
+}
+
+function onHandlePointerUp(event: PointerEvent) {
+  if (handleSwipeStartY === null) return;
+  const lift = handleSwipeStartY - event.clientY;
+  handleSwipeStartY = null;
+  if (Math.abs(lift) < HANDLE_SWIPE_PX) return;
+  // The swipe ends in a click on the handle, which would toggle the size straight back.
+  swallowNextClick();
+  if (lift > 0) isExpanded.value = true;
+  else if (isExpanded.value) isExpanded.value = false;
+  else emit('update:open', false);
+}
 // Messages already in the room when the chat opens appear at once; later ones animate in.
 const animateAfterId = ref(0);
 
@@ -126,7 +157,10 @@ watch(
 watch(
   () => props.open,
   async (isOpen) => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      isExpanded.value = false;
+      return;
+    }
     animateAfterId.value = latestId();
     await nextTick();
     thread.value?.scrollToBottom('auto');
@@ -142,10 +176,25 @@ watch(
       data-dismiss-guard
       :side="sheetSide"
       :show-overlay="false"
-      class="harbor-chat-panel marketing-font top-auto flex h-[75vh] w-full flex-col gap-0 overflow-hidden rounded-[1.5rem] border-0 bg-white p-0 text-harbor-ink shadow-harbor-float data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"
+      :data-chat-size="sheetSize"
+      :class="sheetSizeClass"
+      class="harbor-chat-panel marketing-font top-auto flex w-full flex-col transition-[height] duration-300 gap-0 overflow-hidden rounded-[1.5rem] border-0 bg-white p-0 text-harbor-ink shadow-harbor-float data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"
       @interact-outside="handleInteractOutside"
       @close-auto-focus="restoreChatTriggerFocus"
     >
+      <button
+        v-if="sheetSize !== 'side'"
+        type="button"
+        class="flex h-5 w-full shrink-0 touch-none items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-subtle"
+        :aria-label="t(isExpanded ? 'meeting.chat.shrink' : 'meeting.chat.expand')"
+        :aria-expanded="isExpanded"
+        data-chat-expand
+        @pointerdown="onHandlePointerDown"
+        @pointerup="onHandlePointerUp"
+        @click="isExpanded = !isExpanded"
+      >
+        <span aria-hidden="true" class="h-1 w-9 rounded-full bg-harbor-line" />
+      </button>
       <SheetHeader class="min-h-16 flex-row items-center gap-3 space-y-0 border-b border-harbor-line py-3 pl-4 pr-14">
         <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-harbor-avatar text-harbor-icon">
           <MessageCircleMore class="size-5" />
