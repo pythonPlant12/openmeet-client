@@ -20,9 +20,11 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
 import { useAuth } from '@/composables/useAuth';
+import { useAutoHideControls } from '@/composables/useAutoHideControls';
 import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useCallFormFactor } from '@/composables/useCallFormFactor';
 import { useCallLayoutState } from '@/composables/useCallLayoutState';
+import { useConnectionHaptics } from '@/composables/useConnectionHaptics';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
@@ -83,6 +85,7 @@ const {
 } = useWebrtc();
 
 const { activeSpeakerId, resumeAudioAnalysis } = useActiveSpeaker(participantsArray);
+useConnectionHaptics(isReconnecting, connectionState);
 const screenShare = useScreenShare();
 // Screen shares join as their own participants. Your own share is shown from the local capture, since the
 // SFU never sends it back, and every share is labeled with its presenter's name.
@@ -581,7 +584,6 @@ onUnmounted(() => {
   window.removeEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   window.removeEventListener('pagehide', handlePageHide);
   window.removeEventListener('keydown', handleFullscreenKeydown);
-  window.clearTimeout(fullscreenControlsTimer);
   if (isFullscreen.value) setFullscreen(false);
   document.documentElement.classList.remove('meeting-immersive');
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: false }));
@@ -731,23 +733,30 @@ const handleToggleChat = () => {
 };
 
 // Full screen works in grid and speaker view alike: only the media shows, on a near-black background. The navbar,
-// top row, and controls hide; the controls come back with a swipe up on phones, or the mouse at the bottom edge.
+// top bar, and controls hide; they come back on mouse movement and hide again after 3 s without it, or with a
+// swipe up on touch screens. On desktop it also takes the whole display.
 const FULLSCREEN_SWIPE_PX = 40;
-const FULLSCREEN_CONTROLS_EDGE_PX = 140;
-const FULLSCREEN_CONTROLS_HIDE_MS = 2500;
 const isFullscreen = ref(false);
-const areFullscreenControlsShown = ref(false);
-const showsControls = computed(() => !isFullscreen.value || areFullscreenControlsShown.value);
+const fullscreenControls = useAutoHideControls(isFullscreen);
+const showsControls = fullscreenControls.shown;
 let swipeStart: { x: number; y: number } | null = null;
-let fullscreenControlsTimer: number | undefined;
 
 function setFullscreen(fullscreen: boolean) {
   isFullscreen.value = fullscreen;
-  areFullscreenControlsShown.value = false;
-  window.clearTimeout(fullscreenControlsTimer);
+  if (usesPhoneChrome.value) return;
+  if (fullscreen && !document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.().catch(() => undefined);
+  } else if (!fullscreen && document.fullscreenElement) {
+    document.exitFullscreen().catch(() => undefined);
+  }
 }
 
 const handleToggleFullscreen = () => setFullscreen(!isFullscreen.value);
+
+// Leaving the display's full screen from the browser (Escape, or its own control) leaves the call's full screen too.
+useEventListener(document, 'fullscreenchange', () => {
+  if (!document.fullscreenElement && isFullscreen.value) isFullscreen.value = false;
+});
 
 watch(
   usesPhoneChrome,
@@ -775,32 +784,9 @@ function handleFullscreenTouchEnd(event: TouchEvent) {
   const dy = touch.clientY - swipeStart.y;
   swipeStart = null;
   if (Math.abs(dy) < FULLSCREEN_SWIPE_PX || Math.abs(dy) < Math.abs(dx)) return;
-  areFullscreenControlsShown.value = dy < 0;
+  if (dy < 0) fullscreenControls.show(false);
+  else fullscreenControls.hide();
 }
-
-// The controls stay while the mouse is near the bottom edge or over a menu, and hide a moment after it leaves.
-// Menus open in portals outside the page, so the document listens rather than the page.
-function scheduleFullscreenControlsHide() {
-  window.clearTimeout(fullscreenControlsTimer);
-  fullscreenControlsTimer = window.setTimeout(() => {
-    if (document.querySelector('[role="menu"]')) scheduleFullscreenControlsHide();
-    else areFullscreenControlsShown.value = false;
-  }, FULLSCREEN_CONTROLS_HIDE_MS);
-}
-
-function handleFullscreenPointerMove(event: PointerEvent) {
-  if (!isFullscreen.value || event.pointerType !== 'mouse') return;
-  const nearBottom = window.innerHeight - event.clientY <= FULLSCREEN_CONTROLS_EDGE_PX;
-  const overMenu = event.target instanceof Element && !!event.target.closest('[role="menu"]');
-  if (nearBottom || overMenu) {
-    areFullscreenControlsShown.value = true;
-    window.clearTimeout(fullscreenControlsTimer);
-  } else if (areFullscreenControlsShown.value) {
-    scheduleFullscreenControlsHide();
-  }
-}
-
-useEventListener(document, 'pointermove', handleFullscreenPointerMove, { passive: true });
 
 // Escape first closes an open menu, chat, or dialog; only with none open does it leave full screen.
 function handleFullscreenKeydown(event: KeyboardEvent) {
@@ -915,33 +901,8 @@ const handleReconnect = () => {
         <span class="font-semibold">{{ participantCount }}</span>
       </div>
 
-      <div
-        v-if="!isFullscreen && !usesPhoneChrome"
-        class="fixed top-[calc(84px+1.25rem)] z-[60] transition-[right]"
-        :class="isChatOpen ? 'right-16' : 'right-9'"
-      >
-        <MeetingActionMenu
-          :audio-available="audioAvailable"
-          :is-chat-open="isChatOpen"
-          :is-muted="isMuted"
-          :is-video-off="isVideoOff"
-          :participants="meetingParticipants"
-          :pinned-participant-id="pinnedParticipantId"
-          :video-available="videoAvailable"
-          :view-mode="shownViewMode"
-          :fullscreen="isFullscreen"
-          @disconnect="handleEndCall"
-          @toggle-fullscreen="handleToggleFullscreen"
-          @set-view-mode="handleSetViewMode"
-          @toggle-chat="handleToggleChat"
-          @toggle-mute="handleToggleMute"
-          @toggle-pin="handleTogglePin"
-          @toggle-video="handleToggleVideo"
-        />
-      </div>
-
       <!-- Motion animates `transform`, which would replace a translate-based centering, so a full-width row centers it.
-           Phones place it below the participants and menu buttons, which share the top row there. -->
+           Phones place it below the top bar. -->
       <div
         v-if="!isFullscreen"
         class="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
@@ -1063,22 +1024,10 @@ const handleReconnect = () => {
       <div v-else class="flex-1 flex flex-col">
         <MeetingActionMenu
           context
-          :audio-available="audioAvailable"
-          :is-chat-open="isChatOpen"
-          :is-muted="isMuted"
-          :is-video-off="isVideoOff"
           :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
-          :video-available="videoAvailable"
           :view-mode="shownViewMode"
-          :fullscreen="isFullscreen"
-          @disconnect="handleEndCall"
-          @toggle-fullscreen="handleToggleFullscreen"
           @set-view-mode="handleSetViewMode"
-          @toggle-chat="handleToggleChat"
-          @toggle-mute="handleToggleMute"
-          @toggle-pin="handleTogglePin"
-          @toggle-video="handleToggleVideo"
         >
           <VideoGrid
             :active-speaker-id="activeSpeakerId"
@@ -1088,7 +1037,7 @@ const handleReconnect = () => {
             :participant-avatars="participantAvatars"
             :view-mode="viewMode"
             :fullscreen="isFullscreen"
-            :controls-shown="areFullscreenControlsShown"
+            :controls-shown="isFullscreen && showsControls"
             @toggle-pin="handleTogglePin"
             @toggle-fullscreen="handleToggleFullscreen"
           />
@@ -1131,6 +1080,15 @@ const handleReconnect = () => {
             :video-available="videoAvailable"
             :invite-mode="inviteMode"
             :can-present="screenShare.isSupported"
+            :can-select-area="screenShare.canSelectArea"
+            :is-presenting="!!screenShare.session.value"
+            :participants="meetingParticipants"
+            :pinned-participant-id="pinnedParticipantId"
+            :view-mode="shownViewMode"
+            :fullscreen="isFullscreen"
+            @toggle-fullscreen="handleToggleFullscreen"
+            @set-view-mode="handleSetViewMode"
+            @toggle-pin="handleTogglePin"
             @start-screen-share="handleStartScreenShare"
             @stop-screen-share="screenShare.stop()"
             @toggle-mute="handleToggleMute"

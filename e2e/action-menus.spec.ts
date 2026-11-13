@@ -52,22 +52,28 @@ test.describe('action menus', () => {
     await expect(page.getByRole('menu').getByText('Start a meeting')).toBeVisible();
   });
 
-  test('meeting menu stays synchronized with media, chat, layout, and context actions', async ({ page }) => {
+  test('meeting ⋮ menu holds the rarer actions next to the bar, and the tile area opens the layout menu', async ({
+    page,
+  }) => {
     await page.goto(`/room/action-menu-${Date.now()}`);
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
     await page.getByLabel('Your Name').fill('Action Tester');
     await page.getByRole('button', { name: 'Join Meeting' }).click();
     await expect(page.getByTestId('participant-tile')).toHaveCount(1, { timeout: 20_000 });
 
-    await page.getByRole('button', { name: 'Open meeting actions' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Open chat' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Mute microphone' })).toBeVisible();
-    await page.getByRole('menuitem', { name: 'Mute microphone' }).click();
+    // Mic, camera and chat live in the bar; the ⋮ menu holds the rarer actions.
+    await page.locator('[data-media-control="audio"] [data-media-toggle]').click();
     await expect(page.getByRole('button', { name: 'Unmute microphone' })).toBeVisible();
+    await page.locator('[data-chat-trigger]').click();
+    await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
-    await page.getByRole('menuitem', { name: 'Open chat' }).click();
-    await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
+    for (const name of ['Invite', 'Participants (1)', 'Developer tools', 'Report a bug']) {
+      await expect(page.getByRole('menu').getByText(name, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole('menuitem', { name: 'Open chat' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
     await page.getByRole('menuitemradio', { name: 'Speaker view' }).click();
@@ -77,7 +83,7 @@ test.describe('action menus', () => {
     await page.getByTestId('meeting-video-canvas').click({ button: 'right', position: { x: 20, y: 20 } });
     await expect(page.getByRole('menuitemradio', { name: 'Grid view' })).toBeVisible();
     await expect(page.getByRole('menuitemradio', { name: 'Speaker view' })).toHaveAttribute('aria-checked', 'true');
-    await expect(page.getByRole('menuitem', { name: 'Close chat' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Report a bug' })).toHaveCount(0);
     await page.getByRole('menuitemradio', { name: 'Grid view' }).click();
     await expect(page.getByTestId('meeting-video-canvas')).toHaveAttribute('data-view-mode', 'grid');
 
