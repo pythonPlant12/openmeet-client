@@ -30,6 +30,9 @@ const previewStream = shallowRef<MediaStream | null>(null);
 const isLoading = ref(false);
 let ownedTrack: MediaStreamTrack | null = null;
 let request = 0;
+// The camera the preview is still opening, so a quick confirm waits for it instead of sending nothing.
+let loading: Promise<void> = Promise.resolve();
+let confirming = false;
 
 const deviceOptions = (devices: MediaDeviceInfo[], fallback: string) =>
   devices.map((device, index) => ({ value: device.deviceId, label: device.label || `${fallback} ${index + 1}` }));
@@ -82,8 +85,15 @@ async function showPreview() {
   }
 }
 
+function load(task: () => Promise<void>) {
+  loading = task();
+  return loading;
+}
+
 async function selectCamera(deviceId: string) {
-  if (await camera.changeDevice(deviceId)) await showPreview();
+  await load(async () => {
+    if (await camera.changeDevice(deviceId)) await showPreview();
+  });
 }
 
 function close() {
@@ -96,8 +106,11 @@ function onOpenChange(isOpen: boolean) {
   if (!isOpen) close();
 }
 
-function confirm() {
+async function confirm() {
+  if (confirming) return;
+  confirming = true;
   saveCallSettings({ cameraPreviewSeen: true });
+  if (!props.cameraOn && !ownedTrack) await loading;
   const track = props.cameraOn ? null : ownedTrack;
   // The call owns the previewed track from here on.
   ownedTrack = null;
@@ -116,8 +129,10 @@ watch(
   open,
   async (isOpen) => {
     if (!isOpen) return;
-    await Promise.all([microphone.refresh(), camera.refresh()]);
-    if (open.value) await showPreview();
+    await load(async () => {
+      await Promise.all([microphone.refresh(), camera.refresh()]);
+      if (open.value) await showPreview();
+    });
   },
   { immediate: true },
 );
