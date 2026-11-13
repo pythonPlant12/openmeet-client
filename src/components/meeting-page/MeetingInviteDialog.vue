@@ -156,7 +156,7 @@ watch(policy, (current) => {
   <Dialog v-model:open="open">
     <HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-1.5rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.5rem] border-harbor-line bg-harbor-surface p-4 text-harbor-ink sm:rounded-[1.75rem] sm:p-6"
+      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       data-meeting-invite
     >
       <DialogHeader>

@@ -83,7 +83,7 @@ const handleJoin = () => {
   <Dialog :open="open" :modal="false">
     <DialogContent
       overlay-class="pointer-events-none bg-white/55 backdrop-blur-[2px]"
-      class="marketing-font fixed left-1/2 top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border-transparent bg-white text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.14)] sm:max-w-md"
+      class="marketing-font fixed left-1/2 top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.75rem] border-transparent bg-white p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.14)] sm:max-w-md"
     >
       <DialogHeader>
         <DialogTitle class="flex items-center justify-center sm:justify-start gap-2">
@@ -96,7 +96,7 @@ const handleJoin = () => {
         </DialogDescription>
       </DialogHeader>
 
-      <div class="space-y-4 py-4">
+      <div class="space-y-4">
         <div v-if="access?.requiresPassword" class="space-y-1.5" data-meeting-password>
           <Label for="meeting-password" class="flex items-center gap-1.5">
             <Lock class="size-3.5 text-harbor-accent" />{{ t('meeting.join.passwordLabel') }}
@@ -137,24 +137,12 @@ const handleJoin = () => {
         </div>
       </div>
 
-      <DialogFooter class="flex-col gap-3 sm:flex-row sm:justify-end">
-        <div class="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:justify-end">
-          <Button
-            variant="outline"
-            class="meeting-setting-action meeting-setting-on w-full rounded-full border-transparent bg-harbor-hover px-5 text-harbor-ink sm:w-auto"
-            @click="emit('cancel')"
-          >
-            {{ t('common.cancel') }}
-          </Button>
-          <Button
-            class="meeting-primary-action w-full rounded-full bg-harbor-accent px-5 text-white shadow-harbor-soft sm:w-auto"
-            :disabled="!canJoin"
-            @click="handleJoin"
-          >
-            <LoadingRipple v-if="joining" size="sm" />
-            <template v-else>{{ t('meeting.join.title') }}</template>
-          </Button>
-        </div>
+      <DialogFooter>
+        <Button type="button" variant="pill" size="pill" @click="emit('cancel')">{{ t('common.cancel') }}</Button>
+        <Button type="button" variant="accent" size="pill" :disabled="!canJoin" @click="handleJoin">
+          <LoadingRipple v-if="joining" size="sm" />
+          <template v-else>{{ t('meeting.join.title') }}</template>
+        </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

@@ -40,7 +40,7 @@ const emit = defineEmits<{
   <Dialog :open="open" @update:open="emit('update:open', $event)"
     ><HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       ><DialogHeader
         ><DialogTitle>Join group</DialogTitle
         ><DialogDescription class="text-harbor-muted"
@@ -115,17 +115,13 @@ const emit = defineEmits<{
                 @update:model-value="emit('update:password', $event)"
               /></div></motion.section></AnimatePresence
         ><DialogFooter
-          ><Button
-            type="button"
-            variant="outline"
-            class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-            :disabled="joining"
-            @click="emit('update:open', false)"
+          ><Button type="button" variant="pill" size="pill" :disabled="joining" @click="emit('update:open', false)"
             >Cancel</Button
           ><Button
             v-if="preview"
             type="submit"
-            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
+            variant="accent"
+            size="pill"
             :disabled="joining || (!preview.canJoin && !preview.isMember)"
             >{{ joining ? 'Joining...' : preview.isMember ? 'Open group' : 'Join group' }}</Button
           ></DialogFooter

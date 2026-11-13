@@ -25,6 +25,7 @@ import FriendshipChangeDialog, {
   type PendingFriendshipChange,
 } from '@/components/dashboard-page/groups/FriendshipChangeDialog.vue';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
 import {
   Dialog,
@@ -124,10 +125,8 @@ const selectedMemberIds = ref<string[]>([]);
 const isSelectionMode = ref(false);
 const isRemovingMembers = ref(false);
 const isQuitOpen = ref(false);
-const quitConfirmation = ref('');
 const isLeaving = ref(false);
 const isDeleteOpen = ref(false);
-const deleteConfirmation = ref('');
 const isDeleting = ref(false);
 const copiedGroupId = ref(false);
 let searchRequest = 0;
@@ -141,6 +140,7 @@ const sortedMembers = computed(() => sortGroupMembers(props.members));
 const currentRole = computed(() => props.info?.role ?? props.group.role);
 const canManage = computed(() => currentRole.value === 'creator' || currentRole.value === 'admin');
 const isCreator = computed(() => currentRole.value === 'creator');
+const groupTitle = computed(() => props.info?.title ?? props.group.title ?? 'this group');
 // The owner can leave once someone else can take the group over; alone, they remove it instead.
 const canQuit = computed(() => !isCreator.value || (props.info?.memberCount ?? 0) > 1);
 const groupPolicy = computed(() => props.info?.accessPolicy ?? props.group.accessPolicy);
@@ -210,7 +210,6 @@ function setQuitOpen(open: boolean, force = false) {
   if (open && props.mutationBusy) return;
   isQuitOpen.value = open;
   if (open) quitDialogSession += 1;
-  if (!open) quitConfirmation.value = '';
 }
 
 function setDeleteOpen(open: boolean, force = false) {
@@ -218,7 +217,6 @@ function setDeleteOpen(open: boolean, force = false) {
   if (open && props.mutationBusy) return;
   isDeleteOpen.value = open;
   if (open) deleteDialogSession += 1;
-  if (!open) deleteConfirmation.value = '';
 }
 
 watch(memberSearch, (query, _, onCleanup) => {
@@ -535,7 +533,7 @@ async function updateMemberRole(member: GroupMember, role: GroupMemberRole) {
 }
 
 async function leaveGroup() {
-  if (quitConfirmation.value.toLocaleLowerCase() !== 'quit' || isLeaving.value || !canQuit.value) return;
+  if (isLeaving.value || !canQuit.value) return;
   const groupId = props.group.id;
   const mutationToken = props.beginMutation(groupId);
   if (!mutationToken) return;
@@ -555,7 +553,7 @@ async function leaveGroup() {
 }
 
 async function deleteGroup() {
-  if (deleteConfirmation.value.toLocaleLowerCase() !== 'delete' || isDeleting.value || !canManage.value) return;
+  if (isDeleting.value || !canManage.value) return;
   const groupId = props.group.id;
   const mutationToken = props.beginMutation(groupId);
   if (!mutationToken) return;
@@ -862,7 +860,7 @@ defineExpose({
 
   <Dialog :open="isSettingsOpen" @update:open="setSettingsOpen">
     <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
@@ -942,18 +940,10 @@ defineExpose({
               class="mt-2 h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0" /></motion.div
         ></AnimatePresence>
         <DialogFooter
-          ><Button
-            type="button"
-            variant="outline"
-            class="rounded-full border-harbor-line bg-white"
-            @click="setSettingsOpen(false)"
-            >Cancel</Button
-          ><Button
-            type="submit"
-            class="harbor-primary-action rounded-full bg-harbor-accent text-white"
-            :disabled="isSavingSettings || !settingsTitle.trim()"
-            >{{ isSavingSettings ? 'Saving...' : 'Save settings' }}</Button
-          ></DialogFooter
+          ><Button type="button" variant="pill" size="pill" @click="setSettingsOpen(false)">Cancel</Button
+          ><Button type="submit" variant="accent" size="pill" :disabled="isSavingSettings || !settingsTitle.trim()">{{
+            isSavingSettings ? 'Saving...' : 'Save settings'
+          }}</Button></DialogFooter
         >
       </motion.form>
     </HarborDialogContent>
@@ -961,7 +951,7 @@ defineExpose({
 
   <Dialog :open="isAddMembersOpen" @update:open="setAddMembersOpen">
     <HarborDialogContent
-      class="marketing-font flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink sm:w-full"
+      class="marketing-font flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
@@ -1047,10 +1037,10 @@ defineExpose({
         >
       </div>
       <DialogFooter
-        ><Button variant="outline" class="rounded-full border-harbor-line bg-white" @click="setAddMembersOpen(false)"
-          >Cancel</Button
+        ><Button variant="pill" size="pill" @click="setAddMembersOpen(false)">Cancel</Button
         ><Button
-          class="harbor-primary-action rounded-full bg-harbor-accent mb-2 text-white"
+          variant="accent"
+          size="pill"
           :disabled="!selectedCandidateIds.length || isAddingMembers"
           @click="addSelectedMembers"
           >{{
@@ -1065,68 +1055,31 @@ defineExpose({
     </HarborDialogContent>
   </Dialog>
 
-  <Dialog :open="isQuitOpen" @update:open="setQuitOpen">
-    <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-danger/25 bg-harbor-surface p-5 text-harbor-ink sm:w-full"
-      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-    >
-      <DialogHeader
-        ><DialogTitle>Quit group?</DialogTitle
-        ><DialogDescription class="text-harbor-muted"
-          >Type <strong>quit</strong> to leave. Group messages will disappear from your workspace.<template
-            v-if="isCreator"
-          >
-            The group passes to its longest-standing admin, or to its longest-standing member.</template
-          ></DialogDescription
-        ></DialogHeader
-      >
-      <Input
-        v-model="quitConfirmation"
-        autocomplete="off"
-        placeholder="Type quit"
-        class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
-      />
-      <DialogFooter
-        ><Button variant="outline" class="rounded-full border-harbor-line bg-white" @click="setQuitOpen(false)"
-          >Cancel</Button
-        ><Button
-          class="rounded-full bg-harbor-danger text-white hover:bg-harbor-danger-strong"
-          :disabled="quitConfirmation.toLocaleLowerCase() !== 'quit' || isLeaving"
-          @click="leaveGroup"
-          >{{ isLeaving ? 'Quitting...' : 'Quit group' }}</Button
-        ></DialogFooter
-      >
-    </HarborDialogContent>
-  </Dialog>
-
-  <Dialog :open="isDeleteOpen" @update:open="setDeleteOpen">
-    <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-danger/25 bg-harbor-surface p-5 text-harbor-ink sm:w-full"
-      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-    >
-      <DialogHeader
-        ><DialogTitle>Delete group?</DialogTitle
-        ><DialogDescription class="text-harbor-muted"
-          >This cannot be undone. Type <strong>delete</strong> to continue.</DialogDescription
-        ></DialogHeader
-      >
-      <Input
-        v-model="deleteConfirmation"
-        autocomplete="off"
-        placeholder="Type delete"
-        class="h-11 rounded-xl border-harbor-line bg-white focus-visible:ring-0"
-      />
-      <DialogFooter
-        ><Button variant="outline" class="rounded-full border-harbor-line bg-white" @click="setDeleteOpen(false)"
-          >Cancel</Button
-        ><Button
-          class="rounded-full mb-2 bg-harbor-danger text-white hover:bg-harbor-danger-strong"
-          :disabled="deleteConfirmation.toLocaleLowerCase() !== 'delete' || isDeleting"
-          @click="deleteGroup"
-          >{{ isDeleting ? 'Deleting...' : 'Delete group' }}</Button
-        ></DialogFooter
-      >
-    </HarborDialogContent>
-  </Dialog>
+  <ConfirmDialog
+    :open="isQuitOpen"
+    :icon="LogOut"
+    :title="`Quit ${groupTitle}?`"
+    :description="
+      isCreator
+        ? 'You\'ll stop receiving its messages. The group passes to its longest-standing admin or member.'
+        : 'You\'ll stop receiving its messages.'
+    "
+    action-label="Quit group"
+    busy-label="Quitting..."
+    :busy="isLeaving"
+    @update:open="setQuitOpen"
+    @confirm="leaveGroup"
+  />
+  <ConfirmDialog
+    :open="isDeleteOpen"
+    :icon="Trash2"
+    :title="`Delete ${groupTitle}?`"
+    description="Its messages are deleted for everyone. This can't be undone."
+    action-label="Delete group"
+    busy-label="Deleting..."
+    :busy="isDeleting"
+    @update:open="setDeleteOpen"
+    @confirm="deleteGroup"
+  />
   <FriendshipChangeDialog v-model:pending="pendingFriendChange" :change-friendship="changeFriendship" />
 </template>

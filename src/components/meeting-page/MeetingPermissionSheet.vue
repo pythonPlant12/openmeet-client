@@ -16,6 +16,7 @@ const isNative = canOpenSystemSettings();
   <Sheet v-model:open="open">
     <SheetContent
       side="bottom"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
       class="marketing-font rounded-t-[1.5rem] border-0 bg-white pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-harbor-ink shadow-harbor-float sm:inset-x-auto sm:bottom-6 sm:left-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:rounded-[1.5rem]"
       data-permission-sheet
     >
@@ -27,20 +28,11 @@ const isNative = canOpenSystemSettings();
           {{ t(isNative ? 'meeting.permission.nativeHint' : 'meeting.permission.browserHint') }}
         </SheetDescription>
       </SheetHeader>
-      <div class="mt-5 flex justify-end gap-2">
-        <Button
-          variant="ghost"
-          class="harbor-ghost-action rounded-full px-5 text-harbor-ink"
-          @click="open = false"
-        >
+      <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="pill" size="pill" @click="open = false">
           {{ t('meeting.permission.close') }}
         </Button>
-        <Button
-          v-if="isNative"
-          class="harbor-primary-action rounded-full bg-harbor-accent px-5 text-white"
-          data-open-settings
-          @click="openSystemSettings"
-        >
+        <Button v-if="isNative" type="button" variant="accent" size="pill" data-open-settings @click="openSystemSettings">
           {{ t('meeting.permission.openSettings') }}
         </Button>
       </div>

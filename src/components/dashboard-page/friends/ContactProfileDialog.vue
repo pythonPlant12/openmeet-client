@@ -16,15 +16,8 @@ import {
 import { ref } from 'vue';
 
 import SharedMediaPanel from '@/components/dashboard-page/shared-media/SharedMediaPanel.vue';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  HarborDialogContent,
-} from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Dialog, DialogDescription, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -359,31 +352,15 @@ async function copyNickname(nickname: string) {
         class="max-h-[78dvh] max-w-[min(88dvw,42rem)] rounded-[28%] object-contain shadow-[0_24px_70px_rgba(16,47,53,0.35)]"
       />
     </HarborDialogContent> </Dialog
-  ><Dialog :open="confirmationOpen" @update:open="emit('update:confirmationOpen', $event)"
-    ><HarborDialogContent
-      overlay-class="!z-[1050] bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font !z-[1050] w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-danger/25 bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full sm:p-6"
-      ><DialogHeader
-        ><DialogTitle>Remove friend?</DialogTitle
-        ><DialogDescription class="text-harbor-muted"
-          >Remove {{ profileFriend?.name }} from your friends? You can send another request later.</DialogDescription
-        ></DialogHeader
-      ><DialogFooter class="gap-2"
-        ><Button
-          variant="outline"
-          class="rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-          :disabled="removingId !== null"
-          @click="emit('update:confirmationOpen', false)"
-          >Cancel</Button
-        ><Button
-          class="rounded-full bg-harbor-danger text-white hover:bg-harbor-danger-strong"
-          :disabled="!profileFriend || removingId !== null"
-          @click="emit('remove')"
-          ><LoadingRipple v-if="removingId === profileFriend?.id" size="sm" /><UserMinus v-else class="size-4" />{{
-            removingId ? 'Removing...' : 'Remove friend'
-          }}</Button
-        ></DialogFooter
-      ></HarborDialogContent
-    ></Dialog
-  >
+  ><ConfirmDialog
+    :open="confirmationOpen"
+    :icon="UserMinus"
+    :title="`Remove ${profileFriend?.name ?? 'friend'}?`"
+    description="They leave your friends. You can send another request later."
+    action-label="Remove friend"
+    busy-label="Removing..."
+    :busy="removingId !== null"
+    @update:open="emit('update:confirmationOpen', $event)"
+    @confirm="emit('remove')"
+  />
 </template>

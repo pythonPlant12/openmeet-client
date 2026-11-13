@@ -121,7 +121,7 @@ onBeforeUnmount(stopLevelMeter);
 <template>
   <div class="group relative flex items-center" :data-media-control="kind">
     <Button
-      :variant="off ? 'destructive' : 'secondary'"
+      variant="secondary"
       size="icon"
       class="meeting-control relative size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
       :class="{ 'meeting-control-muted meeting-control-alert': off }"

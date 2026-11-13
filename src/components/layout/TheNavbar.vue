@@ -843,8 +843,8 @@ watch(mobileAccountActionsRef, (element, previous) => {
           <div data-mobile-account-sheet-footer class="space-y-2 border-t border-harbor-line pt-4">
             <Button
               type="button"
-              :variant="isMeetingPage ? 'pill-danger' : 'default'"
-              :class="['min-h-11 w-full', !isMeetingPage && 'liquid-glass-primary rounded-full']"
+              :variant="isMeetingPage ? 'danger' : 'accent'"
+              class="min-h-11 w-full"
               :disabled="isAuthBusy"
               @click="isMeetingPage ? handleQuitMeeting() : handleStartMeeting()"
             >
@@ -1355,7 +1355,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 >
                   <Button
                     type="button"
-                    variant="pill-danger"
+                    variant="danger"
                     class="min-h-11 w-full"
                     :disabled="isAuthBusy"
                     @click="handleQuitMeeting"
@@ -1370,7 +1370,8 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 >
                   <Button
                     type="button"
-                    class="liquid-glass-primary min-h-11 w-full rounded-full"
+                    variant="accent"
+                    class="min-h-11 w-full"
                     :disabled="isAuthBusy"
                     @click="handleStartMeeting"
                   >

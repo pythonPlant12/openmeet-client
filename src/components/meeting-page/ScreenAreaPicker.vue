@@ -4,7 +4,14 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogDescription, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  HarborDialogContent,
+} from '@/components/ui/dialog';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { MIN_AREA_FRACTION, type ScreenArea, normalizeArea } from '@/services/screen-crop';
 
@@ -131,7 +138,7 @@ function answer(choice: ScreenArea | 'whole' | null) {
   <Dialog :open="open" @update:open="(value) => !value && answer(null)"
     ><HarborDialogContent
       overlay-class="bg-harbor-ink/40 backdrop-blur-md"
-      class="marketing-font w-[calc(100%-2rem)] max-w-4xl rounded-[1.75rem] border-harbor-line bg-harbor-surface p-5 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.22)] sm:w-full sm:p-6"
+      class="marketing-font w-[calc(100%-2rem)] max-w-4xl rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.22)] sm:w-full"
       data-screen-area-picker
       ><DialogHeader>
         <DialogTitle>{{ t('meeting.screenShare.areaTitle') }}</DialogTitle>
@@ -193,20 +200,13 @@ function answer(choice: ScreenArea | 'whole' | null) {
           />
         </div>
       </div>
-      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          variant="outline"
-          class="harbor-ghost-action rounded-full border-harbor-line bg-white text-harbor-ink-soft"
-          data-share-whole-screen
-          @click="answer('whole')"
+      <DialogFooter>
+        <Button variant="pill" size="pill" data-share-whole-screen @click="answer('whole')"
           ><Monitor class="size-4" />{{ t('meeting.screenShare.shareWhole') }}</Button
-        ><Button
-          class="harbor-primary-action rounded-full bg-harbor-accent text-white"
-          data-share-area
-          @click="answer({ ...area })"
+        ><Button variant="accent" size="pill" data-share-area @click="answer({ ...area })"
           ><Crop class="size-4" />{{ t('meeting.screenShare.shareArea') }}</Button
         >
-      </div>
+      </DialogFooter>
     </HarborDialogContent></Dialog
   >
 </template>
