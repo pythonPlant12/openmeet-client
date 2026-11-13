@@ -410,11 +410,23 @@
       "inputLevel": "Microphone level",
       "camera": "Camera",
       "previewCamera": "Preview camera",
+      "allowMicrophone": "Allow the microphone",
+      "allowCamera": "Allow the camera",
       "quality": "Quality",
       "noMicrophones": "No microphones found",
       "noCameras": "No cameras found",
       "shareText": "Join my video call: {link}",
       "shareTitle": "Join my video call"
+    },
+    "permission": {
+      "microphoneTitle": "Allow the microphone",
+      "cameraTitle": "Allow the camera",
+      "browserHint": "Your browser blocks it for OpenMeet. Allow it in the site settings behind the icon next to the address, then tap the button again.",
+      "nativeHint": "OpenMeet is not allowed to use it. Allow it in the system settings, then tap the button again.",
+      "openSettings": "Open settings",
+      "close": "Got it",
+      "unavailableMicrophone": "No microphone is available",
+      "unavailableCamera": "No camera is available"
     },
     "tooltips": {
       "status": "Status",

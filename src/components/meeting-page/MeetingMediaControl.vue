@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GaugeAnimated } from '@respeak/lucide-motion-vue';
-import { ChevronUp, Mic, MicOff, ScanFace, Video, VideoOff } from 'lucide-vue-next';
+import { ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
 import { computed, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -31,6 +31,8 @@ const props = defineProps<{
   /** Muted microphone or camera turned off. */
   off: boolean;
   available: boolean;
+  /** The call could not get this medium, such as a refused permission; tapping asks again. */
+  warning?: boolean;
 }>();
 const emit = defineEmits<{
   (event: 'toggle'): void;
@@ -39,6 +41,8 @@ const emit = defineEmits<{
   (event: 'open-change', open: boolean): void;
   /** Preview camera was chosen in the camera menu. */
   (event: 'preview-camera'): void;
+  /** The warning was tapped: ask for the microphone or camera again. */
+  (event: 'request-access'): void;
 }>();
 const { t } = useI18n();
 const {
@@ -63,6 +67,7 @@ const {
 
 const isAudio = computed(() => props.kind === 'audio');
 const toggleLabel = computed(() => {
+  if (props.warning) return t(isAudio.value ? 'meeting.controls.allowMicrophone' : 'meeting.controls.allowCamera');
   if (!props.available)
     return t(isAudio.value ? 'meeting.actions.audioUnavailable' : 'meeting.actions.videoUnavailable');
   if (isAudio.value) return t(props.off ? 'meeting.controls.unmute' : 'meeting.controls.mute');
@@ -83,7 +88,8 @@ function deviceLabel(device: MediaDeviceInfo, index: number) {
 
 function onToggle() {
   playHaptic('light');
-  emit('toggle');
+  if (props.warning) emit('request-access');
+  else emit('toggle');
 }
 
 function onMenuOpen(open: boolean) {
@@ -117,9 +123,9 @@ onBeforeUnmount(stopLevelMeter);
     <Button
       :variant="off ? 'destructive' : 'secondary'"
       size="icon"
-      class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
+      class="meeting-control relative size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
       :class="{ 'meeting-control-muted meeting-control-alert': off }"
-      :disabled="!available"
+      :disabled="!available && !warning"
       :aria-label="toggleLabel"
       :data-media-off="off"
       data-media-toggle
@@ -127,6 +133,14 @@ onBeforeUnmount(stopLevelMeter);
     >
       <template v-if="isAudio"><MicOff v-if="off" class="h-5 w-5" /><Mic v-else class="h-5 w-5" /></template>
       <template v-else><VideoOff v-if="off" class="h-5 w-5" /><Video v-else class="h-5 w-5" /></template>
+      <span
+        v-if="warning"
+        aria-hidden="true"
+        class="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-harbor-danger text-white [&_svg]:!size-2.5"
+        data-media-warning
+      >
+        <TriangleAlert />
+      </span>
     </Button>
     <span aria-hidden="true" class="h-5 w-px shrink-0 bg-harbor-line" />
     <DropdownMenu @update:open="onMenuOpen">

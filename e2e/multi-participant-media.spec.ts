@@ -146,6 +146,35 @@ test.describe('multi-participant media', () => {
     }
   });
 
+  test('a participant who refuses mic and camera still hears and sees the other person', async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'listen-only-e2e', 'stun+turn', {
+      listenOnly: [1],
+    });
+    const [speaker, listener] = session.pages;
+
+    try {
+      await expect(speaker.getByTestId('participant-tile')).toHaveCount(twoParticipantCount, { timeout: 60_000 });
+      await expect(listener.getByTestId('participant-tile')).toHaveCount(twoParticipantCount, { timeout: 60_000 });
+      await waitForAllConnections(session.pages);
+      // The listener receives the other person's audio and video.
+      await waitForHtmlVideoPlayback([listener], twoParticipantCount);
+
+      // Both buttons warn; tapping one asks again and explains how to allow a permission that stays refused.
+      await expect(listener.locator('[data-media-warning]')).toHaveCount(2);
+      await listener.locator('[data-media-control="audio"] [data-media-toggle]').click();
+      await expect(listener.locator('[data-permission-sheet]')).toBeVisible();
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
   test('two participants exchange remote audio and video', async ({ browser, baseURL }) => {
     test.setTimeout(180_000);
 
@@ -492,7 +521,11 @@ async function joinParticipants(
   network: NetworkMode = 'stun+turn',
   // A known name (a signed-in person, or a guest who gave it before) enters with no dialog at all. Everyone
   // enters with mic and camera off, so most tests turn both on once they are in.
-  { knownName = false, turnOnMedia = true }: { knownName?: boolean; turnOnMedia?: boolean } = {},
+  {
+    knownName = false,
+    turnOnMedia = true,
+    listenOnly = [],
+  }: { knownName?: boolean; turnOnMedia?: boolean; listenOnly?: number[] } = {},
 ): Promise<ParticipantSession> {
   const roomUrl =
     process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
@@ -503,6 +536,17 @@ async function joinParticipants(
   for (let index = 0; index < count; index += 1) {
     const context = await browser.newContext({ permissions: ['camera', 'microphone'] });
     contexts.push(context);
+    // A participant who refuses the microphone and camera, the way a denied browser prompt rejects.
+    if (listenOnly.includes(index)) {
+      await context.addInitScript(() => {
+        navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('denied', 'NotAllowedError'));
+        const query = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (descriptor) =>
+          descriptor.name === ('camera' as PermissionName) || descriptor.name === ('microphone' as PermissionName)
+            ? Promise.resolve({ state: 'denied' } as PermissionStatus)
+            : query(descriptor);
+      });
+    }
     if (knownName) {
       await context.addInitScript((name: string) => sessionStorage.setItem('participantName', name), `User ${index + 1}`);
     }
@@ -552,7 +596,7 @@ async function joinParticipants(
     await page.goto(roomUrl, { waitUntil: 'domcontentloaded' });
     if (!knownName) await enterName(page, `User ${index + 1}`);
     await expect(page.getByTestId('participant-video').first()).toBeAttached({ timeout: 30_000 });
-    if (turnOnMedia) await turnOnMicAndCamera(page);
+    if (turnOnMedia && !listenOnly.includes(index)) await turnOnMicAndCamera(page);
   }
 
   return { contexts, pages, roomUrl, diagnostics };

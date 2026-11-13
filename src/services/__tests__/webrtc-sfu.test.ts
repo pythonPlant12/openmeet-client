@@ -3,13 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignalingService } from '../signaling';
 import { WebRTCServiceSFU } from '../webrtc-sfu';
 
-class FakeTrack {
+class FakeTrack extends EventTarget {
   enabled = true;
   readyState: MediaStreamTrackState = 'live';
   constructor(
     readonly kind: 'audio' | 'video',
     private deviceId: string,
-  ) {}
+  ) {
+    super();
+  }
   stop = vi.fn(() => {
     this.readyState = 'ended';
   });
@@ -331,5 +333,109 @@ describe('WebRTCServiceSFU input volume', () => {
 
     expect(service.getInputLevel()).toBeGreaterThan(0);
     expect(audioSender().track).toBe(microphone);
+  });
+});
+
+describe('WebRTCServiceSFU listen-only and lost media', () => {
+  let peerConnection: FakePeerConnection;
+  let getUserMedia: ReturnType<typeof vi.fn>;
+  let permissionState: PermissionState;
+
+  const denied = () => new DOMException('denied', 'NotAllowedError');
+  const missing = () => new DOMException('none', 'NotFoundError');
+
+  beforeEach(() => {
+    permissionState = 'prompt';
+    getUserMedia = vi.fn();
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia },
+      permissions: { query: vi.fn(async () => ({ state: permissionState })) },
+    });
+    vi.stubGlobal('MediaStream', FakeStream);
+    vi.stubGlobal(
+      'RTCPeerConnection',
+      vi.fn(function RTCPeerConnection() {
+        peerConnection = new FakePeerConnection();
+        return peerConnection;
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function startCall() {
+    const service = new WebRTCServiceSFU(signaling(), []);
+    await service.initializeMedia({ cameraOff: true });
+    service.createPeerConnection();
+    return service;
+  }
+
+  it('enters listen-only when permission is denied, still ready to send both later', async () => {
+    getUserMedia.mockRejectedValue(denied());
+
+    const service = await startCall();
+
+    expect(service.getLocalStream()!.getTracks()).toHaveLength(0);
+    expect(service.getMediaIssue('audio')).toBe('denied');
+    expect(service.getMediaIssue('video')).toBe('denied');
+    expect(service.hasCamera()).toBe(false);
+    expect(peerConnection.transceiverKinds).toEqual(['audio', 'video']);
+  });
+
+  it('keeps the microphone when there is no camera', async () => {
+    const microphone = new FakeTrack('audio', 'mic-1');
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (constraints.video) throw missing();
+      return new FakeStream([microphone]);
+    });
+
+    const service = await startCall();
+
+    expect(service.getLocalStream()!.getAudioTracks()).toEqual([microphone]);
+    expect(service.getMediaIssue('audio')).toBeNull();
+    expect(service.getMediaIssue('video')).toBe('unavailable');
+  });
+
+  it('asks again and sends the new microphone on the existing sender', async () => {
+    getUserMedia.mockRejectedValueOnce(denied());
+    const service = await startCall();
+    const microphone = new FakeTrack('audio', 'mic-1');
+    getUserMedia.mockResolvedValueOnce(new FakeStream([microphone]));
+
+    expect(await service.requestMedia('audio')).toBeNull();
+
+    expect(peerConnection.senders[0]!.track).toBe(microphone);
+    expect(service.getLocalStream()!.getAudioTracks()).toEqual([microphone]);
+    expect(service.getMediaIssue('audio')).toBeNull();
+    expect(peerConnection.createOffer).not.toHaveBeenCalled();
+  });
+
+  it('does not ask again once the permission is permanently denied', async () => {
+    getUserMedia.mockRejectedValue(denied());
+    const service = await startCall();
+    getUserMedia.mockClear();
+    permissionState = 'denied';
+
+    expect(await service.requestMedia('video')).toBe('denied');
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it('stops sending and reports a track that drops during the call', async () => {
+    const microphone = new FakeTrack('audio', 'mic-1');
+    getUserMedia.mockResolvedValue(new FakeStream([microphone, new FakeTrack('video', 'cam-1')]));
+    const service = await startCall();
+    const lost = vi.fn();
+    service.onLocalTrackLost = lost;
+
+    microphone.readyState = 'ended';
+    microphone.dispatchEvent(new Event('ended'));
+    await Promise.resolve();
+
+    expect(lost).toHaveBeenCalledWith('audio');
+    expect(service.getLocalStream()!.getAudioTracks()).toHaveLength(0);
+    expect(peerConnection.senders[0]!.replaceTrack).toHaveBeenCalledWith(null);
+    expect(service.getMediaIssue('audio')).toBe('unavailable');
   });
 });
