@@ -290,4 +290,34 @@ describe('SystemAlerts in the native app', () => {
     expect(ringtoneStart).toHaveBeenCalledOnce();
     alerts.stop();
   });
+
+  it('rings only in the app bar while the app is visible, even when its webview reports no focus', async () => {
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const ringtoneStart = vi.spyOn(Ringtone.prototype, 'start').mockImplementation(() => undefined);
+    const { alerts } = createAlerts();
+    await alerts.start();
+
+    alerts.show(callAlert);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(nativeNotifications.showNativeCallNotification).not.toHaveBeenCalled();
+    expect(ringtoneStart).toHaveBeenCalled();
+    alerts.stop();
+  });
+
+  it('swaps a call notification for the app bar when the app comes to the front', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    const ringtoneStart = vi.spyOn(Ringtone.prototype, 'start').mockImplementation(() => undefined);
+    const { alerts } = createAlerts();
+    await alerts.start();
+    alerts.show(callAlert);
+    await vi.waitFor(() => expect(nativeNotifications.showNativeCallNotification).toHaveBeenCalled());
+
+    visibility.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(nativeNotifications.dismissNativeCallNotification).toHaveBeenCalledWith('call-1', 'session');
+    expect(ringtoneStart).toHaveBeenCalled();
+    alerts.stop();
+  });
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { dismissToast, toast } from '@/components/ui/toast/store';
+import { dismissToast, keepOpenForToasts, toast } from '@/components/ui/toast/store';
 
 const sonner = vi.hoisted(() => {
   const toast = Object.assign(vi.fn(), {
@@ -57,5 +57,23 @@ describe('toast adapter', () => {
     dismissToast('toast-id');
 
     expect(sonner.toast.dismiss).toHaveBeenCalledWith('toast-id');
+  });
+
+  it('keeps a dialog open for a press on a notification, and only then', () => {
+    const toaster = document.createElement('section');
+    toaster.setAttribute('data-sonner-toaster', '');
+    const toastItem = document.createElement('li');
+    toaster.append(toastItem);
+    const outside = (target: Element) => {
+      const event = new CustomEvent('dismissableLayer.pointerDownOutside', {
+        cancelable: true,
+        detail: { originalEvent: { target } },
+      });
+      keepOpenForToasts(event);
+      return event.defaultPrevented;
+    };
+
+    expect(outside(toastItem)).toBe(true);
+    expect(outside(document.createElement('div'))).toBe(false);
   });
 });

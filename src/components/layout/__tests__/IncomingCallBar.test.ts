@@ -20,6 +20,9 @@ describe('IncomingCallBar', () => {
     expect(wrapper.get('[data-incoming-call]').text()).toContain('1 more');
 
     await wrapper.get('[data-incoming-accept]').trigger('click');
+    // Decline is the white disc with a red icon, not a red fill.
+    expect(wrapper.get('[data-incoming-decline]').attributes('data-tone')).toBe('destructive');
+    expect(wrapper.get('[data-incoming-decline]').classes()).not.toContain('liquid-glass-danger');
     await wrapper.get('[data-incoming-decline]').trigger('click');
     expect(wrapper.emitted('accept')).toHaveLength(1);
     expect(wrapper.emitted('decline')).toHaveLength(1);

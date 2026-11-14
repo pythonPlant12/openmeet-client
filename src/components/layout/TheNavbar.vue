@@ -123,7 +123,7 @@ const mobileNavBottomClass = computed(() =>
   isMeetingPage.value
     ? 'bottom-[calc(var(--meeting-control-size)+2.5rem)]'
     : showWorkspaceTabs.value
-      ? 'bottom-[calc(max(1rem,env(safe-area-inset-bottom))+var(--liquid-bar-height)+12px)]'
+      ? 'bottom-[calc(var(--liquid-bar-bottom)+var(--liquid-bar-height)+12px)]'
       : isDashboardPage.value
         ? 'bottom-4'
         : 'bottom-6',
@@ -747,7 +747,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
          above its backdrop, so the sheet sits on top of the bar instead of covering it. -->
     <div
       v-if="showWorkspaceTabs"
-      class="marketing-font pointer-events-none fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] flex justify-center px-4"
+      class="marketing-font pointer-events-none fixed inset-x-0 bottom-[var(--liquid-bar-bottom)] flex justify-center px-4"
       :class="mobileMenuOpen ? 'z-[60]' : 'z-40'"
     >
       <LiquidTabBar

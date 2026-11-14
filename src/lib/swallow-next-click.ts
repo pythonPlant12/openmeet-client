@@ -23,9 +23,10 @@ export function swallowNextClick(timeoutMs = 600) {
 
 // Open overlays that a press outside should only dismiss: menus, and panels marked with `data-dismiss-guard`.
 const OPEN_OVERLAYS = '[role="menu"], [data-dismiss-guard][data-state="open"]';
-// Presses here belong to an overlay, or toggle one, so their click must go through.
+// Presses here belong to an overlay, or toggle one, so their click must go through. Notifications float above
+// everything, so a press on one (a swipe to dismiss it) leaves open overlays alone.
 const OVERLAY_PARTS =
-  '[role="menu"], [role="dialog"], [data-dismiss-guard], [aria-haspopup][data-state="open"], [data-chat-trigger]';
+  '[role="menu"], [role="dialog"], [data-dismiss-guard], [aria-haspopup][data-state="open"], [data-chat-trigger], [data-sonner-toaster]';
 
 /**
  * Makes every press outside an open menu or guarded panel dismiss-only. Reka reports touch presses outside a

@@ -8,6 +8,7 @@ import { DialogClose, DialogContent, DialogOverlay, DialogPortal, useForwardProp
 import type { HTMLAttributes } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import { keepOpenForToasts } from '@/components/ui/toast/store';
 import { cn } from '@/lib/utils';
 
 interface SheetContentProps extends DialogContentProps {
@@ -43,7 +44,11 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
         )
       "
     />
-    <DialogContent :class="cn(sheetVariants({ side }), props.class)" v-bind="{ ...forwarded, ...$attrs }">
+    <DialogContent
+      :class="cn(sheetVariants({ side }), props.class)"
+      v-bind="{ ...forwarded, ...$attrs }"
+      @interact-outside="keepOpenForToasts"
+    >
       <slot />
 
       <DialogClose

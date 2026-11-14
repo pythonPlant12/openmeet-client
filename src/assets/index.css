@@ -255,6 +255,12 @@
   gap: 0.75rem;
 }
 
+/* A notification takes touches even while a dialog is open: the dialog turns off pointer events on the page, and
+   the notifications would inherit that, so they could not be swiped away. */
+.harbor-toaster [data-sonner-toast]:not([data-visible='false']) {
+  pointer-events: auto;
+}
+
 .harbor-toaster [data-sonner-toast] [data-title] {
   color: rgb(var(--harbor-ink));
   font-size: 0.9375rem;
@@ -393,6 +399,9 @@
   /* Whole bars: the tabs plus the bar's padding on both sides. */
   --liquid-bar-height: calc(var(--ui-tab-size) + 12px);
   --liquid-bar-height-sm: calc(var(--ui-tab-size-sm) + 8px);
+  /* The phone tab bar's gap to the screen bottom: 1rem, or a little inside the home indicator area where the page
+     covers it (the OpenMeet app), so the bar sits close to the edge. */
+  --liquid-bar-bottom: max(1rem, calc(env(safe-area-inset-bottom) - 0.5rem));
   /* Meeting controls and the meeting's top row buttons, in normal and full screen. */
   /* Large screens stop growing them at 52px, so the bar stays compact on big monitors. */
   --meeting-control-size: clamp(44px, calc(30px + 2.6vmin), 52px);
@@ -1720,9 +1729,9 @@
     }
   }
 
-  /* The call screen is always dark, so it and its chrome (controls, phone bars, chat, camera preview) use a dark
-     Harbor palette. `meeting-immersive` sits on the document while a call is on screen, because the chat and the
-     camera preview open in portals. */
+  /* The call screen is always dark, so it and its chrome (controls, phone bars, chat, camera preview, and the
+     notifications shown during the call) use a dark Harbor palette. `meeting-immersive` sits on the document while
+     a call is on screen, because the chat, the camera preview, and the notifications render outside it. */
   .meeting-controls-dark,
   .call-screen-dark,
   .meeting-immersive
@@ -1731,7 +1740,8 @@
       [data-call-phone-top-bar],
       .harbor-chat-panel,
       [data-camera-preview],
-      [data-meeting-invite]
+      [data-meeting-invite],
+      .harbor-toaster
     ) {
     --harbor-ink: 233 237 239;
     --harbor-ink-soft: 209 215 219;
@@ -1790,6 +1800,11 @@
 
   .call-panel-group > * + * {
     border-top: 1px solid rgb(var(--harbor-line));
+  }
+
+  /* A closed expander has no height, so it draws no divider either. */
+  .call-panel-group > [data-expand][data-state='closed'] {
+    border-top-width: 0;
   }
 
   .call-panel-row {

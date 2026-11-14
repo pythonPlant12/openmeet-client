@@ -35,6 +35,8 @@ interface RingingCall {
   callKind: AlertCallKind;
   alertedAt: number;
   webNotification: Notification | null;
+  /** The OpenMeet app shows a system notification for it, because the call came while the app was away. */
+  nativeShown: boolean;
 }
 
 function blobToDataUrl(blob: Blob) {
@@ -46,8 +48,11 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+// The OpenMeet app is in front whenever its page is visible: its webview does not always report focus, and a
+// missed focus would show a system notification on top of the app's own incoming call bar. A browser tab can be
+// visible in a window behind another one, so there it must also have focus.
 function isAppInFront() {
-  return document.visibilityState === 'visible' && document.hasFocus();
+  return document.visibilityState === 'visible' && (hasNativeNotifications() || document.hasFocus());
 }
 
 /**
@@ -65,8 +70,22 @@ export class SystemAlerts {
 
   constructor(private readonly options: SystemAlertsOptions) {}
 
+  // Coming back to the app while a call rings: the incoming call bar takes over from the system notification.
+  private readonly handleVisibility = () => {
+    if (document.visibilityState !== 'visible') return;
+    for (const [callId, call] of this.calls) {
+      if (!call.nativeShown) continue;
+      call.nativeShown = false;
+      dismissNativeCallNotification(callId, call.callKind).catch((error) =>
+        console.error('[SystemAlerts] Failed to dismiss call notification:', error),
+      );
+      this.ringtone.start();
+    }
+  };
+
   async start() {
     if (!this.native || this.nativeSession) return;
+    document.addEventListener('visibilitychange', this.handleVisibility);
     try {
       this.nativeSession = await startNativeNotifications(
         this.actionLabels(),
@@ -81,6 +100,7 @@ export class SystemAlerts {
   }
 
   stop() {
+    document.removeEventListener('visibilitychange', this.handleVisibility);
     this.generation += 1;
     this.dismissAllCalls();
     this.nativeSession?.stop();
@@ -173,7 +193,12 @@ export class SystemAlerts {
     const body = alert.conversationTitle
       ? translate('notifications.groupCallBody', { name: alert.callerName })
       : translate('notifications.callBody');
-    const call: RingingCall = { callKind: alert.callKind, alertedAt: Date.now(), webNotification: null };
+    const call: RingingCall = {
+      callKind: alert.callKind,
+      alertedAt: Date.now(),
+      webNotification: null,
+      nativeShown: false,
+    };
     this.calls.set(alert.callId, call);
     const generation = this.generation;
 
@@ -188,6 +213,12 @@ export class SystemAlerts {
       void this.avatarBytes(alert.avatarUrl)
         .then((avatar) => {
           if (generation !== this.generation || !this.nativeSession || !isRinging()) return;
+          // The app came to the front while the avatar loaded: its own bar shows the call, so it rings in the app.
+          if (isAppInFront()) {
+            this.ringtone.start();
+            return;
+          }
+          call.nativeShown = true;
           return showNativeCallNotification({ callId: alert.callId, callKind: alert.callKind, title, body, avatar });
         })
         .catch((error) => console.error('[SystemAlerts] Failed to show call notification:', error));

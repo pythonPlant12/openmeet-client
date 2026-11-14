@@ -2227,7 +2227,6 @@ const callingMeetingId = ref<string | null>(null);
 function openCallDetails(meeting: MeetingSession) {
   callDetailsMeeting.value = meeting;
   isCallDetailsOpen.value = true;
-  void markCallRead(meeting);
 }
 
 function openCallParticipantProfile(person: MeetingPerson) {
@@ -2320,46 +2319,6 @@ async function loadBadges() {
 }
 const refreshBadges = useDebounceFn(loadBadges, 400);
 
-// Opening a missed call or swiping it left marks it read, which clears its dot and badge count.
-async function markCallRead(meeting: MeetingSession) {
-  const token = accessToken.value;
-  if (!token || !meeting.unread) return;
-  callHistory.setUnread(meeting.id, false);
-  badgeRequest += 1;
-  badges.value = { ...badges.value, calls: Math.max(badges.value.calls - 1, 0) };
-  try {
-    await socialApi.markMeetingRead(token, meeting.id);
-  } catch (error) {
-    console.error('[Dashboard] Failed to mark call read:', error);
-    callHistory.setUnread(meeting.id, true);
-    toast({ title: 'Could not mark the call read.', variant: 'destructive' });
-  } finally {
-    void refreshBadges();
-  }
-}
-
-async function toggleCallRead(meeting: MeetingSession) {
-  if (meeting.unread) {
-    await markCallRead(meeting);
-    return;
-  }
-  if (!meeting.missed) return;
-
-  const token = accessToken.value;
-  if (!token) return;
-  callHistory.setUnread(meeting.id, true);
-  badges.value = { ...badges.value, calls: badges.value.calls + 1 };
-  try {
-    await socialApi.markMeetingUnread(token, meeting.id);
-  } catch (error) {
-    console.error('[Dashboard] Failed to mark call unread:', error);
-    callHistory.setUnread(meeting.id, false);
-    toast({ title: 'Could not mark the call unread.', variant: 'destructive' });
-  } finally {
-    void refreshBadges();
-  }
-}
-
 // Reading a chat, answering a request or a call ending changes these, so the counts are fetched again.
 watch(
   () => [
@@ -2422,7 +2381,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       hasSelectedConversation
         ? // Below lg an open chat fills the screen; tablets keep the floating top tabs, so it starts under them.
           'fixed inset-0 h-[100dvh] sm:max-lg:!pt-[calc(var(--liquid-bar-height-sm)+1.5rem)] lg:static lg:h-full'
-        : 'h-full max-sm:[--sidebar-bottom-inset:calc(max(1rem,env(safe-area-inset-bottom))+var(--liquid-bar-height)+12px)]'
+        : 'h-full max-sm:[--sidebar-bottom-inset:calc(var(--liquid-bar-bottom)+var(--liquid-bar-height)+12px)]'
     "
   >
     <motion.div
@@ -2529,7 +2488,6 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         <CallsSidebar
           v-show="activeSidebarSection === 'calls'"
           :panel="callsPanel"
-          :badge="badges.calls"
           :meetings="callHistory.meetings.value"
           :self-avatar-url="ownAvatarUrl ?? undefined"
           :call-group="callGroup"
@@ -2543,7 +2501,6 @@ async function startConversationCall(conversation: Conversation, options?: { vid
           @open="openCallDetails"
           @call="callAgain"
           @start-meeting="createMeeting"
-          @toggle-read="toggleCallRead"
           @load-more="callHistory.loadMore"
         />
       </aside>

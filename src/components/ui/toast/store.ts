@@ -24,3 +24,13 @@ export function toast({ title, description, duration, variant, action, cancel }:
   if (variant === 'success') return sonnerToast.success(title, options);
   return sonnerToast.info(title, options);
 }
+
+/**
+ * A dialog or sheet calls this for a press or focus outside it: a press on a notification, such as a swipe to
+ * dismiss it, must not also close the dialog.
+ */
+export function keepOpenForToasts(event: Event) {
+  const original = (event as CustomEvent<{ originalEvent?: Event }>).detail?.originalEvent;
+  const target = original?.target ?? event.target;
+  if (target instanceof Element && target.closest('[data-sonner-toaster]')) event.preventDefault();
+}

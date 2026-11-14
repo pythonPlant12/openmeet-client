@@ -121,6 +121,18 @@ describe('ChatPane', () => {
     expect(wrapper.find('[data-presence-dot]').exists()).toBe(false);
   });
 
+  it('pads the header for the status bar and the composer for the home indicator, except while typing', async () => {
+    const wrapper = mountPane({ conversation });
+    expect(wrapper.get('header').classes().join(' ')).toContain('env(safe-area-inset-top)');
+    const bar = wrapper.get('[data-composer-bar]');
+    expect(bar.classes().join(' ')).toContain('env(safe-area-inset-bottom)');
+
+    await bar.trigger('focusin');
+    expect(bar.classes()).toContain('pb-2.5');
+    await bar.trigger('focusout');
+    expect(bar.classes().join(' ')).toContain('env(safe-area-inset-bottom)');
+  });
+
   it('starts video and audio calls from the header actions', async () => {
     const wrapper = mountPane({
       conversation,

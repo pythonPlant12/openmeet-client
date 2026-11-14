@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { CheckCheck, EyeOff, Info, Phone, PhoneMissed, Plus, UserRound, UsersRound, Video } from 'lucide-vue-next';
+import { Info, Phone, PhoneMissed, Plus, UserRound, UsersRound, Video } from 'lucide-vue-next';
 import { type Component, computed, ref } from 'vue';
 
 import PaneHeader from '@/components/dashboard-page/PaneHeader.vue';
-import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Avatar, AvatarMosaic, type MosaicFace } from '@/components/ui/avatar';
 import { ListHeading, ListRow } from '@/components/ui/list-row';
 import { LoadingRipple } from '@/components/ui/loading';
@@ -23,8 +22,6 @@ import type { MeetingPerson, MeetingSession } from '@/services/social-api';
 
 const props = defineProps<{
   panel: CallsPanel;
-  /** Missed calls not read yet. */
-  badge: number;
   meetings: MeetingSession[];
   isLoading: boolean;
   error: string;
@@ -41,7 +38,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'open', meeting: MeetingSession): void;
   (event: 'call', meeting: MeetingSession): void;
-  (event: 'toggle-read', meeting: MeetingSession): void;
   (event: 'load-more'): void;
   (event: 'start-meeting'): void;
 }>();
@@ -112,7 +108,6 @@ function initials(name: string) {
     aria-labelledby="calls-heading"
   >
     <PaneHeader v-model:query="query" title="Calls" heading-id="calls-heading" search-label="Search calls">
-      <template #badge><SectionBadge :count="badge" singular="missed call" plural="missed calls" /></template>
       <template #trailing>
         <RoundButton tone="accent" aria-label="Start a meeting" title="Start a meeting" @click="emit('start-meeting')">
           <!-- A new call: the handset with a plus in its empty top-right corner. -->
@@ -154,59 +149,16 @@ function initials(name: string) {
       </p>
       <section v-else>
         <ListHeading class="pt-1">Recent</ListHeading>
+        <!-- A missed call reads in red; a swipe left shows the call's details. -->
         <SwipeableRow
           v-for="meeting in visibleMeetings"
           :id="`call-${meeting.id}`"
           :key="meeting.id"
-          :leading-width="meeting.missed ? SWIPE_ACTION_WIDTH : 0"
+          :leading-width="0"
           :trailing-width="SWIPE_ACTION_WIDTH"
-          :full-swipe-leading="meeting.missed"
-          :full-swipe-trailing="meeting.unread"
-          @full-swipe-leading="emit('toggle-read', meeting)"
-          @full-swipe-trailing="emit('toggle-read', meeting)"
         >
-          <template #leading="{ armed, close }">
+          <template #trailing="{ close }">
             <button
-              v-if="meeting.missed"
-              type="button"
-              data-swipe-action
-              class="flex h-full w-full items-center justify-start text-white transition-colors"
-              :class="armed ? 'bg-harbor-ink-soft' : 'bg-harbor-icon'"
-              :aria-label="meeting.unread ? 'Mark call read' : 'Mark call unread'"
-              @click="
-                close();
-                emit('toggle-read', meeting);
-              "
-            >
-              <span
-                class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
-                ><CheckCheck v-if="meeting.unread" class="size-4" /><EyeOff v-else class="size-4" />
-                {{ meeting.unread ? 'Read' : 'Unread' }}</span
-              >
-            </button>
-          </template>
-          <!-- Swiping an unread missed call left marks it read; read calls offer their details. -->
-          <template #trailing="{ armed, close }">
-            <button
-              v-if="meeting.unread"
-              type="button"
-              data-swipe-action
-              data-call-read-action
-              class="flex h-full w-full items-center justify-end text-white transition-colors"
-              :class="armed ? 'bg-harbor-ink-soft' : 'bg-harbor-icon'"
-              aria-label="Mark call read"
-              @click="
-                close();
-                emit('toggle-read', meeting);
-              "
-            >
-              <span
-                class="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold"
-                ><CheckCheck class="size-4" />Read</span
-              >
-            </button>
-            <button
-              v-else
               type="button"
               data-swipe-action
               class="flex h-full w-full items-center justify-end bg-harbor-hover text-harbor-ink"
@@ -258,13 +210,6 @@ function initials(name: string) {
             </template>
             <template #trailing>
               <LoadingRipple v-if="callingId === meeting.id" class="size-4 text-harbor-icon" />
-              <span
-                v-else-if="meeting.unread"
-                data-call-unread
-                class="size-2.5 shrink-0 rounded-full bg-harbor-accent"
-                role="img"
-                aria-label="Unread"
-              />
             </template>
             <!-- Desktop only: call back and details on hover; touch opens the details, which can call back. -->
             <template #actions>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useElementSize } from '@vueuse/core';
+import { useElementSize, useMediaQuery } from '@vueuse/core';
 import { ArrowLeft, CircleUserRound, Ellipsis, MessageCircleMore, Phone, UsersRound, Video, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 import ChatThread from '@/components/dashboard-page/chat/ChatThread.vue';
 import type { SenderAvatar } from '@/components/dashboard-page/chat/voice-message';
@@ -17,6 +17,7 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { userStatusOption } from '@/config/user-status.config';
 import type { Conversation, ConversationMessage, Friend, GifSearchResult, GroupMember } from '@/services/social-api';
+import { coverScreenTop } from '@/services/system-bars';
 
 const props = defineProps<{
   conversation: Conversation | null;
@@ -74,6 +75,16 @@ const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
 const attachments = defineModel<File[]>('attachments', { default: () => [] });
 const thread = ref<InstanceType<typeof ChatThread> | null>(null);
+// On a phone an open chat fills the screen, so in the OpenMeet app it reaches under the status bar too; the header
+// pads for it with env(safe-area-inset-top), and its fade colours the area.
+const isPhoneLayout = useMediaQuery('(max-width: 639px)');
+watch(
+  () => !!(props.conversation || props.pendingFriend) && isPhoneLayout.value,
+  (open) => coverScreenTop('chat', open),
+  { immediate: true },
+);
+onBeforeUnmount(() => coverScreenTop('chat', false));
+
 const header = ref<HTMLElement | null>(null);
 const { height: headerHeight } = useElementSize(header, undefined, { box: 'border-box' });
 // The header's lower part is only its fade, so the first message starts inside it and slides under the blur.
@@ -183,7 +194,10 @@ defineExpose({
         class="relative flex h-full min-h-0 flex-col"
       >
         <!-- The header floats over the messages, which fade and blur as they scroll under it. -->
-        <header ref="header" class="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pb-12 pt-3 sm:px-5">
+        <header
+          ref="header"
+          class="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pb-12 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-5"
+        >
           <!-- The header lets touches through, so it marks its fade for the status bar colour to find. -->
           <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" data-system-bar-layer />
           <div class="flex items-center gap-2 sm:gap-3">

@@ -134,6 +134,8 @@ const mediaInput = ref<HTMLInputElement | null>(null);
 const previewUrls = new Map<File, string>();
 let pendingBottomScroll: ScrollBehavior | null = null;
 const composerCaret = ref(0);
+// Typing on a phone brings up the keyboard over the home indicator area (see the composer's padding).
+const isComposerFocused = ref(false);
 const commandSelection = ref(0);
 const mentionSelection = ref(0);
 const gifSelection = ref(0);
@@ -803,7 +805,15 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
       :attachment-urls="attachmentUrls"
       @close="previewAttachments = []"
     />
-    <div class="bg-harbor-canvas px-2 pb-2.5 pt-2 sm:px-4">
+    <!-- The composer sits on the home indicator area, so it pads for it with a little room to spare, except while
+         typing: the keyboard covers that area then, and the padding would only leave a gap above it. -->
+    <div
+      class="bg-harbor-canvas px-2 pt-2 sm:px-4"
+      :class="isComposerFocused ? 'pb-2.5' : 'pb-[max(0.625rem,calc(env(safe-area-inset-bottom)+0.375rem))]'"
+      data-composer-bar
+      @focusin="isComposerFocused = true"
+      @focusout="isComposerFocused = false"
+    >
       <p v-if="footerNote" class="mb-2 text-xs text-harbor-muted">{{ footerNote }}</p>
       <AnimatePresence>
         <motion.div

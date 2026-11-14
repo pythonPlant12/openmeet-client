@@ -49,7 +49,7 @@ const emit = defineEmits<{ (event: 'update:open', value: boolean): void }>();
       </header>
       <DialogDescription class="sr-only">{{ description }}</DialogDescription>
       <div
-        class="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[calc(4.5rem+env(safe-area-inset-top))]"
+        class="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[calc(5.5rem+env(safe-area-inset-top))]"
         :aria-busy="busy"
       >
         <div class="mx-auto max-w-3xl px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:px-6">

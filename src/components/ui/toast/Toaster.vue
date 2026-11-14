@@ -20,7 +20,7 @@ const position = computed(() => (isMobile.value ? 'top-center' : 'top-right'));
     :gap="10"
     :offset="{ top: 84, right: 20, left: 20 }"
     :mobile-offset="{ top: 84, right: 12, left: 12 }"
-    :swipe-directions="['left', 'right']"
+    :swipe-directions="['left', 'right', 'top']"
     container-aria-label="OpenMeet notifications"
   >
     <template #success-icon><ToastIcon kind="success" /></template>
