@@ -53,7 +53,17 @@ const chatAriaLabel = computed(() => {
     </div>
     <div class="pointer-events-auto flex items-center gap-2">
       <slot name="audio-output" />
-      <DropdownMenu>
+      <button
+        v-if="inviteMode === 'enabled'"
+        type="button"
+        class="call-button call-chip size-11"
+        :aria-label="t('meeting.controls.invitePeople')"
+        data-invite-trigger
+        @click="emit('invite')"
+      >
+        <UserRoundPlus />
+      </button>
+      <DropdownMenu v-else>
         <DropdownMenuTrigger as-child>
           <button type="button" class="call-button call-chip size-11" :aria-label="t('meeting.controls.openShare')">
             <UserRoundPlus />

@@ -6,6 +6,7 @@ import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
+import CallAddPeopleCard from '@/components/meeting-page/CallAddPeopleCard.vue';
 import CallAudioOutputButton from '@/components/meeting-page/CallAudioOutputButton.vue';
 import CallPhoneControls from '@/components/meeting-page/CallPhoneControls.vue';
 import CallPhoneTopBar from '@/components/meeting-page/CallPhoneTopBar.vue';
@@ -29,8 +30,8 @@ import { useCallFormFactor } from '@/composables/useCallFormFactor';
 import { useCallLayoutState } from '@/composables/useCallLayoutState';
 import { useConnectionHaptics } from '@/composables/useConnectionHaptics';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
-import { useScreenShare } from '@/composables/useScreenShare';
 import { useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
+import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { loadCallSettings, needsCameraPreview, saveCallSettings } from '@/lib/call-settings';
@@ -156,12 +157,19 @@ const callFormFactor = useCallFormFactor();
 // Phones, and desktop windows narrower than the phone breakpoint, get the phone call chrome: a top bar and a
 // bottom bar with a drag-up panel. The navbar steps aside for it.
 const usesPhoneChrome = computed(() => callFormFactor.value !== 'desktop');
-// The video area sits between the call screen's top chrome and its controls; VideoGrid reads these variables.
+// The phone call screen asks to add people while you are alone in the call.
+const showsAddPeople = computed(
+  () => usesPhoneChrome.value && showsControls.value && participantCount.value <= 1 && inviteMode.value === 'enabled',
+);
+// The video area sits between the call screen's top chrome and its controls (and the "Add people" card above
+// them); VideoGrid reads these variables.
+const PHONE_CONTROLS_HEIGHT = 'calc(max(0.5rem, env(safe-area-inset-bottom)) + var(--meeting-control-size) + 2.25rem)';
 const callAreaStyle = computed(() =>
   usesPhoneChrome.value
     ? {
         '--call-area-top': 'calc(env(safe-area-inset-top) + 3.75rem)',
-        '--call-area-bottom': 'calc(max(0.5rem, env(safe-area-inset-bottom)) + var(--meeting-control-size) + 2.25rem)',
+        '--call-controls-height': PHONE_CONTROLS_HEIGHT,
+        '--call-area-bottom': showsAddPeople.value ? `calc(${PHONE_CONTROLS_HEIGHT} + 4rem)` : PHONE_CONTROLS_HEIGHT,
       }
     : {
         '--call-area-top': 'calc(84px + 2.25rem + var(--meeting-control-size))',
@@ -1130,6 +1138,14 @@ const handleReconnect = () => {
         />
 
         <Transition name="meeting-controls">
+          <div
+            v-if="showsAddPeople"
+            class="pointer-events-none fixed inset-x-0 bottom-[var(--call-controls-height)] z-40 flex justify-center px-2 pb-2"
+          >
+            <CallAddPeopleCard alone @invite="isInviteOpen = true" />
+          </div>
+        </Transition>
+        <Transition name="meeting-controls">
           <CallPhoneControls
             ref="phoneControls"
             v-if="usesPhoneChrome"
@@ -1226,6 +1242,7 @@ const handleReconnect = () => {
     <MeetingInviteDialog
       v-if="inviteMode === 'enabled'"
       v-model:open="isInviteOpen"
+      :phone="usesPhoneChrome"
       :room-id="meetingId"
       :access="meetingAccess"
       @access-updated="meetingAccess = $event"

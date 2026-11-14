@@ -423,6 +423,14 @@
       "showOwnCamera": "Show my own camera",
       "flipCamera": "Switch camera"
     },
+    "invite": {
+      "title": "Invite people",
+      "description": "Share the link or invite your friends to this call.",
+      "expand": "Show more people",
+      "shrink": "Show fewer people",
+      "addPeople": "Add people",
+      "addPeopleHint": "Invite friends or share the link"
+    },
     "preview": {
       "title": "Camera preview",
       "description": "Check how you look and choose your microphone and camera before others see you.",

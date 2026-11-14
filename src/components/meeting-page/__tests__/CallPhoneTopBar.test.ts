@@ -28,9 +28,19 @@ describe('CallPhoneTopBar', () => {
 
     expect(wrapper.get('[data-room-name]').text()).toContain('team-sync');
     expect(wrapper.find('[data-stub-audio-output]').exists()).toBe(true);
-    expect(wrapper.find('button[aria-label="Open sharing options"]').exists()).toBe(true);
+    expect(wrapper.find('button[aria-label="Invite people"]').exists()).toBe(true);
     expect(wrapper.find('button[aria-label="Open chat"]').exists()).toBe(true);
     expect(wrapper.find('[data-collapse-call]').exists()).toBe(false);
+  });
+
+  it('opens the invite from its button', async () => {
+    const wrapper = mountBar();
+    await wrapper.get('button[aria-label="Invite people"]').trigger('click');
+    expect(wrapper.emitted('invite')).toHaveLength(1);
+  });
+
+  it('keeps the sharing menu where inviting needs an account', () => {
+    expect(mountBar({ inviteMode: 'signedOut' }).find('button[aria-label="Open sharing options"]').exists()).toBe(true);
   });
 
   it('opens the controls panel from the room name', async () => {

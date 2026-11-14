@@ -1655,7 +1655,13 @@
   .meeting-controls-dark,
   .call-screen-dark,
   .meeting-immersive
-    :is([data-call-phone-controls], [data-call-phone-top-bar], .harbor-chat-panel, [data-camera-preview]) {
+    :is(
+      [data-call-phone-controls],
+      [data-call-phone-top-bar],
+      .harbor-chat-panel,
+      [data-camera-preview],
+      [data-meeting-invite]
+    ) {
     --harbor-ink: 233 237 239;
     --harbor-ink-soft: 209 215 219;
     --harbor-icon: 174 186 193;
