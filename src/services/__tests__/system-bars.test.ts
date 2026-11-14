@@ -58,6 +58,20 @@ describe('system bars', () => {
     expect(document.documentElement.style.backgroundColor).toBe('rgb(247, 248, 250)');
   });
 
+  it('reads a translucent top-to-bottom gradient, such as the chat header fade, over the colour below it', async () => {
+    addLayer('rgb(0, 0, 0)');
+    const fade = addLayer('', ['top']);
+    fade.style.backgroundImage = 'linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 80%)';
+    // jsdom has no layout; the fade's top edge is the screen's top.
+    fade.getBoundingClientRect = () => ({ top: 0, height: 100 }) as DOMRect;
+
+    stop = startSystemBarSync();
+
+    // The probe sits 1px into the 100px fade: 0.5 - 0.5 * (1 / 80) of white over black.
+    await vi.waitFor(() => expect(themeColor()).toBe('#7e7e7e'));
+    expect(document.documentElement.style.backgroundColor).toBe('rgb(0, 0, 0)');
+  });
+
   it('follows a page that turns black and returns when it leaves', async () => {
     addLayer('rgb(255, 255, 255)');
     stop = startSystemBarSync();

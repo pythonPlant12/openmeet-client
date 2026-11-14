@@ -77,10 +77,11 @@ function togglePlayback() {
 </script>
 
 <template>
-  <!-- The clock hangs below the waveform, outside the row, so the waveform lines up with the play button. -->
+  <!-- The clock hangs below the waveform, outside the row, so the waveform lines up with the play button. The row
+       has no padding above and 8px below, where the clock sits, so a voice message stays compact. -->
   <div
     data-voice-message
-    class="flex max-w-full items-center gap-2 pb-4 pt-0.5"
+    class="flex max-w-full items-center gap-2 pb-2"
     :class="fill ? 'w-full' : 'w-64 sm:w-80 lg:w-96'"
   >
     <button
@@ -111,7 +112,7 @@ function togglePlayback() {
         @seek="playback.seek"
       />
       <p
-        class="absolute inset-x-0 top-full mt-0.5 flex items-baseline justify-between gap-2 text-[0.6875rem] tabular-nums text-harbor-muted"
+        class="absolute inset-x-0 top-full flex items-baseline justify-between gap-2 text-[0.6875rem] leading-none tabular-nums text-harbor-muted"
       >
         <span class="min-w-0 truncate">
           <template v-if="error">Could not load. Tap to retry.</template>
@@ -121,7 +122,7 @@ function togglePlayback() {
         <time v-if="sentAt && formatTime" :datetime="sentAt" class="shrink-0">{{ formatTime(sentAt) }}</time>
       </p>
     </div>
-    <span v-if="avatar" data-voice-avatar class="relative -mb-4 ml-1 shrink-0" aria-hidden="true">
+    <span v-if="avatar" data-voice-avatar class="relative ml-1 shrink-0" aria-hidden="true">
       <span
         class="flex size-12 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-sm font-semibold text-harbor-icon"
         ><img v-if="avatar.url" :src="avatar.url" alt="" class="size-full object-cover" /><template v-else>{{

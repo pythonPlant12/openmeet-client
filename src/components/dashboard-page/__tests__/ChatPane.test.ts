@@ -306,11 +306,10 @@ describe('ChatPane', () => {
     const chips = wrapper.findAll('[data-reaction-chip]');
     expect(chips[0]!.text()).toBe('👍2');
     expect(chips[1]!.text()).toBe('🎉');
-    // Spacing to the next message lives inside the animated row so it collapses with the chips.
+    // The row is a plain element: it takes and gives back its space at once, with no height animation.
     const row = wrapper.findAll('[data-reaction-row]')[1]!;
-    expect(row.classes()).toContain('overflow-hidden');
-    // Padding sits on an inner wrapper, so the animated row can collapse to exactly zero height.
-    expect(row.classes().some((name) => /^p[tbxy]?-/.test(name))).toBe(false);
+    expect(row.element.tagName).toBe('DIV');
+    expect(row.attributes('style') ?? '').not.toContain('height');
     expect(row.get('div').classes()).toContain('pb-1');
     // Message rows clip only sideways, and the lifted message paints above its neighbours.
     expect(wrapper.findAll('[data-swipeable-row]')[0]!.classes()).toContain('harbor-clip-x');

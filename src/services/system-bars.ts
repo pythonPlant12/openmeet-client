@@ -19,9 +19,14 @@ interface SystemBarColors {
 /** Inset from the screen edge, so the probe stays inside the page and clears floating bars and rounded corners. */
 const PROBE_INSET = 1;
 
+/** Reads an `rgb()`/`rgba()` colour, which may be followed by a gradient stop position. */
 function parseColor(value: string): [...Rgb, number] | null {
-  const channels = value.match(/[\d.]+/g)?.map(Number);
-  if (!value.startsWith('rgb') || !channels || channels.length < 3) return null;
+  const channels = value
+    .trim()
+    .match(/^rgba?\(([^)]*)\)/)?.[1]
+    ?.match(/[\d.]+/g)
+    ?.map(Number);
+  if (!channels || channels.length < 3) return null;
   const [red = 0, green = 0, blue = 0, alpha = 1] = channels;
   return [red, green, blue, alpha];
 }
@@ -30,22 +35,104 @@ function toHex([red, green, blue]: Rgb) {
   return `#${[red, green, blue].map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
 }
 
+type Rgba = [...Rgb, number];
+
+/** Splits a CSS list at its top-level commas, leaving the commas inside `rgb(...)` alone. */
+function splitTopLevel(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    else if (char === ',' && depth === 0) {
+      parts.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts;
+}
+
+/**
+ * The colour of a top-to-bottom `linear-gradient` background at `y`, such as the chat header's fade, which is
+ * translucent white over the messages. Other gradients and images return null and are skipped.
+ */
+function verticalGradientColorAt(image: string, element: Element, y: number): Rgba | null {
+  const match = image.match(/^linear-gradient\((.*)\)$/);
+  if (!match?.[1]) return null;
+  const parts = splitTopLevel(match[1]);
+  if (parts[0] && !parts[0].startsWith('rgb')) {
+    if (parts[0] !== 'to bottom' && parts[0] !== '180deg') return null;
+    parts.shift();
+  }
+  const stops = parts.map((part) => {
+    const color = parseColor(part);
+    const position = part.match(/\)\s+([\d.]+)%$/)?.[1];
+    return color ? { color, position: position === undefined ? null : Number(position) / 100 } : null;
+  });
+  if (stops.length < 2 || stops.some((stop) => !stop)) return null;
+  const resolved = stops as { color: Rgba; position: number | null }[];
+  // Stops without a position spread evenly between their neighbours, as CSS places them.
+  resolved[0]!.position ??= 0;
+  resolved[resolved.length - 1]!.position ??= 1;
+  for (let index = 1; index < resolved.length - 1; index += 1) {
+    if (resolved[index]!.position !== null) continue;
+    const before = resolved[index - 1]!.position!;
+    let next = index + 1;
+    while (resolved[next]!.position === null) next += 1;
+    const after = resolved[next]!.position!;
+    resolved[index]!.position = before + (after - before) / (next - index + 1);
+  }
+
+  const rect = element.getBoundingClientRect();
+  const offset = rect.height > 0 ? Math.min(Math.max((y - rect.top) / rect.height, 0), 1) : 0;
+  const nextIndex = resolved.findIndex((stop) => stop.position! >= offset);
+  if (nextIndex <= 0) return resolved[nextIndex === 0 ? 0 : resolved.length - 1]!.color;
+  const from = resolved[nextIndex - 1]!;
+  const to = resolved[nextIndex]!;
+  const span = to.position! - from.position!;
+  const amount = span > 0 ? (offset - from.position!) / span : 1;
+  return from.color.map((channel, index) => channel + (to.color[index]! - channel) * amount) as Rgba;
+}
+
+/**
+ * Overlays that let touches through (`pointer-events: none`), such as the chat header's fade, are invisible to
+ * hit testing, so they mark themselves with `data-system-bar-layer` to count. They float above the page, so they
+ * come first.
+ */
+function overlaysAt(x: number, y: number): Element[] {
+  return [...document.querySelectorAll('[data-system-bar-layer]')].filter((element) => {
+    const rect = element.getBoundingClientRect();
+    return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
+  });
+}
+
 /**
  * The colour the page shows at a point: the topmost opaque background, with any translucent layers above it
- * blended on top. The document element is skipped because this module paints it.
+ * blended on top. A vertical gradient counts as a layer above its element's own colour. The document element is
+ * skipped because this module paints it.
  */
 function pageColorAt(x: number, y: number): Rgb {
-  const translucent: [...Rgb, number][] = [];
+  const translucent: Rgba[] = [];
   let base: Rgb | null = null;
-  for (const element of document.elementsFromPoint(x, y)) {
+  for (const element of [...overlaysAt(x, y), ...document.elementsFromPoint(x, y)]) {
     if (element === document.documentElement) continue;
-    const color = parseColor(getComputedStyle(element).backgroundColor);
-    if (!color || color[3] === 0) continue;
-    if (color[3] >= 1) {
-      base = [color[0], color[1], color[2]];
-      break;
+    const style = getComputedStyle(element);
+    const layers = [
+      style.backgroundImage === 'none' ? null : verticalGradientColorAt(style.backgroundImage, element, y),
+      parseColor(style.backgroundColor),
+    ];
+    for (const color of layers) {
+      if (!color || color[3] === 0) continue;
+      if (color[3] >= 1) {
+        base = [color[0], color[1], color[2]];
+        break;
+      }
+      translucent.push(color);
     }
-    translucent.push(color);
+    if (base) break;
   }
   base ??= (parseColor(getComputedStyle(document.body).backgroundColor)?.slice(0, 3) as Rgb | undefined) ?? [
     255, 255, 255,
