@@ -2,6 +2,7 @@
 import { refDebounced } from '@vueuse/core';
 import { Check, Search, UserPlus } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,7 +45,10 @@ const invitingId = ref<string | null>(null);
 const invitedIds = ref(new Set<string>());
 let searchRequest = 0;
 
+const { t } = useI18n();
 const isHost = computed(() => !!props.access?.managed && props.access.isOwner);
+// The host edits who may join in place, under the access line.
+const isEditingAccess = ref(false);
 const policy = computed(() => props.access?.accessPolicy ?? 'open');
 const policyOption = computed(() => meetingAccessOption(policy.value));
 const searchPlaceholder = computed(() =>
@@ -116,6 +120,7 @@ async function saveAccess() {
       ...(draftPolicy.value === 'password' && draftPassword.value ? { password: draftPassword.value } : {}),
     });
     draftPassword.value = '';
+    isEditingAccess.value = false;
     emit('access-updated', updated);
     toast({ title: `Meeting access: ${meetingAccessOption(updated.accessPolicy).label}`, variant: 'success' });
   } catch (error) {
@@ -164,14 +169,35 @@ watch(policy, (current) => {
 <template>
   <div class="space-y-4" data-meeting-invite-content>
     <MeetingShareRow :meeting-id="roomId" />
-    <p class="flex items-center gap-1.5 text-sm text-harbor-muted" data-meeting-access-line>
-      <component :is="policyOption.icon" class="size-3.5 shrink-0" />
-      <span data-meeting-access-summary>{{ policyOption.label }} · {{ policyOption.description }}</span>
-    </p>
     <div class="space-y-4">
+      <div v-if="!guest" class="relative">
+        <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle" />
+        <Input
+          v-model="query"
+          type="search"
+          maxlength="80"
+          :placeholder="searchPlaceholder"
+          aria-label="Search people to invite"
+          class="h-10 rounded-full border-0 bg-harbor-hover pl-9 text-sm shadow-harbor-around focus-visible:ring-0"
+        />
+      </div>
+      <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-harbor-muted" data-meeting-access-line>
+        <component :is="policyOption.icon" class="size-3.5 shrink-0" />
+        <span data-meeting-access-summary>{{ policyOption.label }} · {{ policyOption.description }}</span>
+        <button
+          v-if="isHost"
+          type="button"
+          class="font-semibold text-harbor-accent"
+          :aria-expanded="isEditingAccess"
+          data-edit-access
+          @click="isEditingAccess = !isEditingAccess"
+        >
+          {{ t('meeting.invite.editAccess') }}
+        </button>
+      </p>
       <section
-        v-if="isHost"
-        class="space-y-3 rounded-2xl border border-harbor-line bg-harbor-surface p-3"
+        v-if="isHost && isEditingAccess"
+        class="space-y-3 rounded-2xl border border-harbor-line bg-harbor-hover p-3"
         data-host-access
       >
         <MeetingAccessPicker
@@ -187,73 +213,63 @@ watch(policy, (current) => {
           </Button>
         </div>
       </section>
-
-      <div v-if="!guest" class="space-y-2">
-        <div class="relative">
-          <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle" />
-          <Input
-            v-model="query"
-            type="search"
-            maxlength="80"
-            :placeholder="searchPlaceholder"
-            aria-label="Search people to invite"
-            class="h-10 rounded-full border-0 bg-harbor-surface pl-9 text-sm shadow-harbor-around focus-visible:ring-0"
-          />
+      <div
+        v-if="!guest"
+        class="min-h-24 rounded-2xl border border-harbor-line bg-harbor-surface"
+        data-invite-candidates
+      >
+        <div v-if="isSearching && !candidates.length" class="flex justify-center py-8">
+          <LoadingRipple class="size-6 text-harbor-accent" />
         </div>
-        <div class="min-h-24 rounded-2xl border border-harbor-line bg-harbor-surface" data-invite-candidates>
-          <div v-if="isSearching && !candidates.length" class="flex justify-center py-8">
-            <LoadingRipple class="size-6 text-harbor-accent" />
-          </div>
-          <p v-else-if="searchError" class="px-4 py-6 text-center text-sm text-harbor-danger-strong">
-            {{ searchError }}
-          </p>
-          <p v-else-if="!candidates.length" class="px-4 py-6 text-center text-sm text-harbor-muted">
-            {{ emptyText }}
-          </p>
-          <ul v-else class="max-h-[40dvh] overflow-y-auto sm:max-h-72">
-            <li
-              v-for="candidate in candidates"
-              :key="candidate.id"
-              class="flex items-center gap-3 px-3 py-2.5 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-harbor-line"
+        <p v-else-if="searchError" class="px-4 py-6 text-center text-sm text-harbor-danger-strong">
+          {{ searchError }}
+        </p>
+        <p v-else-if="!candidates.length" class="px-4 py-6 text-center text-sm text-harbor-muted">
+          {{ emptyText }}
+        </p>
+        <ul v-else class="sm:max-h-72 sm:overflow-y-auto">
+          <li
+            v-for="candidate in candidates"
+            :key="candidate.id"
+            class="flex items-center gap-3 px-3 py-2.5 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-harbor-line"
+          >
+            <span
+              class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-xs font-semibold text-harbor-icon"
+              ><img
+                v-if="candidate.avatarUrl && avatarCache.urls.value[candidate.avatarUrl]"
+                :src="avatarCache.urls.value[candidate.avatarUrl]"
+                alt=""
+                class="size-full object-cover"
+              /><template v-else>{{ initials(candidate.name) }}</template></span
             >
-              <span
-                class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-xs font-semibold text-harbor-icon"
-                ><img
-                  v-if="candidate.avatarUrl && avatarCache.urls.value[candidate.avatarUrl]"
-                  :src="avatarCache.urls.value[candidate.avatarUrl]"
-                  alt=""
-                  class="size-full object-cover"
-                /><template v-else>{{ initials(candidate.name) }}</template></span
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-semibold">{{ candidate.name }}</span>
+              <span class="block truncate text-xs text-harbor-muted"
+                >@{{ candidate.nickname }}<template v-if="candidate.isFriend"> · Friend</template></span
               >
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-sm font-semibold">{{ candidate.name }}</span>
-                <span class="block truncate text-xs text-harbor-muted"
-                  >@{{ candidate.nickname }}<template v-if="candidate.isFriend"> · Friend</template></span
-                >
-              </span>
-              <Button
-                v-if="candidate.invited || invitedIds.has(candidate.id)"
-                variant="ghost"
-                size="sm"
-                disabled
-                class="h-8 shrink-0 rounded-full px-3 text-xs font-semibold text-harbor-muted disabled:opacity-100 [&_svg]:text-harbor-accent"
-                ><Check class="size-4" />Invited</Button
-              >
-              <Button
-                v-else
-                size="sm"
-                variant="pill"
-                class="!h-8 shrink-0 px-3.5 text-xs"
-                :disabled="invitingId !== null"
-                :data-invite="candidate.id"
-                @click="invite(candidate)"
-              >
-                <LoadingRipple v-if="invitingId === candidate.id" size="sm" />
-                <template v-else><UserPlus class="size-3.5" />Invite</template>
-              </Button>
-            </li>
-          </ul>
-        </div>
+            </span>
+            <Button
+              v-if="candidate.invited || invitedIds.has(candidate.id)"
+              variant="ghost"
+              size="sm"
+              disabled
+              class="h-8 shrink-0 rounded-full px-3 text-xs font-semibold text-harbor-muted disabled:opacity-100 [&_svg]:text-harbor-accent"
+              ><Check class="size-4" />Invited</Button
+            >
+            <Button
+              v-else
+              size="sm"
+              variant="secondary"
+              class="!h-8 shrink-0 rounded-xl bg-harbor-hover px-3.5 text-xs font-semibold text-harbor-ink"
+              :disabled="invitingId !== null"
+              :data-invite="candidate.id"
+              @click="invite(candidate)"
+            >
+              <LoadingRipple v-if="invitingId === candidate.id" size="sm" />
+              <template v-else><UserPlus class="size-3.5" />Invite</template>
+            </Button>
+          </li>
+        </ul>
       </div>
     </div>
   </div>

@@ -435,7 +435,8 @@
       "copied": "Copied",
       "qrCode": "QR code",
       "qrAlt": "QR code of the room link",
-      "email": "Email"
+      "email": "Email",
+      "editAccess": "Edit access"
     },
     "preview": {
       "title": "Camera preview",

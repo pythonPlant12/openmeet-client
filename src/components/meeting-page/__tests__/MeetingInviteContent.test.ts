@@ -81,13 +81,15 @@ describe('MeetingInviteContent', () => {
     expect(wrapper.get('[data-invite-candidates]').text()).toContain('Invited');
   });
 
-  it('describes the access policy and lets only the host change it', async () => {
+  it('describes the access policy under the search, with Edit access only for the host', async () => {
     const host = mountContent();
     expect(host.get('[data-meeting-access-summary]').text()).toContain('Only your friends can join');
+    expect(host.find('[data-host-access]').exists()).toBe(false);
+    await host.get('[data-edit-access]').trigger('click');
     expect(host.find('[data-host-access]').exists()).toBe(true);
 
     const guest = mountContent({ ...hostAccess, isOwner: false });
-    expect(guest.find('[data-host-access]').exists()).toBe(false);
+    expect(guest.find('[data-edit-access]').exists()).toBe(false);
   });
 
   it('shows guests the share targets and the access line, but no people to invite', async () => {
@@ -108,6 +110,7 @@ describe('MeetingInviteContent', () => {
     await wrapper.setProps({ active: true });
     await flushPromises();
 
+    await wrapper.get('[data-edit-access]').trigger('click');
     await wrapper.get('[data-access-select]').setValue('password');
     await wrapper.get('#meeting-access-password').setValue('secret');
     await wrapper.get('[data-host-access] button').trigger('click');
@@ -118,6 +121,7 @@ describe('MeetingInviteContent', () => {
       password: 'secret',
     });
     expect(wrapper.emitted('access-updated')?.[0]?.[0]).toMatchObject({ accessPolicy: 'password' });
+    expect(wrapper.find('[data-host-access]').exists()).toBe(false);
   });
 });
 
