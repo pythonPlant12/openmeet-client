@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useEventListener, useIntervalFn } from '@vueuse/core';
-import { AlertTriangle, ChevronDown, Users } from 'lucide-vue-next';
+import { AlertTriangle, ChevronDown } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -8,6 +8,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import CallAddPeopleCard from '@/components/meeting-page/CallAddPeopleCard.vue';
 import CallAudioOutputButton from '@/components/meeting-page/CallAudioOutputButton.vue';
+import CallDesktopTopBar from '@/components/meeting-page/CallDesktopTopBar.vue';
 import CallPhoneControls from '@/components/meeting-page/CallPhoneControls.vue';
 import CallPhoneTopBar from '@/components/meeting-page/CallPhoneTopBar.vue';
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
@@ -155,7 +156,7 @@ const {
 } = useCallLayoutState();
 const callFormFactor = useCallFormFactor();
 // Phones, and desktop windows narrower than the phone breakpoint, get the phone call chrome: a top bar and a
-// bottom bar with a drag-up panel. The navbar steps aside for it.
+// bottom bar with a drag-up panel. Desktop gets its own top row and controls bar.
 const usesPhoneChrome = computed(() => callFormFactor.value !== 'desktop');
 // The phone call screen asks to add people while you are alone in the call.
 const showsAddPeople = computed(
@@ -172,14 +173,12 @@ const callAreaStyle = computed(() =>
         '--call-area-bottom': showsAddPeople.value ? `calc(${PHONE_CONTROLS_HEIGHT} + 4rem)` : PHONE_CONTROLS_HEIGHT,
       }
     : {
-        '--call-area-top': 'calc(84px + 2.25rem + var(--meeting-control-size))',
+        '--call-area-top': 'calc(2.25rem + var(--meeting-control-size))',
         '--call-area-bottom': 'calc(var(--meeting-control-size) + 3.5rem)',
       },
 );
 // Banners and the connection details sit in the top row on desktop, and just below the top bar on phones.
-const belowTopRowClass = computed(() =>
-  usesPhoneChrome.value ? 'top-[var(--call-area-top)]' : 'top-[calc(84px+1.25rem)]',
-);
+const belowTopRowClass = computed(() => (usesPhoneChrome.value ? 'top-[var(--call-area-top)]' : 'top-5'));
 const roomName = computed(() => (isConversationCall.value ? t('meeting.callTitle') : meetingId.value));
 // The menus show the layout on screen, which follows the call's size and form factor until the person picks one.
 const shownViewMode = computed(() =>
@@ -819,10 +818,10 @@ useEventListener(document, 'fullscreenchange', () => {
   if (!document.fullscreenElement && isFullscreen.value) isFullscreen.value = false;
 });
 
+// The call screen draws its own bars on phones and on desktop alike, so the navbar steps aside while it shows.
 watch(
-  usesPhoneChrome,
-  (phoneChrome) =>
-    window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-phone-chrome', { detail: phoneChrome })),
+  hasJoined,
+  (joined) => window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-phone-chrome', { detail: joined })),
   { immediate: true },
 );
 
@@ -935,7 +934,11 @@ const handleReconnect = () => {
 <template>
   <div
     class="relative h-[calc(100dvh-84px)] overflow-hidden px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0"
-    :class="hasJoined ? ['call-screen-dark', isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-app'] : 'bg-harbor-surface'"
+    :class="
+      hasJoined
+        ? ['call-screen-dark !fixed inset-0 !h-auto', isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-app']
+        : 'bg-harbor-surface'
+    "
     :data-fullscreen="isFullscreen ? 'true' : undefined"
     :style="callAreaStyle"
   >
@@ -990,15 +993,15 @@ const handleReconnect = () => {
           <template #audio-output><CallAudioOutputButton /></template>
         </CallPhoneTopBar>
       </Transition>
-
-      <!-- Participant Count Badge -->
-      <div
-        v-if="!isFullscreen && !usesPhoneChrome && showsControls"
-        class="fixed left-9 top-[calc(84px+1.25rem)] z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-harbor-surface px-4 text-harbor-ink shadow-harbor-soft"
-      >
-        <Users class="h-5 w-5" />
-        <span class="font-semibold">{{ participantCount }}</span>
-      </div>
+      <Transition name="call-controls-top">
+        <CallDesktopTopBar
+          v-if="!usesPhoneChrome && showsControls"
+          :room-name="roomName"
+          :is-chat-open="isChatOpen"
+          :unread-count="unreadCount"
+          @toggle-chat="handleToggleChat"
+        />
+      </Transition>
 
       <!-- Motion animates `transform`, which would replace a translate-based centering, so a full-width row centers it.
            Phones place it below the top bar. -->
@@ -1021,7 +1024,7 @@ const handleReconnect = () => {
             :class="
               connectionBanner === 'reconnecting'
                 ? 'border-harbor-danger/25 bg-harbor-danger-soft text-harbor-danger-strong'
-                : 'border-harbor-line bg-white text-harbor-ink-soft'
+                : 'border-harbor-line bg-harbor-surface text-harbor-ink-soft'
             "
           >
             <LoadingRipple
@@ -1184,8 +1187,6 @@ const handleReconnect = () => {
             :is-video-off="isVideoOff"
             :meeting-id="meetingId"
             :show-connection-status="showConnectionStatus"
-            :is-chat-open="isChatOpen"
-            :unread-count="unreadCount"
             :video-available="videoAvailable"
             :audio-warning="audioWarning"
             :video-warning="videoWarning"
@@ -1205,7 +1206,6 @@ const handleReconnect = () => {
             @toggle-mute="handleToggleMute"
             @toggle-video="handleToggleVideo"
             @toggle-stats="handleToggleStats"
-            @toggle-chat="handleToggleChat"
             @end-call="handleEndCall"
             @invite="isInviteOpen = true"
             @media-changed="refreshMediaAvailability"

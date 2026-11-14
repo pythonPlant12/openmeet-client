@@ -100,7 +100,7 @@ const closeMobileStatusOnOutsidePress = (event: PointerEvent) => {
 const isMeetingChatOpen = ref(false);
 // A meeting in full screen shows only its media, so the navbar steps aside until it ends.
 const isMeetingFullscreen = ref(false);
-// The phone call screen draws its own top and bottom bars, so the navbar steps aside for it too.
+// The call screen draws its own top and bottom bars, so the navbar steps aside for it too.
 const isMeetingPhoneChrome = ref(false);
 const isHiddenForMeeting = computed(
   () => isMeetingFullscreen.value || (isMeetingPage.value && isMeetingPhoneChrome.value),

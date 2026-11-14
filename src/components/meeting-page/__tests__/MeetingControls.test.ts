@@ -22,7 +22,7 @@ function mountControls(props: Partial<InstanceType<typeof MeetingControls>['$pro
       isMuted: false,
       isVideoOff: true,
       meetingId: 'team-sync',
-      isChatOpen: false,
+      inviteMode: 'enabled',
       participants: [],
       pinnedParticipantId: null,
       viewMode: 'grid',
@@ -43,7 +43,7 @@ function mountControls(props: Partial<InstanceType<typeof MeetingControls>['$pro
 describe('MeetingControls', () => {
   afterEach(() => haptics.playHaptic.mockReset());
 
-  it('groups mic and camera, then share, chat and more, then leave, with full screen apart on the right', () => {
+  it('groups mic and camera, then share and more, then leave, with invite on the left and full screen on the right', () => {
     const wrapper = mountControls();
     const itemsIn = (selector: string) =>
       wrapper
@@ -52,10 +52,19 @@ describe('MeetingControls', () => {
         .map((item) => item.attributes('data-bar-item') ?? item.attributes('aria-label'));
 
     expect(itemsIn('[data-controls-group="media"]')).toEqual(['audio', 'video']);
-    expect(itemsIn('[data-controls-group="actions"]')).toEqual(['share', 'Open chat', 'more']);
+    expect(itemsIn('[data-controls-group="actions"]')).toEqual(['share', 'more']);
+    expect(wrapper.find('[data-chat-trigger]').exists()).toBe(false);
     expect(wrapper.find('[data-controls-group] button[aria-label="End call"]').exists()).toBe(false);
     expect(wrapper.get('button[aria-label="End call"]').classes()).toContain('call-button-leave');
     expect(wrapper.get('[data-fullscreen-toggle]').attributes('aria-label')).toBe('Full screen');
+  });
+
+  it('opens the invite from the button on the left, where inviting is possible', async () => {
+    const wrapper = mountControls();
+    await wrapper.get('[data-invite-trigger]').trigger('click');
+    expect(wrapper.emitted('invite')).toHaveLength(1);
+
+    expect(mountControls({ inviteMode: 'hidden' }).find('[data-invite-trigger]').exists()).toBe(false);
   });
 
   it('toggles full screen', async () => {

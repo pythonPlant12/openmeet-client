@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Maximize, MessageSquare, Minimize, PhoneOff } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { Maximize, Minimize, PhoneOff, UserRoundPlus } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 import { playHaptic } from '@/services/haptics';
@@ -10,15 +9,14 @@ import MeetingActionMenu from './MeetingActionMenu.vue';
 import MeetingMediaControl from './MeetingMediaControl.vue';
 import MeetingScreenShareControl from './MeetingScreenShareControl.vue';
 
-// The desktop controls bar: [mic▾][camera▾] · [share][chat][⋮] · [leave], with Full screen on the far right.
+// The desktop controls bar: [mic▾][camera▾] · [share][⋮] · [leave], with invite on the far left and Full screen
+// on the far right. The chat sits in the top bar.
 interface Props {
   audioAvailable: boolean;
   showConnectionStatus: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
   meetingId: string;
-  isChatOpen: boolean;
-  unreadCount?: number;
   videoAvailable: boolean;
   participants: Participant[];
   pinnedParticipantId: string | null;
@@ -41,7 +39,6 @@ interface Emits {
   (e: 'toggle-stats'): void;
   (e: 'toggle-mute'): void;
   (e: 'toggle-video'): void;
-  (e: 'toggle-chat'): void;
   (e: 'toggle-fullscreen'): void;
   (e: 'end-call'): void;
   (e: 'invite'): void;
@@ -56,8 +53,7 @@ interface Emits {
   (e: 'toggle-pin', participantId: string): void;
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  unreadCount: 0,
+withDefaults(defineProps<Props>(), {
   inviteMode: 'hidden',
   canPresent: false,
   canSelectArea: false,
@@ -70,12 +66,6 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>();
 const { t } = useI18n();
 
-const chatAriaLabel = computed(() => {
-  if (props.isChatOpen) return t('meeting.controls.closeChat');
-  if (props.unreadCount) return t('meeting.controls.openChatWithUnread', { count: props.unreadCount });
-  return t('meeting.controls.openChat');
-});
-
 function onLeave() {
   playHaptic('medium');
   emit('end-call');
@@ -83,7 +73,8 @@ function onLeave() {
 </script>
 
 <template>
-  <!-- Solid trays: [mic▾ camera▾] [share chat ⋮] then Leave in red, with Full screen on the far right. -->
+  <!-- Solid trays: [mic▾ camera▾] [share ⋮] then Leave in red, with invite on the far left and Full screen on the far
+       right. -->
   <div
     class="marketing-font pointer-events-none fixed inset-x-0 bottom-4 z-40 flex items-center justify-center gap-2 text-harbor-ink sm:bottom-6"
     :class="{ 'meeting-controls-dark': dark }"
@@ -121,27 +112,6 @@ function onLeave() {
       />
 
       <div class="group relative">
-        <button
-          type="button"
-          class="call-button relative"
-          :aria-label="chatAriaLabel"
-          :aria-pressed="isChatOpen"
-          :data-active="isChatOpen"
-          data-chat-trigger
-          @click="emit('toggle-chat')"
-        >
-          <MessageSquare />
-          <span
-            v-if="unreadCount > 0 && !isChatOpen"
-            class="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-harbor-accent text-[0.625rem] font-bold text-white"
-          >
-            {{ unreadCount > 9 ? '9+' : unreadCount }}
-          </span>
-        </button>
-        <span class="meeting-tooltip">{{ t('meeting.tooltips.chat') }}</span>
-      </div>
-
-      <div class="group relative">
         <MeetingActionMenu
           :participants="participants"
           :pinned-participant-id="pinnedParticipantId"
@@ -172,6 +142,19 @@ function onLeave() {
         <PhoneOff />
       </button>
       <span class="meeting-tooltip">{{ t('meeting.tooltips.leave') }}</span>
+    </div>
+
+    <div v-if="inviteMode !== 'hidden'" class="group pointer-events-auto absolute left-6">
+      <button
+        type="button"
+        class="call-button call-chip"
+        :aria-label="t('meeting.controls.invitePeople')"
+        data-invite-trigger
+        @click="emit('invite')"
+      >
+        <UserRoundPlus />
+      </button>
+      <span class="meeting-tooltip">{{ t('meeting.controls.invitePeople') }}</span>
     </div>
 
     <div class="call-tray pointer-events-auto absolute right-6">
