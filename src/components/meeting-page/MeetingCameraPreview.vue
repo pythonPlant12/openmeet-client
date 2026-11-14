@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
@@ -184,14 +183,14 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="flex justify-center">
-        <Button
-          variant="secondary"
-          class="harbor-ghost-action h-12 rounded-full bg-white/90 px-6 font-semibold text-harbor-ink shadow-harbor-soft backdrop-blur"
+        <button
+          type="button"
+          class="call-button call-chip h-12 w-auto px-6 text-sm font-semibold"
           data-camera-preview-confirm
           @click="confirm"
         >
           {{ t(cameraOn ? 'meeting.preview.done' : 'meeting.preview.turnOn') }}
-        </Button>
+        </button>
       </div>
     </DialogContent>
   </Dialog>

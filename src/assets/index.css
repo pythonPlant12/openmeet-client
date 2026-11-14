@@ -1540,15 +1540,16 @@
 
 /* In the components layer, so utilities on a single button or tray can still adjust it. */
 @layer components {
-  /* Call controls: solid, flat buttons in solid trays, with no glass, drop, or bounce. A tray groups related
-     buttons; Leave stands alone in red. State changes only the fill and icon color, quickly. */
+  /* Call controls: flat squircle buttons in solid trays, with no glass, drop, or bounce. A tray groups related
+     buttons; Leave stands alone in red. State changes only the fill and icon color, quickly. The squircle sits
+     between a rounded square and a circle. */
   .call-tray {
     display: flex;
     align-items: center;
     gap: 0.125rem;
     padding: 0.25rem;
     border: 1px solid rgb(var(--harbor-line));
-    border-radius: 1.125rem;
+    border-radius: calc(var(--meeting-control-size) * 0.4 + 0.25rem);
     background: rgb(var(--harbor-surface));
     box-shadow: var(--harbor-shadow-soft);
   }
@@ -1560,7 +1561,7 @@
     justify-content: center;
     width: var(--meeting-control-size);
     height: var(--meeting-control-size);
-    border-radius: 0.875rem;
+    border-radius: calc(var(--meeting-control-size) * 0.4);
     color: rgb(var(--harbor-ink));
     background-color: transparent;
     -webkit-tap-highlight-color: transparent;
@@ -1607,9 +1608,11 @@
     }
   }
 
-  /* A muted microphone or a camera that is off shows its icon in red. */
-  .call-button[data-off='true'] {
+  /* A muted microphone or a camera that is off shows a red icon on a red-tinted fill. */
+  .call-button[data-off='true'],
+  .call-button[data-off='true']:hover {
     color: rgb(var(--harbor-danger));
+    background-color: rgb(var(--harbor-danger-soft));
   }
 
   /* A medium that is live and worth noticing, such as the camera or a screen share, fills solid. */
@@ -1622,7 +1625,7 @@
   /* Leave uses fixed reds rather than the danger tokens, which dark scopes lighten for text. */
   .call-button-leave {
     width: calc(var(--meeting-control-size) * 1.25);
-    border-radius: 0.875rem;
+    border-radius: calc(var(--meeting-control-size) * 0.4);
     color: #fff;
     background-color: rgb(196 81 61);
   }
@@ -1633,17 +1636,26 @@
     background-color: rgb(169 67 50);
   }
 
-  /* Square chips for the phone top bar, the same flat surface as the trays. */
+  /* Standalone call buttons outside a tray, such as the phone top bar and the camera preview: a grey squircle. */
   .call-chip {
-    border: 1px solid rgb(var(--harbor-line));
-    background-color: rgb(var(--harbor-surface));
+    border-radius: calc(var(--meeting-control-size) * 0.4);
+    background-color: rgb(var(--harbor-hover));
     box-shadow: var(--harbor-shadow-soft);
   }
 
-  /* Full screen puts the call on the near-black stage, so its chrome (controls, phone bars, chat) switches to a
-     dark Harbor palette. The class sits on the document because the chat opens in a portal. */
+  @media (hover: hover) and (pointer: fine) {
+    .call-chip:not(:disabled):hover {
+      background-color: rgb(var(--harbor-line));
+    }
+  }
+
+  /* The call screen is always dark, so it and its chrome (controls, phone bars, chat, camera preview) use a dark
+     Harbor palette. `meeting-immersive` sits on the document while a call is on screen, because the chat and the
+     camera preview open in portals. */
   .meeting-controls-dark,
-  .meeting-immersive :is([data-call-phone-controls], [data-call-phone-top-bar], .harbor-chat-panel) {
+  .call-screen-dark,
+  .meeting-immersive
+    :is([data-call-phone-controls], [data-call-phone-top-bar], .harbor-chat-panel, [data-camera-preview]) {
     --harbor-ink: 233 237 239;
     --harbor-ink-soft: 209 215 219;
     --harbor-icon: 174 186 193;
@@ -1668,6 +1680,12 @@
     color-scheme: dark;
     /* Text inherited from outside the scope would keep the light ink. */
     color: rgb(var(--harbor-ink));
+  }
+
+  /* The page behind the call screen, such as the strip under the phone chrome, stays dark too. */
+  html.meeting-immersive,
+  html.meeting-immersive body {
+    background-color: rgb(17 20 22);
   }
 
   /* Meeting menus highlight items with a flat fill instead of the liquid drop, and their icons stay still. */

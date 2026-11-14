@@ -786,9 +786,13 @@ watch(
   { immediate: true },
 );
 
+// The call screen is always dark. Menus, the chat, and the camera preview open in portals outside the page, so the
+// dark theme for them hangs off the document.
+watch(hasJoined, (joined) => document.documentElement.classList.toggle('meeting-immersive', joined), {
+  immediate: true,
+});
+
 watch(isFullscreen, (fullscreen) => {
-  // Menus open in portals outside the page, so the dark theme for them hangs off the document.
-  document.documentElement.classList.toggle('meeting-immersive', fullscreen);
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: fullscreen }));
 });
 
@@ -908,7 +912,7 @@ const handleReconnect = () => {
 <template>
   <div
     class="relative h-[calc(100dvh-84px)] overflow-hidden px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0"
-    :class="isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-surface'"
+    :class="hasJoined ? ['call-screen-dark', isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-app'] : 'bg-harbor-surface'"
     :data-fullscreen="isFullscreen ? 'true' : undefined"
     :style="callAreaStyle"
     @touchstart.passive="handleFullscreenTouchStart"
@@ -965,7 +969,7 @@ const handleReconnect = () => {
       <!-- Participant Count Badge -->
       <div
         v-if="!isFullscreen && !usesPhoneChrome"
-        class="fixed left-9 top-[calc(84px+1.25rem)] z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-white px-4 text-harbor-ink shadow-[0_1px_2px_rgba(17,27,33,0.06),0_4px_14px_rgba(17,27,33,0.1)]"
+        class="fixed left-9 top-[calc(84px+1.25rem)] z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-harbor-surface px-4 text-harbor-ink shadow-harbor-soft"
       >
         <Users class="h-5 w-5" />
         <span class="font-semibold">{{ participantCount }}</span>
@@ -1143,7 +1147,7 @@ const handleReconnect = () => {
           <MeetingControls
             v-else
             v-show="showsControls"
-            :dark="isFullscreen"
+            dark
             :audio-available="audioAvailable"
             :is-muted="isMuted"
             :is-video-off="isVideoOff"
