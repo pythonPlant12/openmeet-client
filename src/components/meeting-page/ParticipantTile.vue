@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { MaximizeAnimated, MinimizeAnimated, PinAnimated, PinOffAnimated } from '@respeak/lucide-motion-vue';
+import { useElementBounding, useElementVisibility, useWindowSize } from '@vueuse/core';
 import { Eye, EyeOff, MonitorUp } from 'lucide-vue-next';
-import { useElementBounding, useWindowSize } from '@vueuse/core';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -46,15 +46,17 @@ interface Props {
   /** The call controls are hidden, so the name tag shrinks to the mic-off icon. */
   collapsed?: boolean;
   /**
-   * The tile is off screen, such as on another grid page: it keeps playing the person's audio but drops their
-   * video, so the device does not render cameras nobody sees.
+   * The tile is off screen, such as on another grid page: it drops the person's video, so the device does not
+   * render cameras nobody sees. Their audio plays from the call's audio layer (CallAudio), not from the tile.
    */
-  audioOnly?: boolean;
+  offscreen?: boolean;
   /**
    * How much of the screen's bottom the full screen call controls cover, as a CSS length, while they show. The
    * name tag rises so it stays above them.
    */
   controlsReserve?: string;
+  /** The tile's corner radius as a CSS length, such as one that follows a phone's rounded screen; 1.4rem if unset. */
+  cornerRadius?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -71,8 +73,9 @@ const props = withDefaults(defineProps<Props>(), {
   isFullscreen: false,
   nameToggle: false,
   collapsed: false,
-  audioOnly: false,
+  offscreen: false,
   controlsReserve: undefined,
+  cornerRadius: undefined,
 });
 const { t } = useI18n();
 
@@ -92,13 +95,13 @@ const isOptionsOpen = ref(false);
 const videoRef = ref<HTMLVideoElement | null>(null);
 // A remote camera is "loading" from joining until its first frame renders.
 const hasVideoFrames = ref(false);
-// An audio-only tile plays a stream with just the audio tracks, so its video track has nothing to render into.
-const mediaStream = computed(() => {
-  const stream = props.participant.stream;
-  if (!stream || !props.audioOnly) return stream;
-  return new MediaStream(stream.getAudioTracks());
-});
-const showsVideo = computed(() => props.participant.videoEnabled && !props.audioOnly);
+// Video renders only while the tile is on screen: not on another grid page (`offscreen`) and not scrolled out of
+// the strip or the grid, which clip it. The tile's video is always muted; everyone's audio plays from CallAudio.
+const tileRoot = ref<HTMLElement | null>(null);
+const isOnScreen = useElementVisibility(tileRoot, { initialValue: true });
+const rendersVideo = computed(() => !props.offscreen && isOnScreen.value);
+const mediaStream = computed(() => (rendersVideo.value ? props.participant.stream : null));
+const showsVideo = computed(() => props.participant.videoEnabled && rendersVideo.value);
 const isMediaLoading = computed(
   () =>
     !props.participant.isLocal &&
@@ -126,7 +129,7 @@ const playAttachedVideo = async () => {
   try {
     await video.play();
   } catch {
-    // Ignore autoplay errors. Browser policy can require a user gesture for audio.
+    // Ignore autoplay errors; a muted video normally plays at once.
     console.log(`[ParticipantTile] Autoplay may be blocked for ${props.participant.name}`);
   }
 };
@@ -160,7 +163,6 @@ const statusOption = computed(() => (props.status ? userStatusOption(props.statu
 const showsNameTag = computed(() => props.showNameTag && (!props.collapsed || !props.participant.audioEnabled));
 // Over the full screen controls the tag rises by the part of the controls that overlaps this tile, measured from
 // the tile's bottom edge to the screen's, so tiles higher up keep their tag in place.
-const tileRoot = ref<HTMLElement | null>(null);
 const { bottom: tileBottom, update: measureTile } = useElementBounding(tileRoot);
 const { height: windowHeight } = useWindowSize();
 watch(
@@ -191,6 +193,13 @@ const isCompact = computed(() => props.size === 'sidebar' || props.size === 'mob
 // video with no gap at the corners. Phone webviews do not always clip a video to its parent's corners, so the
 // video and the layers over it carry the curve themselves.
 const innerRadiusClass = computed(() => (props.bleed ? 'rounded-none' : 'rounded-[calc(1.4rem-2px)]'));
+// A custom radius overrides both curves inline.
+const outerRadiusStyle = computed(() =>
+  props.cornerRadius && !props.bleed ? { borderRadius: props.cornerRadius } : undefined,
+);
+const innerRadiusStyle = computed(() =>
+  props.cornerRadius && !props.bleed ? { borderRadius: `calc(${props.cornerRadius} - 2px)` } : undefined,
+);
 
 // Screens are never cropped or mirrored, so their text stays whole and readable.
 const isScreen = computed(() => !!props.participant.screenShareOf);
@@ -204,6 +213,8 @@ const surfaceClass = computed(() => (props.dark ? 'bg-[#161C1E]' : 'bg-harbor-li
 const attachStream = async () => {
   await nextTick();
   const stream = mediaStream.value;
+  // An off-screen tile lets go of the stream, so its video stops decoding.
+  if (videoRef.value && !stream) videoRef.value.srcObject = null;
   if (videoRef.value && stream) {
     // Only set srcObject if it's different from what's currently set
     if (videoRef.value.srcObject !== stream) {
@@ -271,6 +282,7 @@ onMounted(async () => {
           : '',
         pressed ? 'scale-[0.97] duration-100' : '',
       ]"
+      :style="outerRadiusStyle"
       data-participant-surface
       :aria-label="
         interactive
@@ -284,7 +296,7 @@ onMounted(async () => {
       @pointerleave="pressed = false"
       @click="interactive && emit('click')"
     >
-      <!-- Video element (always present for audio playback, hidden when video disabled) -->
+      <!-- The camera, hidden while it is off. Muted: everyone's audio plays from CallAudio. -->
       <video
         v-if="participant.stream"
         ref="videoRef"
@@ -293,7 +305,7 @@ onMounted(async () => {
         :data-participant-local="participant.isLocal"
         autoplay
         playsinline
-        :muted="participant.isLocal"
+        :muted="true"
         @loadedmetadata="
           reportAspect();
           playAttachedVideo();
@@ -309,6 +321,7 @@ onMounted(async () => {
           objectFitClass,
           { hidden: !showsVideo, '-scale-x-100': participant.isLocal && !isScreen },
         ]"
+        :style="innerRadiusStyle"
       />
 
       <!-- Avatar (shown when no stream or video disabled) -->
@@ -317,6 +330,7 @@ onMounted(async () => {
         data-participant-avatar
         class="absolute inset-0 flex items-center justify-center"
         :class="[surfaceClass, innerRadiusClass]"
+        :style="innerRadiusStyle"
       >
         <div
           :class="[
@@ -336,6 +350,7 @@ onMounted(async () => {
         data-participant-loading
         class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-harbor-accent backdrop-blur-[2px]"
         :class="[dark ? 'bg-[#161C1E]/70' : 'bg-harbor-line/70', innerRadiusClass]"
+        :style="innerRadiusStyle"
         role="status"
       >
         <LoadingRipple :size="isCompact ? 'sm' : 'lg'" />

@@ -27,6 +27,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Expand } from '@/components/ui/expand';
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { type MediaKind, useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
 import { VIDEO_QUALITY_OPTIONS } from '@/lib/video-quality';
@@ -203,56 +204,58 @@ onBeforeUnmount(stopLevelMeter);
           aria-hidden="true"
         />
       </button>
-      <div v-if="isExpanded" class="px-3 pb-3" data-media-options>
-        <div class="call-choice-list">
-          <CallPanelChoice
-            v-bind="choiceModel('source')"
-            :label="t('meeting.controls.source')"
-            :options="deviceOptions"
-            :value="activeId"
-            :disabled="busy"
-            :empty-text="t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras')"
-            option-attribute="data-device-option"
-            data-media-source
-            @select="selectDevice"
-          />
-          <template v-if="isAudio">
+      <Expand :open="isExpanded">
+        <div class="px-3 pb-3" data-media-options>
+          <div class="call-choice-list">
             <CallPanelChoice
-              v-if="canChooseSpeaker && speakers.length"
-              v-bind="choiceModel('speaker')"
-              :label="t('meeting.controls.speaker')"
-              :options="speakerOptions"
-              :value="speakerId"
-              option-attribute="data-speaker-option"
-              data-media-speaker
-              @select="selectSpeaker"
-            />
-            <MeetingInputVolume
-              class="!px-3.5 !py-3"
-              :volume-percent="volumePercent"
-              :level-percent="levelPercent"
-              @change="onVolumeChange"
-            />
-          </template>
-          <template v-else>
-            <CallPanelChoice
-              v-bind="choiceModel('quality')"
-              :label="t('meeting.controls.quality')"
-              :options="qualityOptions"
-              :value="quality"
+              v-bind="choiceModel('source')"
+              :label="t('meeting.controls.source')"
+              :options="deviceOptions"
+              :value="activeId"
               :disabled="busy"
-              option-attribute="data-quality-option"
-              data-media-quality
-              @select="changeQuality"
+              :empty-text="t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras')"
+              option-attribute="data-device-option"
+              data-media-source
+              @select="selectDevice"
             />
-            <button type="button" class="call-choice" data-preview-camera @click="emit('preview-camera')">
-              <ScanFace class="size-4 shrink-0 text-harbor-icon" aria-hidden="true" />
-              <span class="flex-1 text-left">{{ t('meeting.controls.previewCamera') }}</span>
-            </button>
-          </template>
-          <slot name="extra" />
+            <template v-if="isAudio">
+              <CallPanelChoice
+                v-if="canChooseSpeaker && speakers.length"
+                v-bind="choiceModel('speaker')"
+                :label="t('meeting.controls.speaker')"
+                :options="speakerOptions"
+                :value="speakerId"
+                option-attribute="data-speaker-option"
+                data-media-speaker
+                @select="selectSpeaker"
+              />
+              <MeetingInputVolume
+                class="!px-3.5 !py-3"
+                :volume-percent="volumePercent"
+                :level-percent="levelPercent"
+                @change="onVolumeChange"
+              />
+            </template>
+            <template v-else>
+              <CallPanelChoice
+                v-bind="choiceModel('quality')"
+                :label="t('meeting.controls.quality')"
+                :options="qualityOptions"
+                :value="quality"
+                :disabled="busy"
+                option-attribute="data-quality-option"
+                data-media-quality
+                @select="changeQuality"
+              />
+              <button type="button" class="call-choice" data-preview-camera @click="emit('preview-camera')">
+                <ScanFace class="size-4 shrink-0 text-harbor-icon" aria-hidden="true" />
+                <span class="flex-1 text-left">{{ t('meeting.controls.previewCamera') }}</span>
+              </button>
+            </template>
+            <slot name="extra" />
+          </div>
         </div>
-      </div>
+      </Expand>
     </template>
 
     <template v-else>

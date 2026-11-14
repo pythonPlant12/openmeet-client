@@ -2,6 +2,7 @@
 import { Check, ChevronDown } from 'lucide-vue-next';
 import { computed, ref, useId, watch } from 'vue';
 
+import { Expand } from '@/components/ui/expand';
 import { Input } from '@/components/ui/input';
 import { LoadingRipple } from '@/components/ui/loading';
 import { MEETING_ACCESS_OPTIONS, meetingAccessOption } from '@/config/meeting-access.config';
@@ -95,48 +96,50 @@ watch(isOpen, (open) => {
         aria-hidden="true"
       />
     </component>
-    <div v-if="editable && isOpen" :id="listId" class="px-3 pb-3" data-host-access>
-      <div class="call-choice-list" role="radiogroup" aria-label="Privacy">
-        <button
-          v-for="option in MEETING_ACCESS_OPTIONS"
-          :key="option.value"
-          type="button"
-          role="radio"
-          class="call-choice"
-          :aria-checked="option.value === draftPolicy"
-          :disabled="saving"
-          :data-access-option="option.value"
-          @click="choose(option.value)"
-        >
-          <component :is="option.icon" class="size-4 shrink-0 text-harbor-icon" aria-hidden="true" />
-          <span class="min-w-0 flex-1 text-left">
-            <span class="block truncate">{{ option.label }}</span>
-            <span class="block text-xs font-normal text-harbor-muted">{{ option.description }}</span>
-          </span>
-          <Check v-if="option.value === draftPolicy" class="size-4 shrink-0" aria-hidden="true" />
-        </button>
-        <form v-if="draftPolicy === 'password'" class="flex gap-2 px-3.5 py-3" @submit.prevent="savePassword">
-          <Input
-            id="meeting-access-password"
-            v-model="password"
-            type="password"
-            autocomplete="new-password"
-            maxlength="256"
-            aria-label="Meeting password"
-            :disabled="saving"
-            :placeholder="hasPassword ? 'New password, or empty to keep it' : 'At least 4 characters'"
-            class="h-9 min-w-0 flex-1 rounded-lg border-harbor-line bg-harbor-canvas text-sm focus-visible:ring-0"
-          />
+    <Expand v-if="editable" :open="isOpen">
+      <div :id="listId" class="px-3 pb-3" data-host-access>
+        <div class="call-choice-list" role="radiogroup" aria-label="Privacy">
           <button
-            type="submit"
-            class="call-button call-chip h-9 w-auto shrink-0 px-4 text-sm font-semibold"
-            :disabled="!canSavePassword"
-            data-save-access-password
+            v-for="option in MEETING_ACCESS_OPTIONS"
+            :key="option.value"
+            type="button"
+            role="radio"
+            class="call-choice"
+            :aria-checked="option.value === draftPolicy"
+            :disabled="saving"
+            :data-access-option="option.value"
+            @click="choose(option.value)"
           >
-            Save
+            <component :is="option.icon" class="size-4 shrink-0 text-harbor-icon" aria-hidden="true" />
+            <span class="min-w-0 flex-1 text-left">
+              <span class="block truncate">{{ option.label }}</span>
+              <span class="block text-xs font-normal text-harbor-muted">{{ option.description }}</span>
+            </span>
+            <Check v-if="option.value === draftPolicy" class="size-4 shrink-0" aria-hidden="true" />
           </button>
-        </form>
+          <form v-if="draftPolicy === 'password'" class="flex gap-2 px-3.5 py-3" @submit.prevent="savePassword">
+            <Input
+              id="meeting-access-password"
+              v-model="password"
+              type="password"
+              autocomplete="new-password"
+              maxlength="256"
+              aria-label="Meeting password"
+              :disabled="saving"
+              :placeholder="hasPassword ? 'New password, or empty to keep it' : 'At least 4 characters'"
+              class="h-9 min-w-0 flex-1 rounded-lg border-harbor-line bg-harbor-canvas text-sm focus-visible:ring-0"
+            />
+            <button
+              type="submit"
+              class="call-button call-chip h-9 w-auto shrink-0 px-4 text-sm font-semibold"
+              :disabled="!canSavePassword"
+              data-save-access-password
+            >
+              Save
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
+    </Expand>
   </div>
 </template>

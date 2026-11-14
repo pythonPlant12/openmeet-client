@@ -20,6 +20,7 @@ import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.v
 import MeetingPermissionSheet from '@/components/meeting-page/MeetingPermissionSheet.vue';
 import ScreenAreaPicker from '@/components/meeting-page/ScreenAreaPicker.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
+import { Expand } from '@/components/ui/expand';
 import { menuIconMotionKey } from '@/components/ui/liquid-menu/motion';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
@@ -42,6 +43,7 @@ import { followAudioOutput } from '@/services/audio-output';
 import { playHaptic } from '@/services/haptics';
 import { showSystemNotification } from '@/services/notifications';
 import { type MeetingRoomAccess, SocialApiError, type UserStatus, socialApi } from '@/services/social-api';
+import { coverScreenTop } from '@/services/system-bars';
 import type { MediaIssue } from '@/services/webrtc-sfu';
 import { getServices } from '@/xstate/machines/webrtc/actors';
 import type { Participant } from '@/xstate/machines/webrtc/types';
@@ -174,7 +176,10 @@ const { height: addPeopleRowHeight } = useElementSize(addPeopleRow, undefined, {
 const phoneControlsHeight = computed(() => {
   const measured = phoneControls.value?.restingHeight ?? 0;
   const tray = measured > 0 ? `${measured}px` : 'calc(var(--meeting-control-size) + 2.25rem)';
-  return `calc(max(0.5rem, env(safe-area-inset-bottom)) + ${tray})`;
+  // Full screen lifts the bar by 0.25rem (see CallPhoneControls).
+  const lift = isFullscreen.value ? ' + 0.25rem' : '';
+  // The bar's gap to the screen bottom, as CallPhoneControls pads it: 0.5rem, and 0.5rem above the home indicator.
+  return `calc(max(0.5rem, calc(env(safe-area-inset-bottom) + 0.5rem)) + ${tray}${lift})`;
 });
 const callAreaStyle = computed(() =>
   usesPhoneChrome.value
@@ -192,8 +197,11 @@ const callAreaStyle = computed(() =>
       }
     : {
         '--call-area-top': 'calc(2.25rem + var(--meeting-control-size))',
-        // The controls bar's top edge: 1.5rem from the bottom, plus the tray (the buttons, its padding and border).
-        '--call-controls-height': 'calc(var(--meeting-control-size) + 2rem + 2px)',
+        // The controls bar's top edge: 1.5rem from the bottom (1.75rem in full screen, see MeetingControls), plus
+        // the tray (the buttons, its padding and border).
+        '--call-controls-height': isFullscreen.value
+          ? 'calc(var(--meeting-control-size) + 2.25rem + 2px)'
+          : 'calc(var(--meeting-control-size) + 2rem + 2px)',
         '--call-bottom-chrome': 'var(--call-controls-height)',
         '--call-area-bottom': 'calc(var(--meeting-control-size) + 3.5rem)',
       },
@@ -623,6 +631,7 @@ onUnmounted(() => {
   window.removeEventListener('pagehide', handlePageHide);
   window.removeEventListener('keydown', handleFullscreenKeydown);
   if (isFullscreen.value) setFullscreen(false);
+  coverScreenTop('call', false);
   document.documentElement.classList.remove('meeting-immersive');
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: false }));
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-call-chrome', { detail: false }));
@@ -796,6 +805,11 @@ watch(isFullscreen, (fullscreen) => {
   else callControls.show();
 });
 
+// In the OpenMeet app, a full screen call on a phone in portrait covers the whole screen, around the notch too
+// (the home indicator area is always covered); the rest of the call stays below the status bar.
+const coversSystemBars = computed(() => isFullscreen.value && callFormFactor.value === 'phone-portrait');
+watch(coversSystemBars, (covers) => coverScreenTop('call', covers));
+
 function handleVideoSwipe(direction: 'up' | 'down') {
   if (!usesPhoneChrome.value || !isFullscreen.value) return;
   if (direction === 'up' && !showsControls.value) {
@@ -813,7 +827,6 @@ function toggleOwnCamera() {
   showOwnCamera.value = !showOwnCamera.value;
   saveCallSettings({ showOwnCamera: showOwnCamera.value });
 }
-
 
 // The top bar's camera flip moves to the next camera, such as from the front to the back camera of a phone.
 const cameraSettings = useMeetingMediaSettings('video');
@@ -1089,12 +1102,14 @@ const handleReconnect = () => {
                 {{ t('meeting.warning') }}
               </span>
             </div>
-            <p v-if="showConnectionQualityDetails" class="mt-1 text-xs text-harbor-danger-strong">
-              {{ connectionQualityReason || t('meeting.mediaWarning') }}
-              <span v-if="packetLossPercent > 0">
-                {{ t('meeting.packetLoss', { percent: packetLossPercent }) }}
-              </span>
-            </p>
+            <Expand :open="showConnectionQualityDetails">
+              <p class="mt-1 text-xs text-harbor-danger-strong">
+                {{ connectionQualityReason || t('meeting.mediaWarning') }}
+                <span v-if="packetLossPercent > 0">
+                  {{ t('meeting.packetLoss', { percent: packetLossPercent }) }}
+                </span>
+              </p>
+            </Expand>
           </div>
           <ChevronDown
             class="h-4 w-4 shrink-0 text-harbor-danger-strong transition-transform"
@@ -1169,6 +1184,7 @@ const handleReconnect = () => {
           :controls-hidden="!showsControls"
           :hide-own-camera="!showOwnCamera"
           @toggle-pin="handleTogglePin"
+          @show-grid="handleSetViewMode('grid')"
           @toggle-fullscreen="handleToggleFullscreen"
           @long-press="handleVideoLongPress"
           @swipe="handleVideoSwipe"
@@ -1196,6 +1212,7 @@ const handleReconnect = () => {
             :show-own-camera="showOwnCamera"
             :audio-warning="audioWarning"
             :video-warning="videoWarning"
+            :fullscreen="isFullscreen"
             @toggle-mute="handleToggleMute"
             @toggle-video="handleToggleVideo"
             @request-access="handleRequestAccess"

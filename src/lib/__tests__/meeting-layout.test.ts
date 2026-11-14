@@ -43,8 +43,13 @@ describe('selectCallLayout', () => {
     });
   });
 
-  it('keeps the small picture when the person picks Grid on a phone 1:1 call', () => {
-    expect(layoutFor([me, person('ada')], 'phone-portrait', { viewMode: 'grid' }).kind).toBe('self-view');
+  it('shows a phone 1:1 call as a grid page when the person picks Grid', () => {
+    expect(layoutFor([me, person('ada')], 'phone-portrait', { viewMode: 'grid' })).toEqual({
+      kind: 'grid',
+      ids: ['me', 'ada'],
+      columns: 1,
+      paged: true,
+    });
   });
 
   it('fills a phone with one column for yourself alone', () => {
