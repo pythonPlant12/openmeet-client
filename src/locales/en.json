@@ -418,7 +418,8 @@
       "shareText": "Join my video call: {link}",
       "shareTitle": "Join my video call",
       "moreControls": "More controls",
-      "audioOutput": "Audio output"
+      "audioOutput": "Audio output",
+      "showChat": "Show chat"
     },
     "preview": {
       "title": "Camera preview",

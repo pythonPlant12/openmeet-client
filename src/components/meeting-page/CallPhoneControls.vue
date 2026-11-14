@@ -1,29 +1,39 @@
 <script setup lang="ts">
 import { onClickOutside, useElementSize } from '@vueuse/core';
-import { Bug, Check, Code, LayoutGrid, MicOff, PhoneOff, Pin, PinOff, ScanFace } from 'lucide-vue-next';
+import {
+  Bug,
+  Check,
+  ChevronRight,
+  Code,
+  LayoutGrid,
+  MessageSquare,
+  PhoneOff,
+  ScanEye,
+  ScanFace,
+  UserRoundPlus,
+} from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { RoundButton } from '@/components/ui/round-button';
 import { buildGitHubIssueUrl } from '@/lib/github-issue';
 import { swallowNextClick } from '@/lib/swallow-next-click';
 import { playHaptic } from '@/services/haptics';
-import type { Participant } from '@/xstate/machines/webrtc/types';
 
 import MeetingMediaControl from './MeetingMediaControl.vue';
 import MeetingScreenShareControl from './MeetingScreenShareControl.vue';
 
-// The phone call screen's bottom bar: mic, camera, share and leave in thumb reach. Its handle (or a swipe up on
-// the bar) reveals a panel with the rest of the controls and settings, which snaps open or closed.
+// The phone call screen's bottom bar: camera, mic, share and leave in thumb reach. Its handle (or a swipe up on
+// the bar) reveals a panel with the rest of the controls and settings, which snaps open or closed. While the
+// panel is open the bar moves to the top of the card, above the panel.
 defineProps<{
   audioAvailable: boolean;
   videoAvailable: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
   canPresent: boolean;
-  participants: Participant[];
-  pinnedParticipantId: string | null;
   viewMode: 'grid' | 'speaker';
+  /** The panel's Invite people row shows only where inviting is possible. */
+  canInvite: boolean;
   showConnectionStatus: boolean;
   /** The call could not get the microphone or camera; its button shows a warning that asks again. */
   audioWarning?: boolean;
@@ -40,8 +50,9 @@ const emit = defineEmits<{
   (e: 'start-screen-share', options?: { selectArea: boolean }): void;
   (e: 'stop-screen-share'): void;
   (e: 'set-view-mode', mode: 'grid' | 'speaker'): void;
-  (e: 'toggle-pin', participantId: string): void;
   (e: 'toggle-stats'): void;
+  (e: 'toggle-chat'): void;
+  (e: 'invite'): void;
 }>();
 
 const { t } = useI18n();
@@ -133,6 +144,12 @@ function stopListening() {
 
 onBeforeUnmount(stopListening);
 
+/** A panel row that does one thing closes the panel, so its result is in view. */
+function fromPanel(action: () => void) {
+  setOpen(false);
+  action();
+}
+
 function onLeave() {
   playHaptic('medium');
   emit('end-call');
@@ -145,13 +162,13 @@ function onLeave() {
   >
     <div
       ref="card"
-      class="call-tray pointer-events-auto flex-col items-stretch w-full max-w-md overflow-hidden rounded-[1.5rem] p-0"
+      class="call-tray pointer-events-auto flex w-full max-w-md flex-col items-stretch overflow-hidden rounded-[1.5rem] p-0"
       data-call-phone-controls
       :data-state="isOpen ? 'open' : 'closed'"
     >
       <button
         type="button"
-        class="flex h-5 w-full touch-none items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-subtle"
+        class="order-1 flex h-5 w-full touch-none items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-subtle"
         :aria-label="t('meeting.controls.moreControls')"
         :aria-expanded="isOpen"
         :aria-controls="panelId"
@@ -163,105 +180,31 @@ function onLeave() {
       </button>
 
       <div
-        :id="panelId"
-        class="overflow-hidden"
-        :class="draggedHeight === null ? 'transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]' : ''"
-        :style="{ height: `${revealedHeight}px` }"
-        :inert="!isOpen || undefined"
-        data-controls-panel
+        class="flex touch-none items-center justify-around gap-1 px-2 pb-2"
+        :class="isOpen ? 'order-2' : 'order-4'"
+        :data-position="isOpen ? 'top' : 'bottom'"
+        data-controls-bar
+        @pointerdown="onPointerDown"
       >
-        <div ref="panelContent" class="max-h-[55dvh] overflow-y-auto overscroll-contain px-3 pb-2">
-          <h3 class="px-1 pb-2 text-sm font-semibold text-harbor-muted">{{ t('meeting.actions.layout') }}</h3>
-          <div role="radiogroup" :aria-label="t('meeting.actions.layout')" class="grid grid-cols-2 gap-2">
-            <button
-              v-for="layout in layouts"
-              :key="layout.mode"
-              type="button"
-              role="radio"
-              :aria-checked="viewMode === layout.mode"
-              class="flex h-11 items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition-colors [@media(hover:hover)]:hover:bg-harbor-hover"
-              :class="viewMode === layout.mode ? '!bg-harbor-hover text-harbor-ink' : 'text-harbor-ink-soft'"
-              @click="emit('set-view-mode', layout.mode)"
-            >
-              <component :is="layout.icon" class="size-4" />{{ layout.label }}
-            </button>
-          </div>
-
-          <h3 class="px-1 pb-1 pt-4 text-sm font-semibold text-harbor-muted">
-            {{ t('meeting.actions.participantsCount', { count: participants.length }) }}
-          </h3>
-          <ul>
-            <li
-              v-for="participant in participants"
-              :key="participant.id"
-              class="flex min-h-11 items-center gap-2 border-b border-harbor-line px-1 last:border-b-0"
-            >
-              <span class="min-w-0 flex-1 truncate text-sm font-semibold">
-                {{ participant.name }}
-                <span v-if="participant.isLocal" class="font-normal text-harbor-muted">{{ t('meeting.you') }}</span>
-              </span>
-              <MicOff v-if="!participant.audioEnabled" class="size-4 shrink-0 text-harbor-danger" />
-              <RoundButton
-                tone="plain"
-                size="sm"
-                :aria-label="
-                  t(pinnedParticipantId === participant.id ? 'meeting.participant.unpin' : 'meeting.participant.pin', {
-                    name: participant.name,
-                  })
-                "
-                :aria-pressed="pinnedParticipantId === participant.id"
-                @click="emit('toggle-pin', participant.id)"
-              >
-                <PinOff v-if="pinnedParticipantId === participant.id" />
-                <Pin v-else />
-              </RoundButton>
-            </li>
-          </ul>
-
-          <div class="mt-3 grid gap-1">
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="showConnectionStatus"
-              class="flex h-11 items-center gap-3 rounded-2xl px-2 text-sm font-semibold [@media(hover:hover)]:hover:bg-harbor-hover"
-              data-dev-tools
-              @click="emit('toggle-stats')"
-            >
-              <Code class="size-4 text-harbor-icon" />
-              <span class="flex-1 text-left">{{ t('meeting.actions.devTools') }}</span>
-              <Check v-if="showConnectionStatus" class="size-4" aria-hidden="true" />
-            </button>
-            <a
-              :href="reportUrl"
-              target="_blank"
-              rel="noreferrer"
-              class="flex h-11 items-center gap-3 rounded-2xl px-2 text-sm font-semibold [@media(hover:hover)]:hover:bg-harbor-hover"
-            >
-              <Bug class="size-4 text-harbor-icon" />{{ t('meeting.actions.reportBug') }}
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex touch-none items-center justify-around gap-1 px-2 pb-2" @pointerdown="onPointerDown">
-        <MeetingMediaControl
-          kind="audio"
-          :off="isMuted"
-          :available="audioAvailable"
-          :warning="audioWarning"
-          @toggle="emit('toggle-mute')"
-          @request-access="emit('request-access', 'audio')"
-          @media-changed="emit('media-changed')"
-        />
         <MeetingMediaControl
           kind="video"
+          variant="toggle"
           :off="isVideoOff"
           :available="videoAvailable"
           :warning="videoWarning"
           @toggle="emit('toggle-video')"
           @request-access="emit('request-access', 'video')"
           @media-changed="emit('media-changed')"
-          @preview-camera="emit('preview-camera')"
+        />
+        <MeetingMediaControl
+          kind="audio"
+          variant="toggle"
+          :off="isMuted"
+          :available="audioAvailable"
+          :warning="audioWarning"
+          @toggle="emit('toggle-mute')"
+          @request-access="emit('request-access', 'audio')"
+          @media-changed="emit('media-changed')"
         />
         <MeetingScreenShareControl
           v-if="canPresent"
@@ -277,6 +220,105 @@ function onLeave() {
         >
           <PhoneOff />
         </button>
+      </div>
+
+      <div
+        :id="panelId"
+        class="order-3 overflow-hidden"
+        :class="draggedHeight === null ? 'transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]' : ''"
+        :style="{ height: `${revealedHeight}px` }"
+        :inert="!isOpen || undefined"
+        data-controls-panel
+      >
+        <div ref="panelContent" class="max-h-[55dvh] space-y-3 overflow-y-auto overscroll-contain px-3 pb-3">
+          <div class="call-panel-group">
+            <button
+              type="button"
+              class="call-panel-row"
+              data-panel-row="chat"
+              @click="fromPanel(() => emit('toggle-chat'))"
+            >
+              <MessageSquare class="call-panel-row-icon" />
+              <span class="flex-1 text-left">{{ t('meeting.controls.showChat') }}</span>
+            </button>
+          </div>
+
+          <div class="call-panel-group">
+            <MeetingMediaControl
+              kind="audio"
+              variant="row"
+              :off="isMuted"
+              :available="audioAvailable"
+              @media-changed="emit('media-changed')"
+            />
+            <MeetingMediaControl
+              kind="video"
+              variant="row"
+              :off="isVideoOff"
+              :available="videoAvailable"
+              @media-changed="emit('media-changed')"
+              @preview-camera="fromPanel(() => emit('preview-camera'))"
+            />
+            <button
+              type="button"
+              class="call-panel-row"
+              data-panel-row="preview-camera"
+              @click="fromPanel(() => emit('preview-camera'))"
+            >
+              <ScanEye class="call-panel-row-icon" />
+              <span class="flex-1 text-left">{{ t('meeting.controls.previewCamera') }}</span>
+            </button>
+          </div>
+
+          <div class="call-panel-group p-2">
+            <h3 class="px-1 pb-2 text-xs font-semibold text-harbor-muted">{{ t('meeting.actions.layout') }}</h3>
+            <div role="radiogroup" :aria-label="t('meeting.actions.layout')" class="grid grid-cols-2 gap-2">
+              <button
+                v-for="layout in layouts"
+                :key="layout.mode"
+                type="button"
+                role="radio"
+                :aria-checked="viewMode === layout.mode"
+                class="flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors"
+                :class="viewMode === layout.mode ? 'bg-harbor-line text-harbor-ink' : 'text-harbor-ink-soft'"
+                @click="emit('set-view-mode', layout.mode)"
+              >
+                <component :is="layout.icon" class="size-4" />{{ layout.label }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="canInvite" class="call-panel-group">
+            <button
+              type="button"
+              class="call-panel-row"
+              data-panel-row="invite"
+              @click="fromPanel(() => emit('invite'))"
+            >
+              <UserRoundPlus class="call-panel-row-icon" />
+              <span class="flex-1 text-left">{{ t('meeting.controls.invitePeople') }}</span>
+              <ChevronRight class="size-4 text-harbor-icon" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div class="call-panel-group">
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="showConnectionStatus"
+              class="call-panel-row"
+              data-dev-tools
+              @click="emit('toggle-stats')"
+            >
+              <Code class="call-panel-row-icon" />
+              <span class="flex-1 text-left">{{ t('meeting.actions.devTools') }}</span>
+              <Check v-if="showConnectionStatus" class="size-4" aria-hidden="true" />
+            </button>
+            <a :href="reportUrl" target="_blank" rel="noreferrer" class="call-panel-row">
+              <Bug class="call-panel-row-icon" />{{ t('meeting.actions.reportBug') }}
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   </div>

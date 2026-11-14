@@ -1702,6 +1702,46 @@
     animation: none !important;
   }
 
+  /* The phone controls panel: grouped rows on a slightly raised surface, like a settings list. */
+  .call-panel-group {
+    overflow: hidden;
+    border-radius: 1rem;
+    background-color: rgb(var(--harbor-hover));
+  }
+
+  .call-panel-group > * + * {
+    border-top: 1px solid rgb(var(--harbor-line));
+  }
+
+  .call-panel-row {
+    display: flex;
+    width: 100%;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: rgb(var(--harbor-ink));
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .call-panel-row:active {
+    background-color: rgb(var(--harbor-line));
+  }
+
+  .call-panel-row:focus-visible {
+    outline: 2px solid rgb(var(--harbor-subtle));
+    outline-offset: -2px;
+  }
+
+  .call-panel-row-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    color: rgb(var(--harbor-icon));
+  }
+
   /* Leave beside the trays matches their full height. */
   .call-button-tall {
     height: calc(var(--meeting-control-size) + 0.5rem + 2px);

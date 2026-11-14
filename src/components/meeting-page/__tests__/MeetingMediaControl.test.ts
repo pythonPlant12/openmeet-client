@@ -84,9 +84,14 @@ const RadioItem = defineComponent({
   },
 });
 
-function mountControl(kind: 'audio' | 'video', off = false, warning = false) {
+function mountControl(
+  kind: 'audio' | 'video',
+  off = false,
+  warning = false,
+  variant?: 'split' | 'toggle' | 'row',
+) {
   return mount(MeetingMediaControl, {
-    props: { kind, off, available: !warning, warning },
+    props: { kind, off, available: !warning, warning, variant },
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
       stubs: {
@@ -135,6 +140,18 @@ describe('MeetingMediaControl', () => {
     expect(wrapper.emitted('open-change')).toBeUndefined();
     expect(haptics.playHaptic).toHaveBeenCalledWith('light');
     expect(wrapper.get('[data-media-toggle]').attributes('aria-label')).toBe('Mute microphone');
+  });
+
+  it('shows only the toggle in the phone bar, with no chevron', () => {
+    const control = mountControl('audio', false, false, 'toggle');
+    expect(control.find('[data-media-toggle]').exists()).toBe(true);
+    expect(control.find('[data-media-menu-trigger]').exists()).toBe(false);
+  });
+
+  it('shows only the device menu as a labelled row in the phone controls panel', () => {
+    const control = mountControl('video', false, false, 'row');
+    expect(control.find('[data-media-toggle]').exists()).toBe(false);
+    expect(control.get('[data-media-menu-trigger]').text()).toContain('Camera');
   });
 
   it('shows a muted microphone or a camera that is off in red', () => {

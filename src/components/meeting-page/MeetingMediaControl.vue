@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GaugeAnimated } from '@respeak/lucide-motion-vue';
-import { ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
+import { ChevronRight, ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
 import { computed, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -32,6 +32,11 @@ const props = defineProps<{
   available: boolean;
   /** The call could not get this medium, such as a refused permission; tapping asks again. */
   warning?: boolean;
+  /**
+   * `split` (default): the toggle and the chevron that opens the device menu. `toggle`: the toggle alone, for the
+   * phone bar. `row`: the device menu alone, opened from a row in the phone controls panel.
+   */
+  variant?: 'split' | 'toggle' | 'row';
 }>();
 const emit = defineEmits<{
   (event: 'toggle'): void;
@@ -118,8 +123,14 @@ onBeforeUnmount(stopLevelMeter);
 </script>
 
 <template>
-  <div class="group relative flex items-center" :data-media-control="kind">
+  <div
+    class="group relative flex items-center"
+    :class="{ 'w-full': variant === 'row' }"
+    :data-media-control="kind"
+    :data-variant="variant ?? 'split'"
+  >
     <button
+      v-if="variant !== 'row'"
       type="button"
       class="call-button relative"
       :disabled="!available && !warning"
@@ -141,9 +152,28 @@ onBeforeUnmount(stopLevelMeter);
         <TriangleAlert />
       </span>
     </button>
-    <DropdownMenu @update:open="onMenuOpen">
+    <DropdownMenu v-if="variant !== 'toggle'" @update:open="onMenuOpen">
       <DropdownMenuTrigger as-child>
-        <button type="button" class="call-button call-button-chevron" :aria-label="menuLabel" data-media-menu-trigger>
+        <button
+          v-if="variant === 'row'"
+          type="button"
+          class="call-panel-row"
+          :aria-label="menuLabel"
+          data-media-menu-trigger
+        >
+          <component :is="isAudio ? Mic : Video" class="call-panel-row-icon" />
+          <span class="flex-1 text-left">{{
+            t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera')
+          }}</span>
+          <ChevronRight class="size-4 text-harbor-icon" aria-hidden="true" />
+        </button>
+        <button
+          v-else
+          type="button"
+          class="call-button call-button-chevron"
+          :aria-label="menuLabel"
+          data-media-menu-trigger
+        >
           <ChevronUp />
         </button>
       </DropdownMenuTrigger>

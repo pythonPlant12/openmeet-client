@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
 import en from '@/locales/en.json';
-import type { Participant } from '@/xstate/machines/webrtc/types';
 
 const haptics = vi.hoisted(() => ({ playHaptic: vi.fn() }));
 vi.mock('@/services/haptics', () => haptics);
@@ -12,16 +11,12 @@ const { default: CallPhoneControls } = await import('@/components/meeting-page/C
 
 enableAutoUnmount(afterEach);
 
-const participants: Participant[] = [
-  { id: 'local', name: 'Local Person', isLocal: true, stream: null, audioEnabled: true, videoEnabled: true },
-  { id: 'remote', name: 'Remote Person', isLocal: false, stream: null, audioEnabled: false, videoEnabled: true },
-];
-
 // The split buttons and the share control have their own tests; here they only need to be found.
 const MediaControl = {
-  props: ['kind', 'off', 'available', 'warning'],
-  emits: ['toggle', 'request-access'],
-  template: '<button :data-stub-media="kind" @click="$emit(warning ? \'request-access\' : \'toggle\')" />',
+  props: ['kind', 'off', 'available', 'warning', 'variant'],
+  emits: ['toggle', 'request-access', 'preview-camera'],
+  template:
+    '<button :data-stub-media="kind" :data-variant="variant" @click="$emit(warning ? \'request-access\' : \'toggle\')" />',
 };
 const ShareControl = { template: '<button data-stub-share />' };
 
@@ -34,9 +29,8 @@ function mountControls(props: Partial<InstanceType<typeof CallPhoneControls>['$p
       isMuted: false,
       isVideoOff: true,
       canPresent: false,
-      participants,
-      pinnedParticipantId: null,
       viewMode: 'grid',
+      canInvite: true,
       showConnectionStatus: false,
       ...props,
     },
@@ -48,6 +42,7 @@ function mountControls(props: Partial<InstanceType<typeof CallPhoneControls>['$p
 }
 
 const handle = (wrapper: ReturnType<typeof mountControls>) => wrapper.get('[data-controls-handle]');
+const bar = (wrapper: ReturnType<typeof mountControls>) => wrapper.get('[data-controls-bar]');
 
 describe('CallPhoneControls', () => {
   beforeEach(() => {
@@ -62,23 +57,32 @@ describe('CallPhoneControls', () => {
     haptics.playHaptic.mockReset();
   });
 
-  it('shows mic, camera, and leave in the bar, and share only where the screen can be shared', async () => {
-    const wrapper = mountControls();
+  it('reads camera, mic, share, leave in the bar, without chevrons', async () => {
+    const wrapper = mountControls({ canPresent: true });
+    const controls = bar(wrapper)
+      .findAll('button')
+      .map(
+        (button) =>
+          button.attributes('data-stub-media') ??
+          (button.attributes('data-stub-share') !== undefined ? 'share' : button.attributes('aria-label')),
+      );
+    expect(controls).toEqual(['video', 'audio', 'share', 'End call']);
+    expect(
+      bar(wrapper)
+        .findAll('[data-stub-media]')
+        .map((media) => media.attributes('data-variant')),
+    ).toEqual(['toggle', 'toggle']);
+  });
 
-    expect(wrapper.find('[data-stub-media="audio"]').exists()).toBe(true);
-    expect(wrapper.find('[data-stub-media="video"]').exists()).toBe(true);
-    expect(wrapper.find('[data-stub-share]').exists()).toBe(false);
-    expect(wrapper.find('button[aria-label="End call"]').exists()).toBe(true);
-
-    await wrapper.setProps({ canPresent: true });
-    expect(wrapper.find('[data-stub-share]').exists()).toBe(true);
+  it('shows share only where the screen can be shared', () => {
+    expect(mountControls().find('[data-stub-share]').exists()).toBe(false);
   });
 
   it('forwards the mic and camera toggles', async () => {
     const wrapper = mountControls();
 
-    await wrapper.get('[data-stub-media="audio"]').trigger('click');
-    await wrapper.get('[data-stub-media="video"]').trigger('click');
+    await bar(wrapper).get('[data-stub-media="audio"]').trigger('click');
+    await bar(wrapper).get('[data-stub-media="video"]').trigger('click');
 
     expect(wrapper.emitted('toggle-mute')).toHaveLength(1);
     expect(wrapper.emitted('toggle-video')).toHaveLength(1);
@@ -87,8 +91,8 @@ describe('CallPhoneControls', () => {
   it('passes the mic and camera warnings through and asks for access again', async () => {
     const wrapper = mountControls({ audioWarning: true, videoWarning: true });
 
-    await wrapper.get('[data-stub-media="audio"]').trigger('click');
-    await wrapper.get('[data-stub-media="video"]').trigger('click');
+    await bar(wrapper).get('[data-stub-media="audio"]').trigger('click');
+    await bar(wrapper).get('[data-stub-media="video"]').trigger('click');
 
     expect(wrapper.emitted('request-access')).toEqual([['audio'], ['video']]);
   });
@@ -117,10 +121,31 @@ describe('CallPhoneControls', () => {
     expect(haptics.playHaptic).toHaveBeenCalledTimes(2);
   });
 
-  it('holds the layout, pins, participants, dev tools, and the bug report in the panel', async () => {
-    const wrapper = mountControls({ pinnedParticipantId: 'remote' });
+  it('moves the controls row to the top of the card while the panel is open', async () => {
+    const wrapper = mountControls();
+    expect(bar(wrapper).attributes('data-position')).toBe('bottom');
+    await handle(wrapper).trigger('click');
+    expect(bar(wrapper).attributes('data-position')).toBe('top');
+  });
+
+  it('holds chat, devices, layout, invite, dev tools, and the bug report in the panel, but no participants', async () => {
+    const wrapper = mountControls();
     await handle(wrapper).trigger('click');
     const panel = wrapper.get('[data-controls-panel]');
+
+    await panel.get('[data-panel-row="chat"]').trigger('click');
+    expect(wrapper.emitted('toggle-chat')).toHaveLength(1);
+
+    expect(
+      panel
+        .findAll('[data-stub-media]')
+        .map((row) => [row.attributes('data-stub-media'), row.attributes('data-variant')]),
+    ).toEqual([
+      ['audio', 'row'],
+      ['video', 'row'],
+    ]);
+    await panel.get('[data-panel-row="preview-camera"]').trigger('click');
+    expect(wrapper.emitted('preview-camera')).toHaveLength(1);
 
     expect(panel.get('[role="radio"][aria-checked="true"]').text()).toContain('Grid view');
     await panel
@@ -129,11 +154,10 @@ describe('CallPhoneControls', () => {
       .trigger('click');
     expect(wrapper.emitted('set-view-mode')).toEqual([['speaker']]);
 
-    expect(panel.text()).toContain('Local Person');
-    expect(panel.text()).toContain('Remote Person');
-    await panel.get('button[aria-label="Unpin Remote Person"]').trigger('click');
-    await panel.get('button[aria-label="Pin Local Person"]').trigger('click');
-    expect(wrapper.emitted('toggle-pin')).toEqual([['remote'], ['local']]);
+    await panel.get('[data-panel-row="invite"]').trigger('click');
+    expect(wrapper.emitted('invite')).toHaveLength(1);
+
+    expect(panel.find('[data-panel-participants]').exists()).toBe(false);
 
     const devTools = panel.get('[data-dev-tools]');
     expect(devTools.attributes('aria-checked')).toBe('false');
@@ -143,5 +167,10 @@ describe('CallPhoneControls', () => {
     const report = panel.get<HTMLAnchorElement>('a[target="_blank"]');
     expect(report.text()).toContain('Report a bug');
     expect(report.element.href).toContain('Area%3A+meeting');
+  });
+
+  it('leaves out the invite row where inviting is not possible', async () => {
+    const wrapper = mountControls({ canInvite: false });
+    expect(wrapper.find('[data-panel-row="invite"]').exists()).toBe(false);
   });
 });

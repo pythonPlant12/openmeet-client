@@ -1111,9 +1111,8 @@ const handleReconnect = () => {
             :is-muted="isMuted"
             :is-video-off="isVideoOff"
             :can-present="screenShare.isSupported"
-            :participants="meetingParticipants"
-            :pinned-participant-id="pinnedParticipantId"
             :view-mode="shownViewMode"
+            :can-invite="inviteMode === 'enabled'"
             :show-connection-status="showConnectionStatus"
             :audio-warning="audioWarning"
             :video-warning="videoWarning"
@@ -1126,8 +1125,9 @@ const handleReconnect = () => {
             @start-screen-share="handleStartScreenShare"
             @stop-screen-share="screenShare.stop()"
             @set-view-mode="handleSetViewMode"
-            @toggle-pin="handleTogglePin"
             @toggle-stats="handleToggleStats"
+            @toggle-chat="handleToggleChat"
+            @invite="isInviteOpen = true"
           />
           <MeetingControls
             v-else
