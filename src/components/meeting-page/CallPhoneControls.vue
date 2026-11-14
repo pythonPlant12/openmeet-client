@@ -148,6 +148,9 @@ function stopListening() {
 
 onBeforeUnmount(stopListening);
 
+// The top bar's room name opens the panel too.
+defineExpose({ open: () => setOpen(true) });
+
 /** A panel row that does one thing closes the panel, so its result is in view. */
 function fromPanel(action: () => void) {
   setOpen(false);

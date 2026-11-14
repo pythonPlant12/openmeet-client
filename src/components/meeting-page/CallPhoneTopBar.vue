@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageSquare, UserRoundPlus, Users } from 'lucide-vue-next';
+import { ChevronRight, MessageSquare, SwitchCamera, UserRoundPlus } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -7,11 +7,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 
 import CallInviteMenuItems from './CallInviteMenuItems.vue';
 
-// The phone call screen's top bar: the room name with the number of people, then audio output, invite and chat.
-// It sits below the notch; the collapse button joins it with the active call (ADR 0001).
+// The phone call screen's top bar: the room name, which opens the controls panel, then audio output, invite, the
+// camera flip while the camera is on, and chat. It sits below the notch; the collapse button joins it with the
+// mobile mini call (ADR 0001).
 const props = defineProps<{
   roomName: string;
-  participantCount: number;
+  /** The camera flip shows only while your camera is on. */
+  cameraOn?: boolean;
   meetingId: string;
   inviteMode: 'enabled' | 'signedOut' | 'hidden';
   isChatOpen: boolean;
@@ -20,6 +22,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'toggle-chat'): void;
   (e: 'invite'): void;
+  (e: 'open-panel'): void;
+  (e: 'flip-camera'): void;
 }>();
 const { t } = useI18n();
 
@@ -35,11 +39,17 @@ const chatAriaLabel = computed(() => {
     class="marketing-font pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-50 flex items-center gap-2 px-3 text-harbor-ink"
     data-call-phone-top-bar
   >
-    <div class="call-chip pointer-events-auto flex h-11 min-w-0 flex-1 items-center gap-3 rounded-[0.875rem] pl-4 pr-3">
-      <span class="min-w-0 flex-1 truncate font-semibold">{{ roomName }}</span>
-      <span class="flex shrink-0 items-center gap-1 text-sm font-semibold text-harbor-muted">
-        <Users class="size-4" aria-hidden="true" />{{ participantCount }}
-      </span>
+    <div class="flex min-w-0 flex-1">
+      <button
+        type="button"
+        class="call-chip pointer-events-auto flex h-11 min-w-0 max-w-full items-center gap-1 pl-4 pr-2.5 text-sm font-semibold"
+        :aria-label="t('meeting.controls.moreControls')"
+        data-room-name
+        @click="emit('open-panel')"
+      >
+        <span class="min-w-0 truncate">{{ roomName }}</span>
+        <ChevronRight class="size-4 shrink-0 text-harbor-icon" aria-hidden="true" />
+      </button>
     </div>
     <div class="pointer-events-auto flex items-center gap-2">
       <slot name="audio-output" />
@@ -53,6 +63,16 @@ const chatAriaLabel = computed(() => {
           <CallInviteMenuItems :meeting-id="meetingId" :invite-mode="inviteMode" @invite="emit('invite')" />
         </DropdownMenuContent>
       </DropdownMenu>
+      <button
+        v-if="cameraOn"
+        type="button"
+        class="call-button call-chip size-11"
+        :aria-label="t('meeting.controls.flipCamera')"
+        data-flip-camera
+        @click="emit('flip-camera')"
+      >
+        <SwitchCamera />
+      </button>
       <button
         type="button"
         class="call-button call-chip relative size-11"

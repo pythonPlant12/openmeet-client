@@ -420,7 +420,8 @@
       "moreControls": "More controls",
       "audioOutput": "Audio output",
       "showChat": "Show chat",
-      "showOwnCamera": "Show my own camera"
+      "showOwnCamera": "Show my own camera",
+      "flipCamera": "Switch camera"
     },
     "preview": {
       "title": "Camera preview",

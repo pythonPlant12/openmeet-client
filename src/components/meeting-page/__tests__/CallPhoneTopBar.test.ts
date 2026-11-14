@@ -11,7 +11,6 @@ function mountBar(props: Partial<InstanceType<typeof CallPhoneTopBar>['$props']>
   return mount(CallPhoneTopBar, {
     props: {
       roomName: 'team-sync',
-      participantCount: 3,
       meetingId: 'team-sync',
       inviteMode: 'enabled',
       isChatOpen: false,
@@ -24,14 +23,28 @@ function mountBar(props: Partial<InstanceType<typeof CallPhoneTopBar>['$props']>
 }
 
 describe('CallPhoneTopBar', () => {
-  it('shows the room name, the number of people, audio output, invite, and chat', () => {
+  it('shows the room name, audio output, invite, and chat, with no collapse button', () => {
     const wrapper = mountBar();
 
-    expect(wrapper.text()).toContain('team-sync');
-    expect(wrapper.text()).toContain('3');
+    expect(wrapper.get('[data-room-name]').text()).toContain('team-sync');
     expect(wrapper.find('[data-stub-audio-output]').exists()).toBe(true);
     expect(wrapper.find('button[aria-label="Open sharing options"]').exists()).toBe(true);
     expect(wrapper.find('button[aria-label="Open chat"]').exists()).toBe(true);
+    expect(wrapper.find('[data-collapse-call]').exists()).toBe(false);
+  });
+
+  it('opens the controls panel from the room name', async () => {
+    const wrapper = mountBar();
+    await wrapper.get('[data-room-name]').trigger('click');
+    expect(wrapper.emitted('open-panel')).toHaveLength(1);
+  });
+
+  it('offers the camera flip only while the camera is on', async () => {
+    expect(mountBar({ cameraOn: false }).find('[data-flip-camera]').exists()).toBe(false);
+
+    const wrapper = mountBar({ cameraOn: true });
+    await wrapper.get('[data-flip-camera]').trigger('click');
+    expect(wrapper.emitted('flip-camera')).toHaveLength(1);
   });
 
   it('toggles the chat and counts unread messages on its button', async () => {

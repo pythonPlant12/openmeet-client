@@ -30,6 +30,7 @@ import { useCallLayoutState } from '@/composables/useCallLayoutState';
 import { useConnectionHaptics } from '@/composables/useConnectionHaptics';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
 import { useScreenShare } from '@/composables/useScreenShare';
+import { useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { loadCallSettings, needsCameraPreview, saveCallSettings } from '@/lib/call-settings';
@@ -772,6 +773,22 @@ function toggleOwnCamera() {
   saveCallSettings({ showOwnCamera: showOwnCamera.value });
 }
 
+const phoneControls = ref<InstanceType<typeof CallPhoneControls> | null>(null);
+
+// The top bar's camera flip moves to the next camera, such as from the front to the back camera of a phone.
+const cameraSettings = useMeetingMediaSettings('video');
+async function flipCamera() {
+  await cameraSettings.refresh();
+  const cameras = cameraSettings.devices.value;
+  if (cameras.length < 2) return;
+  const current = cameras.findIndex((camera) => camera.deviceId === cameraSettings.activeId.value);
+  const next = cameras[(current + 1) % cameras.length];
+  if (next && (await cameraSettings.changeDevice(next.deviceId))) {
+    playHaptic('light');
+    refreshMediaAvailability();
+  }
+}
+
 function handleVideoLongPress() {
   callControls.toggle();
   playHaptic('selection');
@@ -952,12 +969,14 @@ const handleReconnect = () => {
         <CallPhoneTopBar
           v-if="usesPhoneChrome && showsControls"
           :room-name="roomName"
-          :participant-count="participantCount"
+          :camera-on="!isVideoOff"
           :meeting-id="meetingId"
           :invite-mode="inviteMode"
           :is-chat-open="isChatOpen"
           :unread-count="unreadCount"
           @toggle-chat="handleToggleChat"
+          @open-panel="phoneControls?.open()"
+          @flip-camera="flipCamera"
           @invite="isInviteOpen = true"
         >
           <template #audio-output><CallAudioOutputButton /></template>
@@ -1112,6 +1131,7 @@ const handleReconnect = () => {
 
         <Transition name="meeting-controls">
           <CallPhoneControls
+            ref="phoneControls"
             v-if="usesPhoneChrome"
             v-show="showsControls"
             :audio-available="audioAvailable"
