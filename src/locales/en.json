@@ -349,6 +349,7 @@
     "join": {
       "title": "Join Meeting",
       "description": "Configure your settings before joining",
+      "entryDescription": "Enter your name to join the meeting",
       "cameraBlocked": "Camera blocked",
       "cameraOff": "Camera is off",
       "micOn": "Mic On",
@@ -384,6 +385,7 @@
       "unmute": "Unmute microphone",
       "turnCameraOff": "Turn camera off",
       "turnCameraOn": "Turn camera on",
+      "cameraFailed": "Could not turn the camera on",
       "endCall": "End call",
       "linkCopied": "Link copied!",
       "copyLink": "Copy meeting link",
@@ -402,8 +404,56 @@
       "presentAreaHint": "Pick a screen or window, then select an area",
       "stopPresenting": "Stop presenting",
       "cameraOptions": "Camera options",
+      "microphone": "Microphone",
+      "speaker": "Speaker",
+      "source": "Source",
+      "inputVolume": "Input volume",
+      "inputLevel": "Microphone level",
+      "camera": "Camera",
+      "previewCamera": "Preview camera",
+      "allowMicrophone": "Allow the microphone",
+      "allowCamera": "Allow the camera",
+      "quality": "Quality",
+      "noMicrophones": "No microphones found",
+      "noCameras": "No cameras found",
       "shareText": "Join my video call: {link}",
-      "shareTitle": "Join my video call"
+      "shareTitle": "Join my video call",
+      "moreControls": "More controls",
+      "audioOutput": "Audio output",
+      "showChat": "Show chat",
+      "showOwnCamera": "Show my own camera",
+      "flipCamera": "Switch camera"
+    },
+    "invite": {
+      "title": "Invite people",
+      "description": "Share the link or invite your friends to this call.",
+      "expand": "Show more people",
+      "shrink": "Show fewer people",
+      "addPeople": "Add people",
+      "addPeopleHint": "Invite friends or share the link",
+      "share": "Share",
+      "copyLink": "Copy link",
+      "copied": "Copied",
+      "qrCode": "QR code",
+      "qrAlt": "QR code of the room link",
+      "email": "Email",
+      "editAccess": "Edit access"
+    },
+    "preview": {
+      "title": "Camera preview",
+      "description": "Check how you look and choose your microphone and camera before others see you.",
+      "turnOn": "Turn on camera",
+      "done": "Done"
+    },
+    "permission": {
+      "microphoneTitle": "Allow the microphone",
+      "cameraTitle": "Allow the camera",
+      "browserHint": "Your browser blocks it for OpenMeet. Allow it in the site settings behind the icon next to the address, then tap the button again.",
+      "nativeHint": "OpenMeet is not allowed to use it. Allow it in the system settings, then tap the button again.",
+      "openSettings": "Open settings",
+      "close": "Got it",
+      "unavailableMicrophone": "No microphone is available",
+      "unavailableCamera": "No camera is available"
     },
     "tooltips": {
       "status": "Status",
@@ -422,7 +472,9 @@
       "send": "Send message",
       "sendShort": "Send",
       "subtitle": "Everyone in this meeting",
-      "footer": "Chat is cleared when the meeting ends"
+      "footer": "Chat is cleared when the meeting ends",
+      "expand": "Expand chat",
+      "shrink": "Shrink chat"
     },
     "participant": {
       "focus": "Focus {name}",
@@ -435,6 +487,8 @@
       "showName": "Show name",
       "hideName": "Hide name",
       "connecting": "Connecting…",
+      "muted": "Muted",
+      "expand": "Show {name} full screen",
       "selfView": "Your view. Drag it to any corner."
     },
     "actions": {
@@ -447,6 +501,8 @@
       "stopVideo": "Turn camera off",
       "startVideo": "Turn camera on",
       "videoUnavailable": "Camera unavailable",
+      "showStrip": "Show everyone",
+      "hideStrip": "Hide everyone else",
       "layout": "Layout",
       "grid": "Grid view",
       "speaker": "Speaker view",
@@ -455,7 +511,11 @@
       "pinParticipant": "Pin participant",
       "videoCanvas": "Meeting video canvas",
       "reportBug": "Report a bug",
-      "disconnect": "Disconnect"
+      "disconnect": "Disconnect",
+      "devTools": "Developer tools",
+      "participantsCount": "Participants ({count})",
+      "screenShare": "Screen share",
+      "invite": "Invite"
     },
     "error": {
       "title": "Connection Lost",
@@ -464,7 +524,8 @@
       "lost": "Your connection to the meeting was lost. This could be due to network issues.",
       "goHome": "Go Home",
       "reconnect": "Reconnect"
-    }
+    },
+    "callTitle": "Call"
   },
   "errors": {
     "generic": "An error occurred",

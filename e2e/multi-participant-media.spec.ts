@@ -67,10 +67,11 @@ const haveCurrentData = 2;
 const diagnosticTags = ['[SignalingService]', '[WebRTCServiceSFU]', '[webrtcMachine]'];
 const unsafeDiagnosticPattern = /sdp|candidate|token|cookie|credential|password|turn:|turns:|bearer|vite_/i;
 
+// Two fake cameras, so the camera switch test has a second device to pick. The first stays the default.
 test.use({
   launchOptions: {
     args: [
-      '--use-fake-device-for-media-stream',
+      '--use-fake-device-for-media-stream=device-count=2',
       '--use-fake-ui-for-media-stream',
       '--autoplay-policy=no-user-gesture-required',
     ],
@@ -78,7 +79,10 @@ test.use({
 });
 
 test.describe('multi-participant media', () => {
-  test('navigates away from prejoin without transition warnings or stale viewport locks', async ({ page, baseURL }) => {
+  test('navigates away from the name step without transition warnings or stale viewport locks', async ({
+    page,
+    baseURL,
+  }) => {
     const transitionWarnings: string[] = [];
     page.on('console', (message) => {
       if (message.type() === 'warning' && message.text().includes('Component inside <Transition>')) {
@@ -102,6 +106,80 @@ test.describe('multi-participant media', () => {
       )
       .toEqual({ bodyOverflow: '', bodyPointerEvents: '', htmlOverflow: '' });
     expect(transitionWarnings).toEqual([]);
+  });
+
+  test('enters without a join dialog with mic and camera off, and turning each on reaches the other', async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'direct-entry-e2e', 'stun+turn', {
+      knownName: true,
+      turnOnMedia: false,
+    });
+
+    try {
+      await waitForParticipantCount(session.pages, twoParticipantCount);
+      await waitForAllConnections(session.pages);
+      for (const page of session.pages) {
+        await expect(page.getByRole('heading', { name: 'Join Meeting' })).toHaveCount(0);
+        await expect(page.locator('[data-media-control="audio"] [data-media-toggle]')).toHaveAttribute(
+          'data-media-off',
+          'true',
+        );
+        await expect(page.locator('[data-media-control="video"] [data-media-toggle]')).toHaveAttribute(
+          'data-media-off',
+          'true',
+        );
+        await expect.poll(() => liveLocalVideoTracks(page)).toBe(0);
+        await expect(page.locator(remoteVideoSelector)).toBeHidden();
+      }
+
+      // The first camera turn-on on a device shows the camera preview; turning the camera on there sends it.
+      await session.pages[0].locator('[data-media-control="video"] [data-media-toggle]').click();
+      await expect(session.pages[0].locator('[data-camera-preview]')).toBeVisible();
+      await session.pages[0].locator('[data-camera-preview-confirm]').click();
+      await expect(session.pages[0].locator('[data-camera-preview]')).toHaveCount(0);
+
+      for (const page of session.pages) await turnOnMicAndCamera(page);
+
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
+  test('a participant who refuses mic and camera still hears and sees the other person', async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'listen-only-e2e', 'stun+turn', {
+      listenOnly: [1],
+    });
+    const [speaker, listener] = session.pages;
+
+    try {
+      await expect(speaker.getByTestId('participant-tile')).toHaveCount(twoParticipantCount, { timeout: 60_000 });
+      await expect(listener.getByTestId('participant-tile')).toHaveCount(twoParticipantCount, { timeout: 60_000 });
+      await waitForAllConnections(session.pages);
+      // The listener receives the other person's audio and video.
+      await waitForHtmlVideoPlayback([listener], twoParticipantCount);
+
+      // Both buttons warn; tapping one asks again and explains how to allow a permission that stays refused.
+      await expect(listener.locator('[data-media-warning]')).toHaveCount(2);
+      await listener.locator('[data-media-control="audio"] [data-media-toggle]').click();
+      await expect(listener.locator('[data-permission-sheet]')).toBeVisible();
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
   });
 
   test('two participants exchange remote audio and video', async ({ browser, baseURL }) => {
@@ -130,6 +208,93 @@ test.describe('multi-participant media', () => {
     } finally {
       await closeContexts(session.contexts);
     }
+  });
+
+  test('turning the camera off releases it and turning it on reaches the other person again', async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'camera-off-on-e2e');
+    const [sender, viewer] = session.pages;
+
+    try {
+      await waitForParticipantCount(session.pages, twoParticipantCount);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      const peerConnectionsBefore = await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0);
+
+      await toggleOwnCamera(sender);
+      // The camera is stopped, not just disabled, so the device's camera light goes off.
+      await expect.poll(() => liveLocalVideoTracks(sender)).toBe(0);
+      await expect(viewer.locator(remoteVideoSelector)).toBeHidden();
+
+      await toggleOwnCamera(sender);
+      await expect.poll(() => liveLocalVideoTracks(sender)).toBe(1);
+      await expect(viewer.locator(remoteVideoSelector)).toBeVisible();
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+
+      // The new camera track went out on the existing connection: no reconnect and no renegotiation.
+      expect(await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0)).toBe(peerConnectionsBefore);
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
+  test('a microphone switch from the chevron menu still reaches the other person', async ({ browser, baseURL }) => {
+    test.setTimeout(180_000);
+
+    const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'mic-switch-e2e');
+    const [sender] = session.pages;
+
+    try {
+      await waitForParticipantCount(session.pages, twoParticipantCount);
+      await waitForAllConnections(session.pages);
+      await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+      const peerConnectionsBefore = await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0);
+
+      // Chrome's fake audio offers several inputs, so another microphone is always there.
+      const deviceId = await switchOwnDevice(sender, 'audio');
+      await expect.poll(() => localDeviceId(sender, 'audio')).toBe(deviceId);
+      await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+
+      expect(await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0)).toBe(peerConnectionsBefore);
+      await expectNoConnectionErrorDialog(session.pages);
+    } finally {
+      test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+      await closeContexts(session.contexts);
+    }
+  });
+
+  test.describe('with two cameras', () => {
+    test('a camera switch from the chevron menu still reaches the other person', async ({ browser, baseURL }) => {
+      test.setTimeout(180_000);
+
+      const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'camera-switch-e2e');
+      const [sender] = session.pages;
+
+      try {
+        await waitForParticipantCount(session.pages, twoParticipantCount);
+        await waitForAllConnections(session.pages);
+        await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+        const peerConnectionsBefore = await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0);
+
+        const deviceId = await switchOwnDevice(sender, 'video');
+        await expect.poll(() => localDeviceId(sender, 'video')).toBe(deviceId);
+        await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+        await expectMediaStillFlowing(session.pages, twoParticipantCount - 1);
+
+        expect(await sender.evaluate(() => window.__openmeetPeerConnections?.length ?? 0)).toBe(peerConnectionsBefore);
+        await expectNoConnectionErrorDialog(session.pages);
+      } finally {
+        test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+        await closeContexts(session.contexts);
+      }
+    });
   });
 
   test('transmits and renders audio/video for every participant', async ({ browser, baseURL }) => {
@@ -215,11 +380,11 @@ test.describe('multi-participant media', () => {
         await session.pages[0].waitForTimeout(15_000);
       }
 
-      // The second participant reloads mid-call, the way a dropped user rejoins.
+      // The second participant reloads mid-call, the way a dropped user rejoins. The name is remembered for the
+      // tab, so the reload enters directly, with mic and camera off.
       await session.pages[1].reload({ waitUntil: 'domcontentloaded' });
-      await session.pages[1].locator('#participant-name').fill('User 2');
-      await expect(session.pages[1].getByRole('button', { name: 'Join Meeting' })).toBeEnabled({ timeout: 30_000 });
-      await session.pages[1].getByRole('button', { name: 'Join Meeting' }).click();
+      await expect(session.pages[1].getByTestId('participant-video').first()).toBeAttached({ timeout: 30_000 });
+      await turnOnMicAndCamera(session.pages[1]);
 
       await waitForParticipantCount(session.pages, count);
       await waitForAllConnections(session.pages);
@@ -351,6 +516,13 @@ async function joinParticipants(
   count: number,
   roomPrefix: string,
   network: NetworkMode = 'stun+turn',
+  // A known name (a signed-in person, or a guest who gave it before) enters with no dialog at all. Everyone
+  // enters with mic and camera off, so most tests turn both on once they are in.
+  {
+    knownName = false,
+    turnOnMedia = true,
+    listenOnly = [],
+  }: { knownName?: boolean; turnOnMedia?: boolean; listenOnly?: number[] } = {},
 ): Promise<ParticipantSession> {
   const roomUrl =
     process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
@@ -361,6 +533,20 @@ async function joinParticipants(
   for (let index = 0; index < count; index += 1) {
     const context = await browser.newContext({ permissions: ['camera', 'microphone'] });
     contexts.push(context);
+    // A participant who refuses the microphone and camera, the way a denied browser prompt rejects.
+    if (listenOnly.includes(index)) {
+      await context.addInitScript(() => {
+        navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('denied', 'NotAllowedError'));
+        const query = navigator.permissions.query.bind(navigator.permissions);
+        navigator.permissions.query = (descriptor) =>
+          descriptor.name === ('camera' as PermissionName) || descriptor.name === ('microphone' as PermissionName)
+            ? Promise.resolve({ state: 'denied' } as PermissionStatus)
+            : query(descriptor);
+      });
+    }
+    if (knownName) {
+      await context.addInitScript((name: string) => sessionStorage.setItem('participantName', name), `User ${index + 1}`);
+    }
 
     await context.addInitScript((mode: NetworkMode) => {
       window.__openmeetPeerConnections = [];
@@ -405,13 +591,71 @@ async function joinParticipants(
 
   for (const [index, page] of pages.entries()) {
     await page.goto(roomUrl, { waitUntil: 'domcontentloaded' });
-    await page.locator('#participant-name').fill(`User ${index + 1}`);
-    await expect(page.getByRole('button', { name: 'Join Meeting' })).toBeEnabled({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Join Meeting' }).click();
+    if (!knownName) await enterName(page, `User ${index + 1}`);
     await expect(page.getByTestId('participant-video').first()).toBeAttached({ timeout: 30_000 });
+    if (turnOnMedia && !listenOnly.includes(index)) await turnOnMicAndCamera(page);
   }
 
   return { contexts, pages, roomUrl, diagnostics };
+}
+
+const remoteVideoSelector = '[data-testid="participant-video"]:not([data-participant-local="true"])';
+
+async function enterName(page: Page, name: string) {
+  await page.locator('#participant-name').fill(name);
+  await expect(page.getByRole('button', { name: 'Join Meeting' })).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Join Meeting' }).click();
+}
+
+async function turnOnMicAndCamera(page: Page) {
+  const mic = page.locator('[data-media-control="audio"] [data-media-toggle]');
+  const camera = page.locator('[data-media-control="video"] [data-media-toggle]');
+  if ((await mic.getAttribute('data-media-off')) === 'true') await mic.click();
+  if ((await camera.getAttribute('data-media-off')) === 'true') await toggleOwnCamera(page);
+  await expect(mic).toHaveAttribute('data-media-off', 'false');
+  await expect(camera).toHaveAttribute('data-media-off', 'false');
+}
+
+/** Turning the camera on for the first time on a device goes through the camera preview. */
+async function toggleOwnCamera(page: Page) {
+  const toggle = page.locator('[data-media-control="video"] [data-media-toggle]');
+  const turningOn = (await toggle.getAttribute('data-media-off')) === 'true';
+  await toggle.click();
+  if (!turningOn) return;
+  const confirm = page.locator('[data-camera-preview-confirm]');
+  await expect(confirm.or(page.locator('[data-media-control="video"] [data-media-off="false"]'))).toBeVisible();
+  if (await confirm.isVisible()) await confirm.click();
+}
+
+/** Picks a device other than the active one from the split button's chevron menu; returns the device ID. */
+async function switchOwnDevice(page: Page, kind: 'audio' | 'video') {
+  await page.locator(`[data-media-control="${kind}"] [data-media-menu-trigger]`).click();
+  const option = page.locator('[data-media-options] [data-device-option][data-state="unchecked"]').first();
+  const deviceId = await option.getAttribute('data-device-option');
+  await option.click();
+  await page.keyboard.press('Escape');
+  return deviceId;
+}
+
+async function localDeviceId(page: Page, kind: 'audio' | 'video') {
+  return page.evaluate((trackKind) => {
+    const video = document.querySelector<HTMLVideoElement>(
+      '[data-testid="participant-video"][data-participant-local="true"]',
+    );
+    const stream = video?.srcObject instanceof MediaStream ? video.srcObject : null;
+    const track = trackKind === 'audio' ? stream?.getAudioTracks()[0] : stream?.getVideoTracks()[0];
+    return track?.getSettings().deviceId ?? null;
+  }, kind);
+}
+
+async function liveLocalVideoTracks(page: Page) {
+  return page.evaluate(() => {
+    const video = document.querySelector<HTMLVideoElement>(
+      '[data-testid="participant-video"][data-participant-local="true"]',
+    );
+    const stream = video?.srcObject instanceof MediaStream ? video.srcObject : null;
+    return stream?.getVideoTracks().filter((track) => track.readyState === 'live').length ?? 0;
+  });
 }
 
 async function waitForParticipantCount(pages: Page[], expectedParticipants: number) {

@@ -11,9 +11,7 @@ test.use({
 });
 
 test.describe('action menus', () => {
-  test('dashboard exposes equivalent ellipsis and context actions without replacing native input menus', async ({
-    page,
-  }) => {
+  test('the workspace keeps native menus on text inputs', async ({ page }) => {
     const unique = Date.now();
     await page.goto('/register');
     await page.getByLabel('Your name').fill('Menu Tester');
@@ -22,62 +20,49 @@ test.describe('action menus', () => {
     await page.getByLabel('Password', { exact: true }).fill('menu-password');
     await page.getByLabel('Confirm password').fill('menu-password');
     await page.getByRole('button', { name: 'Create an account' }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard/);
 
-    await page.getByRole('button', { name: 'Open dashboard actions' }).click();
-    const menu = page.getByRole('menu');
-    await expect(menu.getByText('Start a meeting')).toBeVisible();
-    await expect(menu.getByText('Report a bug')).toBeVisible();
-    const reportHref = await menu.getByRole('menuitem', { name: 'Report a bug' }).getAttribute('href');
-    expect(reportHref).toContain('github.com/pythonPlant12/openmeet/issues/new');
-    expect(reportHref).not.toContain('/room/');
-    await page.keyboard.press('Escape');
-
-    await page.getByPlaceholder('friend@example.com').click({ button: 'right' });
+    // A right-click or a long-press on a text input keeps the browser's own menu, not an app menu.
+    const search = page.getByRole('searchbox', { name: 'Search chats' });
+    await search.click({ button: 'right' });
     await expect(page.getByRole('menu')).toHaveCount(0);
 
-    const friendInput = page.getByPlaceholder('friend@example.com');
-    await friendInput.dispatchEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' });
-    await friendInput.evaluate(() => new Promise((resolve) => window.setTimeout(resolve, 800)));
-    await friendInput.dispatchEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch' });
+    await search.dispatchEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' });
+    await search.evaluate(() => new Promise((resolve) => window.setTimeout(resolve, 800)));
+    await search.dispatchEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch' });
     await expect(page.getByRole('menu')).toHaveCount(0);
-
-    await page.getByRole('heading', { name: /Ready when you are/ }).click({ button: 'right' });
-    await expect(page.getByRole('menu').getByText('Start a meeting')).toBeVisible();
-    await expect(page.getByRole('menu').getByText('Report a bug')).toBeVisible();
-    await page.keyboard.press('Escape');
-
-    await page.locator('header[aria-label="Dashboard action surface"]').focus();
-    await page.keyboard.press('ContextMenu');
-    await expect(page.getByRole('menu').getByText('Start a meeting')).toBeVisible();
   });
 
-  test('meeting menu stays synchronized with media, chat, layout, and context actions', async ({ page }) => {
+  test('meeting ⋮ menu holds the rarer actions, and a long-press on the video area hides the controls', async ({
+    page,
+  }) => {
+    // A guest without a saved name is asked only for the name; the call starts with the microphone off.
     await page.goto(`/room/action-menu-${Date.now()}`);
     await expect(page.getByRole('heading', { name: 'Join Meeting' })).toBeVisible();
     await page.getByLabel('Your Name').fill('Action Tester');
     await page.getByRole('button', { name: 'Join Meeting' }).click();
     await expect(page.getByTestId('participant-tile')).toHaveCount(1, { timeout: 20_000 });
 
-    await page.getByRole('button', { name: 'Open meeting actions' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Open chat' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Mute microphone' })).toBeVisible();
-    await page.getByRole('menuitem', { name: 'Mute microphone' }).click();
-    await expect(page.getByRole('button', { name: 'Unmute microphone' })).toBeVisible();
+    // Mic and camera live in the bar and chat in the top row; the ⋮ menu holds the rarer actions.
+    await page.locator('[data-media-control="audio"] [data-media-toggle]').click();
+    await expect(page.getByRole('button', { name: 'Mute microphone' })).toBeVisible();
+    await page.locator('[data-chat-trigger]').click();
+    await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
-    await page.getByRole('menuitem', { name: 'Open chat' }).click();
-    await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible();
+    for (const name of ['Invite', 'Participants (1)', 'Developer tools', 'Report a bug']) {
+      await expect(page.getByRole('menu').getByText(name, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole('menuitem', { name: 'Open chat' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Open meeting actions' }).click();
     await page.getByRole('menuitemradio', { name: 'Speaker view' }).click();
     await expect(page.getByTestId('meeting-video-canvas')).toHaveAttribute('data-view-mode', 'speaker');
 
-    // The tile area's context menu is the layout menu: Grid and Speaker only.
-    await page.getByTestId('meeting-video-canvas').click({ button: 'right', position: { x: 20, y: 20 } });
-    await expect(page.getByRole('menuitemradio', { name: 'Grid view' })).toBeVisible();
-    await expect(page.getByRole('menuitemradio', { name: 'Speaker view' })).toHaveAttribute('aria-checked', 'true');
-    await expect(page.getByRole('menuitem', { name: 'Close chat' })).toHaveCount(0);
+    // The tile area has no layout menu any more: the ⋮ menu switches back to the grid.
+    await page.getByRole('button', { name: 'Open meeting actions' }).click();
     await page.getByRole('menuitemradio', { name: 'Grid view' }).click();
     await expect(page.getByTestId('meeting-video-canvas')).toHaveAttribute('data-view-mode', 'grid');
 
@@ -99,11 +84,12 @@ test.describe('action menus', () => {
       pointerId: 1,
       pointerType: 'touch',
     });
-    await expect(page.getByRole('menuitemradio', { name: 'Speaker view' })).toBeVisible();
-    await page.keyboard.press('Escape');
-
-    await page.getByTestId('meeting-video-canvas').focus();
-    await page.keyboard.press('ContextMenu');
-    await expect(page.getByRole('menuitemradio', { name: 'Grid view' })).toBeVisible();
+    // A long-press on the video area hides the call controls; the next one brings them back.
+    await expect(page.locator('[data-meeting-controls]')).toBeHidden();
+    await participantTile.dispatchEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch' });
+    await participantTile.evaluate(() => new Promise((resolve) => window.setTimeout(resolve, 800)));
+    await participantTile.dispatchEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch' });
+    await page.mouse.move(10, 10);
+    await expect(page.locator('[data-meeting-controls]')).toBeVisible();
   });
 });

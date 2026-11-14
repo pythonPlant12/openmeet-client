@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
 import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
+import en from '@/locales/en.json';
 import { playHaptic } from '@/services/haptics';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
@@ -13,39 +14,7 @@ const participants: Participant[] = [
   { id: 'remote', name: 'Remote Person', isLocal: false, stream: null, audioEnabled: true, videoEnabled: true },
 ];
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      meeting: {
-        participant: {
-          pin: 'Pin {name}',
-          unpin: 'Unpin {name}',
-        },
-        actions: {
-          open: 'Open meeting actions',
-          openChat: 'Open chat',
-          closeChat: 'Close chat',
-          mute: 'Mute microphone',
-          unmute: 'Unmute microphone',
-          audioUnavailable: 'Microphone unavailable',
-          stopVideo: 'Turn camera off',
-          startVideo: 'Turn camera on',
-          videoUnavailable: 'Camera unavailable',
-          layout: 'Layout',
-          grid: 'Grid view',
-          speaker: 'Speaker view',
-          fullscreen: 'Full screen',
-          exitFullscreen: 'Exit full screen',
-          pinParticipant: 'Pin participant',
-          reportBug: 'Report a bug',
-          disconnect: 'Disconnect',
-        },
-      },
-    },
-  },
-});
+const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } });
 
 enableAutoUnmount(afterEach);
 
@@ -72,18 +41,17 @@ beforeEach(() => {
   HTMLElement.prototype.releasePointerCapture = vi.fn();
 });
 
-function mountMenu() {
+function mountMenu(props: Partial<InstanceType<typeof MeetingActionMenu>['$props']> = {}) {
   return mount(MeetingActionMenu, {
     attachTo: document.body,
     props: {
-      audioAvailable: true,
-      isChatOpen: false,
-      isMuted: false,
-      isVideoOff: false,
       participants,
       pinnedParticipantId: null,
-      videoAvailable: true,
       viewMode: 'grid',
+      meetingId: 'team-sync',
+      inviteMode: 'enabled',
+      canPresent: true,
+      ...props,
     },
     global: { plugins: [i18n] },
   });
@@ -91,76 +59,89 @@ function mountMenu() {
 
 afterEach(() => vi.clearAllMocks());
 
+async function openMenu(wrapper: ReturnType<typeof mountMenu>) {
+  await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
+  await flushPromises();
+  return document.body.querySelector<HTMLElement>('[role="menu"]')!;
+}
+
+async function openSubmenu(trigger: HTMLElement) {
+  trigger.focus();
+  trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await flushPromises();
+  const menus = document.body.querySelectorAll<HTMLElement>('[role="menu"]');
+  return menus[menus.length - 1]!;
+}
+
 describe('MeetingActionMenu', () => {
-  it('mirrors live chat and media state', async () => {
-    const wrapper = mountMenu();
-    await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
-    await flushPromises();
+  it('holds screen share, invite, layout, pin participant, participants, dev tools, and report bug', async () => {
+    const menu = await openMenu(mountMenu());
+    const topLevel = Array.from(menu.querySelectorAll(':scope [role^="menuitem"]'))
+      .filter((item) => item.closest('[role="menu"]') === menu)
+      .map((item) => item.textContent?.trim());
 
-    const menuItems = () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'));
-    const actionItem = (label: string) => menuItems().find((item) => item.textContent?.includes(label));
-
-    expect(document.body.textContent).toContain('Open chat');
-    expect(document.body.textContent).toContain('Mute microphone');
-    expect(document.body.textContent).toContain('Turn camera off');
-    expect(actionItem('Mute microphone')?.classList).toContain('harbor-context-menu-danger');
-    expect(actionItem('Turn camera off')?.classList).toContain('harbor-context-menu-danger');
-
-    await wrapper.setProps({ isChatOpen: true, isMuted: true, isVideoOff: true });
-    expect(document.body.textContent).toContain('Close chat');
-    expect(document.body.textContent).toContain('Unmute microphone');
-    expect(document.body.textContent).toContain('Turn camera on');
-    expect(actionItem('Unmute microphone')?.classList).not.toContain('harbor-context-menu-danger');
-    expect(actionItem('Turn camera on')?.classList).not.toContain('harbor-context-menu-danger');
+    expect(topLevel).toEqual([
+      'Screen share',
+      'Invite',
+      'Grid view',
+      'Speaker view',
+      'Pin participant',
+      'Participants (2)',
+      'Developer tools',
+      'Report a bug',
+    ]);
+    expect(menu.textContent).not.toContain('Open chat');
+    expect(menu.textContent).not.toContain('Mute microphone');
+    expect(menu.textContent).not.toContain('Full screen');
   });
 
-  it('shows pin actions only in speaker view and keeps reports privacy-safe', async () => {
-    const wrapper = mountMenu();
-    await wrapper.setProps({ viewMode: 'speaker', pinnedParticipantId: 'remote' });
-    await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
-    await flushPromises();
-    const menu = document.body.querySelector('[role="menu"]');
-    const reportLink = menu?.querySelector<HTMLAnchorElement>('a[target="_blank"]');
+  it('leaves out screen share where the screen cannot be shared, and pinning when alone', async () => {
+    const menu = await openMenu(mountMenu({ canPresent: false, participants: participants.slice(0, 1) }));
 
-    expect(menu?.textContent).toContain('Pin participant');
-    expect(menu?.textContent).toContain('Local Person');
-    expect(menu?.textContent).toContain('Remote Person');
-    expect(menu?.querySelector('[role="menuitemradio"][aria-checked="true"]')?.textContent).toContain('Speaker view');
-    expect(menu?.querySelector('[role="menuitemcheckbox"][aria-checked="true"]')?.getAttribute('aria-label')).toBe(
+    expect(menu.querySelector('[data-menu-screen-share]')).toBeNull();
+    expect(menu.querySelector('[data-menu-pin]')).toBeNull();
+  });
+
+  it('starts and stops the screen share from its submenu', async () => {
+    const wrapper = mountMenu({ canSelectArea: true });
+    const menu = await openMenu(wrapper);
+    const submenu = await openSubmenu(menu.querySelector<HTMLElement>('[data-menu-screen-share]')!);
+    const items = Array.from(submenu.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      'Present a screen, window, or tab',
+      'Present part of a screen',
+    ]);
+    items[1]!.click();
+    await flushPromises();
+    expect(wrapper.emitted('startScreenShare')).toEqual([[{ selectArea: true }]]);
+  });
+
+  it('pins from the pin submenu and lists the participants', async () => {
+    const wrapper = mountMenu({ pinnedParticipantId: 'remote' });
+    const menu = await openMenu(wrapper);
+    const pins = await openSubmenu(menu.querySelector<HTMLElement>('[data-menu-pin]')!);
+
+    expect(pins.querySelector('[role="menuitemcheckbox"][aria-checked="true"]')?.getAttribute('aria-label')).toBe(
       'Unpin Remote Person',
     );
+    pins.querySelector<HTMLElement>('[aria-label="Pin Local Person"]')!.click();
+    await flushPromises();
+    expect(wrapper.emitted('togglePin')).toEqual([['local']]);
+  });
+
+  it('toggles dev tools and keeps bug reports privacy-safe', async () => {
+    const wrapper = mountMenu({ showConnectionStatus: true });
+    const menu = await openMenu(wrapper);
+    const devTools = menu.querySelector<HTMLElement>('[data-menu-dev-tools]')!;
+    const reportLink = menu.querySelector<HTMLAnchorElement>('a[target="_blank"]');
+
+    expect(devTools.getAttribute('aria-checked')).toBe('true');
     expect(reportLink?.href).toContain('Area%3A+meeting');
     expect(reportLink?.href).not.toContain('/room/');
-    expect(menu?.querySelectorAll('svg').length).toBeGreaterThanOrEqual(10);
-  });
-
-  it('toggles full screen from the menu in either layout', async () => {
-    const wrapper = mountMenu();
-    await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
+    devTools.click();
     await flushPromises();
-    const toggle = () => document.body.querySelector<HTMLElement>('[data-fullscreen-toggle]');
-
-    expect(toggle()?.textContent).toContain('Full screen');
-    expect(toggle()?.getAttribute('aria-checked')).toBe('false');
-    toggle()?.click();
-    await flushPromises();
-    expect(wrapper.emitted('toggleFullscreen')).toHaveLength(1);
-
-    await wrapper.setProps({ fullscreen: true, viewMode: 'speaker' });
-    await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
-    await flushPromises();
-    expect(toggle()?.textContent).toContain('Exit full screen');
-    expect(toggle()?.getAttribute('aria-checked')).toBe('true');
-  });
-
-  it('reports unavailable tracks instead of presenting false enabled actions', async () => {
-    const wrapper = mountMenu();
-    await wrapper.setProps({ audioAvailable: false, videoAvailable: false });
-    await wrapper.get('button[aria-label="Open meeting actions"]').trigger('click');
-    await flushPromises();
-
-    expect(document.body.textContent).toContain('Microphone unavailable');
-    expect(document.body.textContent).toContain('Camera unavailable');
+    expect(wrapper.emitted('toggleStats')).toHaveLength(1);
   });
 });
 
@@ -170,13 +151,8 @@ describe('MeetingActionMenu layout menu', () => {
       attachTo: document.body,
       props: {
         context: true,
-        audioAvailable: true,
-        isChatOpen: false,
-        isMuted: false,
-        isVideoOff: false,
         participants,
         pinnedParticipantId: null,
-        videoAvailable: true,
         viewMode: 'grid',
       },
       slots: { default: '<div data-testid="tile-area">tiles</div>' },

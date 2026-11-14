@@ -143,6 +143,45 @@ describe('VideoGrid layout', () => {
   });
 });
 
+describe('VideoGrid strip on desktop', () => {
+  it('collapses the strip below the speaker and shows your own view as a corner picture', async () => {
+    desktop();
+    const wrapper = mountGrid({ participants: people(3), pinnedParticipantId: 'ada', viewMode: 'speaker' });
+    expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'bob']);
+    expect(wrapper.find('[data-testid="self-picture"]').exists()).toBe(false);
+
+    await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(wrapper.find('[data-testid="participant-strip"]').exists()).toBe(false);
+    expect(tileIds(wrapper, '[data-testid="self-picture"]')).toEqual(['me']);
+    expect(wrapper.emitted('togglePin')).toBeUndefined();
+
+    await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'bob']);
+  });
+
+  it('shows no corner picture while you are the speaker', async () => {
+    desktop();
+    const wrapper = mountGrid({ participants: people(3), pinnedParticipantId: 'me', viewMode: 'speaker' });
+    await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(wrapper.find('[data-testid="self-picture"]').exists()).toBe(false);
+  });
+
+  it('keeps the floating strip on a phone, with no toggle', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(5) });
+    expect(wrapper.find('[data-strip-toggle]').exists()).toBe(false);
+  });
+});
+
+describe('VideoGrid own camera', () => {
+  it('leaves your own tile out when you hide your own camera, but keeps your screen share', () => {
+    desktop();
+    const myScreen = person('me-screen', { isLocal: true, screenShareOf: 'me' });
+    const wrapper = mountGrid({ participants: [...people(3), myScreen], hideOwnCamera: true, viewMode: 'grid' });
+    expect(tileIds(wrapper, '[data-testid="participant-grid"]')).toEqual(['ada', 'bob', 'me-screen']);
+  });
+});
+
 describe('VideoGrid tile interactions', () => {
   it('pins a tapped tile after the double-tap window', async () => {
     desktop();
@@ -166,7 +205,7 @@ describe('VideoGrid tile interactions', () => {
     expect(wrapper.emitted('togglePin')).toEqual([['ada']]);
   });
 
-  it('does not pin after a long-press, which opens the layout menu instead', () => {
+  it('reports a long-press on a tile to toggle the call controls, without pinning', () => {
     phone();
     vi.useFakeTimers();
     const wrapper = mountGrid({ participants: people(3) });
@@ -174,10 +213,75 @@ describe('VideoGrid tile interactions', () => {
     vi.advanceTimersByTime(10);
 
     tile.element.dispatchEvent(pointer('pointerdown'));
-    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(499);
+    expect(wrapper.emitted('longPress')).toBeUndefined();
+    vi.advanceTimersByTime(1);
+    expect(wrapper.emitted('longPress')).toHaveLength(1);
+    tile.element.dispatchEvent(pointer('pointerup'));
     tile.element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
     vi.advanceTimersByTime(300);
     expect(wrapper.emitted('togglePin')).toBeUndefined();
+  });
+
+  it('reports a long-press on the empty space around the tiles too', () => {
+    phone();
+    vi.useFakeTimers();
+    const wrapper = mountGrid({ participants: people(3) });
+    vi.advanceTimersByTime(10);
+    canvas(wrapper).element.dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(500);
+    expect(wrapper.emitted('longPress')).toHaveLength(1);
+  });
+
+  it('does nothing on a tap on the empty space around the tiles', () => {
+    phone();
+    vi.useFakeTimers();
+    const wrapper = mountGrid({ participants: people(3) });
+    vi.advanceTimersByTime(10);
+    canvas(wrapper).element.dispatchEvent(pointer('pointerdown'));
+    canvas(wrapper).element.dispatchEvent(pointer('pointerup'));
+    canvas(wrapper).element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    vi.advanceTimersByTime(300);
+    expect(wrapper.emitted('togglePin')).toBeUndefined();
+    expect(wrapper.emitted('longPress')).toBeUndefined();
+  });
+
+  it('cancels a long-press when the finger moves', () => {
+    phone();
+    vi.useFakeTimers();
+    const wrapper = mountGrid({ participants: people(3) });
+    vi.advanceTimersByTime(10);
+    canvas(wrapper).element.dispatchEvent(pointer('pointerdown', { clientX: 0, clientY: 0 }));
+    canvas(wrapper).element.dispatchEvent(pointer('pointermove', { clientX: 0, clientY: 40 }));
+    vi.advanceTimersByTime(600);
+    expect(wrapper.emitted('longPress')).toBeUndefined();
+  });
+
+  it('reports a vertical swipe on the video area, but not a sideways one', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(3) });
+    const touch = (type: string, x: number, y: number) => {
+      const event = new Event(type, { bubbles: true });
+      const points = [{ clientX: x, clientY: y }];
+      Object.defineProperty(event, type === 'touchend' ? 'changedTouches' : 'touches', { value: points });
+      canvas(wrapper).element.dispatchEvent(event);
+    };
+
+    touch('touchstart', 100, 400);
+    touch('touchend', 104, 300);
+    touch('touchstart', 100, 300);
+    touch('touchend', 98, 380);
+    touch('touchstart', 100, 300);
+    touch('touchend', 220, 320);
+
+    expect(wrapper.emitted('swipe')).toEqual([['up'], ['down']]);
+  });
+
+  it('collapses the name tags while the call controls are hidden', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(3), controlsHidden: true });
+    const tags = wrapper.findAll('[data-participant-name-tag]');
+    expect(tags.every((tag) => !tag.isVisible())).toBe(true);
   });
 
   it('shows a tile in full screen from its ⋯ menu by pinning it and entering full screen', async () => {

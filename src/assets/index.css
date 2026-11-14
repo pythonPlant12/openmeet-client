@@ -566,18 +566,10 @@
     inset 0 1px 1px rgb(255 255 255 / 0.12) !important;
 }
 
-/* A small glass bubble for labels over video, such as a participant's name tag. */
+/* A small flat label over video, such as a participant's name tag: a dark solid chip with no glass. */
 .meeting-glass-bubble {
   color: #fff;
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%), rgb(16 47 53 / 0.42);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  backdrop-filter: blur(10px) saturate(1.4);
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.55),
-    inset 0 0 0 1px rgb(255 255 255 / 0.22),
-    0 6px 16px -6px rgb(0 0 0 / 0.45);
-  text-shadow: 0 1px 1px rgb(0 0 0 / 0.25);
+  background: rgb(17 27 33 / 0.62);
 }
 
 /* Every menu is liquid glass: a frosted surface with a bright rim, and one bubble (LiquidMenuHighlight) that
@@ -1544,4 +1536,472 @@
 /* Translucent dark tints (quotes, link cards) turn light on the dark chat. */
 .meeting-immersive .harbor-chat-panel .bg-harbor-ink\/\[0\.05\] {
   background-color: rgb(255 255 255 / 0.08) !important;
+}
+
+/* In the components layer, so utilities on a single button or tray can still adjust it. */
+@layer components {
+  /* Call controls: flat squircle buttons in solid trays, with no glass, drop, or bounce. A tray groups related
+     buttons; Leave stands alone in red. State changes only the fill and icon color, quickly. The squircle sits
+     between a rounded square and a circle. */
+  .call-tray {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.25rem;
+    border: 1px solid rgb(var(--harbor-line));
+    border-radius: calc(var(--meeting-control-size) * 0.4 + 0.25rem);
+    background: rgb(var(--harbor-surface));
+    box-shadow: var(--harbor-shadow-soft);
+  }
+
+  .call-button {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: var(--meeting-control-size);
+    height: var(--meeting-control-size);
+    border-radius: calc(var(--meeting-control-size) * 0.4);
+    color: rgb(var(--harbor-ink));
+    background-color: transparent;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .call-button svg {
+    width: var(--meeting-control-icon);
+    height: var(--meeting-control-icon);
+  }
+
+  .call-button:focus-visible {
+    outline: 2px solid rgb(var(--harbor-subtle));
+    outline-offset: -2px;
+  }
+
+  .call-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* The chevron that opens a device menu sits right after its button, narrower. */
+  .call-button-chevron {
+    width: 1.5rem;
+    margin-left: -0.125rem;
+    color: rgb(var(--harbor-icon));
+  }
+
+  .call-button-chevron svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .call-button:not(:disabled):active,
+  .call-button[data-state='open'] {
+    background-color: rgb(var(--harbor-hover));
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .call-button:not(:disabled):hover {
+      background-color: rgb(var(--harbor-hover));
+    }
+  }
+
+  /* A muted microphone or a camera that is off shows a red icon on a red-tinted fill. */
+  .call-button[data-off='true'],
+  .call-button[data-off='true']:hover {
+    color: rgb(var(--harbor-danger));
+    background-color: rgb(var(--harbor-danger-soft));
+  }
+
+  /* The microphone and camera controls are one filled button each, toggle and chevron together: grey while on,
+     red while off, so both read the same way. */
+  .call-media {
+    border-radius: calc(var(--meeting-control-size) * 0.4);
+    color: rgb(var(--harbor-ink));
+    background-color: rgb(var(--harbor-hover));
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .call-media[data-off='true'] {
+    color: rgb(var(--harbor-danger));
+    background-color: rgb(var(--harbor-danger-soft));
+    box-shadow: inset 0 0 0 1px rgb(var(--harbor-danger) / 0.3);
+  }
+
+  .call-media .call-button,
+  .call-media .call-button[data-off='true'],
+  .call-media .call-button:hover {
+    color: inherit;
+    background-color: transparent;
+  }
+
+  /* Each half's hover fill follows the control's outer corners and meets the other half square. */
+  .call-media .call-button {
+    border-radius: inherit;
+  }
+
+  .call-media [data-media-toggle]:not(:only-of-type) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .call-media [data-media-menu-trigger] {
+    margin-left: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .call-media .call-button:not(:disabled):active,
+  .call-media .call-button[data-state='open'] {
+    background-color: rgb(var(--harbor-ink) / 0.1);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .call-media .call-button:not(:disabled):hover {
+      background-color: rgb(var(--harbor-ink) / 0.08);
+    }
+  }
+
+  /* A medium that is live and worth noticing, such as a screen share, fills solid. */
+  .call-button[data-active='true'],
+  .call-button[data-active='true']:hover {
+    color: rgb(var(--harbor-surface));
+    background-color: rgb(var(--harbor-ink));
+  }
+
+  /* Leave uses fixed reds rather than the danger tokens, which dark scopes lighten for text. */
+  .call-button-leave {
+    width: calc(var(--meeting-control-size) * 1.25);
+    border-radius: calc(var(--meeting-control-size) * 0.4);
+    color: #fff;
+    background-color: rgb(196 81 61);
+  }
+
+  .call-button-leave:not(:disabled):active,
+  .call-button-leave:not(:disabled):hover {
+    color: #fff;
+    background-color: rgb(169 67 50);
+  }
+
+  /* Standalone call buttons outside a tray, such as the phone top bar and the camera preview: a grey squircle. */
+  .call-chip {
+    border-radius: calc(var(--meeting-control-size) * 0.4);
+    background-color: rgb(var(--harbor-hover));
+    box-shadow: var(--harbor-shadow-soft);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .call-chip:not(:disabled):hover {
+      background-color: rgb(var(--harbor-line));
+    }
+  }
+
+  /* The call screen is always dark, so it and its chrome (controls, phone bars, chat, camera preview) use a dark
+     Harbor palette. `meeting-immersive` sits on the document while a call is on screen, because the chat and the
+     camera preview open in portals. */
+  .meeting-controls-dark,
+  .call-screen-dark,
+  .meeting-immersive
+    :is(
+      [data-call-phone-controls],
+      [data-call-phone-top-bar],
+      .harbor-chat-panel,
+      [data-camera-preview],
+      [data-meeting-invite]
+    ) {
+    --harbor-ink: 233 237 239;
+    --harbor-ink-soft: 209 215 219;
+    --harbor-icon: 174 186 193;
+    --harbor-muted: 150 163 171;
+    --harbor-subtle: 134 150 160;
+    --harbor-faint: 102 119 129;
+    --harbor-waveform: 102 119 129;
+    --harbor-avatar: 52 58 63;
+    --harbor-line: 52 57 61;
+    --harbor-hover: 48 54 58;
+    --harbor-canvas: 22 25 27;
+    --harbor-app: 17 20 22;
+    --harbor-surface: 30 33 36;
+    /* Teal reads poorly on the dark call screen, so its accent is a light grey. */
+    --harbor-accent: 209 215 219;
+    --harbor-accent-soft: 58 64 68;
+    --harbor-danger: 217 137 123;
+    --harbor-danger-strong: 196 81 61;
+    --harbor-danger-soft: 64 34 29;
+    --harbor-shadow-soft: 0 6px 18px rgb(0 0 0 / 0.35);
+    --harbor-shadow-raised: 0 8px 22px rgb(0 0 0 / 0.4);
+    --harbor-shadow-around: 0 0 0 1px rgb(255 255 255 / 0.04), 0 0 8px rgb(0 0 0 / 0.4);
+    --harbor-shadow-float: 0 18px 48px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+    /* Text inherited from outside the scope would keep the light ink. */
+    color: rgb(var(--harbor-ink));
+  }
+
+  /* The page behind the call screen, such as the strip under the phone chrome, stays dark too. */
+  html.meeting-immersive,
+  html.meeting-immersive body {
+    background-color: rgb(17 20 22);
+  }
+
+  /* Meeting menus highlight items with a flat fill instead of the liquid drop, and their icons stay still. */
+  :is(.meeting-menu, .meeting-immersive .liquid-menu) > .liquid-menu-bubble {
+    display: none;
+  }
+
+  :is(.meeting-menu, .meeting-immersive .liquid-menu) [role^='menuitem']:is([data-highlighted], [data-state='open']) {
+    background-color: rgb(var(--harbor-hover)) !important;
+    border-radius: 0.625rem;
+  }
+
+  :is(.meeting-menu, .meeting-immersive .liquid-menu) .liquid-menu-static-icon {
+    animation: none !important;
+  }
+
+  /* The phone controls panel: grouped rows on a slightly raised surface, like a settings list. */
+  .call-panel-group {
+    overflow: hidden;
+    border-radius: 1rem;
+    background-color: rgb(var(--harbor-hover));
+  }
+
+  .call-panel-group > * + * {
+    border-top: 1px solid rgb(var(--harbor-line));
+  }
+
+  .call-panel-row {
+    display: flex;
+    width: 100%;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: rgb(var(--harbor-ink));
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .call-panel-row:active {
+    background-color: rgb(var(--harbor-line));
+  }
+
+  .call-panel-row:focus-visible {
+    outline: 2px solid rgb(var(--harbor-subtle));
+    outline-offset: -2px;
+  }
+
+  .call-panel-row-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    color: rgb(var(--harbor-icon));
+  }
+
+  /* Choices that expand under a phone panel row, such as microphones or camera quality, with a check on the
+     chosen one. */
+  .call-choice-list {
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background-color: rgb(var(--harbor-ink) / 0.06);
+  }
+
+  .call-choice-list > * + * {
+    border-top: 1px solid rgb(var(--harbor-ink) / 0.08);
+  }
+
+  .call-choice {
+    display: flex;
+    width: 100%;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: rgb(var(--harbor-ink));
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .call-choice:active {
+    background-color: rgb(var(--harbor-ink) / 0.08);
+  }
+
+  .call-choice:disabled {
+    opacity: 0.5;
+  }
+
+  .call-choice[aria-checked='true'] > svg {
+    color: rgb(var(--harbor-accent));
+  }
+
+  /* A volume slider: a thin rounded track, filled up to the value, with a round white handle. The page sets
+     `--fill` to the value as a percentage. */
+  .call-volume-slider {
+    display: block;
+    width: 100%;
+    height: 1.25rem;
+    cursor: pointer;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .call-volume-slider::-webkit-slider-runnable-track {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: linear-gradient(
+      to right,
+      rgb(var(--harbor-accent)) var(--fill, 50%),
+      rgb(var(--harbor-ink) / 0.15) var(--fill, 50%)
+    );
+  }
+
+  .call-volume-slider::-moz-range-track {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: rgb(var(--harbor-ink) / 0.15);
+  }
+
+  .call-volume-slider::-moz-range-progress {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: rgb(var(--harbor-accent));
+  }
+
+  .call-volume-slider::-webkit-slider-thumb {
+    width: 1.125rem;
+    height: 1.125rem;
+    margin-top: -0.375rem;
+    border: 0;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .call-volume-slider::-moz-range-thumb {
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 0;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  }
+
+  .call-volume-slider:focus-visible {
+    outline: none;
+  }
+
+  .call-volume-slider:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid rgb(var(--harbor-subtle));
+    outline-offset: 2px;
+  }
+
+  /* The invite's share targets: a round grey icon over a short label, in a row that scrolls sideways. */
+  .call-share-target {
+    display: flex;
+    width: 4.5rem;
+    flex-shrink: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgb(var(--harbor-muted));
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .call-share-icon {
+    display: flex;
+    width: 3.25rem;
+    height: 3.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.875rem;
+    color: rgb(var(--harbor-ink));
+    background-color: rgb(var(--harbor-hover));
+    transition: background-color 120ms ease;
+  }
+
+  .call-share-icon > svg {
+    width: 1.375rem;
+    height: 1.375rem;
+  }
+
+  .call-share-icon > img {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .call-share-target:active .call-share-icon,
+  .call-share-target[aria-pressed='true'] .call-share-icon {
+    background-color: rgb(var(--harbor-line));
+  }
+
+  .call-share-target:focus-visible {
+    outline: none;
+  }
+
+  .call-share-target:focus-visible .call-share-icon {
+    outline: 2px solid rgb(var(--harbor-subtle));
+  }
+
+  /* A participant's name tag: a small dark label at the bottom of the tile, with a mic-off icon when muted. */
+  .call-name-tag {
+    color: rgb(var(--harbor-ink));
+    background-color: rgb(var(--harbor-app) / 0.72);
+    border-radius: 0.5rem;
+  }
+
+  /* Leave beside the trays matches their full height. */
+  .call-button-tall {
+    height: calc(var(--meeting-control-size) + 0.5rem + 2px);
+  }
+}
+
+/* Text fields on the dark call screen get a light border, since the shared field border nearly vanishes there.
+   Outside the layer, so it wins over the fields' own border utilities. */
+:is(
+    .call-screen-dark,
+    .meeting-immersive
+      :is(
+        [data-call-phone-controls],
+        [data-call-phone-top-bar],
+        .harbor-chat-panel,
+        [data-camera-preview],
+        [data-meeting-invite]
+      )
+  )
+  :is(input:not([type='range'], [type='checkbox'], [type='radio']), textarea) {
+  border-color: rgb(var(--harbor-ink) / 0.22);
+}
+
+:is(
+    .call-screen-dark,
+    .meeting-immersive
+      :is(
+        [data-call-phone-controls],
+        [data-call-phone-top-bar],
+        .harbor-chat-panel,
+        [data-camera-preview],
+        [data-meeting-invite]
+      )
+  )
+  :is(input:not([type='range'], [type='checkbox'], [type='radio']), textarea):focus {
+  border-color: rgb(var(--harbor-ink) / 0.4);
+}
+
+/* Chat parts written with plain white or a fixed gray follow the dark palette in full screen. Outside
+   the layer, so they win over the utilities. */
+.meeting-immersive .harbor-chat-panel :is(.bg-white, .bg-\[\#D1D7DB\]) {
+  background-color: rgb(var(--harbor-surface));
+}
+
+.meeting-immersive .harbor-chat-panel .bg-\[\#D1D7DB\] {
+  background-color: rgb(var(--harbor-line));
 }

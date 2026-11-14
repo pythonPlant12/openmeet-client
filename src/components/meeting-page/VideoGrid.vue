@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useElementSize, useMediaQuery } from '@vueuse/core';
+import { ChevronDown, ChevronUp } from 'lucide-vue-next';
 import { computed, onUnmounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -31,17 +32,23 @@ const props = defineProps<{
   participantStatuses?: Record<string, UserStatus>;
   /** Avatar image URLs of registered participants, keyed by participant ID. */
   participantAvatars?: Record<string, string>;
-  /** Phones show the navbar at the top (guests), so the video area starts below it and the meeting's top row. */
-  phoneTopBar?: boolean;
   /** Full screen: the media fills the whole screen on a near-black background, with nothing around it. */
   fullscreen?: boolean;
   /** Full screen controls are showing, so the strip moves up to stay above them. */
   controlsShown?: boolean;
+  /** The call controls are hidden, so the name tags shrink to the mic-off icon. */
+  controlsHidden?: boolean;
+  /** Leaves your own camera tile out of the layout; your screen share stays. */
+  hideOwnCamera?: boolean;
 }>();
 
 const emit = defineEmits<{
   togglePin: [participantId: string];
   toggleFullscreen: [];
+  /** A touch held on the video area, which hides or shows the call controls. */
+  longPress: [];
+  /** A vertical swipe on the video area, such as to show or hide the controls in full screen. */
+  swipe: [direction: 'up' | 'down'];
 }>();
 const { t } = useI18n();
 
@@ -54,8 +61,12 @@ const MIN_STRIP_TILE_HEIGHT = 64;
 const STRIP_GAP = 8;
 /** Two taps this close together are a double tap, which toggles full screen instead of pinning. */
 const DOUBLE_TAP_MS = 280;
-/** A touch held this long is a long-press, which opens the layout menu instead of pinning. */
+/** A touch held this long is a long-press, which hides or shows the call controls instead of pinning. */
 const LONG_PRESS_MS = 500;
+/** A finger that moves further than this is scrolling or dragging, not long-pressing. */
+const LONG_PRESS_SLOP_PX = 10;
+/** A finger that travels at least this far, mostly up or down, is a swipe. */
+const SWIPE_MIN_PX = 40;
 /** The phone 1:1 self view: a portrait picture about a quarter of the screen wide, inset from the edges. */
 const SELF_VIEW_WIDTH_SHARE = 0.28;
 const SELF_VIEW_MIN_WIDTH = 88;
@@ -67,10 +78,17 @@ const DRAG_THRESHOLD_PX = 6;
 
 const isWide = useMediaQuery('(min-width: 768px)');
 const formFactor = useCallFormFactor();
-const hasParticipants = computed(() => props.participants.length > 0);
+// Phone call screens centre the name tags and open each person's menu from their name tag.
+const isPhone = computed(() => formFactor.value !== 'desktop');
+const shownParticipants = computed(() =>
+  props.hideOwnCamera
+    ? props.participants.filter((participant) => !participant.isLocal || participant.screenShareOf)
+    : props.participants,
+);
+const hasParticipants = computed(() => shownParticipants.value.length > 0);
 const layout = computed(() =>
   selectCallLayout({
-    participants: props.participants,
+    participants: shownParticipants.value,
     formFactor: formFactor.value,
     viewMode: props.viewMode,
     pinnedParticipantId: props.pinnedParticipantId,
@@ -140,7 +158,8 @@ const gridStyle = (participant: Participant) => {
 };
 
 // Speaker view: the main video takes the whole stage. It fills it when it has the stage's orientation, and
-// otherwise fits inside at its own shape; everyone else floats in a strip over its bottom edge.
+// otherwise fits inside at its own shape; everyone else sits in a strip (over its bottom edge on phones and in
+// full screen, below it on desktop).
 const stage = ref<HTMLElement | null>(null);
 const { width: stageWidth, height: stageHeight } = useElementSize(stage);
 const mainFills = computed(() => {
@@ -162,6 +181,28 @@ const stripHeight = computed(() => {
   if (!aspectSum || available <= 0) return preferred;
   return Math.max(MIN_STRIP_TILE_HEIGHT, Math.min(preferred, Math.floor(available / aspectSum)));
 });
+// Desktop: the strip sits below the speaker rather than over the video, and a toggle collapses it. While it is
+// collapsed your own view stays as a small picture in the corner. Phones and full screen keep the floating strip.
+const STRIP_TOGGLE_SPACE = 32;
+const isStripCollapsed = ref(false);
+const stripBelow = computed(() => !isPhone.value && !props.fullscreen && secondaryParticipants.value.length > 0);
+const showsStrip = computed(
+  () => secondaryParticipants.value.length > 0 && !(stripBelow.value && isStripCollapsed.value),
+);
+const selfPicture = computed(() =>
+  stripBelow.value && isStripCollapsed.value
+    ? (secondaryParticipants.value.find((participant) => participant.isLocal && !participant.screenShareOf) ?? null)
+    : null,
+);
+const stageStyle = computed(() => {
+  if (!stripBelow.value) return { height: '100%' };
+  const below = isStripCollapsed.value ? STRIP_TOGGLE_SPACE : stripHeight.value + STRIP_GAP + STRIP_TOGGLE_SPACE;
+  return { height: `calc(100% - ${below}px)` };
+});
+const stripToggleStyle = computed(() => ({
+  bottom: isStripCollapsed.value ? '0.25rem' : `calc(${stripHeight.value}px + 1.5rem)`,
+}));
+
 const stripStyle = (participant: Participant) => ({
   width: `${Math.floor(stripHeight.value * aspectOf(participant))}px`,
 });
@@ -243,12 +284,48 @@ function endSelfViewDrag(event: PointerEvent) {
 
 // One tap on a tile pins or unpins that person; a double tap anywhere toggles full screen. The single tap waits
 // a moment so a double tap does not also pin. Keyboard presses (no pointer detail) act at once. A touch held
-// long enough opens the layout menu instead, so its click does nothing.
+// still for `LONG_PRESS_MS` anywhere on the video area is a long-press instead, so its click does nothing.
 let lastTapAt = 0;
 let pendingTap: number | undefined;
-let touchPressStartedAt = 0;
+let longPressTimer: number | undefined;
+let longPressStart: { x: number; y: number } | null = null;
+let longPressFired = false;
+function cancelLongPress() {
+  window.clearTimeout(longPressTimer);
+  longPressTimer = undefined;
+  longPressStart = null;
+}
 function handleCanvasPointerDown(event: PointerEvent) {
-  touchPressStartedAt = event.pointerType === 'mouse' ? 0 : Date.now();
+  cancelLongPress();
+  longPressFired = false;
+  if (event.pointerType === 'mouse') return;
+  longPressStart = { x: event.clientX, y: event.clientY };
+  longPressTimer = window.setTimeout(() => {
+    longPressTimer = undefined;
+    longPressStart = null;
+    longPressFired = true;
+    emit('longPress');
+  }, LONG_PRESS_MS);
+}
+function handleCanvasPointerMove(event: PointerEvent) {
+  if (!longPressStart) return;
+  if (Math.hypot(event.clientX - longPressStart.x, event.clientY - longPressStart.y) > LONG_PRESS_SLOP_PX) {
+    cancelLongPress();
+  }
+}
+// Touch events rather than pointer events, since the browser cancels a pointer as soon as a vertical pan starts.
+let swipeStart: { x: number; y: number } | null = null;
+function handleCanvasTouchStart(event: TouchEvent) {
+  const touch = event.touches[0];
+  swipeStart = event.touches.length === 1 && touch ? { x: touch.clientX, y: touch.clientY } : null;
+}
+function handleCanvasTouchEnd(event: TouchEvent) {
+  const touch = event.changedTouches[0];
+  if (!swipeStart || !touch) return;
+  const dx = touch.clientX - swipeStart.x;
+  const dy = touch.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dy) >= SWIPE_MIN_PX && Math.abs(dy) > Math.abs(dx) * 1.5) emit('swipe', dy < 0 ? 'up' : 'down');
 }
 function handleCanvasClick(event: MouseEvent) {
   const participantId = (event.target as Element | null)?.closest<HTMLElement>('[data-testid="participant-tile"]')
@@ -257,9 +334,10 @@ function handleCanvasClick(event: MouseEvent) {
     if (participantId) emit('togglePin', participantId);
     return;
   }
-  const wasLongPress = touchPressStartedAt > 0 && Date.now() - touchPressStartedAt >= LONG_PRESS_MS;
-  touchPressStartedAt = 0;
-  if (wasLongPress) return;
+  if (longPressFired) {
+    longPressFired = false;
+    return;
+  }
   const now = Date.now();
   if (now - lastTapAt < DOUBLE_TAP_MS) {
     window.clearTimeout(pendingTap);
@@ -277,7 +355,10 @@ function handleCanvasClick(event: MouseEvent) {
       }, DOUBLE_TAP_MS)
     : undefined;
 }
-onUnmounted(() => window.clearTimeout(pendingTap));
+onUnmounted(() => {
+  window.clearTimeout(pendingTap);
+  cancelLongPress();
+});
 
 // "Full screen" on a tile shows that person alone: it pins them, then enters full screen. On the tile already
 // shown in full screen it leaves full screen.
@@ -290,7 +371,7 @@ function showTileFullscreen(participant: Participant) {
   if (!props.fullscreen) emit('toggleFullscreen');
 }
 
-// Strip tiles on phones hide names to keep the small videos clear; the tile's ⋯ menu reveals one.
+// Strip tiles on phones hide names to keep the small videos clear; the tile's menu reveals one.
 const revealedNames = reactive(new Set<string>());
 function toggleName(participantId: string) {
   if (revealedNames.has(participantId)) revealedNames.delete(participantId);
@@ -308,22 +389,21 @@ function toggleName(participantId: string) {
     tabindex="0"
     :aria-label="t('meeting.actions.videoCanvas')"
     @pointerdown="handleCanvasPointerDown"
+    @pointermove="handleCanvasPointerMove"
+    @pointerup="cancelLongPress"
+    @pointercancel="cancelLongPress"
+    @touchstart.passive="handleCanvasTouchStart"
+    @touchend="handleCanvasTouchEnd"
     @click="handleCanvasClick"
   >
-    <!-- The video area fills the space between the top row (participants and actions buttons) and the bottom
-         control bar, so no tile hides under either. In full screen it takes the whole screen. -->
+    <!-- The video area fills the space between the call screen's top bar and its controls, which the page sets as
+         --call-area-top and --call-area-bottom, so no tile hides under either. In full screen it takes the whole
+         screen. -->
     <div
       v-if="hasParticipants"
       class="fixed inset-x-0"
       :class="
-        fullscreen
-          ? 'inset-y-0 z-[35] bg-[#0B0F10]'
-          : [
-              'bottom-[calc(var(--meeting-control-size)+2.5rem)] sm:bottom-[calc(var(--meeting-control-size)+3.5rem)] sm:top-[calc(84px+2.25rem+var(--meeting-control-size))]',
-              phoneTopBar === false
-                ? 'top-[calc(1.25rem+var(--meeting-control-size)+env(safe-area-inset-top))]'
-                : 'top-[calc(5rem+var(--meeting-control-size))]',
-            ]
+        fullscreen ? 'inset-y-0 z-[35] bg-[#0B0F10]' : 'bottom-[var(--call-area-bottom)] top-[var(--call-area-top)]'
       "
     >
       <Transition name="meeting-layout" mode="out-in">
@@ -339,6 +419,7 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[participant.id]"
               :speaking="isSpeaking(participant)"
               :dark="fullscreen"
+              :collapsed="controlsHidden"
               fit="cover"
               size="grid"
               :is-expanded="pinnedParticipantId === participant.id"
@@ -364,6 +445,7 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[selfViewMain.id]"
               :speaking="isSpeaking(selfViewMain)"
               :dark="fullscreen"
+              :collapsed="controlsHidden"
               :bleed="fullscreen"
               fit="cover"
               size="full"
@@ -391,6 +473,7 @@ function toggleName(participantId: string) {
                 :avatar-url="participantAvatars?.[selfViewSelf.id]"
                 :speaking="isSpeaking(selfViewSelf)"
                 :dark="fullscreen"
+                :collapsed="controlsHidden"
                 size="mobile"
                 fit="cover"
                 :show-name-tag="false"
@@ -402,7 +485,12 @@ function toggleName(participantId: string) {
         </div>
 
         <div v-else key="speaker" class="absolute inset-0" :class="fullscreen ? '' : 'p-2 sm:p-4'">
-          <div ref="stage" class="relative flex size-full items-center justify-center" data-testid="speaker-stage">
+          <div
+            ref="stage"
+            class="relative flex w-full items-center justify-center"
+            :style="stageStyle"
+            data-testid="speaker-stage"
+          >
             <ParticipantTile
               v-if="speakerParticipant"
               :style="mainStyle"
@@ -412,6 +500,7 @@ function toggleName(participantId: string) {
               :speaking="isSpeaking(speakerParticipant)"
               :fit="mainFills ? 'cover' : 'contain'"
               :dark="fullscreen"
+              :collapsed="controlsHidden"
               :bleed="fullscreen"
               size="full"
               :is-expanded="pinnedParticipantId === speakerParticipant.id"
@@ -422,16 +511,44 @@ function toggleName(participantId: string) {
             />
           </div>
 
-          <!-- Everyone else floats over the bottom of the main video, on phones and desktops alike; it scrolls
-               sideways when it does not fit. -->
+          <!-- Everyone else: a strip over the bottom of the main video on phones and in full screen, below it on
+               desktop. It scrolls sideways when it does not fit. -->
+          <button
+            v-if="stripBelow"
+            type="button"
+            class="call-button call-chip absolute left-1/2 z-10 h-6 w-12 -translate-x-1/2 [&_svg]:!size-4"
+            :style="stripToggleStyle"
+            :aria-label="t(isStripCollapsed ? 'meeting.actions.showStrip' : 'meeting.actions.hideStrip')"
+            :aria-expanded="!isStripCollapsed"
+            data-strip-toggle
+            @click.stop="isStripCollapsed = !isStripCollapsed"
+          >
+            <ChevronUp v-if="isStripCollapsed" />
+            <ChevronDown v-else />
+          </button>
+
           <div
-            v-if="secondaryParticipants.length"
+            v-if="selfPicture"
+            class="absolute bottom-4 right-4 z-10 aspect-video w-52 rounded-[1.4rem] shadow-[0_10px_28px_rgba(0,0,0,0.35)] sm:bottom-6 sm:right-6"
+            data-testid="self-picture"
+          >
+            <ParticipantTile
+              :participant="selfPicture"
+              :avatar-url="participantAvatars?.[selfPicture.id]"
+              :speaking="isSpeaking(selfPicture)"
+              :collapsed="controlsHidden"
+              size="mobile"
+              fit="cover"
+              :show-name-tag="false"
+              :show-actions="false"
+              @aspect="setAspect(selfPicture.id, $event)"
+            />
+          </div>
+
+          <div
+            v-if="showsStrip"
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            :class="
-              fullscreen && controlsShown
-                ? 'bottom-[calc(var(--meeting-control-size)+2.5rem)] sm:bottom-[calc(var(--meeting-control-size)+3.5rem)]'
-                : 'bottom-4 sm:bottom-6'
-            "
+            :class="fullscreen && controlsShown ? 'bottom-[var(--call-area-bottom)]' : 'bottom-4 sm:bottom-6'"
           >
             <div class="pointer-events-auto max-w-full overflow-x-auto" data-testid="participant-strip">
               <div class="flex w-max gap-2" :style="{ height: `${stripHeight}px` }">
@@ -447,6 +564,7 @@ function toggleName(participantId: string) {
                     :avatar-url="participantAvatars?.[participant.id]"
                     :speaking="isSpeaking(participant)"
                     :dark="fullscreen"
+                    :collapsed="controlsHidden"
                     size="mobile"
                     :show-name-tag="isWide || revealedNames.has(participant.id)"
                     :name-toggle="!isWide"
@@ -486,23 +604,16 @@ function toggleName(participantId: string) {
 
 .meeting-layout-enter-active,
 .meeting-layout-leave-active {
-  transition:
-    opacity 0.32s ease,
-    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.2s ease;
 }
 
 .meeting-layout-leave-active {
   pointer-events: none;
 }
 
-.meeting-layout-enter-from {
-  opacity: 0;
-  transform: scale(0.97);
-}
-
+.meeting-layout-enter-from,
 .meeting-layout-leave-to {
   opacity: 0;
-  transform: scale(1.025);
 }
 
 @media (prefers-reduced-motion: reduce) {

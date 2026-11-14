@@ -18,7 +18,7 @@ const selected = computed(() => props.options.find((option) => option.value === 
 
 <template>
   <div
-    class="relative flex h-10 w-full min-w-0 items-center gap-2 rounded-full border border-harbor-line bg-harbor-surface pl-4 pr-9 text-xs text-harbor-ink focus-within:ring-2 focus-within:ring-harbor-subtle/40 sm:text-sm"
+    class="relative flex h-10 w-full min-w-0 items-center gap-2 rounded-2xl border border-harbor-line bg-harbor-hover pl-4 pr-9 text-xs text-harbor-ink focus-within:ring-2 focus-within:ring-harbor-subtle/40 sm:text-sm"
     :class="{ 'opacity-50': disabled }"
     data-meeting-select
   >

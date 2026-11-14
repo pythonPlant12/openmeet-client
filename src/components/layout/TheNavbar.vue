@@ -100,6 +100,11 @@ const closeMobileStatusOnOutsidePress = (event: PointerEvent) => {
 const isMeetingChatOpen = ref(false);
 // A meeting in full screen shows only its media, so the navbar steps aside until it ends.
 const isMeetingFullscreen = ref(false);
+// The call screen draws its own top and bottom bars, so the navbar steps aside for it too.
+const isMeetingCallChrome = ref(false);
+const isHiddenForMeeting = computed(
+  () => isMeetingFullscreen.value || (isMeetingPage.value && isMeetingCallChrome.value),
+);
 const isDashboardChatOpen = ref(false);
 const dashboardPanel = ref<DashboardPanelState>(null);
 const isLandingPage = computed(() => route.meta.showMarketingNav === true);
@@ -521,6 +526,11 @@ function handleMeetingFullscreen(event: Event) {
   if (isMeetingFullscreen.value) closeMobileMenu();
 }
 
+function handleMeetingCallChrome(event: Event) {
+  isMeetingCallChrome.value = (event as CustomEvent<boolean>).detail;
+  if (isMeetingCallChrome.value) closeMobileMenu();
+}
+
 function handleDashboardPanelState(event: Event) {
   dashboardPanel.value = (event as CustomEvent<DashboardPanelState>).detail;
 }
@@ -594,6 +604,7 @@ onMounted(() => {
   window.addEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
   window.addEventListener('openmeet:dashboard-panel-state', handleDashboardPanelState);
   window.addEventListener('openmeet:meeting-fullscreen', handleMeetingFullscreen);
+  window.addEventListener('openmeet:meeting-call-chrome', handleMeetingCallChrome);
   document.addEventListener('pointerdown', closeMobileStatusOnOutsidePress, true);
   if ('ResizeObserver' in window) navResizeObserver = new ResizeObserver(updateNavLayout);
   updateNavLayout();
@@ -610,6 +621,7 @@ onUnmounted(() => {
   window.removeEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
   window.removeEventListener('openmeet:dashboard-panel-state', handleDashboardPanelState);
   window.removeEventListener('openmeet:meeting-fullscreen', handleMeetingFullscreen);
+  window.removeEventListener('openmeet:meeting-call-chrome', handleMeetingCallChrome);
 });
 
 watch([mobileMenuExpanded, activeMobileMenuIsContentSized], () => requestAnimationFrame(updateNavLayout));
@@ -630,7 +642,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
 </script>
 
 <template>
-  <!-- Every part of the navbar hides while a meeting is in full screen. -->
+  <!-- Every part of the navbar hides while a meeting is in full screen or shows the phone call chrome. -->
   <template
     v-if="
       isAuthenticated &&
@@ -638,7 +650,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
       isMobile &&
       !isMeetingChatOpen &&
       !isDashboardChatOpen &&
-      !isMeetingFullscreen
+      !isHiddenForMeeting
     "
   >
     <!-- z-40 keeps the tabs above the page but under dialogs (z-50). While the account sheet is open they rise
@@ -866,7 +878,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
     </motion.nav>
   </template>
   <button
-    v-if="mobileMenuExpanded && !isClosingMobileMenu && (!isAuthenticated || !isMobile) && !isMeetingFullscreen"
+    v-if="mobileMenuExpanded && !isClosingMobileMenu && (!isAuthenticated || !isMobile) && !isHiddenForMeeting"
     type="button"
     class="fixed inset-0 z-[1020] cursor-default bg-transparent"
     aria-label="Close navigation"
@@ -876,7 +888,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
   <!-- Wider screens use one liquid bar: workspace tabs when signed in, and the brand, marketing menus, and
        meeting action for guests and meetings. Below 1280px guests and meetings keep the glass capsule. -->
   <div
-    v-if="showDesktopLiquidBar && !isMeetingFullscreen"
+    v-if="showDesktopLiquidBar && !isHiddenForMeeting"
     class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] flex justify-center px-4 text-harbor-ink"
   >
     <LiquidTabBar
@@ -1042,7 +1054,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
   </div>
   <!-- Guests and meetings below 1280px keep the branded glass capsule and its expanding menu. -->
   <motion.nav
-    v-if="(!isAuthenticated || (!isMobile && !showWorkspaceTabs)) && !isDesktop && !isMeetingFullscreen"
+    v-if="(!isAuthenticated || (!isMobile && !showWorkspaceTabs)) && !isDesktop && !isHiddenForMeeting"
     layout-root
     class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] text-harbor-ink"
     :aria-label="t('nav.navigationTitle')"

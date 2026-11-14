@@ -1,258 +1,161 @@
 <script setup lang="ts">
-import { refDebounced } from '@vueuse/core';
-import { Check, Search, UserPlus } from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
-import { Button } from '@/components/ui/button';
 import { Dialog, DialogDescription, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { LoadingRipple } from '@/components/ui/loading';
-import { toast } from '@/components/ui/toast';
-import { useAvatarCache } from '@/composables/useAvatarCache';
-import { meetingAccessOption, meetingInvitesAnyone } from '@/config/meeting-access.config';
-import {
-  type GroupAccessPolicy,
-  type MeetingInvitationCandidate,
-  type MeetingRoomAccess,
-  SocialApiError,
-  socialApi,
-} from '@/services/social-api';
-import { cookieUtils } from '@/utils';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import type { MeetingRoomAccess } from '@/services/social-api';
 
-import MeetingAccessPicker from './MeetingAccessPicker.vue';
+import MeetingInviteContent from './MeetingInviteContent.vue';
 
-const props = defineProps<{
+// Invite people: a dimmed bottom sheet on a phone, which the handle makes taller, and a centred dialog on
+// desktop. Both hold the same invite content.
+defineProps<{
   roomId: string;
   access: MeetingRoomAccess | null;
+  /** Phone call screens show the invite as a bottom sheet. */
+  phone?: boolean;
+  /** Guests get the share targets and the access line only. */
+  guest?: boolean;
 }>();
 const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{ (event: 'access-updated', access: MeetingRoomAccess): void }>();
+const { t } = useI18n();
 
-const token = () => cookieUtils.get('accessToken') ?? '';
-const avatarCache = useAvatarCache((path) => socialApi.loadAvatar(token(), path));
-const query = ref('');
-const debouncedQuery = refDebounced(query, 300);
-const candidates = ref<MeetingInvitationCandidate[]>([]);
-const isSearching = ref(false);
-const searchError = ref('');
-const invitingId = ref<string | null>(null);
-const invitedIds = ref(new Set<string>());
-let searchRequest = 0;
+/** A drag on the sheet's top further than this grows, shrinks, or dismisses the sheet. */
+const HANDLE_DRAG_PX = 24;
+/** A flick down this fast (px/ms) dismisses the sheet however short it was. */
+const FLICK_VELOCITY = 0.5;
+const isExpanded = ref(false);
+// How far the sheet follows a finger dragging it down; it slides back, or away, on release.
+const dragOffset = ref(0);
+const isDragging = ref(false);
+let drag: { startY: number; lastY: number; lastTime: number; velocity: number } | null = null;
 
-const isHost = computed(() => !!props.access?.managed && props.access.isOwner);
-const policy = computed(() => props.access?.accessPolicy ?? 'open');
-const policyOption = computed(() => meetingAccessOption(policy.value));
-const searchPlaceholder = computed(() =>
-  meetingInvitesAnyone(policy.value) ? 'Search people by name or @nickname' : 'Search people the host knows',
-);
-const emptyText = computed(() =>
-  debouncedQuery.value.trim()
-    ? 'No one matches who can join this meeting.'
-    : 'Your friends who can join appear here. Search to find more people.',
-);
+function onDragStart(event: PointerEvent) {
+  if (event.button !== 0) return;
+  drag = { startY: event.clientY, lastY: event.clientY, lastTime: event.timeStamp, velocity: 0 };
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd);
+  window.addEventListener('pointercancel', onDragEnd);
+}
 
-// Host access settings, edited in place and saved explicitly.
-const draftPolicy = ref<GroupAccessPolicy>(policy.value);
-const draftPassword = ref('');
-const isSavingAccess = ref(false);
-const accessChanged = computed(() => draftPolicy.value !== policy.value || draftPassword.value.length > 0);
-const canSaveAccess = computed(() => {
-  if (!accessChanged.value || isSavingAccess.value) return false;
-  if (draftPolicy.value !== 'password') return true;
-  return draftPassword.value.length >= 4 || (policy.value === 'password' && !draftPassword.value);
-});
+function onDragMove(event: PointerEvent) {
+  if (!drag) return;
+  const elapsed = event.timeStamp - drag.lastTime;
+  if (elapsed > 0) drag.velocity = (event.clientY - drag.lastY) / elapsed;
+  drag.lastY = event.clientY;
+  drag.lastTime = event.timeStamp;
+  const dy = event.clientY - drag.startY;
+  if (Math.abs(dy) > 4) isDragging.value = true;
+  dragOffset.value = Math.max(dy, 0);
+}
 
-async function search() {
-  const request = ++searchRequest;
-  const text = debouncedQuery.value.trim();
-  // The server needs at least two characters to search everyone; shorter text lists friends.
-  const effectiveQuery = text.length >= 2 ? text : '';
-  isSearching.value = true;
-  searchError.value = '';
-  try {
-    const results = await socialApi.listMeetingInvitationCandidates(token(), props.roomId, effectiveQuery);
-    if (request !== searchRequest) return;
-    candidates.value = results;
-    void avatarCache.ensure(results.flatMap((candidate) => (candidate.avatarUrl ? [candidate.avatarUrl] : [])));
-  } catch (error) {
-    if (request !== searchRequest) return;
-    console.error('[MeetingInviteDialog] Failed to load people:', error);
-    candidates.value = [];
-    searchError.value = error instanceof SocialApiError ? error.message : 'Could not load people.';
-  } finally {
-    if (request === searchRequest) isSearching.value = false;
+function onDragEnd(event: PointerEvent) {
+  stopDragListeners();
+  if (!drag) return;
+  const dy = event.clientY - drag.startY;
+  const { velocity } = drag;
+  drag = null;
+  isDragging.value = false;
+  if (dy < -HANDLE_DRAG_PX) {
+    isExpanded.value = true;
+    dragOffset.value = 0;
+  } else if (dy > HANDLE_DRAG_PX || velocity > FLICK_VELOCITY) {
+    if (isExpanded.value && velocity <= FLICK_VELOCITY) {
+      isExpanded.value = false;
+      dragOffset.value = 0;
+    } else {
+      // The closing slide starts from where the finger left the sheet.
+      open.value = false;
+    }
+  } else {
+    dragOffset.value = 0;
+    const onHandle = event.target instanceof Element && !!event.target.closest('[data-invite-handle]');
+    if (Math.abs(dy) <= 4 && onHandle) isExpanded.value = !isExpanded.value;
   }
 }
 
-async function invite(candidate: MeetingInvitationCandidate) {
-  invitingId.value = candidate.id;
-  try {
-    await socialApi.inviteToMeetingRoom(token(), props.roomId, candidate.id);
-    invitedIds.value = new Set([...invitedIds.value, candidate.id]);
-    toast({ title: `${candidate.name} was invited.`, variant: 'success' });
-  } catch (error) {
-    console.error('[MeetingInviteDialog] Failed to invite:', error);
-    toast({
-      title: `Could not invite ${candidate.name}.`,
-      description: error instanceof SocialApiError ? error.message : undefined,
-      variant: 'destructive',
-    });
-  } finally {
-    invitingId.value = null;
-  }
+function stopDragListeners() {
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragEnd);
+  window.removeEventListener('pointercancel', onDragEnd);
 }
 
-async function saveAccess() {
-  if (!canSaveAccess.value) return;
-  isSavingAccess.value = true;
-  try {
-    const updated = await socialApi.updateMeetingRoom(token(), props.roomId, {
-      accessPolicy: draftPolicy.value,
-      ...(draftPolicy.value === 'password' && draftPassword.value ? { password: draftPassword.value } : {}),
-    });
-    draftPassword.value = '';
-    emit('access-updated', updated);
-    toast({ title: `Meeting access: ${meetingAccessOption(updated.accessPolicy).label}`, variant: 'success' });
-  } catch (error) {
-    console.error('[MeetingInviteDialog] Failed to update access:', error);
-    toast({
-      title: 'Could not change meeting access.',
-      description: error instanceof SocialApiError ? error.message : undefined,
-      variant: 'destructive',
-    });
-  } finally {
-    isSavingAccess.value = false;
-  }
-}
+onBeforeUnmount(stopDragListeners);
 
-function initials(name: string) {
-  return (
-    name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part.charAt(0).toUpperCase())
-      .join('') || '?'
-  );
+/** Keyboard presses on the handle toggle the height; pointer taps already did in `onDragEnd`. */
+function onHandleKey(event: MouseEvent) {
+  if (event.detail === 0) isExpanded.value = !isExpanded.value;
 }
 
 watch(open, (isOpen) => {
   if (!isOpen) return;
-  draftPolicy.value = policy.value;
-  draftPassword.value = '';
-  void search();
-});
-watch(debouncedQuery, () => {
-  if (open.value) void search();
-});
-// Changing who may join changes who can be invited.
-watch(policy, (current) => {
-  draftPolicy.value = current;
-  if (open.value) void search();
+  isExpanded.value = false;
+  dragOffset.value = 0;
 });
 </script>
 
 <template>
-  <Dialog v-model:open="open">
+  <Sheet v-if="phone" v-model:open="open">
+    <SheetContent
+      side="bottom"
+      hide-close
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md sm:bg-harbor-ink/30"
+      class="marketing-font flex flex-col gap-3 rounded-t-[1.75rem] border-0 bg-harbor-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 text-harbor-ink"
+      :class="[
+        isExpanded ? 'h-[92dvh]' : 'h-[62dvh]',
+        isDragging
+          ? '!transition-none'
+          : 'transition-[height,transform] !duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+      ]"
+      :style="dragOffset ? { transform: `translateY(${dragOffset}px)` } : undefined"
+      :data-expanded="isExpanded"
+      data-meeting-invite
+    >
+      <!-- The sheet's top drags: down to dismiss it or shrink it, up to make it taller; a tap toggles its height. -->
+      <div class="shrink-0 touch-none select-none" data-invite-drag-area @pointerdown="onDragStart">
+        <button
+          type="button"
+          class="flex h-6 w-full items-center justify-center"
+          :aria-label="t(isExpanded ? 'meeting.invite.shrink' : 'meeting.invite.expand')"
+          data-invite-handle
+          @click="onHandleKey"
+        >
+          <span aria-hidden="true" class="h-1 w-9 rounded-full bg-harbor-line" />
+        </button>
+        <SheetTitle class="text-center text-white font-semibold">{{ t('meeting.invite.title') }}</SheetTitle>
+      </div>
+      <SheetDescription class="sr-only">{{ t('meeting.invite.description') }}</SheetDescription>
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <MeetingInviteContent
+          :room-id="roomId"
+          :access="access"
+          :active="open"
+          :guest="guest"
+          @access-updated="emit('access-updated', $event)"
+        />
+      </div>
+    </SheetContent>
+  </Sheet>
+
+  <Dialog v-else v-model:open="open">
     <HarborDialogContent
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="marketing-font top-[calc(50%+2.25rem)] max-h-[calc(100dvh-6rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
+      class="marketing-font max-h-[calc(100dvh-4rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-harbor-float sm:w-full"
       data-meeting-invite
     >
       <DialogHeader>
-        <DialogTitle class="flex items-center gap-2"
-          ><UserPlus class="size-5 text-harbor-accent" />Invite people</DialogTitle
-        >
-        <DialogDescription class="flex items-center gap-1.5 text-harbor-muted">
-          <component :is="policyOption.icon" class="size-3.5 shrink-0" />
-          <span data-meeting-access-summary>{{ policyOption.label }} · {{ policyOption.description }}</span>
-        </DialogDescription>
+        <DialogTitle class="text-center text-harbor-ink">{{ t('meeting.invite.title') }}</DialogTitle>
+        <DialogDescription class="sr-only">{{ t('meeting.invite.description') }}</DialogDescription>
       </DialogHeader>
-
-      <div class="space-y-4">
-        <section v-if="isHost" class="space-y-3 rounded-2xl border border-harbor-line bg-white p-3" data-host-access>
-          <MeetingAccessPicker
-            v-model:policy="draftPolicy"
-            v-model:password="draftPassword"
-            :has-password="policy === 'password'"
-            :disabled="isSavingAccess"
-          />
-          <div class="flex justify-end">
-            <Button variant="pill" class="!h-9 px-4" :disabled="!canSaveAccess" @click="saveAccess">
-              <LoadingRipple v-if="isSavingAccess" size="sm" />
-              <template v-else>Save access</template>
-            </Button>
-          </div>
-        </section>
-
-        <div class="space-y-2">
-          <div class="relative">
-            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle" />
-            <Input
-              v-model="query"
-              type="search"
-              maxlength="80"
-              :placeholder="searchPlaceholder"
-              aria-label="Search people to invite"
-              class="h-10 rounded-full border-0 bg-harbor-surface pl-9 text-sm shadow-harbor-around focus-visible:ring-0"
-            />
-          </div>
-          <div class="min-h-24 rounded-2xl border border-harbor-line bg-white" data-invite-candidates>
-            <div v-if="isSearching && !candidates.length" class="flex justify-center py-8">
-              <LoadingRipple class="size-6 text-harbor-accent" />
-            </div>
-            <p v-else-if="searchError" class="px-4 py-6 text-center text-sm text-harbor-danger-strong">
-              {{ searchError }}
-            </p>
-            <p v-else-if="!candidates.length" class="px-4 py-6 text-center text-sm text-harbor-muted">
-              {{ emptyText }}
-            </p>
-            <ul v-else class="max-h-[40dvh] overflow-y-auto sm:max-h-72">
-              <li
-                v-for="candidate in candidates"
-                :key="candidate.id"
-                class="flex items-center gap-3 px-3 py-2.5 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-harbor-line"
-              >
-                <span
-                  class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-xs font-semibold text-harbor-icon"
-                  ><img
-                    v-if="candidate.avatarUrl && avatarCache.urls.value[candidate.avatarUrl]"
-                    :src="avatarCache.urls.value[candidate.avatarUrl]"
-                    alt=""
-                    class="size-full object-cover"
-                  /><template v-else>{{ initials(candidate.name) }}</template></span
-                >
-                <span class="min-w-0 flex-1">
-                  <span class="block truncate text-sm font-semibold">{{ candidate.name }}</span>
-                  <span class="block truncate text-xs text-harbor-muted"
-                    >@{{ candidate.nickname }}<template v-if="candidate.isFriend"> · Friend</template></span
-                  >
-                </span>
-                <Button
-                  v-if="candidate.invited || invitedIds.has(candidate.id)"
-                  variant="ghost"
-                  size="sm"
-                  disabled
-                  class="h-8 shrink-0 rounded-full px-3 text-xs font-semibold text-harbor-muted disabled:opacity-100 [&_svg]:text-harbor-accent"
-                  ><Check class="size-4" />Invited</Button
-                >
-                <Button
-                  v-else
-                  size="sm"
-                  variant="pill"
-                  class="!h-8 shrink-0 px-3.5 text-xs"
-                  :disabled="invitingId !== null"
-                  :data-invite="candidate.id"
-                  @click="invite(candidate)"
-                >
-                  <LoadingRipple v-if="invitingId === candidate.id" size="sm" />
-                  <template v-else><UserPlus class="size-3.5" />Invite</template>
-                </Button>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <MeetingInviteContent
+        :room-id="roomId"
+        :access="access"
+        :active="open"
+        :guest="guest"
+        @access-updated="emit('access-updated', $event)"
+      />
     </HarborDialogContent>
   </Dialog>
 </template>

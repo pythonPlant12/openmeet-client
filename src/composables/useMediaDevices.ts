@@ -7,6 +7,7 @@ const audioPermission = ref<PermissionState>('unknown');
 const videoPermission = ref<PermissionState>('unknown');
 const audioDevices = shallowRef<MediaDeviceInfo[]>([]);
 const videoDevices = shallowRef<MediaDeviceInfo[]>([]);
+const audioOutputDevices = shallowRef<MediaDeviceInfo[]>([]);
 
 export function useMediaDevices() {
   const isAudioDenied = computed(() => audioPermission.value === 'denied');
@@ -19,6 +20,7 @@ export function useMediaDevices() {
     console.log('Devices: ', devices);
     audioDevices.value = devices.filter((d) => d.kind === 'audioinput');
     videoDevices.value = devices.filter((d) => d.kind === 'videoinput');
+    audioOutputDevices.value = devices.filter((d) => d.kind === 'audiooutput');
   };
 
   // Check current permission states and track changes
@@ -60,6 +62,7 @@ export function useMediaDevices() {
     videoPermission,
     audioDevices,
     videoDevices,
+    audioOutputDevices,
     isAudioDenied,
     isVideoDenied,
     hasAllPermissions,

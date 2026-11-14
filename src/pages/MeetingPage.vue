@@ -1,34 +1,48 @@
 <script setup lang="ts">
 import { useEventListener, useIntervalFn } from '@vueuse/core';
-import { AlertTriangle, ChevronDown, Users } from 'lucide-vue-next';
+import { AlertTriangle, ChevronDown } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
+import CallAddPeopleCard from '@/components/meeting-page/CallAddPeopleCard.vue';
+import CallAudioOutputButton from '@/components/meeting-page/CallAudioOutputButton.vue';
+import CallDesktopTopBar from '@/components/meeting-page/CallDesktopTopBar.vue';
+import CallPhoneControls from '@/components/meeting-page/CallPhoneControls.vue';
+import CallPhoneTopBar from '@/components/meeting-page/CallPhoneTopBar.vue';
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
 import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
-import JoinMeetingDialog, { type JoinSettings } from '@/components/meeting-page/JoinMeetingDialog.vue';
-import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
+import MeetingCameraPreview from '@/components/meeting-page/MeetingCameraPreview.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
+import MeetingEntryDialog, { type EntrySettings } from '@/components/meeting-page/MeetingEntryDialog.vue';
 import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.vue';
+import MeetingPermissionSheet from '@/components/meeting-page/MeetingPermissionSheet.vue';
 import ScreenAreaPicker from '@/components/meeting-page/ScreenAreaPicker.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
+import { menuIconMotionKey } from '@/components/ui/liquid-menu/motion';
 import { LoadingRipple } from '@/components/ui/loading';
+import { toast } from '@/components/ui/toast';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
 import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
+import { useCallControlsVisibility } from '@/composables/useCallControlsVisibility';
 import { useCallFormFactor } from '@/composables/useCallFormFactor';
 import { useCallLayoutState } from '@/composables/useCallLayoutState';
+import { useConnectionHaptics } from '@/composables/useConnectionHaptics';
 import { useFullscreenLock } from '@/composables/useFullscreenLock';
+import { useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
+import { loadCallSettings, needsCameraPreview, saveCallSettings } from '@/lib/call-settings';
 import { selectCallLayout } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
+import { followAudioOutput } from '@/services/audio-output';
 import { playHaptic } from '@/services/haptics';
 import { showSystemNotification } from '@/services/notifications';
 import { type MeetingRoomAccess, SocialApiError, type UserStatus, socialApi } from '@/services/social-api';
+import type { MediaIssue } from '@/services/webrtc-sfu';
 import { getServices } from '@/xstate/machines/webrtc/actors';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
@@ -36,6 +50,8 @@ import type { Participant } from '@/xstate/machines/webrtc/types';
 useFullscreenLock();
 
 const { t } = useI18n();
+// The call screen stays calm: menu icons don't move on hover or press.
+provide(menuIconMotionKey, false);
 const route = useRoute();
 const router = useRouter();
 const meetingId = computed(() => route.params.id as string);
@@ -44,21 +60,8 @@ const conversationId = computed(() => {
   return typeof conversation === 'string' && conversation.trim() ? conversation : null;
 });
 const isConversationCall = computed(() => conversationId.value !== null);
-// Audio calls from a chat open with the camera off; it can still be turned on before joining.
-const startsWithVideo = computed(() => route.query.video !== 'off');
 
 const { isAuthenticated, isCheckingSession, currentUser, accessToken } = useAuth();
-// On phones TheNavbar shows a top bar only to guests; signed-in phones use the bottom account button. The meeting's
-// top row sits right under that bar, or at the very top without it, so the video area below gets the space.
-const hasPhoneTopBar = computed(() => !isAuthenticated.value);
-const phoneTopRowClass = computed(() =>
-  hasPhoneTopBar.value ? 'top-20' : 'top-[calc(0.75rem+env(safe-area-inset-top))]',
-);
-const phoneBelowTopRowClass = computed(() =>
-  hasPhoneTopBar.value
-    ? 'top-[calc(5rem+var(--meeting-control-size))]'
-    : 'top-[calc(1.25rem+var(--meeting-control-size)+env(safe-area-inset-top))]',
-);
 const meetingExitRoute = computed(() => (isAuthenticated.value ? '/dashboard' : '/'));
 
 const {
@@ -82,18 +85,22 @@ const {
   leaveRoom: endCall,
   toggleParticipantAudio,
   toggleParticipantVideo,
+  setCameraEnabled,
   sendChatMessage,
   sendChatReaction,
   retry,
 } = useWebrtc();
 
 const { activeSpeakerId, resumeAudioAnalysis } = useActiveSpeaker(participantsArray);
+useConnectionHaptics(isReconnecting, connectionState);
 const screenShare = useScreenShare();
 // Screen shares join as their own participants. Your own share is shown from the local capture, since the
 // SFU never sends it back, and every share is labeled with its presenter's name.
 const meetingParticipants = computed<Participant[]>(() => {
   const byId = new Map(participantsArray.value.map((participant) => [participant.id, participant]));
   return participantsArray.value.map((participant) => {
+    // Your own mute shows as soon as you toggle it, before the call has synced it to your participant.
+    if (participant.isLocal && !participant.screenShareOf) return { ...participant, audioEnabled: !isMuted.value };
     if (!participant.screenShareOf) return participant;
     const presenter = byId.get(participant.screenShareOf);
     const name = t('meeting.screenShare.label', { name: presenter?.name ?? participant.name });
@@ -150,6 +157,31 @@ const {
   keepPinAmong,
 } = useCallLayoutState();
 const callFormFactor = useCallFormFactor();
+// Phones, and desktop windows narrower than the phone breakpoint, get the phone call chrome: a top bar and a
+// bottom bar with a drag-up panel. Desktop gets its own top row and controls bar.
+const usesPhoneChrome = computed(() => callFormFactor.value !== 'desktop');
+// The phone call screen asks to add people while you are alone in the call.
+const showsAddPeople = computed(
+  () => usesPhoneChrome.value && showsControls.value && participantCount.value <= 1 && inviteMode.value !== 'hidden',
+);
+// The video area sits between the call screen's top chrome and its controls (and the "Add people" card above
+// them); VideoGrid reads these variables.
+const PHONE_CONTROLS_HEIGHT = 'calc(max(0.5rem, env(safe-area-inset-bottom)) + var(--meeting-control-size) + 2.25rem)';
+const callAreaStyle = computed(() =>
+  usesPhoneChrome.value
+    ? {
+        '--call-area-top': 'calc(env(safe-area-inset-top) + 3.75rem)',
+        '--call-controls-height': PHONE_CONTROLS_HEIGHT,
+        '--call-area-bottom': showsAddPeople.value ? `calc(${PHONE_CONTROLS_HEIGHT} + 4rem)` : PHONE_CONTROLS_HEIGHT,
+      }
+    : {
+        '--call-area-top': 'calc(2.25rem + var(--meeting-control-size))',
+        '--call-area-bottom': 'calc(var(--meeting-control-size) + 3.5rem)',
+      },
+);
+// Banners and the connection details sit in the top row on desktop, and just below the top bar on phones.
+const belowTopRowClass = computed(() => (usesPhoneChrome.value ? 'top-[var(--call-area-top)]' : 'top-5'));
+const roomName = computed(() => (isConversationCall.value ? t('meeting.callTitle') : meetingId.value));
 // The menus show the layout on screen, which follows the call's size and form factor until the person picks one.
 const shownViewMode = computed(() =>
   selectCallLayout({
@@ -164,6 +196,13 @@ const shownViewMode = computed(() =>
 );
 const audioAvailable = ref(false);
 const videoAvailable = ref(false);
+// Why the call has no microphone or camera, such as a refused permission; the button warns and asks again.
+const audioIssue = ref<MediaIssue | null>(null);
+const videoIssue = ref<MediaIssue | null>(null);
+const audioWarning = computed(() => !!audioIssue.value && !audioAvailable.value);
+const videoWarning = computed(() => !!videoIssue.value && !videoAvailable.value);
+const permissionSheetKind = ref<'audio' | 'video' | null>(null);
+const isPermissionSheetOpen = ref(false);
 const showConnectionStatus = ref(false);
 const showConnectionQualityDetails = ref(false);
 const shouldJoinRoom = ref(false);
@@ -171,7 +210,7 @@ const pendingRoomId = ref<string | null>(null);
 const sfuRoomId = ref<string | null>(null);
 const pendingMediaSettings = ref<{ audioEnabled: boolean; videoEnabled: boolean } | null>(null);
 
-const showJoinDialog = ref(false);
+const showEntryDialog = ref(false);
 const showConnectionError = ref(false);
 const participantName = ref<string>('');
 const initialDialogName = ref<string>('');
@@ -228,10 +267,7 @@ watch(
   localStream,
   (stream, _, onCleanup) => {
     const observedTracks = new Set<MediaStreamTrack>();
-    const updateAvailability = () => {
-      audioAvailable.value = stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false;
-      videoAvailable.value = stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
-    };
+    const updateAvailability = () => readMediaAvailability(stream);
     const observeTrack = (track: MediaStreamTrack) => {
       if (observedTracks.has(track)) return;
       observedTracks.add(track);
@@ -392,22 +428,18 @@ watch(
     if (newState === 'error' && webrtcError.value) {
       console.error('[MeetingRoom] WebRTC error:', webrtcError.value.message);
 
-      // The room refused the join (wrong password, access changed): ask again in the join dialog.
+      // The room refused the join (wrong password, access changed): ask for the password again.
       if (MEETING_ACCESS_ERRORS.includes(webrtcError.value.message)) {
         accessError.value = webrtcError.value.message;
         joinPassword = null;
+        participantName.value = '';
         void loadMeetingAccess();
-        showJoinDialog.value = true;
+        showEntryDialog.value = true;
         isJoining.value = false;
         return;
       }
 
-      if (localParticipantId.value || connectionState.value || iceConnectionState.value) {
-        showConnectionError.value = true;
-      } else {
-        showJoinDialog.value = true;
-        participantName.value = '';
-      }
+      showConnectionError.value = true;
     }
   },
 );
@@ -416,9 +448,15 @@ watch(
   () => state.value,
   (newState) => {
     if (newState === 'mediaReady') {
+      const service = getServices().webrtcService;
+      if (service) service.onLocalTrackLost = handleLocalTrackLost;
+      refreshMediaAvailability();
+
       // Apply initial media settings before joining
       if (pendingMediaSettings.value && localStream.value) {
-        const { audioEnabled, videoEnabled } = pendingMediaSettings.value;
+        // A call without a microphone, such as a refused permission, starts muted and listen-only.
+        const audioEnabled = pendingMediaSettings.value.audioEnabled && localStream.value.getAudioTracks().length > 0;
+        const { videoEnabled } = pendingMediaSettings.value;
 
         // Apply audio setting
         localStream.value.getAudioTracks().forEach((track) => {
@@ -426,10 +464,7 @@ watch(
         });
         isMuted.value = !audioEnabled;
 
-        // Apply video setting
-        localStream.value.getVideoTracks().forEach((track) => {
-          track.enabled = videoEnabled;
-        });
+        // The camera was already released when media started; its sender stays for turning it on.
         isVideoOff.value = !videoEnabled;
 
         // Store for sending after joining if not default (both enabled)
@@ -448,6 +483,10 @@ watch(
 
     // Send initial media state to other participants after joining
     if (newState === 'inCall') {
+      if (!hasPlayedJoinedHaptic) {
+        hasPlayedJoinedHaptic = true;
+        playHaptic('success');
+      }
       if (pendingInitialMediaState.value && localParticipantId.value) {
         const { audioEnabled, videoEnabled } = pendingInitialMediaState.value;
         toggleParticipantAudio(localParticipantId.value, audioEnabled);
@@ -504,24 +543,23 @@ const initializeMeeting = async () => {
     }
   }
 
-  if (!isConversationCall.value) void loadMeetingAccess();
+  if (!isConversationCall.value) await loadMeetingAccess();
 
-  const storedName = sessionStorage.getItem('participantName');
+  // Signed-in people and guests who already gave their name enter directly. Only a missing name or a room
+  // password needs asking first.
+  const name = isAuthenticated.value
+    ? currentUser.value?.name || t('meeting.fallbackUser')
+    : (sessionStorage.getItem('participantName') ?? '');
+  initialDialogName.value = name;
+  showNameInput.value = !isAuthenticated.value;
 
-  // Always show the join dialog for media settings
-  // Pre-fill name for authenticated users or from session storage
-  if (isAuthenticated.value) {
-    initialDialogName.value = currentUser.value?.name || t('meeting.fallbackUser');
-    showNameInput.value = false; // Don't show name input for logged-in users
-  } else if (storedName) {
-    initialDialogName.value = storedName;
-    showNameInput.value = true;
-  } else {
-    initialDialogName.value = '';
-    showNameInput.value = true;
+  const access = isConversationCall.value ? null : meetingAccess.value;
+  const needsAsking = !name || !!access?.requiresPassword || (!!access && !access.canJoin);
+  if (needsAsking) {
+    showEntryDialog.value = true;
+    return;
   }
-
-  showJoinDialog.value = true;
+  enterCall(name);
 };
 
 watch(isCheckingSession, (checking) => {
@@ -544,8 +582,11 @@ function cancelRingingCall(keepalive = false) {
 }
 
 const handlePageHide = () => cancelRingingCall(true);
+// The chosen speaker applies to every participant's audio as their media appears.
+let stopFollowingAudioOutput: (() => void) | null = null;
 
 onMounted(() => {
+  stopFollowingAudioOutput = followAudioOutput();
   window.addEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   window.addEventListener('pagehide', handlePageHide);
   window.addEventListener('keydown', handleFullscreenKeydown);
@@ -555,15 +596,16 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  stopFollowingAudioOutput?.();
   screenShare.stop();
   window.clearTimeout(participantStatusTimer);
   window.removeEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   window.removeEventListener('pagehide', handlePageHide);
   window.removeEventListener('keydown', handleFullscreenKeydown);
-  window.clearTimeout(fullscreenControlsTimer);
   if (isFullscreen.value) setFullscreen(false);
   document.documentElement.classList.remove('meeting-immersive');
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: false }));
+  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-call-chrome', { detail: false }));
   cancelRingingCall();
   window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: false }));
   endCall();
@@ -593,40 +635,35 @@ async function loadMeetingAccess() {
   }
 }
 
-async function prepareAccess(settings: JoinSettings) {
-  const token = accessToken.value ?? '';
-  if (settings.accessSettings && meetingAccess.value?.isOwner) {
-    meetingAccess.value = await socialApi.updateMeetingRoom(token, meetingId.value, settings.accessSettings);
-  }
-  if (settings.password !== undefined) {
-    await socialApi.checkMeetingRoomPassword(meetingId.value, settings.password);
-    joinPassword = settings.password;
-  }
-}
-
-const handleJoinMeeting = async (settings: JoinSettings) => {
-  void resumeAudioAnalysis().catch(() => undefined);
+const handleEntry = async (settings: EntrySettings) => {
   accessError.value = '';
-  if (!isConversationCall.value && (settings.password !== undefined || settings.accessSettings)) {
+  if (!isConversationCall.value && settings.password !== undefined) {
     isJoining.value = true;
     try {
-      await prepareAccess(settings);
+      await socialApi.checkMeetingRoomPassword(meetingId.value, settings.password);
+      joinPassword = settings.password;
     } catch (error) {
       accessError.value = error instanceof SocialApiError ? error.message : t('meeting.join.accessFailed');
-      isJoining.value = false;
       return;
+    } finally {
+      isJoining.value = false;
     }
-    isJoining.value = false;
   }
+  enterCall(settings.name);
+};
 
-  participantName.value = settings.name;
-  showJoinDialog.value = false;
+let hasPlayedJoinedHaptic = false;
 
-  // Store media settings to apply after media is initialized
-  pendingMediaSettings.value = {
-    audioEnabled: settings.audioEnabled,
-    videoEnabled: settings.videoEnabled,
-  };
+// Every meeting and call starts the same way: one capture asks for microphone and camera permission, the saved
+// devices and mic state come back, and the camera always starts off.
+function enterCall(name: string) {
+  void resumeAudioAnalysis().catch(() => undefined);
+  participantName.value = name;
+  showEntryDialog.value = false;
+  hasPlayedJoinedHaptic = false;
+
+  const saved = loadCallSettings();
+  pendingMediaSettings.value = { audioEnabled: saved.micOn, videoEnabled: false };
 
   if (meetingId.value) {
     // In SFU architecture, everyone just "joins" the room
@@ -638,13 +675,13 @@ const handleJoinMeeting = async (settings: JoinSettings) => {
     retry();
   }
 
-  // Pass device constraints to initMedia
   initMedia(participantName.value, {
-    audioDeviceId: settings.audioDeviceId,
-    videoDeviceId: settings.videoDeviceId,
+    audioDeviceId: saved.microphoneId,
+    videoDeviceId: saved.cameraId,
     videoQuality: loadVideoQuality(),
+    cameraOff: true,
   });
-};
+}
 
 const handleCancelJoin = () => {
   router.push(meetingExitRoute.value);
@@ -661,23 +698,52 @@ const handleToggleMute = () => {
   });
 
   isMuted.value = newMutedState;
+  saveCallSettings({ micOn: !newMutedState });
   toggleParticipantAudio(localParticipantId.value, !newMutedState);
 };
 
+let isTogglingCamera = false;
+const isCameraPreviewOpen = ref(false);
+
 const handleToggleVideo = () => {
   if (!localStream.value || !localParticipantId.value) return;
-
-  const videoTracks = localStream.value.getVideoTracks();
-  const newVideoOffState = !isVideoOff.value;
-
-  videoTracks.forEach((track) => {
-    track.enabled = !newVideoOffState;
-  });
-
-  console.log('Toggling video. New state:', newVideoOffState);
-  isVideoOff.value = newVideoOffState;
-  toggleParticipantVideo(localParticipantId.value, !newVideoOffState);
+  // The first camera turn-on on this device shows the camera preview first.
+  if (isVideoOff.value && needsCameraPreview()) {
+    isCameraPreviewOpen.value = true;
+    return;
+  }
+  void setCamera(isVideoOff.value);
 };
+
+// Turning the camera on from the camera preview sends the track it already shows.
+function handleCameraPreviewConfirm(track: MediaStreamTrack | null) {
+  if (track) void setCamera(true, track);
+}
+
+async function setCamera(turnOn: boolean, capturedTrack?: MediaStreamTrack) {
+  if (!localParticipantId.value || isTogglingCamera) {
+    capturedTrack?.stop();
+    return;
+  }
+  isTogglingCamera = true;
+  try {
+    await setCameraEnabled(turnOn, capturedTrack);
+  } catch (error) {
+    console.error('[MeetingRoom] Failed to toggle the camera:', error);
+    toast({
+      title: t('meeting.controls.cameraFailed'),
+      description: error instanceof Error ? error.message : undefined,
+      variant: 'destructive',
+    });
+    return;
+  } finally {
+    isTogglingCamera = false;
+  }
+
+  isVideoOff.value = !turnOn;
+  refreshMediaAvailability();
+  if (localParticipantId.value) toggleParticipantVideo(localParticipantId.value, turnOn);
+}
 
 const handleToggleStats = () => {
   showConnectionStatus.value = !showConnectionStatus.value;
@@ -696,70 +762,92 @@ const handleToggleChat = () => {
   });
 };
 
-// Full screen works in grid and speaker view alike: only the media shows, on a near-black background. The navbar,
-// top row, and controls hide; the controls come back with a swipe up on phones, or the mouse at the bottom edge.
-const FULLSCREEN_SWIPE_PX = 40;
-const FULLSCREEN_CONTROLS_EDGE_PX = 140;
-const FULLSCREEN_CONTROLS_HIDE_MS = 2500;
+// Full screen works in grid and speaker view alike: only the media shows, on a near-black background, and on
+// desktop it also takes the whole display. The call controls (top bar, controls, and full name tags) hide after
+// 3 s without mouse movement on desktop, and on a long-press on the video area on a phone.
 const isFullscreen = ref(false);
-const areFullscreenControlsShown = ref(false);
-const showsControls = computed(() => !isFullscreen.value || areFullscreenControlsShown.value);
-let swipeStart: { x: number; y: number } | null = null;
-let fullscreenControlsTimer: number | undefined;
+const callControls = useCallControlsVisibility(computed(() => !usesPhoneChrome.value));
+const showsControls = callControls.shown;
+
+// Full screen starts with only the media. On desktop moving the mouse brings the controls back; on a phone a swipe up
+// does, and a swipe down hides them again.
+watch(isFullscreen, (fullscreen) => {
+  if (fullscreen) callControls.hide();
+  else callControls.show();
+});
+
+function handleVideoSwipe(direction: 'up' | 'down') {
+  if (!usesPhoneChrome.value || !isFullscreen.value) return;
+  if (direction === 'up' && !showsControls.value) {
+    callControls.show();
+    playHaptic('selection');
+  } else if (direction === 'down' && showsControls.value) {
+    callControls.hide();
+    playHaptic('selection');
+  }
+}
+
+// Hiding your own tile is a per-device view choice; your camera keeps reaching the others.
+const showOwnCamera = ref(loadCallSettings().showOwnCamera);
+function toggleOwnCamera() {
+  showOwnCamera.value = !showOwnCamera.value;
+  saveCallSettings({ showOwnCamera: showOwnCamera.value });
+}
+
+const phoneControls = ref<InstanceType<typeof CallPhoneControls> | null>(null);
+
+// The top bar's camera flip moves to the next camera, such as from the front to the back camera of a phone.
+const cameraSettings = useMeetingMediaSettings('video');
+async function flipCamera() {
+  await cameraSettings.refresh();
+  const cameras = cameraSettings.devices.value;
+  if (cameras.length < 2) return;
+  const current = cameras.findIndex((camera) => camera.deviceId === cameraSettings.activeId.value);
+  const next = cameras[(current + 1) % cameras.length];
+  if (next && (await cameraSettings.changeDevice(next.deviceId))) {
+    playHaptic('light');
+    refreshMediaAvailability();
+  }
+}
+
+function handleVideoLongPress() {
+  callControls.toggle();
+  playHaptic('selection');
+}
 
 function setFullscreen(fullscreen: boolean) {
   isFullscreen.value = fullscreen;
-  areFullscreenControlsShown.value = false;
-  window.clearTimeout(fullscreenControlsTimer);
+  if (usesPhoneChrome.value) return;
+  if (fullscreen && !document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.().catch(() => undefined);
+  } else if (!fullscreen && document.fullscreenElement) {
+    document.exitFullscreen().catch(() => undefined);
+  }
 }
 
 const handleToggleFullscreen = () => setFullscreen(!isFullscreen.value);
 
-watch(isFullscreen, (fullscreen) => {
-  // Menus open in portals outside the page, so the dark theme for them hangs off the document.
-  document.documentElement.classList.toggle('meeting-immersive', fullscreen);
-  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: fullscreen }));
+// Leaving the display's full screen from the browser (Escape, or its own control) leaves the call's full screen too.
+useEventListener(document, 'fullscreenchange', () => {
+  if (!document.fullscreenElement && isFullscreen.value) isFullscreen.value = false;
 });
 
-function handleFullscreenTouchStart(event: TouchEvent) {
-  const touch = event.touches[0];
-  swipeStart = isFullscreen.value && touch ? { x: touch.clientX, y: touch.clientY } : null;
-}
+// The call screen draws its own bars on phones and on desktop alike, so the navbar steps aside while it shows.
+watch(
+  hasJoined,
+  (joined) => window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-call-chrome', { detail: joined })),
+  { immediate: true },
+);
 
-// A mostly vertical swipe anywhere: up brings the controls in from the bottom, down hides them again.
-function handleFullscreenTouchEnd(event: TouchEvent) {
-  const touch = event.changedTouches[0];
-  if (!swipeStart || !touch) return;
-  const dx = touch.clientX - swipeStart.x;
-  const dy = touch.clientY - swipeStart.y;
-  swipeStart = null;
-  if (Math.abs(dy) < FULLSCREEN_SWIPE_PX || Math.abs(dy) < Math.abs(dx)) return;
-  areFullscreenControlsShown.value = dy < 0;
-}
+// The call screen is always dark. Menus, the chat, and the camera preview open in portals outside the page, so the
+// dark theme for them hangs off the document.
+watch(hasJoined, (joined) => document.documentElement.classList.toggle('meeting-immersive', joined), {
+  immediate: true,
+});
 
-// The controls stay while the mouse is near the bottom edge or over a menu, and hide a moment after it leaves.
-// Menus open in portals outside the page, so the document listens rather than the page.
-function scheduleFullscreenControlsHide() {
-  window.clearTimeout(fullscreenControlsTimer);
-  fullscreenControlsTimer = window.setTimeout(() => {
-    if (document.querySelector('[role="menu"]')) scheduleFullscreenControlsHide();
-    else areFullscreenControlsShown.value = false;
-  }, FULLSCREEN_CONTROLS_HIDE_MS);
-}
-
-function handleFullscreenPointerMove(event: PointerEvent) {
-  if (!isFullscreen.value || event.pointerType !== 'mouse') return;
-  const nearBottom = window.innerHeight - event.clientY <= FULLSCREEN_CONTROLS_EDGE_PX;
-  const overMenu = event.target instanceof Element && !!event.target.closest('[role="menu"]');
-  if (nearBottom || overMenu) {
-    areFullscreenControlsShown.value = true;
-    window.clearTimeout(fullscreenControlsTimer);
-  } else if (areFullscreenControlsShown.value) {
-    scheduleFullscreenControlsHide();
-  }
-}
-
-useEventListener(document, 'pointermove', handleFullscreenPointerMove, { passive: true });
+watch(isFullscreen, (fullscreen) => {
+  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: fullscreen }));
+});
 
 // Escape first closes an open menu, chat, or dialog; only with none open does it leave full screen.
 function handleFullscreenKeydown(event: KeyboardEvent) {
@@ -770,9 +858,63 @@ function handleFullscreenKeydown(event: KeyboardEvent) {
 
 // A device switch swaps tracks without the browser's track events, so availability is read again.
 function refreshMediaAvailability() {
-  const stream = localStream.value;
+  readMediaAvailability(localStream.value);
+}
+
+function readMediaAvailability(stream: MediaStream | null | undefined) {
+  const service = getServices().webrtcService;
   audioAvailable.value = stream?.getAudioTracks().some((track) => track.readyState === 'live') ?? false;
-  videoAvailable.value = stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
+  videoAvailable.value = hasCamera(stream);
+  audioIssue.value = service?.getMediaIssue('audio') ?? null;
+  videoIssue.value = service?.getMediaIssue('video') ?? null;
+}
+
+// Tapping a warning asks for the microphone or camera again. A permanently refused permission shows how to allow
+// it instead, since the browser would refuse without a prompt.
+async function handleRequestAccess(kind: 'audio' | 'video') {
+  const service = getServices().webrtcService;
+  if (!service) return;
+  const issue = await service.requestMedia(kind);
+  refreshMediaAvailability();
+  if (issue === 'denied') {
+    permissionSheetKind.value = kind;
+    isPermissionSheetOpen.value = true;
+    return;
+  }
+  if (issue) {
+    toast({
+      title: t(kind === 'audio' ? 'meeting.permission.unavailableMicrophone' : 'meeting.permission.unavailableCamera'),
+      variant: 'destructive',
+    });
+    return;
+  }
+  // Allowing a medium is asking to use it, so it turns on.
+  if (kind === 'audio') {
+    isMuted.value = false;
+    saveCallSettings({ micOn: true });
+    if (localParticipantId.value) toggleParticipantAudio(localParticipantId.value, true);
+  } else {
+    isVideoOff.value = false;
+    if (localParticipantId.value) toggleParticipantVideo(localParticipantId.value, true);
+  }
+}
+
+// A revoked permission or an unplugged device stops the track; the others see it off and the button warns.
+function handleLocalTrackLost(kind: 'audio' | 'video') {
+  playHaptic('warning');
+  refreshMediaAvailability();
+  if (kind === 'audio') isMuted.value = true;
+  else isVideoOff.value = true;
+  if (localParticipantId.value) {
+    if (kind === 'audio') toggleParticipantAudio(localParticipantId.value, false);
+    else toggleParticipantVideo(localParticipantId.value, false);
+  }
+}
+
+// A camera turned off has no live track, but it is still there to turn back on.
+function hasCamera(stream: MediaStream | null | undefined) {
+  const live = stream?.getVideoTracks().some((track) => track.readyState === 'live') ?? false;
+  return live || (getServices().webrtcService?.hasCamera() ?? false);
 }
 
 const handleSendMessage = (message: string, replyToId?: number) => {
@@ -806,10 +948,13 @@ const handleReconnect = () => {
 <template>
   <div
     class="relative h-[calc(100dvh-84px)] overflow-hidden px-3 pb-3 pt-0 sm:px-5 sm:pb-3 sm:pt-0"
-    :class="isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-surface'"
+    :class="
+      hasJoined
+        ? ['call-screen-dark !fixed inset-0 !h-auto', isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-app']
+        : 'bg-harbor-surface'
+    "
     :data-fullscreen="isFullscreen ? 'true' : undefined"
-    @touchstart.passive="handleFullscreenTouchStart"
-    @touchend.passive="handleFullscreenTouchEnd"
+    :style="callAreaStyle"
   >
     <div
       v-if="isCheckingSession"
@@ -831,8 +976,8 @@ const handleReconnect = () => {
       <div class="absolute inset-x-8 top-10 h-px bg-harbor-faint/50" />
     </div>
 
-    <JoinMeetingDialog
-      v-if="showJoinDialog"
+    <MeetingEntryDialog
+      v-if="showEntryDialog"
       open
       :meeting-id="meetingId"
       :initial-name="initialDialogName"
@@ -840,53 +985,44 @@ const handleReconnect = () => {
       :access="isConversationCall ? null : meetingAccess"
       :access-error="accessError"
       :joining="isJoining"
-      :initial-video-enabled="startsWithVideo"
-      @join="handleJoinMeeting"
+      @join="handleEntry"
       @cancel="handleCancelJoin"
     />
 
     <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-harbor-ink flex flex-col">
-      <!-- Participant Count Badge -->
-      <div
-        v-if="!isFullscreen"
-        class="fixed left-7 z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-white px-4 text-harbor-ink shadow-[0_1px_2px_rgba(17,27,33,0.06),0_4px_14px_rgba(17,27,33,0.1)] sm:left-9 sm:top-[calc(84px+1.25rem)]"
-        :class="phoneTopRowClass"
-      >
-        <Users class="h-5 w-5" />
-        <span class="font-semibold">{{ participantCount }}</span>
-      </div>
-
-      <div
-        v-if="!isFullscreen"
-        class="fixed z-[60] transition-[right] sm:top-[calc(84px+1.25rem)]"
-        :class="[phoneTopRowClass, isChatOpen ? 'right-16' : 'right-7 sm:right-9']"
-      >
-        <MeetingActionMenu
-          :audio-available="audioAvailable"
+      <Transition name="call-controls-top">
+        <CallPhoneTopBar
+          v-if="usesPhoneChrome && showsControls"
+          :room-name="roomName"
+          :camera-on="!isVideoOff"
+          :meeting-id="meetingId"
+          :invite-mode="inviteMode"
           :is-chat-open="isChatOpen"
-          :is-muted="isMuted"
-          :is-video-off="isVideoOff"
-          :participants="meetingParticipants"
-          :pinned-participant-id="pinnedParticipantId"
-          :video-available="videoAvailable"
-          :view-mode="shownViewMode"
-          :fullscreen="isFullscreen"
-          @disconnect="handleEndCall"
-          @toggle-fullscreen="handleToggleFullscreen"
-          @set-view-mode="handleSetViewMode"
+          :unread-count="unreadCount"
           @toggle-chat="handleToggleChat"
-          @toggle-mute="handleToggleMute"
-          @toggle-pin="handleTogglePin"
-          @toggle-video="handleToggleVideo"
+          @open-panel="phoneControls?.open()"
+          @flip-camera="flipCamera"
+          @invite="isInviteOpen = true"
+        >
+          <template #audio-output><CallAudioOutputButton /></template>
+        </CallPhoneTopBar>
+      </Transition>
+      <Transition name="call-controls-top">
+        <CallDesktopTopBar
+          v-if="!usesPhoneChrome && showsControls"
+          :room-name="roomName"
+          :is-chat-open="isChatOpen"
+          :unread-count="unreadCount"
+          @toggle-chat="handleToggleChat"
         />
-      </div>
+      </Transition>
 
       <!-- Motion animates `transform`, which would replace a translate-based centering, so a full-width row centers it.
-           Phones place it below the participants and menu buttons, which share the top row there. -->
+           Phones place it below the top bar. -->
       <div
         v-if="!isFullscreen"
-        class="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 sm:top-[calc(84px+1.25rem)]"
-        :class="phoneBelowTopRowClass"
+        class="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
+        :class="belowTopRowClass"
       >
         <AnimatePresence>
           <motion.div
@@ -902,7 +1038,7 @@ const handleReconnect = () => {
             :class="
               connectionBanner === 'reconnecting'
                 ? 'border-harbor-danger/25 bg-harbor-danger-soft text-harbor-danger-strong'
-                : 'border-harbor-line bg-white text-harbor-ink-soft'
+                : 'border-harbor-line bg-harbor-surface text-harbor-ink-soft'
             "
           >
             <LoadingRipple
@@ -918,8 +1054,8 @@ const handleReconnect = () => {
       <button
         v-if="hasPoorConnection && !isFullscreen"
         type="button"
-        :class="phoneBelowTopRowClass"
-        class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-4 py-3 text-left text-sm text-harbor-danger-strong shadow-lg sm:top-[calc(84px+1.25rem)]"
+        :class="belowTopRowClass"
+        class="fixed left-1/2 z-50 w-[calc(100%-3.5rem)] max-w-md -translate-x-1/2 rounded-xl border border-harbor-danger/25 bg-harbor-danger-soft px-4 py-3 text-left text-sm text-harbor-danger-strong shadow-lg"
         data-testid="connection-quality-warning"
         @click="showConnectionQualityDetails = !showConnectionQualityDetails"
       >
@@ -951,8 +1087,7 @@ const handleReconnect = () => {
       <!-- Debug Info Panel -->
       <div
         v-if="showConnectionStatus && !isFullscreen"
-        :class="phoneBelowTopRowClass"
-        class="fixed right-7 z-50 space-y-1 rounded-lg border border-harbor-line bg-harbor-hover p-3 text-xs text-harbor-ink shadow-lg sm:right-9 sm:top-[calc(84px+2.5rem+var(--meeting-control-size))]"
+        class="fixed right-7 top-[var(--call-area-top)] z-50 space-y-1 rounded-lg border border-harbor-line bg-harbor-hover p-3 text-xs text-harbor-ink shadow-lg sm:right-9"
       >
         <div class="flex items-center gap-2">
           <span class="text-harbor-icon">{{ t('meeting.state') }}</span>
@@ -1003,63 +1138,87 @@ const handleReconnect = () => {
       </div>
 
       <div v-else class="flex-1 flex flex-col">
-        <MeetingActionMenu
-          context
-          :audio-available="audioAvailable"
-          :is-chat-open="isChatOpen"
-          :is-muted="isMuted"
-          :is-video-off="isVideoOff"
+        <VideoGrid
+          :active-speaker-id="activeSpeakerId"
           :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
-          :video-available="videoAvailable"
-          :view-mode="shownViewMode"
+          :participant-statuses="participantStatuses"
+          :participant-avatars="participantAvatars"
+          :view-mode="viewMode"
           :fullscreen="isFullscreen"
-          @disconnect="handleEndCall"
-          @toggle-fullscreen="handleToggleFullscreen"
-          @set-view-mode="handleSetViewMode"
-          @toggle-chat="handleToggleChat"
-          @toggle-mute="handleToggleMute"
+          :controls-shown="isFullscreen && showsControls"
+          :controls-hidden="!showsControls"
+          :hide-own-camera="!showOwnCamera"
           @toggle-pin="handleTogglePin"
-          @toggle-video="handleToggleVideo"
-        >
-          <VideoGrid
-            :active-speaker-id="activeSpeakerId"
-            :participants="meetingParticipants"
-            :pinned-participant-id="pinnedParticipantId"
-            :participant-statuses="participantStatuses"
-            :participant-avatars="participantAvatars"
-            :view-mode="viewMode"
-            :phone-top-bar="hasPhoneTopBar"
-            :fullscreen="isFullscreen"
-            :controls-shown="areFullscreenControlsShown"
-            @toggle-pin="handleTogglePin"
-            @toggle-fullscreen="handleToggleFullscreen"
-          />
-        </MeetingActionMenu>
+          @toggle-fullscreen="handleToggleFullscreen"
+          @long-press="handleVideoLongPress"
+          @swipe="handleVideoSwipe"
+        />
 
         <Transition name="meeting-controls">
-          <MeetingControls
+          <div
+            v-if="showsAddPeople"
+            class="pointer-events-none fixed inset-x-0 bottom-[var(--call-controls-height)] z-40 flex justify-center px-2 pb-2"
+          >
+            <CallAddPeopleCard alone @invite="isInviteOpen = true" />
+          </div>
+        </Transition>
+        <Transition name="meeting-controls">
+          <CallPhoneControls
+            ref="phoneControls"
+            v-if="usesPhoneChrome"
             v-show="showsControls"
-            :dark="isFullscreen"
+            :audio-available="audioAvailable"
+            :video-available="videoAvailable"
+            :is-muted="isMuted"
+            :is-video-off="isVideoOff"
+            :can-present="screenShare.isSupported"
+            :show-own-camera="showOwnCamera"
+            :audio-warning="audioWarning"
+            :video-warning="videoWarning"
+            @toggle-mute="handleToggleMute"
+            @toggle-video="handleToggleVideo"
+            @request-access="handleRequestAccess"
+            @preview-camera="isCameraPreviewOpen = true"
+            @end-call="handleEndCall"
+            @media-changed="refreshMediaAvailability"
+            @start-screen-share="handleStartScreenShare"
+            @stop-screen-share="screenShare.stop()"
+            @toggle-own-camera="toggleOwnCamera"
+          />
+          <MeetingControls
+            v-else
+            v-show="showsControls"
+            dark
             :audio-available="audioAvailable"
             :is-muted="isMuted"
             :is-video-off="isVideoOff"
             :meeting-id="meetingId"
             :show-connection-status="showConnectionStatus"
-            :is-chat-open="isChatOpen"
-            :unread-count="unreadCount"
             :video-available="videoAvailable"
+            :audio-warning="audioWarning"
+            :video-warning="videoWarning"
             :invite-mode="inviteMode"
             :can-present="screenShare.isSupported"
+            :can-select-area="screenShare.canSelectArea"
+            :is-presenting="!!screenShare.session.value"
+            :participants="meetingParticipants"
+            :pinned-participant-id="pinnedParticipantId"
+            :view-mode="shownViewMode"
+            :fullscreen="isFullscreen"
+            @toggle-fullscreen="handleToggleFullscreen"
+            @set-view-mode="handleSetViewMode"
+            @toggle-pin="handleTogglePin"
             @start-screen-share="handleStartScreenShare"
             @stop-screen-share="screenShare.stop()"
             @toggle-mute="handleToggleMute"
             @toggle-video="handleToggleVideo"
             @toggle-stats="handleToggleStats"
-            @toggle-chat="handleToggleChat"
             @end-call="handleEndCall"
             @invite="isInviteOpen = true"
             @media-changed="refreshMediaAvailability"
+            @request-access="handleRequestAccess"
+            @preview-camera="isCameraPreviewOpen = true"
           />
         </Transition>
       </div>
@@ -1075,9 +1234,24 @@ const handleReconnect = () => {
       />
     </div>
 
+    <MeetingCameraPreview
+      v-if="isCameraPreviewOpen"
+      v-model:open="isCameraPreviewOpen"
+      :camera-on="!isVideoOff"
+      @confirm="handleCameraPreviewConfirm"
+    />
+
+    <MeetingPermissionSheet
+      v-if="permissionSheetKind"
+      v-model:open="isPermissionSheetOpen"
+      :kind="permissionSheetKind"
+    />
+
     <MeetingInviteDialog
-      v-if="inviteMode === 'enabled'"
+      v-if="inviteMode !== 'hidden'"
       v-model:open="isInviteOpen"
+      :phone="usesPhoneChrome"
+      :guest="inviteMode === 'signedOut'"
       :room-id="meetingId"
       :access="meetingAccess"
       @access-updated="meetingAccess = $event"
@@ -1098,34 +1272,33 @@ const handleReconnect = () => {
 </template>
 
 <style>
-/* Full screen controls slide up from the bottom and back down. Only the bar's own layers fade: an ancestor
-   below full opacity would stop the glass from blurring the video behind it until the fade ended, which mobile
-   browsers show as the blur popping in. */
+/* The call controls slide out towards their edge and fade: the bottom bar down, the top bar up. */
 .meeting-controls-enter-active,
-.meeting-controls-leave-active {
-  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.meeting-controls-enter-active .liquid-surface > *,
-.meeting-controls-leave-active .liquid-surface > * {
-  transition: opacity 0.24s ease;
+.meeting-controls-leave-active,
+.call-controls-top-enter-active,
+.call-controls-top-leave-active {
+  transition:
+    opacity 0.22s ease,
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .meeting-controls-enter-from,
 .meeting-controls-leave-to {
-  transform: translateY(1.5rem);
+  opacity: 0;
+  transform: translateY(1.25rem);
 }
 
-.meeting-controls-enter-from .liquid-surface > *,
-.meeting-controls-leave-to .liquid-surface > * {
+.call-controls-top-enter-from,
+.call-controls-top-leave-to {
   opacity: 0;
+  transform: translateY(-1.25rem);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .meeting-controls-enter-active,
   .meeting-controls-leave-active,
-  .meeting-controls-enter-active .liquid-surface > *,
-  .meeting-controls-leave-active .liquid-surface > * {
+  .call-controls-top-enter-active,
+  .call-controls-top-leave-active {
     transition: none;
   }
 }
