@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMediaQuery } from '@vueuse/core';
 import { type Component, computed, nextTick, onUnmounted, ref } from 'vue';
-import { type RouteLocationRaw, RouterLink } from 'vue-router';
+import { type RouteLocationRaw, RouterLink, useRouter } from 'vue-router';
 
 import LiquidGlassSurface from '@/components/layout/LiquidGlassSurface.vue';
 
@@ -16,6 +16,8 @@ export interface LiquidTab {
   disabled?: boolean;
   // Custom items render through the `item-<key>` slot, which receives `attrs` to bind on the control.
   custom?: boolean;
+  // The icon keeps its pressed pose while this is the current tab, such as Calls keeping the phone's rings.
+  holdsPressedIcon?: boolean;
 }
 
 const props = withDefaults(
@@ -108,11 +110,21 @@ function handleClickCapture(event: MouseEvent) {
   event.stopPropagation();
 }
 
+const router = useRouter();
+
+// Items with a long-press render as buttons, since a phone opens its own preview menu on a held link, so their
+// tap navigates here instead of through a link.
+const rendersAsLink = (item: LiquidTab) => !!item.to && !props.longPressKeys.includes(item.key);
+
 function handleSelect(item: LiquidTab) {
   if (item.disabled) return;
   playIconPress(item.key);
   emit('select', item.key);
+  if (item.to && !rendersAsLink(item)) void router.push(item.to);
 }
+
+const iconAnimates = (item: LiquidTab) =>
+  pressedKey.value === item.key || (!!item.holdsPressedIcon && item.key === props.activeKey);
 
 function itemAttrs(item: LiquidTab, targetKey: string | null) {
   return {
@@ -182,11 +194,11 @@ onUnmounted(() => {
         :pressed="pressedKey === item.key"
       />
       <component
-        :is="item.to ? RouterLink : 'button'"
+        :is="rendersAsLink(item) ? RouterLink : 'button'"
         v-else
         v-bind="{
           ...itemAttrs(item, targetKey),
-          ...(item.to ? { to: item.to } : { type: 'button', disabled: item.disabled }),
+          ...(rendersAsLink(item) ? { to: item.to } : { type: 'button', disabled: item.disabled }),
         }"
       >
         <span class="liquid-tab-icon">
@@ -195,7 +207,7 @@ onUnmounted(() => {
             v-if="item.icon"
             :size="size === 'sm' ? 18 : 20"
             :stroke-width="1.9"
-            :animate="pressedKey === item.key"
+            :animate="iconAnimates(item)"
             :animate-on-hover="supportsHover && !prefersReducedMotion"
             trigger-target="closest:.liquid-tab"
             aria-hidden="true"
@@ -237,6 +249,10 @@ onUnmounted(() => {
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
+  /* A held tab never selects its label or opens the phone's callout menu. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   transition:
     color 0.25s,
     background-color 0.25s;
@@ -250,10 +266,6 @@ onUnmounted(() => {
 /* Primary actions read like the other items; only their place at the end of the bar sets them apart. */
 .liquid-tab[data-variant='primary'] {
   margin-left: 4px;
-}
-
-.liquid-tab[data-long-press='true'] {
-  -webkit-touch-callout: none;
 }
 
 .liquid-tab:disabled {

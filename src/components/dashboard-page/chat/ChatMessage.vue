@@ -357,46 +357,39 @@ function formatFileSize(byteSize: number) {
         </motion.button>
       </motion.div>
     </AnimatePresence>
-    <!-- Reactions tuck under the bubble's edge; the row grows and shrinks so later messages slide, not jump. -->
-    <AnimatePresence>
-      <motion.div
-        v-if="reactions.length"
-        data-reaction-row
-        :initial="prefersReducedMotion ? false : { height: 0, marginTop: 0, marginBottom: 0, opacity: 0 }"
-        :animate="{ height: 'auto', marginTop: -10, marginBottom: -4, opacity: 1 }"
-        :exit="prefersReducedMotion ? undefined : { height: 0, marginTop: 0, marginBottom: 0, opacity: 0 }"
-        :transition="
-          prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 36, mass: 0.9 }
-        "
-        class="relative z-10 max-w-[82%] overflow-hidden sm:max-w-[68%]"
-      >
-        <div class="flex flex-wrap gap-1 px-2 pb-1 pt-1" :class="local ? 'justify-end' : 'justify-start'">
-          <!-- popLayout lifts a leaving chip out of the flow at once, so the remaining chips glide over. -->
-          <AnimatePresence mode="popLayout">
-            <motion.button
-              v-for="reaction in reactions"
-              :key="reaction.emoji"
-              type="button"
-              data-reaction-chip
-              layout
-              :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.5 }"
-              :animate="{ opacity: 1, scale: 1 }"
-              :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.5 }"
-              :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 28 }"
-              class="inline-flex h-6 items-center gap-1 rounded-full px-1.5 text-[0.6875rem] font-semibold tabular-nums shadow-[0_1px_3px_rgba(16,47,53,0.12)] ring-2 ring-white"
-              :class="
-                reaction.reactedByMe ? 'bg-harbor-accent-soft text-harbor-ink' : 'bg-harbor-hover text-harbor-icon'
-              "
-              :aria-pressed="reaction.reactedByMe"
-              :aria-label="`${reaction.emoji} ${reaction.count}${reaction.reactedByMe ? ', including you' : ''}`"
-              @click="emit('react', reaction.emoji)"
-            >
-              <span class="text-[0.8125rem] leading-none">{{ reaction.emoji }}</span>
-              <span v-if="reaction.count > 1">{{ reaction.count }}</span>
-            </motion.button>
-          </AnimatePresence>
-        </div>
-      </motion.div>
-    </AnimatePresence>
+    <!-- Reactions tuck under the bubble's edge. The row appears and leaves at once, so the messages around it
+         move in one step instead of sliding while it grows or shrinks. -->
+    <div
+      v-if="reactions.length"
+      data-reaction-row
+      class="relative z-10 -mb-1 mt-[-10px] max-w-[82%] sm:max-w-[68%]"
+    >
+      <div class="flex flex-wrap gap-1 px-2 pb-1 pt-1" :class="local ? 'justify-end' : 'justify-start'">
+        <!-- popLayout lifts a leaving chip out of the flow at once, so the remaining chips glide over. -->
+        <AnimatePresence mode="popLayout">
+          <motion.button
+            v-for="reaction in reactions"
+            :key="reaction.emoji"
+            type="button"
+            data-reaction-chip
+            layout
+            :initial="prefersReducedMotion ? false : { opacity: 0, scale: 0.5 }"
+            :animate="{ opacity: 1, scale: 1 }"
+            :exit="prefersReducedMotion ? undefined : { opacity: 0, scale: 0.5 }"
+            :transition="prefersReducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 28 }"
+            class="inline-flex h-6 items-center gap-1 rounded-full px-1.5 text-[0.6875rem] font-semibold tabular-nums shadow-[0_1px_3px_rgba(16,47,53,0.12)] ring-2 ring-white"
+            :class="
+              reaction.reactedByMe ? 'bg-harbor-accent-soft text-harbor-ink' : 'bg-harbor-hover text-harbor-icon'
+            "
+            :aria-pressed="reaction.reactedByMe"
+            :aria-label="`${reaction.emoji} ${reaction.count}${reaction.reactedByMe ? ', including you' : ''}`"
+            @click="emit('react', reaction.emoji)"
+          >
+            <span class="text-[0.8125rem] leading-none">{{ reaction.emoji }}</span>
+            <span v-if="reaction.count > 1">{{ reaction.count }}</span>
+          </motion.button>
+        </AnimatePresence>
+      </div>
+    </div>
   </motion.li>
 </template>

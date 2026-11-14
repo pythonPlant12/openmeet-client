@@ -115,9 +115,11 @@ describe('MeetingInviteContent', () => {
     await flushPromises();
 
     await wrapper.get('[data-edit-access]').trigger('click');
-    await wrapper.get('[data-access-select]').setValue('password');
+    await wrapper.get('[data-access-option="password"]').trigger('click');
+    // A password needs typing first, so choosing it saves nothing yet.
+    expect(api.updateMeetingRoom).not.toHaveBeenCalled();
     await wrapper.get('#meeting-access-password').setValue('secret');
-    await wrapper.get('[data-host-access] button').trigger('click');
+    await wrapper.get('[data-host-access] form').trigger('submit');
     await flushPromises();
 
     expect(api.updateMeetingRoom).toHaveBeenCalledWith(expect.any(String), 'room-1', {
@@ -125,7 +127,22 @@ describe('MeetingInviteContent', () => {
       password: 'secret',
     });
     expect(wrapper.emitted('access-updated')?.[0]?.[0]).toMatchObject({ accessPolicy: 'password' });
+    // The call screen hands the saved access back, and the row closes on it.
+    await wrapper.setProps({ access: { ...hostAccess, accessPolicy: 'password' } });
     expect(wrapper.find('[data-host-access]').exists()).toBe(false);
+  });
+
+  it('applies another access choice for the host as soon as it is picked', async () => {
+    api.updateMeetingRoom.mockResolvedValue({ ...hostAccess, accessPolicy: 'open' });
+    const wrapper = mountContent();
+    await wrapper.setProps({ active: true });
+    await flushPromises();
+
+    await wrapper.get('[data-edit-access]').trigger('click');
+    await wrapper.get('[data-access-option="open"]').trigger('click');
+    await flushPromises();
+
+    expect(api.updateMeetingRoom).toHaveBeenCalledWith(expect.any(String), 'room-1', { accessPolicy: 'open' });
   });
 });
 

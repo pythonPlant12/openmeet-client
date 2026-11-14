@@ -5,7 +5,7 @@ import {
   LogOutAnimated,
   MessageSquareAnimated,
   PhoneAnimated,
-  PlusAnimated,
+  UsersRoundAnimated,
 } from '@respeak/lucide-motion-vue';
 import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
@@ -23,6 +23,7 @@ import {
   LogOut,
   Menu,
   ServerCog,
+  Settings,
   ShieldCheck,
   Video,
   X,
@@ -48,6 +49,7 @@ import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useOwnProfile } from '@/composables/useOwnProfile';
 import { useBranding } from '@/config/branding.config';
 import { USER_STATUS_OPTIONS } from '@/config/user-status.config';
+import { swallowNextClick } from '@/lib/swallow-next-click';
 import type { DashboardPanelState } from '@/pages/dashboard-group-state';
 import { playHaptic } from '@/services/haptics';
 import type { UserStatus } from '@/services/social-api';
@@ -93,9 +95,13 @@ const { avatarUrl, nickname, ownStatus, ownStatusOption, isNicknameCopied, setOw
   useOwnProfile();
 const isMobileStatusOpen = ref(false);
 const mobileStatusRef = ref<HTMLElement | null>(null);
+// The phone account sheet has its own status row, which shares the open state.
+const sheetStatusRef = ref<HTMLElement | null>(null);
 // The expanded status picker collapses (with its usual animation) on any press outside it.
 const closeMobileStatusOnOutsidePress = (event: PointerEvent) => {
-  if (!isMobileStatusOpen.value || mobileStatusRef.value?.contains(event.target as Node)) return;
+  const target = event.target as Node;
+  if (!isMobileStatusOpen.value || mobileStatusRef.value?.contains(target) || sheetStatusRef.value?.contains(target))
+    return;
   isMobileStatusOpen.value = false;
 };
 const isMeetingChatOpen = ref(false);
@@ -139,13 +145,19 @@ const workspaceTabs = computed<LiquidTab[]>(() => [
     to: { path: '/dashboard', query: { panel: 'messages' } },
   },
   {
-    // The Friends pane is where people and groups are added, so its tab reads New.
+    // The Friends pane lists people and groups, so its tab shares the Chats groups icon.
     key: 'friends',
-    label: t('nav.new'),
-    icon: PlusAnimated,
+    label: t('nav.contacts'),
+    icon: UsersRoundAnimated,
     to: { path: '/dashboard', query: { panel: 'friends' } },
   },
-  { key: 'calls', label: t('nav.calls'), icon: PhoneAnimated, to: { path: '/dashboard', query: { panel: 'calls' } } },
+  {
+    key: 'calls',
+    label: t('nav.calls'),
+    icon: PhoneAnimated,
+    to: { path: '/dashboard', query: { panel: 'calls' } },
+    holdsPressedIcon: true,
+  },
   // The avatar opens the account sheet on phones and the account menu elsewhere.
   { key: 'account', label: t('nav.account'), custom: true },
   ...(isMobile.value
@@ -543,6 +555,76 @@ function handleTabSelect(key: string) {
   else if (key === 'login') handleGoToLogin();
 }
 
+// Phones: a swipe up on the workspace tabs opens the account sheet, and dragging the sheet down closes it, like
+// the call controls panel. The sheet follows the finger; letting go past a third of the way, or with a flick,
+// closes it, and otherwise it slides back.
+const SHEET_SWIPE_MIN_PX = 40;
+const SHEET_CLOSE_PX = 80;
+const SHEET_FLICK_PX_PER_MS = 0.5;
+const SHEET_TAP_SLOP_PX = 6;
+let tabSwipeStart: { x: number; y: number } | null = null;
+function handleTabsTouchStart(event: TouchEvent) {
+  const touch = event.touches[0];
+  tabSwipeStart = event.touches.length === 1 && touch ? { x: touch.clientX, y: touch.clientY } : null;
+}
+function handleTabsTouchMove(event: TouchEvent) {
+  const touch = event.touches[0];
+  if (!tabSwipeStart || !touch) return;
+  const lift = tabSwipeStart.y - touch.clientY;
+  if (lift < SHEET_SWIPE_MIN_PX || lift <= Math.abs(touch.clientX - tabSwipeStart.x) * 1.5) return;
+  tabSwipeStart = null;
+  if (mobileMenuOpen.value) return;
+  swallowNextClick();
+  playHaptic('selection');
+  handleToggleMobileMenu();
+}
+function handleTabsTouchEnd() {
+  tabSwipeStart = null;
+}
+
+const sheetDragOffset = ref(0);
+const isSheetDragging = ref(false);
+let sheetDrag: { startY: number; lastY: number; lastTime: number; velocity: number } | null = null;
+const sheetDragStyle = computed(() => ({
+  translate: `0 ${sheetDragOffset.value}px`,
+  transition: isSheetDragging.value ? 'none' : 'translate 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+}));
+function handleSheetTouchStart(event: TouchEvent) {
+  const touch = event.touches[0];
+  if (event.touches.length !== 1 || !touch) return;
+  sheetDrag = { startY: touch.clientY, lastY: touch.clientY, lastTime: event.timeStamp, velocity: 0 };
+}
+function handleSheetTouchMove(event: TouchEvent) {
+  const touch = event.touches[0];
+  if (!sheetDrag || !touch) return;
+  const elapsed = event.timeStamp - sheetDrag.lastTime;
+  if (elapsed > 0) sheetDrag.velocity = (touch.clientY - sheetDrag.lastY) / elapsed;
+  sheetDrag.lastY = touch.clientY;
+  sheetDrag.lastTime = event.timeStamp;
+  const offset = Math.max(0, touch.clientY - sheetDrag.startY);
+  if (!isSheetDragging.value && offset < SHEET_TAP_SLOP_PX) return;
+  isSheetDragging.value = true;
+  sheetDragOffset.value = offset;
+}
+function handleSheetTouchEnd() {
+  const drag = sheetDrag;
+  sheetDrag = null;
+  if (!drag || !isSheetDragging.value) return;
+  isSheetDragging.value = false;
+  // The drag ends in a click on whatever is under the finger, which must not also press it.
+  swallowNextClick();
+  if (sheetDragOffset.value > SHEET_CLOSE_PX || drag.velocity > SHEET_FLICK_PX_PER_MS) {
+    playHaptic('selection');
+    closeMobileMenu();
+  } else {
+    sheetDragOffset.value = 0;
+  }
+}
+// The sheet keeps its dragged position while it closes, and starts from rest the next time it opens.
+watch(mobileMenuExpanded, (expanded) => {
+  if (expanded) sheetDragOffset.value = 0;
+});
+
 // On a phone, holding the Calls tab starts a new empty call instead of opening the call history.
 function handleTabLongPress(key: string) {
   if (key !== 'calls') return;
@@ -669,8 +751,12 @@ watch(mobileAccountActionsRef, (element, previous) => {
       :class="mobileMenuOpen ? 'z-[60]' : 'z-40'"
     >
       <LiquidTabBar
-        class="pointer-events-auto"
+        class="pointer-events-auto touch-none"
         compact
+        @touchstart.passive="handleTabsTouchStart"
+        @touchmove.passive="handleTabsTouchMove"
+        @touchend="handleTabsTouchEnd"
+        @touchcancel="handleTabsTouchEnd"
         :items="workspaceTabs"
         :active-key="activeWorkspaceTab"
         :label="t('nav.workspaceNavigation')"
@@ -733,114 +819,87 @@ watch(mobileAccountActionsRef, (element, previous) => {
           hide-close
           overlay-class="harbor-mobile-account-overlay bg-harbor-ink/20 backdrop-blur-[2px]"
           :class="[
-            'marketing-font harbor-mobile-account-sheet fixed right-4 left-auto top-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.75rem] border border-harbor-line bg-white p-4 shadow-[0_-16px_42px_rgba(17,27,33,0.16)]',
+            'marketing-font harbor-mobile-account-sheet fixed touch-none right-4 left-auto top-auto flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-[1.75rem] border border-harbor-line bg-white p-4 shadow-[0_-16px_42px_rgba(17,27,33,0.16)]',
             mobileNavBottomClass,
             { 'harbor-mobile-account-sheet-closing': isClosingMobileMenu },
           ]"
           aria-label="Account navigation"
+          :style="sheetDragStyle"
+          @touchstart.passive="handleSheetTouchStart"
+          @touchmove.passive="handleSheetTouchMove"
+          @touchend="handleSheetTouchEnd"
+          @touchcancel="handleSheetTouchEnd"
         >
           <DialogTitle class="sr-only">Account navigation</DialogTitle>
+          <!-- You at the top, then your status, Settings, and Start meeting, all on the navbar's own gray and aligned
+               to the left. A drag down on the sheet closes it (see sheet drag). -->
           <div
             data-mobile-account-sheet-handle
-            class="mx-auto mb-3 h-1.5 w-10 shrink-0 rounded-full bg-[#D1D7DB]"
+            class="mx-auto mb-3 h-1.5 w-10 shrink-0 rounded-full bg-harbor-line"
             aria-hidden="true"
           />
-          <div data-mobile-account-sheet-header class="flex items-center gap-3 border-b border-harbor-line pb-4">
-            <button
-              type="button"
-              class="harbor-ghost-action relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 p-0"
-              :class="[ownStatusOption.chipClass, ownStatusOption.borderClass]"
-              :aria-label="t('nav.accountInformation')"
-              @click="handleGoToPage('/account')"
+          <div data-mobile-account-sheet-header class="flex items-center gap-3 px-1 pb-3">
+            <span
+              class="relative flex size-12 shrink-0 items-center justify-center rounded-full bg-harbor-avatar text-harbor-icon"
             >
-              <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-[0.55rem] object-cover" />
-              <CircleUserRound v-else class="size-5" />
+              <img v-if="avatarUrl" :src="avatarUrl" alt="" class="size-full rounded-full object-cover" />
+              <CircleUserRound v-else class="size-6" />
               <span
                 v-if="ownStatus"
-                class="absolute bottom-1 right-1 size-3 rounded-full border-2 border-white"
+                class="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-white"
                 :class="ownStatusOption.dotClass"
               />
-            </button>
-            <!-- Name and @nickname share one left edge: equal padding with a matching negative margin keeps their
-                 hover areas while the text lines up with the column. -->
-            <div class="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-              <button
-                type="button"
-                class="harbor-ghost-action -mx-1.5 max-w-[calc(100%+0.75rem)] rounded-lg px-1.5 py-0.5 text-left leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-                @click="handleGoToPage('/account')"
-              >
-                <span class="block truncate font-semibold text-harbor-ink">{{ accountName }}</span>
-              </button>
+            </span>
+            <span class="min-w-0 flex-1 text-left">
+              <span class="block truncate font-semibold text-harbor-ink">{{ accountName }}</span>
               <button
                 v-if="nickname"
                 type="button"
-                data-copy-nickname
-                class="harbor-ghost-action -mx-1.5 inline-flex max-w-[calc(100%+0.75rem)] items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-medium leading-tight text-harbor-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
+                data-sheet-copy-nickname
+                class="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-md text-sm text-harbor-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
                 :aria-label="
                   isNicknameCopied ? t('nav.nicknameCopied') : t('nav.copyNickname', { nickname: `@${nickname}` })
                 "
                 @click="copyNickname"
               >
                 <span class="truncate">@{{ nickname }}</span>
-                <Check v-if="isNicknameCopied" class="size-3 shrink-0" /><Copy v-else class="size-3 shrink-0" />
+                <Check v-if="isNicknameCopied" class="size-3.5 shrink-0" />
+                <Copy v-else class="size-3.5 shrink-0" />
               </button>
-            </div>
-            <button
-              type="button"
-              class="harbor-ghost-action flex size-10 shrink-0 items-center justify-center rounded-full text-harbor-ink-soft"
-              :aria-label="t('common.close')"
-              @click="closeMobileMenu()"
-            >
-              <X class="size-5" />
-            </button>
+            </span>
           </div>
-          <div data-mobile-account-sheet-body class="min-h-0 flex-1 overflow-y-auto py-4">
-            <div class="space-y-1">
+          <div data-mobile-account-sheet-body class="space-y-2">
+            <div v-if="ownStatus" ref="sheetStatusRef" data-sheet-status>
               <button
                 type="button"
-                class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-                @click="handleGoToPage('/dashboard')"
-              >
-                {{ t('common.dashboard') }}
-              </button>
-              <button
-                type="button"
-                class="harbor-ghost-action flex min-h-11 w-full items-center rounded-xl px-3 text-left font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-                @click="handleGoToFriends"
-              >
-                {{ t('nav.friends') }}
-              </button>
-            </div>
-            <div v-if="ownStatus" ref="mobileStatusRef" class="mt-4 border-t border-harbor-line pt-4">
-              <button
-                type="button"
-                data-mobile-status-toggle
-                class="harbor-ghost-action flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-harbor-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
+                data-sheet-status-toggle
+                class="harbor-sheet-action flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left font-semibold"
                 :aria-expanded="isMobileStatusOpen"
-                aria-controls="mobile-status-options"
+                aria-controls="sheet-status-options"
                 @click="isMobileStatusOpen = !isMobileStatusOpen"
               >
-                <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
-                <span class="min-w-0 flex-1"
-                  ><span class="sr-only">{{ t('nav.status') }}: </span
-                  >{{ ownStatus ? ownStatusOption.label : t('nav.status') }}</span
+                <span class="flex size-5 shrink-0 items-center justify-center"
+                  ><span class="size-2.5 rounded-full" :class="ownStatusOption.dotClass"
+                /></span>
+                <span class="min-w-0 flex-1 truncate"
+                  >{{ t('nav.status') }}
+                  <span class="font-normal text-harbor-muted">· {{ ownStatusOption.label }}</span></span
                 >
                 <ChevronDown
-                  class="size-4 shrink-0 text-harbor-muted transition-transform duration-200"
+                  class="size-4 shrink-0 text-harbor-icon transition-transform duration-200"
                   :class="{ 'rotate-180': isMobileStatusOpen }"
                 />
               </button>
               <div
-                id="mobile-status-options"
+                id="sheet-status-options"
                 class="grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
                 :class="isMobileStatusOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
               >
                 <div class="min-h-0 overflow-hidden" :inert="!isMobileStatusOpen">
                   <div
-                    data-mobile-status-options
                     role="radiogroup"
                     :aria-label="t('nav.status')"
-                    class="mt-2 space-y-1"
+                    class="mt-1 space-y-0.5 rounded-2xl bg-harbor-hover p-1"
                   >
                     <button
                       v-for="option in USER_STATUS_OPTIONS"
@@ -848,12 +907,13 @@ watch(mobileAccountActionsRef, (element, previous) => {
                       type="button"
                       role="radio"
                       :aria-checked="option.value === ownStatus"
-                      :data-status-option="option.value"
-                      class="harbor-ghost-action flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left"
-                      :class="option.value === ownStatus ? 'bg-harbor-hover' : ''"
+                      :data-sheet-status-option="option.value"
+                      class="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left active:bg-harbor-line"
                       @click="selectMobileStatus(option.value)"
                     >
-                      <span class="size-2.5 shrink-0 rounded-full" :class="option.dotClass" />
+                      <span class="flex size-5 shrink-0 items-center justify-center"
+                        ><span class="size-2.5 rounded-full" :class="option.dotClass"
+                      /></span>
                       <span class="min-w-0 flex-1 text-sm font-semibold text-harbor-ink">{{ option.label }}</span>
                       <Check v-if="option.value === ownStatus" class="size-4 shrink-0 text-harbor-icon" />
                     </button>
@@ -861,26 +921,27 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 </div>
               </div>
             </div>
-          </div>
-          <div data-mobile-account-sheet-footer class="space-y-2 border-t border-harbor-line pt-4">
-            <Button
+            <button
               type="button"
-              :variant="isMeetingPage ? 'danger' : 'accent'"
-              class="min-h-11 w-full"
+              data-mobile-settings
+              class="harbor-sheet-action flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left font-semibold"
+              @click="handleGoToPage('/account')"
+            >
+              <Settings class="size-5 shrink-0 text-harbor-icon" />{{ t('nav.settings') }}
+            </button>
+            <button
+              type="button"
+              data-mobile-start-meeting
+              class="harbor-sheet-action flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 text-left font-semibold"
+              :class="isMeetingPage ? 'text-harbor-danger-strong' : ''"
               :disabled="isAuthBusy"
               @click="isMeetingPage ? handleQuitMeeting() : handleStartMeeting()"
             >
-              <LogOut v-if="isMeetingPage" class="size-4" /><Video v-else class="size-4" />
+              <LogOut v-if="isMeetingPage" class="size-5 shrink-0" /><Video
+                v-else
+                class="size-5 shrink-0 text-harbor-icon"
+              />
               {{ isMeetingPage ? t('common.quitMeeting') : t('common.startMeeting') }}
-            </Button>
-            <button
-              type="button"
-              class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-              :disabled="isAuthBusy"
-              @click="handleLogout"
-            >
-              <LoadingRipple v-if="isLoggingOut" size="sm" /><LogOut v-else class="size-4" />
-              {{ t('common.logOut') }}
             </button>
           </div>
         </HarborDialogContent>

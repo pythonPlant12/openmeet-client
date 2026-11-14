@@ -184,7 +184,8 @@ defineExpose({
       >
         <!-- The header floats over the messages, which fade and blur as they scroll under it. -->
         <header ref="header" class="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pb-12 pt-3 sm:px-5">
-          <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" />
+          <!-- The header lets touches through, so it marks its fade for the status bar colour to find. -->
+          <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" data-system-bar-layer />
           <div class="flex items-center gap-2 sm:gap-3">
             <button
               type="button"

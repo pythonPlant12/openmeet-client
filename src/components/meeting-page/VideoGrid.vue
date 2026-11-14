@@ -82,6 +82,13 @@ const isWide = useMediaQuery('(min-width: 768px)');
 const formFactor = useCallFormFactor();
 // Phone call screens centre the name tags and open each person's menu from their name tag.
 const isPhone = computed(() => formFactor.value !== 'desktop');
+// Phones shrink name tags to the mic-off icon while the controls hide; desktop keeps names readable at all times.
+const collapsesNameTags = computed(() => !!props.controlsHidden && isPhone.value);
+// In full screen the controls (and a phone's "Add people" card) float over the tiles, so name tags near the
+// bottom rise to just above them (by 0.5rem) while they show. The page sets --call-bottom-chrome to their top edge.
+const nameTagReserve = computed(() =>
+  props.fullscreen && props.controlsShown ? 'calc(var(--call-bottom-chrome) + 0.5rem)' : undefined,
+);
 const shownParticipants = computed(() =>
   props.hideOwnCamera
     ? props.participants.filter((participant) => !participant.isLocal || participant.screenShareOf)
@@ -421,7 +428,7 @@ function toggleName(participantId: string) {
 
 <template>
   <div
-    class="relative h-full w-full flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-accent"
+    class="relative h-full w-full flex-1 select-none [-webkit-touch-callout:none] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-accent"
     data-testid="meeting-video-canvas"
     :data-view-mode="layout.kind === 'speaker' ? 'speaker' : 'grid'"
     :data-layout="layout.kind"
@@ -487,7 +494,8 @@ function toggleName(participantId: string) {
                 :avatar-url="participantAvatars?.[participant.id]"
                 :speaking="isSpeaking(participant)"
                 :dark="fullscreen"
-                :collapsed="controlsHidden"
+                :collapsed="collapsesNameTags"
+                :controls-reserve="nameTagReserve"
                 fit="cover"
                 size="grid"
                 :audio-only="isOffPage(index)"
@@ -553,7 +561,8 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[selfViewMain.id]"
               :speaking="isSpeaking(selfViewMain)"
               :dark="fullscreen"
-              :collapsed="controlsHidden"
+              :collapsed="collapsesNameTags"
+              :controls-reserve="nameTagReserve"
               :bleed="fullscreen"
               fit="cover"
               size="full"
@@ -581,7 +590,7 @@ function toggleName(participantId: string) {
                 :avatar-url="participantAvatars?.[selfViewSelf.id]"
                 :speaking="isSpeaking(selfViewSelf)"
                 :dark="fullscreen"
-                :collapsed="controlsHidden"
+                :collapsed="collapsesNameTags"
                 size="mobile"
                 fit="cover"
                 :show-name-tag="false"
@@ -608,7 +617,8 @@ function toggleName(participantId: string) {
               :speaking="isSpeaking(speakerParticipant)"
               :fit="mainFills ? 'cover' : 'contain'"
               :dark="fullscreen"
-              :collapsed="controlsHidden"
+              :collapsed="collapsesNameTags"
+              :controls-reserve="nameTagReserve"
               :bleed="fullscreen"
               size="full"
               :is-expanded="pinnedParticipantId === speakerParticipant.id"
@@ -644,7 +654,7 @@ function toggleName(participantId: string) {
               :participant="selfPicture"
               :avatar-url="participantAvatars?.[selfPicture.id]"
               :speaking="isSpeaking(selfPicture)"
-              :collapsed="controlsHidden"
+              :collapsed="collapsesNameTags"
               size="mobile"
               fit="cover"
               :show-name-tag="false"
@@ -675,7 +685,7 @@ function toggleName(participantId: string) {
                     :avatar-url="participantAvatars?.[participant.id]"
                     :speaking="isSpeaking(participant)"
                     :dark="fullscreen"
-                    :collapsed="controlsHidden"
+                    :collapsed="collapsesNameTags"
                     size="mobile"
                     :show-name-tag="isWide || revealedNames.has(participant.id)"
                     :name-toggle="!isWide"

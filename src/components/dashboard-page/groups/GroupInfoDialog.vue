@@ -6,10 +6,12 @@ import {
   Clock3,
   Copy,
   Crown,
+  Ellipsis,
   Eye,
   LockKeyhole,
   LogOut,
   MessageCircle,
+  Phone,
   ShieldCheck,
   Trash2,
   UserCheck,
@@ -17,6 +19,7 @@ import {
   UserPlus,
   UserRound,
   UsersRound,
+  Video,
 } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 
@@ -91,6 +94,8 @@ const emit = defineEmits<{
   (event: 'refresh'): void;
   (event: 'load-more-members'): void;
   (event: 'chat-member', member: GroupMember): void;
+  (event: 'call', options: { video: boolean }): void;
+  (event: 'chat'): void;
 }>();
 
 const pendingFriendChange = ref<PendingFriendshipChange | null>(null);
@@ -318,6 +323,68 @@ watch(
     :description="`${info?.title ?? 'This group'}'s details and participants.`"
     @update:open="emit('update:open', $event)"
   >
+    <!-- Actions sit at the top right, like the chat header's: call and chat, with the rest under ⋯. Leaving and
+         deleting are red, like Remove friend in a friend's menu. -->
+    <template v-if="info?.isMember && !loading && !error" #actions>
+      <RoundButtonGroup aria-label="Group actions">
+        <button
+          type="button"
+          class="size-10"
+          data-start-call
+          aria-label="Start a group audio call"
+          title="Call"
+          @click="emit('call', { video: false })"
+        >
+          <Phone class="size-[1.125rem]" /></button
+        ><button
+          type="button"
+          class="size-10"
+          data-open-chat
+          aria-label="Open the group chat"
+          title="Chat"
+          @click="emit('chat')"
+        >
+          <MessageCircle class="size-5" />
+        </button>
+        <DropdownMenu :modal="false">
+          <DropdownMenuTrigger as-child>
+            <button type="button" class="size-10" aria-label="More group actions" title="More" data-group-more>
+              <Ellipsis class="size-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" :side-offset="8" class="min-w-52">
+            <DropdownMenuItem data-start-video-call @select="emit('call', { video: true })">
+              <Video />Video call
+            </DropdownMenuItem>
+            <template v-if="canManage(info.role)">
+              <DropdownMenuItem data-add-members @select="emit('add-members')">
+                <UserPlus />{{ groupAddActionLabel(info.accessPolicy) }}
+              </DropdownMenuItem>
+              <DropdownMenuItem data-group-security @select="emit('group-settings')">
+                <LockKeyhole />Security
+              </DropdownMenuItem>
+            </template>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              v-if="info.role !== 'creator' || info.memberCount > 1"
+              variant="danger"
+              data-quit-group
+              @select="emit('quit-group')"
+            >
+              <LogOut />Quit group
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-if="canManage(info.role)"
+              variant="danger"
+              data-remove-group
+              @select="emit('remove-group')"
+            >
+              <Trash2 />Delete group
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </RoundButtonGroup>
+    </template>
     <div v-if="loading" class="flex min-h-72 items-center justify-center">
       <LoadingRipple class="size-7 text-harbor-accent" />
     </div>
@@ -378,28 +445,6 @@ watch(
           <h3 class="truncate text-3xl font-semibold leading-tight tracking-[-0.03em]">{{ info.title }}</h3>
           <p class="mt-1 text-base text-harbor-muted">#{{ info.groupCode }}</p>
         </div>
-        <!-- Group management sits under the name, in the same white pill as the chat header's call buttons;
-               leaving or removing the group lives apart at the bottom. -->
-        <RoundButtonGroup v-if="info.isMember && canManage(info.role)" aria-label="Group actions">
-          <button
-            type="button"
-            class="size-11"
-            :aria-label="groupAddActionLabel(info.accessPolicy)"
-            :title="groupAddActionLabel(info.accessPolicy)"
-            @click="emit('add-members')"
-          >
-            <UserPlus class="size-5" /></button
-          ><button
-            type="button"
-            class="size-11"
-            data-group-security
-            aria-label="Security"
-            title="Change group access and password"
-            @click="emit('group-settings')"
-          >
-            <LockKeyhole class="size-5" />
-          </button>
-        </RoundButtonGroup>
         <input ref="avatarInput" type="file" accept="image/*" class="sr-only" @change="uploadAvatar" />
       </section>
       <section class="grid gap-4 rounded-[1.4rem] bg-harbor-app p-4 text-sm sm:grid-cols-3">
@@ -609,25 +654,6 @@ watch(
         :access-token="accessToken"
         :user-id="currentUserId"
       />
-      <section v-if="info.isMember" class="flex flex-col gap-2 sm:flex-row" aria-label="Leave or remove group">
-        <button
-          v-if="info.role !== 'creator' || info.memberCount > 1"
-          type="button"
-          data-quit-group
-          class="harbor-pill-button harbor-pill-button-danger flex flex-1 items-center justify-center gap-2 px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-          @click="emit('quit-group')"
-        >
-          <LogOut class="size-4" />Quit group</button
-        ><button
-          v-if="canManage(info.role)"
-          type="button"
-          data-remove-group
-          class="harbor-pill-button harbor-pill-button-danger flex flex-1 items-center justify-center gap-2 px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-          @click="emit('remove-group')"
-        >
-          <Trash2 class="size-4" />Remove group
-        </button>
-      </section>
     </div>
   </InfoPage>
   <Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"

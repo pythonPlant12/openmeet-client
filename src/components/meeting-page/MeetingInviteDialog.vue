@@ -102,7 +102,7 @@ watch(open, (isOpen) => {
       side="bottom"
       hide-close
       overlay-class="bg-harbor-ink/30 backdrop-blur-md sm:bg-harbor-ink/30"
-      class="marketing-font flex flex-col gap-3 rounded-t-[1.75rem] border-0 bg-harbor-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 text-harbor-ink"
+      class="call-invite-sheet marketing-font flex flex-col gap-3 rounded-t-[1.75rem] border-0 bg-harbor-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 text-harbor-ink"
       :class="[
         isExpanded ? 'h-[92dvh]' : 'h-[62dvh]',
         isDragging
@@ -127,8 +127,12 @@ watch(open, (isOpen) => {
         <SheetTitle class="text-center text-white font-semibold">{{ t('meeting.invite.title') }}</SheetTitle>
       </div>
       <SheetDescription class="sr-only">{{ t('meeting.invite.description') }}</SheetDescription>
-      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <!-- Scrolls only when the settings above the people box leave it no room. -->
+      <div
+        class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         <MeetingInviteContent
+          fill
           :room-id="roomId"
           :access="access"
           :active="open"

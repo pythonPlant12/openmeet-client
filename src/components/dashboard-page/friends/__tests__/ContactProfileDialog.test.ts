@@ -13,6 +13,17 @@ const stubs = {
   DialogTitle: { template: '<div><slot /></div>' },
   DialogDescription: { template: '<div><slot /></div>' },
   DialogFooter: { template: '<div><slot /></div>' },
+  // Menus render their items in place, and an item reports `select` on click like the real one.
+  DropdownMenu: { template: '<div><slot /></div>' },
+  DropdownMenuTrigger: { template: '<div><slot /></div>' },
+  DropdownMenuContent: { template: '<div><slot /></div>' },
+  DropdownMenuSeparator: { template: '<hr />' },
+  DropdownMenuItem: {
+    props: ['variant', 'disabled'],
+    emits: ['select'],
+    template:
+      '<button type="button" :data-variant="variant" :disabled="disabled" @click="$emit(\'select\')"><slot /></button>',
+  },
 };
 
 describe('ContactProfileDialog', () => {
@@ -92,9 +103,13 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.text()).not.toContain('Online');
     expect(wrapper.text()).toContain('“Building OpenMeet”');
     expect(wrapper.text()).toContain('alex@example.com');
-    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Start a video call"]').exists()).toBe(true);
-    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Start an audio call"]').exists()).toBe(true);
-    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Remove friend"]').exists()).toBe(true);
+    // Call and Chat sit in the header pill; video call and Remove friend (in red) are under ⋯.
+    expect(wrapper.find('[data-info-page-actions] [aria-label="Start an audio call"]').exists()).toBe(true);
+    expect(wrapper.find('[data-info-page-actions] [data-open-chat]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Profile actions"] [data-start-video-call]').text()).toContain('Video call');
+    expect(wrapper.get('[aria-label="Profile actions"] [data-remove-friend]').attributes('data-variant')).toBe(
+      'danger',
+    );
   });
 
   it('shows only public details and an Add friend action to people who are not friends', async () => {

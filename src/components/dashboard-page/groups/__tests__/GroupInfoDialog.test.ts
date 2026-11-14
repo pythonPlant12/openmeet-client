@@ -68,6 +68,17 @@ function mountDialog(props: Record<string, unknown> = {}) {
         DialogTitle: { template: '<div><slot /></div>' },
         DialogDescription: { template: '<div><slot /></div>' },
         LoadingRipple: { template: '<span data-loading />' },
+        // Menus render their items in place, and an item reports `select` on click like the real one.
+        DropdownMenu: { template: '<div><slot /></div>' },
+        DropdownMenuTrigger: { template: '<div><slot /></div>' },
+        DropdownMenuContent: { template: '<div><slot /></div>' },
+        DropdownMenuSeparator: { template: '<hr />' },
+        DropdownMenuItem: {
+          props: ['variant', 'disabled'],
+          emits: ['select'],
+          template:
+            '<button type="button" :data-variant="variant" :disabled="disabled" @click="$emit(\'select\')"><slot /></button>',
+        },
       },
     },
   });
@@ -259,6 +270,19 @@ describe('GroupInfoDialog', () => {
       ['friend-1', 'Friend'],
       ['member-1', 'Member'],
     ]);
+  });
+
+  it('puts Call and Chat at the top right, with the rest under ⋯ and leaving or deleting in red', async () => {
+    const owner = mountDialog({ info: { ...groupInfo, role: 'creator', memberCount: 3 } });
+    const actions = owner.get('[data-info-page-actions]');
+    await actions.get('[data-start-call]').trigger('click');
+    await actions.get('[data-open-chat]').trigger('click');
+    await actions.get('[data-start-video-call]').trigger('click');
+    expect(owner.emitted('call')).toEqual([[{ video: false }], [{ video: true }]]);
+    expect(owner.emitted('chat')).toHaveLength(1);
+    expect(actions.get('[data-quit-group]').attributes('data-variant')).toBe('danger');
+    expect(actions.get('[data-remove-group]').attributes('data-variant')).toBe('danger');
+    expect(actions.get('[data-remove-group]').text()).toContain('Delete group');
   });
 
   it('lets the owner quit when someone can take the group over', () => {
