@@ -19,6 +19,7 @@ import {
 import { cookieUtils } from '@/utils';
 
 import MeetingAccessPicker from './MeetingAccessPicker.vue';
+import MeetingShareRow from './MeetingShareRow.vue';
 
 // The invite's content, shared by the phone bottom sheet and the desktop dialog: the room's access, a search,
 // and your friends (or anyone the search finds) with an Invite button each.
@@ -27,6 +28,8 @@ const props = defineProps<{
   access: MeetingRoomAccess | null;
   /** The sheet or dialog is open, so the people list loads. */
   active: boolean;
+  /** Inviting people needs an account, so guests get the share targets and the access line only. */
+  guest?: boolean;
 }>();
 const emit = defineEmits<{ (event: 'access-updated', access: MeetingRoomAccess): void }>();
 
@@ -141,7 +144,7 @@ function initials(name: string) {
 watch(
   () => props.active,
   (isActive) => {
-    if (!isActive) return;
+    if (!isActive || props.guest) return;
     draftPolicy.value = policy.value;
     draftPassword.value = '';
     void search();
@@ -149,17 +152,18 @@ watch(
   { immediate: true },
 );
 watch(debouncedQuery, () => {
-  if (props.active) void search();
+  if (props.active && !props.guest) void search();
 });
 // Changing who may join changes who can be invited.
 watch(policy, (current) => {
   draftPolicy.value = current;
-  if (props.active) void search();
+  if (props.active && !props.guest) void search();
 });
 </script>
 
 <template>
   <div class="space-y-4" data-meeting-invite-content>
+    <MeetingShareRow :meeting-id="roomId" />
     <p class="flex items-center gap-1.5 text-sm text-harbor-muted" data-meeting-access-line>
       <component :is="policyOption.icon" class="size-3.5 shrink-0" />
       <span data-meeting-access-summary>{{ policyOption.label }} · {{ policyOption.description }}</span>
@@ -184,7 +188,7 @@ watch(policy, (current) => {
         </div>
       </section>
 
-      <div class="space-y-2">
+      <div v-if="!guest" class="space-y-2">
         <div class="relative">
           <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-harbor-subtle" />
           <Input

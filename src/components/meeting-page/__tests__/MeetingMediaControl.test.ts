@@ -84,12 +84,7 @@ const RadioItem = defineComponent({
   },
 });
 
-function mountControl(
-  kind: 'audio' | 'video',
-  off = false,
-  warning = false,
-  variant?: 'split' | 'toggle' | 'row',
-) {
+function mountControl(kind: 'audio' | 'video', off = false, warning = false, variant?: 'split' | 'toggle' | 'row') {
   return mount(MeetingMediaControl, {
     props: { kind, off, available: !warning, warning, variant },
     global: {

@@ -159,7 +159,7 @@ const callFormFactor = useCallFormFactor();
 const usesPhoneChrome = computed(() => callFormFactor.value !== 'desktop');
 // The phone call screen asks to add people while you are alone in the call.
 const showsAddPeople = computed(
-  () => usesPhoneChrome.value && showsControls.value && participantCount.value <= 1 && inviteMode.value === 'enabled',
+  () => usesPhoneChrome.value && showsControls.value && participantCount.value <= 1 && inviteMode.value !== 'hidden',
 );
 // The video area sits between the call screen's top chrome and its controls (and the "Add people" card above
 // them); VideoGrid reads these variables.
@@ -1156,7 +1156,7 @@ const handleReconnect = () => {
             :is-video-off="isVideoOff"
             :can-present="screenShare.isSupported"
             :view-mode="shownViewMode"
-            :can-invite="inviteMode === 'enabled'"
+            :can-invite="inviteMode !== 'hidden'"
             :show-own-camera="showOwnCamera"
             :show-connection-status="showConnectionStatus"
             :audio-warning="audioWarning"
@@ -1240,9 +1240,10 @@ const handleReconnect = () => {
     />
 
     <MeetingInviteDialog
-      v-if="inviteMode === 'enabled'"
+      v-if="inviteMode !== 'hidden'"
       v-model:open="isInviteOpen"
       :phone="usesPhoneChrome"
+      :guest="inviteMode === 'signedOut'"
       :room-id="meetingId"
       :access="meetingAccess"
       @access-updated="meetingAccess = $event"

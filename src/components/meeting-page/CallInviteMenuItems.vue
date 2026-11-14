@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n';
 
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
+import { meetingLink as linkTo, telegramShareUrl, whatsAppShareUrl } from '@/lib/meeting-share';
 
 // The invite and share items of a meeting, for any dropdown or submenu that offers them.
 const props = defineProps<{
@@ -18,7 +19,7 @@ const { t } = useI18n();
 
 const copiedLink = ref(false);
 const copiedId = ref(false);
-const meetingLink = () => `${window.location.origin}/room/${props.meetingId}`;
+const meetingLink = () => linkTo(props.meetingId);
 
 function flash(flag: typeof copiedLink) {
   flag.value = true;
@@ -39,15 +40,12 @@ async function copyMeetingId() {
 
 function shareOnWhatsApp() {
   const text = t('meeting.controls.shareText', { link: meetingLink() });
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  window.open(whatsAppShareUrl(text), '_blank');
 }
 
 function shareOnTelegram() {
   const text = t('meeting.controls.shareTitle');
-  window.open(
-    `https://t.me/share/url?url=${encodeURIComponent(meetingLink())}&text=${encodeURIComponent(text)}`,
-    '_blank',
-  );
+  window.open(telegramShareUrl(meetingLink(), text), '_blank');
 }
 </script>
 

@@ -90,6 +90,18 @@ describe('MeetingInviteContent', () => {
     expect(guest.find('[data-host-access]').exists()).toBe(false);
   });
 
+  it('shows guests the share targets and the access line, but no people to invite', async () => {
+    const wrapper = mount(MeetingInviteContent, {
+      props: { active: true, roomId: 'room-1', access: null, guest: true },
+      global: { plugins: [i18n()] },
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-share-row]').exists()).toBe(true);
+    expect(wrapper.find('[data-meeting-access-line]').exists()).toBe(true);
+    expect(wrapper.find('[data-invite-candidates]').exists()).toBe(false);
+    expect(api.listMeetingInvitationCandidates).not.toHaveBeenCalled();
+  });
+
   it('saves a new password policy for the host', async () => {
     api.updateMeetingRoom.mockResolvedValue({ ...hostAccess, accessPolicy: 'password' });
     const wrapper = mountContent();

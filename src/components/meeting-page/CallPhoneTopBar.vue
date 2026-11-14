@@ -54,7 +54,7 @@ const chatAriaLabel = computed(() => {
     <div class="pointer-events-auto flex items-center gap-2">
       <slot name="audio-output" />
       <button
-        v-if="inviteMode === 'enabled'"
+        v-if="inviteMode !== 'hidden'"
         type="button"
         class="call-button call-chip size-11"
         :aria-label="t('meeting.controls.invitePeople')"

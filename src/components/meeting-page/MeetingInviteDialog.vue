@@ -15,6 +15,8 @@ defineProps<{
   access: MeetingRoomAccess | null;
   /** Phone call screens show the invite as a bottom sheet. */
   phone?: boolean;
+  /** Guests get the share targets and the access line only. */
+  guest?: boolean;
 }>();
 const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{ (event: 'access-updated', access: MeetingRoomAccess): void }>();
@@ -73,6 +75,7 @@ watch(open, (isOpen) => {
           :room-id="roomId"
           :access="access"
           :active="open"
+          :guest="guest"
           @access-updated="emit('access-updated', $event)"
         />
       </div>
@@ -93,6 +96,7 @@ watch(open, (isOpen) => {
         :room-id="roomId"
         :access="access"
         :active="open"
+        :guest="guest"
         @access-updated="emit('access-updated', $event)"
       />
     </HarborDialogContent>

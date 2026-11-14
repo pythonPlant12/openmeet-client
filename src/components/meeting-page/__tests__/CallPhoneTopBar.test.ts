@@ -39,8 +39,9 @@ describe('CallPhoneTopBar', () => {
     expect(wrapper.emitted('invite')).toHaveLength(1);
   });
 
-  it('keeps the sharing menu where inviting needs an account', () => {
-    expect(mountBar({ inviteMode: 'signedOut' }).find('button[aria-label="Open sharing options"]').exists()).toBe(true);
+  it('opens the invite for guests too, and keeps the sharing menu for conversation calls', () => {
+    expect(mountBar({ inviteMode: 'signedOut' }).find('button[aria-label="Invite people"]').exists()).toBe(true);
+    expect(mountBar({ inviteMode: 'hidden' }).find('button[aria-label="Open sharing options"]').exists()).toBe(true);
   });
 
   it('opens the controls panel from the room name', async () => {

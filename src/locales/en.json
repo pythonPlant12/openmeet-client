@@ -429,7 +429,13 @@
       "expand": "Show more people",
       "shrink": "Show fewer people",
       "addPeople": "Add people",
-      "addPeopleHint": "Invite friends or share the link"
+      "addPeopleHint": "Invite friends or share the link",
+      "share": "Share",
+      "copyLink": "Copy link",
+      "copied": "Copied",
+      "qrCode": "QR code",
+      "qrAlt": "QR code of the room link",
+      "email": "Email"
     },
     "preview": {
       "title": "Camera preview",
