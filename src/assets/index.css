@@ -276,16 +276,6 @@
   color: rgb(var(--harbor-icon));
 }
 
-.harbor-toaster [data-sonner-toast][data-type='success'] [data-icon] {
-  background: rgb(var(--harbor-accent-soft));
-  color: rgb(var(--harbor-accent));
-}
-
-.harbor-toaster [data-sonner-toast][data-type='error'] [data-icon] {
-  background: rgb(var(--harbor-danger-soft));
-  color: rgb(var(--harbor-danger));
-}
-
 .harbor-toaster [data-sonner-toast] [data-button] {
   min-height: 2.25rem;
   border-radius: 999px;
@@ -1381,6 +1371,36 @@
   }
 }
 
+/* Actions in the phone's account sheet sit on the navbar's own gray, with no shadow or border. */
+.harbor-sheet-action {
+  color: rgb(var(--harbor-ink));
+  background: rgb(var(--harbor-hover));
+  transition:
+    background-color 0.2s,
+    transform 0.15s;
+}
+
+.harbor-sheet-action:active:not(:disabled) {
+  background: rgb(var(--harbor-line));
+  transform: scale(0.98);
+}
+
+.harbor-sheet-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.harbor-sheet-action:focus-visible {
+  outline: 2px solid rgb(var(--harbor-subtle));
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .harbor-sheet-action:not(:disabled):hover {
+    background: rgb(var(--harbor-line));
+  }
+}
+
 /* A pill of round actions, such as the call controls at the top of a chat. */
 .harbor-round-group {
   display: inline-flex;
@@ -2004,4 +2024,35 @@
 
 .meeting-immersive .harbor-chat-panel .bg-\[\#D1D7DB\] {
   background-color: rgb(var(--harbor-line));
+}
+
+/* The phone invite sheet slides up from the bottom edge with the same ease as the call controls' panel, and
+   slides back down from wherever a drag left it. Outside the layer, so it wins over the sheet's animate utilities. */
+[data-meeting-invite].call-invite-sheet[data-state='open'] {
+  animation: call-invite-sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+[data-meeting-invite].call-invite-sheet[data-state='closed'] {
+  animation: call-invite-sheet-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes call-invite-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes call-invite-sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-meeting-invite].call-invite-sheet[data-state] {
+    animation-duration: 1ms;
+  }
 }

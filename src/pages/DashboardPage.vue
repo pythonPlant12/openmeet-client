@@ -2073,6 +2073,38 @@ async function startContactProfileCall(options?: { video: boolean }) {
   await startFriendCall(friend, options);
 }
 
+// Profile info's Chat opens the direct chat with the person, in place of the profile.
+function openContactProfileChat() {
+  const friend = contactProfileFriend.value;
+  if (!friend) return;
+  setContactProfileDialogOpen(false);
+  void openFriendConversation(friend);
+}
+
+// Group info's Chat and Call act on the group's own conversation and close Group info.
+function groupInfoConversation() {
+  const id = groupInfo.value?.id;
+  if (!id) return null;
+  return (
+    conversations.value.find((conversation) => conversation.id === id) ??
+    (selectedConversation.value?.id === id ? selectedConversation.value : null)
+  );
+}
+
+function openGroupInfoChat() {
+  const conversation = groupInfoConversation();
+  if (!conversation) return;
+  setGroupProfileDialogOpen(false);
+  selectConversation(conversation);
+}
+
+async function startGroupInfoCall(options?: { video: boolean }) {
+  const conversation = groupInfoConversation();
+  if (!conversation || isCallLaunchActive.value) return;
+  setGroupProfileDialogOpen(false);
+  await startConversationCall(conversation, options);
+}
+
 async function startFriendCall(friend: Friend, options?: { video: boolean }) {
   if (isCallLaunchActive.value) return;
   const conversation = await openFriendConversation(friend);
@@ -2400,7 +2432,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       class="relative mx-auto h-full max-w-[1600px] overflow-hidden bg-white sm:rounded-[1.75rem] sm:border sm:border-harbor-line sm:shadow-[0_20px_70px_rgba(17,27,33,0.08)] lg:grid lg:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]"
     >
       <aside
-        class="flex h-full min-h-0 flex-col border-b border-harbor-line bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-b-0 lg:border-r lg:border-harbor-line"
+        class="flex h-full min-h-0 flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-r lg:border-harbor-line"
         :class="
           hasSelectedConversation
             ? 'pointer-events-none absolute inset-0 -translate-x-3 opacity-0 lg:static lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto'
@@ -2682,6 +2714,8 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       :change-friendship="changeMemberFriendship"
       @load-more-members="loadMoreGroupMembers"
       @chat-member="openMemberChat"
+      @chat="openGroupInfoChat"
+      @call="startGroupInfoCall"
     />
     <AcceptGroupInvitationDialog
       :open="activeGroupInvitation !== null"
@@ -2711,6 +2745,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       @update:open="setContactProfileDialogOpen"
       @update:confirmation-open="setContactRemoveConfirmationOpen"
       @call="startContactProfileCall"
+      @chat="openContactProfileChat"
       @remove="removeProfileFriend"
       @add-friend="addProfileFriend"
       @accept-request="respondToFriendRequest($event, true)"

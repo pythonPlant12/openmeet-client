@@ -121,6 +121,7 @@ vi.mock('@respeak/lucide-motion-vue', async () => {
     PlusAnimated: iconStub('plus'),
     UserRoundCheckAnimated: iconStub('user-round-check'),
     UsersAnimated: iconStub('users'),
+    UsersRoundAnimated: iconStub('users-round'),
   };
 });
 
@@ -276,7 +277,7 @@ describe('TheNavbar', () => {
     expect(wrapper.get('.harbor-nav-layout').attributes('data-layout')).toBeUndefined();
   });
 
-  it('shows the Friends pane tab as New with a plus icon', async () => {
+  it('shows the Contacts tab with the groups icon from the Chats sidebar', async () => {
     media.desktop = true;
     auth.authenticated = true;
     social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
@@ -284,8 +285,8 @@ describe('TheNavbar', () => {
     await flushPromises();
 
     const tab = wrapper.get('[data-tab="friends"]');
-    expect(tab.get('svg').attributes('data-icon')).toBe('plus');
-    expect(tab.text()).toContain('nav.new');
+    expect(tab.get('svg').attributes('data-icon')).toBe('users-round');
+    expect(tab.text()).toContain('nav.contacts');
   });
 
   it('uses a persistent profile trigger and bottom sheet for authenticated phones', async () => {
@@ -310,10 +311,13 @@ describe('TheNavbar', () => {
 
     const accountNavigation = wrapper.get('section[aria-label="Account navigation"]');
     expect(accountNavigation.classes()).toContain('bottom-[calc(var(--meeting-control-size)+2.5rem)]');
+    // The sheet holds only Settings and the meeting action; Log out lives on the Settings page.
+    expect(accountNavigation.text()).toContain('nav.settings');
     expect(accountNavigation.text()).toContain('common.quitMeeting');
-    expect(accountNavigation.text()).toContain('common.logOut');
-    await wrapper.get('[data-mobile-status-toggle]').trigger('click');
-    expect(wrapper.find('[data-mobile-status-options]').exists()).toBe(true);
+    expect(accountNavigation.text()).not.toContain('common.logOut');
+    expect(accountNavigation.findAll('button').map((button) => button.attributes('class'))).toEqual(
+      expect.arrayContaining([expect.stringContaining('harbor-sheet-action')]),
+    );
     wrapper.unmount();
   });
 
@@ -764,6 +768,7 @@ describe('TheNavbar', () => {
     media.hover = false;
     media.mobile = true;
     auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
     const { wrapper } = await mountNavbar('/dashboard');
     await flushPromises();
 
@@ -776,8 +781,47 @@ describe('TheNavbar', () => {
     expect(account.element.tagName).toBe('BUTTON');
     await account.trigger('click');
     await flushPromises();
-    expect(wrapper.get('section[aria-label="Account navigation"]').text()).toContain('common.logOut');
+    expect(wrapper.get('section[aria-label="Account navigation"] [data-mobile-settings]').text()).toContain(
+      'nav.settings',
+    );
+    expect(wrapper.get('section[aria-label="Account navigation"] [data-mobile-start-meeting]').text()).toContain(
+      'common.startMeeting',
+    );
+    // You at the top with a copyable nickname, then the status row, which expands to the choices.
+    const sheet = wrapper.get('section[aria-label="Account navigation"]');
+    expect(sheet.find('[data-mobile-account-sheet-header]').exists()).toBe(true);
+    const statusToggle = sheet.find('[data-sheet-status-toggle]');
+    expect(sheet.get('[data-sheet-copy-nickname]').text()).toContain('@ada_l');
+    expect(statusToggle.attributes('aria-expanded')).toBe('false');
+    await statusToggle.trigger('click');
+    expect(statusToggle.attributes('aria-expanded')).toBe('true');
+    expect(sheet.findAll('[data-sheet-status-option]')).toHaveLength(5);
     expect(tabs.get('[aria-current="page"]').attributes('data-tab')).toBe('account');
+    wrapper.unmount();
+  });
+
+  it('opens the account sheet with a swipe up on the phone workspace tabs', async () => {
+    media.desktop = false;
+    media.hover = false;
+    media.mobile = true;
+    media.reduced = true;
+    auth.authenticated = true;
+    const { wrapper } = await mountNavbar('/dashboard');
+    await flushPromises();
+
+    const tabs = wrapper.get('nav[aria-label="nav.workspaceNavigation"]').element;
+    const touch = (type: string, y: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.defineProperty(event, 'touches', { value: [{ clientX: 100, clientY: y }] });
+      tabs.dispatchEvent(event);
+    };
+    touch('touchstart', 800);
+    touch('touchmove', 790);
+    await flushPromises();
+    expect(wrapper.find('section[aria-label="Account navigation"]').exists()).toBe(false);
+    touch('touchmove', 740);
+    await flushPromises();
+    expect(wrapper.find('section[aria-label="Account navigation"]').exists()).toBe(true);
     wrapper.unmount();
   });
 

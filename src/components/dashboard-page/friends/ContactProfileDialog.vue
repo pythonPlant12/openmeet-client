@@ -1,11 +1,31 @@
 <script setup lang="ts">
-import { CalendarDays, Check, Clock3, Copy, Mail, Phone, UserPlus, UserX, Video, X } from 'lucide-vue-next';
+import {
+  CalendarDays,
+  Check,
+  Clock3,
+  Copy,
+  Ellipsis,
+  Mail,
+  MessageCircle,
+  Phone,
+  UserPlus,
+  UserX,
+  Video,
+  X,
+} from 'lucide-vue-next';
 import { ref } from 'vue';
 
 import InfoPage from '@/components/dashboard-page/details/InfoPage.vue';
 import SharedMediaPanel from '@/components/dashboard-page/shared-media/SharedMediaPanel.vue';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
 import { RoundButtonGroup } from '@/components/ui/round-button';
 import { toast } from '@/components/ui/toast';
@@ -43,6 +63,7 @@ const emit = defineEmits<{
   (event: 'update:open', value: boolean): void;
   (event: 'update:confirmationOpen', value: boolean): void;
   (event: 'call', options: { video: boolean }): void;
+  (event: 'chat'): void;
   (event: 'remove'): void;
   (event: 'add-friend'): void;
   (event: 'accept-request', request: FriendRequest): void;
@@ -78,6 +99,94 @@ async function copyNickname(nickname: string) {
     :busy="!!profile && loading"
     @update:open="emit('update:open', $event)"
   >
+    <!-- Actions sit at the top right, in the same white pill as the chat header's call buttons. Removing a
+         friend asks for confirmation first. -->
+    <template v-if="profile" #actions>
+      <RoundButtonGroup v-if="pendingRequest" aria-label="Friend request actions">
+        <button
+          type="button"
+          class="size-10"
+          data-accept-friend-request
+          :disabled="respondingId !== null"
+          aria-label="Accept friend request"
+          title="Accept friend request"
+          @click="emit('accept-request', pendingRequest)"
+        >
+          <Check class="size-5" /></button
+        ><button
+          type="button"
+          class="size-10"
+          data-tone="destructive"
+          data-decline-friend-request
+          :disabled="respondingId !== null"
+          aria-label="Decline friend request"
+          title="Decline friend request"
+          @click="emit('decline-request', pendingRequest)"
+        >
+          <X class="size-5" />
+        </button>
+      </RoundButtonGroup>
+      <RoundButtonGroup v-else-if="profile.relationship === 'none' && !profileFriend" aria-label="Profile actions">
+        <button
+          type="button"
+          class="size-10"
+          data-add-friend
+          aria-label="Add friend"
+          title="Add friend"
+          @click="emit('add-friend')"
+        >
+          <UserPlus class="size-5" />
+        </button>
+      </RoundButtonGroup>
+      <RoundButtonGroup v-else-if="profileFriend" aria-label="Profile actions">
+        <button
+          type="button"
+          class="size-10"
+          data-start-call
+          :disabled="opening !== null || callActive"
+          aria-label="Start an audio call"
+          title="Call"
+          @click="emit('call', { video: false })"
+        >
+          <Phone class="size-[1.125rem]" /></button
+        ><button
+          type="button"
+          class="size-10"
+          data-open-chat
+          :disabled="opening !== null"
+          aria-label="Send a message"
+          title="Chat"
+          @click="emit('chat')"
+        >
+          <MessageCircle class="size-5" />
+        </button>
+        <DropdownMenu :modal="false">
+          <DropdownMenuTrigger as-child>
+            <button type="button" class="size-10" aria-label="More profile actions" title="More" data-profile-more>
+              <Ellipsis class="size-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" :side-offset="8" class="min-w-52">
+            <DropdownMenuItem
+              data-start-video-call
+              :disabled="opening !== null || callActive"
+              @select="emit('call', { video: true })"
+            >
+              <Video />Video call
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="danger"
+              data-remove-friend
+              :disabled="removingId !== null"
+              @select="emit('update:confirmationOpen', true)"
+            >
+              <UserX />Remove friend
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </RoundButtonGroup>
+    </template>
     <!-- Render the fallback profile immediately and update it in place, so the page does not jump when the live
          details arrive. -->
     <div v-if="loading && !profile" class="flex min-h-64 items-center justify-center">
@@ -152,78 +261,6 @@ async function copyNickname(nickname: string) {
             </button>
           </div>
         </div>
-        <!-- Actions sit under the name, in the same white pill as the chat header's call buttons. Removing a
-             friend asks for confirmation first. -->
-        <RoundButtonGroup v-if="pendingRequest" aria-label="Friend request actions">
-          <button
-            type="button"
-            class="size-11"
-            data-accept-friend-request
-            :disabled="respondingId !== null"
-            aria-label="Accept friend request"
-            title="Accept friend request"
-            @click="emit('accept-request', pendingRequest)"
-          >
-            <Check class="size-5" /></button
-          ><button
-            type="button"
-            class="size-11"
-            data-tone="destructive"
-            data-decline-friend-request
-            :disabled="respondingId !== null"
-            aria-label="Decline friend request"
-            title="Decline friend request"
-            @click="emit('decline-request', pendingRequest)"
-          >
-            <X class="size-5" />
-          </button>
-        </RoundButtonGroup>
-        <RoundButtonGroup v-else-if="profile.relationship === 'none' && !profileFriend" aria-label="Profile actions">
-          <button
-            type="button"
-            class="size-11"
-            data-add-friend
-            aria-label="Add friend"
-            title="Add friend"
-            @click="emit('add-friend')"
-          >
-            <UserPlus class="size-5" />
-          </button>
-        </RoundButtonGroup>
-        <RoundButtonGroup v-else-if="profileFriend" aria-label="Profile actions">
-          <button
-            type="button"
-            class="size-11"
-            data-start-video-call
-            :disabled="opening !== null || callActive"
-            aria-label="Start a video call"
-            title="Start a video call"
-            @click="emit('call', { video: true })"
-          >
-            <Video class="size-5" /></button
-          ><button
-            type="button"
-            class="size-11"
-            data-start-call
-            :disabled="opening !== null || callActive"
-            aria-label="Start an audio call"
-            title="Start an audio call"
-            @click="emit('call', { video: false })"
-          >
-            <Phone class="size-[1.125rem]" /></button
-          ><button
-            type="button"
-            class="size-11"
-            data-tone="destructive"
-            data-remove-friend
-            :disabled="removingId !== null"
-            aria-label="Remove friend"
-            title="Remove friend"
-            @click="emit('update:confirmationOpen', true)"
-          >
-            <UserX class="size-5" />
-          </button>
-        </RoundButtonGroup>
         <p
           class="max-w-md text-sm leading-6"
           :class="profile.statusMessage ? 'text-harbor-icon' : 'text-harbor-subtle'"

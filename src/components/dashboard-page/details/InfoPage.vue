@@ -27,7 +27,7 @@ const emit = defineEmits<{ (event: 'update:open', value: boolean): void }>();
       <header
         class="pointer-events-none absolute inset-x-0 top-0 z-20 px-3 pb-12 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-5"
       >
-        <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" />
+        <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" data-system-bar-layer />
         <div class="mx-auto flex max-w-3xl items-center gap-3">
           <button
             type="button"
@@ -38,7 +38,13 @@ const emit = defineEmits<{ (event: 'update:open', value: boolean): void }>();
             @click="emit('update:open', false)"
           >
             <ArrowLeft class="size-5" /></button
-          ><DialogTitle class="truncate text-base font-semibold text-harbor-ink">{{ title }}</DialogTitle>
+          ><DialogTitle class="min-w-0 flex-1 truncate text-base font-semibold text-harbor-ink">{{
+            title
+          }}</DialogTitle>
+          <!-- The page's actions sit at the top right, like the chat header's call buttons. -->
+          <div v-if="$slots.actions" class="pointer-events-auto shrink-0" data-info-page-actions>
+            <slot name="actions" />
+          </div>
         </div>
       </header>
       <DialogDescription class="sr-only">{{ description }}</DialogDescription>

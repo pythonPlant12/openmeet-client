@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Camera, Check, Copy, Eye, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Camera, Check, Copy, Eye, LogOut, Trash2 } from 'lucide-vue-next';
 import { motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -22,10 +22,11 @@ import { useFullAvatar } from '@/composables/useFullAvatar';
 import { USER_STATUS_OPTIONS } from '@/config/user-status.config';
 import { hasNativeMediaPicker, pickNativeMedia } from '@/services/media-picker';
 import { type UserStatus, socialApi } from '@/services/social-api';
+import { AuthEventType } from '@/xstate/machines/auth/types';
 
 const router = useRouter();
 const { t } = useI18n();
-const { accessToken, currentUser, isAuthenticated, isCheckingSession } = useAuth();
+const { accessToken, currentUser, isAuthenticated, isCheckingSession, send } = useAuth();
 
 const name = ref('');
 const nickname = ref('');
@@ -448,6 +449,15 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </form>
+        <!-- Leaving the account sits apart from the profile form. -->
+        <button
+          type="button"
+          data-account-log-out
+          class="harbor-pill-button harbor-pill-button-danger inline-flex w-full items-center justify-center gap-2 px-6 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
+          @click="send({ type: AuthEventType.LOGOUT })"
+        >
+          <LogOut class="size-4" />{{ t('common.logOut') }}
+        </button>
       </motion.div>
     </template>
     <Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
