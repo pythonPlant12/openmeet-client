@@ -627,10 +627,11 @@ async function toggleOwnCamera(page: Page) {
   if (await confirm.isVisible()) await confirm.click();
 }
 
-/** Picks a device other than the active one from the split button's chevron menu; returns the device ID. */
+/** Picks a device other than the active one from the split button's Source submenu; returns the device ID. */
 async function switchOwnDevice(page: Page, kind: 'audio' | 'video') {
   await page.locator(`[data-media-control="${kind}"] [data-media-menu-trigger]`).click();
-  const option = page.locator('[data-media-options] [data-device-option][data-state="unchecked"]').first();
+  await page.locator('[data-media-options] [data-media-source-menu]').hover();
+  const option = page.locator('[data-media-source-options] [data-device-option][data-state="unchecked"]').first();
   const deviceId = await option.getAttribute('data-device-option');
   await option.click();
   await page.keyboard.press('Escape');

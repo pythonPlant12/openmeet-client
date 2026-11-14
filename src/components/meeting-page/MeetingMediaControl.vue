@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { GaugeAnimated } from '@respeak/lucide-motion-vue';
-import { ChevronDown, ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import {
+  ChevronDown,
+  ChevronUp,
+  Mic,
+  MicOff,
+  ScanFace,
+  TriangleAlert,
+  Video,
+  VideoOff,
+  Volume2,
+} from 'lucide-vue-next';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import {
@@ -123,7 +133,14 @@ function onVolumeChange(percent: number) {
   void changeInputVolume(percent / 100);
 }
 
-const isExpanded = ref(false);
+// The phone panel keeps one section open at a time, so it may drive this row's expansion.
+const isExpanded = defineModel<boolean>('expanded', { default: false });
+// Within the row, one setting's choices show at a time.
+const openChoice = ref<'source' | 'speaker' | 'quality' | null>(null);
+const choiceModel = (choice: 'source' | 'speaker' | 'quality') => ({
+  open: openChoice.value === choice,
+  'onUpdate:open': (open: boolean) => (openChoice.value = open ? choice : null),
+});
 const deviceOptions = computed(() =>
   devices.value.map((device, index) => ({ value: device.deviceId, label: deviceLabel(device, index) })),
 );
@@ -133,6 +150,12 @@ const speakerOptions = computed(() =>
     label: speaker.label || `${t('meeting.controls.speaker')} ${index + 1}`,
   })),
 );
+const activeDeviceLabel = computed(
+  () => deviceOptions.value.find((option) => option.value === activeId.value)?.label ?? '',
+);
+const activeSpeakerLabel = computed(
+  () => speakerOptions.value.find((option) => option.value === speakerId.value)?.label ?? '',
+);
 const qualityOptions = computed(() =>
   VIDEO_QUALITY_OPTIONS.map((option) => ({
     value: option.value,
@@ -141,9 +164,13 @@ const qualityOptions = computed(() =>
   })),
 );
 
+watch(isExpanded, (expanded) => {
+  onMenuOpen(expanded);
+  if (!expanded) openChoice.value = null;
+});
+
 function toggleExpanded() {
   isExpanded.value = !isExpanded.value;
-  onMenuOpen(isExpanded.value);
 }
 
 onBeforeUnmount(stopLevelMeter);
@@ -179,6 +206,7 @@ onBeforeUnmount(stopLevelMeter);
       <div v-if="isExpanded" class="px-3 pb-3" data-media-options>
         <div class="call-choice-list">
           <CallPanelChoice
+            v-bind="choiceModel('source')"
             :label="t('meeting.controls.source')"
             :options="deviceOptions"
             :value="activeId"
@@ -191,6 +219,7 @@ onBeforeUnmount(stopLevelMeter);
           <template v-if="isAudio">
             <CallPanelChoice
               v-if="canChooseSpeaker && speakers.length"
+              v-bind="choiceModel('speaker')"
               :label="t('meeting.controls.speaker')"
               :options="speakerOptions"
               :value="speakerId"
@@ -207,6 +236,7 @@ onBeforeUnmount(stopLevelMeter);
           </template>
           <template v-else>
             <CallPanelChoice
+              v-bind="choiceModel('quality')"
               :label="t('meeting.controls.quality')"
               :options="qualityOptions"
               :value="quality"
@@ -263,36 +293,53 @@ onBeforeUnmount(stopLevelMeter);
           <DropdownMenuLabel>{{
             t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera')
           }}</DropdownMenuLabel>
-          <p v-if="!devices.length" class="px-2 py-1.5 text-sm text-harbor-muted">
-            {{ t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras') }}
-          </p>
-          <DropdownMenuRadioGroup :model-value="activeId" @update:model-value="selectDevice">
-            <DropdownMenuRadioItem
-              v-for="(device, index) in devices"
-              :key="device.deviceId"
-              :value="device.deviceId"
-              :disabled="busy"
-              :data-device-option="device.deviceId"
-            >
-              <span class="truncate">{{ deviceLabel(device, index) }}</span>
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-
-          <template v-if="isAudio">
-            <template v-if="canChooseSpeaker && speakers.length">
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>{{ t('meeting.controls.speaker') }}</DropdownMenuLabel>
-              <DropdownMenuRadioGroup :model-value="speakerId" @update:model-value="selectSpeaker">
+          <!-- Like the phone panel, each setting is one row with its current value that opens its choices. -->
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger data-media-source-menu>
+              <LiquidMenuIcon class="text-harbor-ink" :fallback="isAudio ? Mic : Video" />{{
+                t('meeting.controls.source')
+              }}
+              <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{ activeDeviceLabel }}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent class="meeting-menu marketing-font w-72" data-media-source-options>
+              <p v-if="!devices.length" class="px-2 py-1.5 text-sm text-harbor-muted">
+                {{ t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras') }}
+              </p>
+              <DropdownMenuRadioGroup :model-value="activeId" @update:model-value="selectDevice">
                 <DropdownMenuRadioItem
-                  v-for="(speaker, index) in speakers"
-                  :key="speaker.deviceId"
-                  :value="speaker.deviceId"
-                  :data-speaker-option="speaker.deviceId"
+                  v-for="option in deviceOptions"
+                  :key="option.value"
+                  :value="option.value"
+                  :disabled="busy"
+                  :data-device-option="option.value"
                 >
-                  <span class="truncate">{{ speaker.label || `${t('meeting.controls.speaker')} ${index + 1}` }}</span>
+                  <span class="truncate">{{ option.label }}</span>
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
-            </template>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+
+          <template v-if="isAudio">
+            <DropdownMenuSub v-if="canChooseSpeaker && speakers.length">
+              <DropdownMenuSubTrigger data-media-speaker-menu>
+                <LiquidMenuIcon class="text-harbor-ink" :fallback="Volume2" />{{ t('meeting.controls.speaker') }}
+                <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{
+                  activeSpeakerLabel
+                }}</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent class="meeting-menu marketing-font w-72" data-media-speaker-options>
+                <DropdownMenuRadioGroup :model-value="speakerId" @update:model-value="selectSpeaker">
+                  <DropdownMenuRadioItem
+                    v-for="option in speakerOptions"
+                    :key="option.value"
+                    :value="option.value"
+                    :data-speaker-option="option.value"
+                  >
+                    <span class="truncate">{{ option.label }}</span>
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
             <DropdownMenuSeparator />
             <MeetingInputVolume
