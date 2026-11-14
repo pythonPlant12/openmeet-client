@@ -32,7 +32,14 @@ const isNative = canOpenSystemSettings();
         <Button type="button" variant="pill" size="pill" @click="open = false">
           {{ t('meeting.permission.close') }}
         </Button>
-        <Button v-if="isNative" type="button" variant="accent" size="pill" data-open-settings @click="openSystemSettings">
+        <Button
+          v-if="isNative"
+          type="button"
+          variant="accent"
+          size="pill"
+          data-open-settings
+          @click="openSystemSettings"
+        >
           {{ t('meeting.permission.openSettings') }}
         </Button>
       </div>

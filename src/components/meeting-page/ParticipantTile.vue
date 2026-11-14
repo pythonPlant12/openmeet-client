@@ -299,7 +299,7 @@ onMounted(async () => {
         v-if="showNameTag"
         data-participant-name-tag
         :class="[
-          'meeting-glass-bubble absolute flex items-center rounded-full',
+          'meeting-glass-bubble absolute flex items-center rounded-lg',
           isCompact
             ? 'bottom-1.5 left-1.5 gap-1 py-0.5 pl-0.5 pr-2 text-[11px]'
             : 'bottom-2 left-2 gap-1.5 py-0.5 pl-0.5 pr-2.5 text-xs',
@@ -390,7 +390,7 @@ onMounted(async () => {
         <button
           type="button"
           :class="[
-            'meeting-glass-bubble absolute flex items-center justify-center rounded-full transition-opacity',
+            'meeting-glass-bubble absolute flex items-center justify-center rounded-lg transition-opacity',
             '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',
             isCompact ? 'bottom-1.5 right-1.5 size-6' : 'bottom-2 right-2 size-8',
             isOptionsOpen ? '[@media(hover:hover)]:opacity-100' : '',

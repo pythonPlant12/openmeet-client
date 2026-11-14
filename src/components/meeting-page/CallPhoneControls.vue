@@ -145,7 +145,7 @@ function onLeave() {
   >
     <div
       ref="card"
-      class="pointer-events-auto w-full max-w-md overflow-hidden rounded-[1.75rem] bg-harbor-surface shadow-harbor-float"
+      class="call-tray pointer-events-auto flex-col items-stretch w-full max-w-md overflow-hidden rounded-[1.5rem] p-0"
       data-call-phone-controls
       :data-state="isOpen ? 'open' : 'closed'"
     >
@@ -269,9 +269,14 @@ function onLeave() {
           @start-area="emit('start-screen-share', { selectArea: true })"
           @stop="emit('stop-screen-share')"
         />
-        <RoundButton tone="danger" :aria-label="t('meeting.controls.endCall')" @click="onLeave">
+        <button
+          type="button"
+          class="call-button call-button-leave"
+          :aria-label="t('meeting.controls.endCall')"
+          @click="onLeave"
+        >
           <PhoneOff />
-        </RoundButton>
+        </button>
       </div>
     </div>
   </div>

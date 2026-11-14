@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { Maximize, MessageSquare, Minimize, PhoneOff } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import LiquidGlassSurface from '@/components/layout/LiquidGlassSurface.vue';
-import { Button } from '@/components/ui/button';
 import { playHaptic } from '@/services/haptics';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
@@ -31,7 +29,7 @@ interface Props {
   canPresent?: boolean;
   canSelectArea?: boolean;
   isPresenting?: boolean;
-  /** Full screen shows the bar as dark glass over the near-black stage. */
+  /** Full screen shows the bar dark over the near-black stage. */
   dark?: boolean;
   fullscreen?: boolean;
   /** The call could not get the microphone or camera; its button shows a warning that asks again. */
@@ -72,16 +70,6 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<Emits>();
 const { t } = useI18n();
 
-// The liquid drop rests on an open menu, else on the open chat, and follows the mouse.
-const openMenuKey = ref<string | null>(null);
-const dropTargetKey = computed(() => openMenuKey.value ?? (props.isChatOpen ? 'chat' : null));
-const measureKey = computed(() => `${props.canPresent}`);
-
-function setMenuOpen(key: string, open: boolean) {
-  if (open) openMenuKey.value = key;
-  else if (openMenuKey.value === key) openMenuKey.value = null;
-}
-
 const chatAriaLabel = computed(() => {
   if (props.isChatOpen) return t('meeting.controls.closeChat');
   if (props.unreadCount) return t('meeting.controls.openChatWithUnread', { count: props.unreadCount });
@@ -95,25 +83,15 @@ function onLeave() {
 </script>
 
 <template>
-  <!-- The controls sit on the same liquid glass as the navbar: round transparent buttons, with the drop on the
-       hovered button or open menu. -->
-  <!-- A full-width row centers the bar, so the full screen slide-in can animate its transform freely. -->
+  <!-- Solid trays: [mic▾ camera▾] [share chat ⋮] then Leave in red, with Full screen on the far right. -->
   <div
-    class="marketing-font pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center text-harbor-ink sm:bottom-6"
+    class="marketing-font pointer-events-none fixed inset-x-0 bottom-4 z-40 flex items-center justify-center gap-2 text-harbor-ink sm:bottom-6"
     :class="{ 'meeting-controls-dark': dark }"
     data-meeting-controls
   >
-    <LiquidGlassSurface
-      class="pointer-events-auto flex items-center justify-center gap-1 rounded-full p-1.5 sm:gap-2 sm:p-2"
-      :data-tone="dark ? 'dark' : undefined"
-      :target-key="dropTargetKey"
-      :measure-key="measureKey"
-      follow-hover
-    >
+    <div class="call-tray pointer-events-auto" data-controls-group="media">
       <MeetingMediaControl
         kind="audio"
-        data-liquid-key="audio"
-        @open-change="setMenuOpen('audio', $event)"
         :off="isMuted"
         :available="audioAvailable"
         :warning="audioWarning"
@@ -124,8 +102,6 @@ function onLeave() {
 
       <MeetingMediaControl
         kind="video"
-        data-liquid-key="video"
-        @open-change="setMenuOpen('video', $event)"
         :off="isVideoOff"
         :available="videoAvailable"
         :warning="videoWarning"
@@ -134,40 +110,38 @@ function onLeave() {
         @media-changed="emit('media-changed')"
         @preview-camera="emit('preview-camera')"
       />
+    </div>
 
-      <span aria-hidden="true" class="h-6 w-px shrink-0 bg-harbor-line" data-controls-separator />
-
+    <div class="call-tray pointer-events-auto" data-controls-group="actions">
       <MeetingScreenShareControl
         v-if="canPresent"
-        data-liquid-key="present"
-        @open-change="setMenuOpen('present', $event)"
         @start="emit('start-screen-share')"
         @start-area="emit('start-screen-share', { selectArea: true })"
         @stop="emit('stop-screen-share')"
       />
 
-      <div class="group relative" data-liquid-key="chat">
-        <Button
-          variant="secondary"
-          size="icon"
-          @click="emit('toggle-chat')"
-          class="meeting-control relative size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
-          :class="{ '!text-harbor-ink': props.isChatOpen }"
+      <div class="group relative">
+        <button
+          type="button"
+          class="call-button relative"
           :aria-label="chatAriaLabel"
+          :aria-pressed="isChatOpen"
+          :data-active="isChatOpen"
           data-chat-trigger
+          @click="emit('toggle-chat')"
         >
-          <MessageSquare class="h-5 w-5" />
+          <MessageSquare />
           <span
-            v-if="props.unreadCount && props.unreadCount > 0 && !props.isChatOpen"
-            class="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-harbor-ink text-xs font-bold text-white"
+            v-if="unreadCount > 0 && !isChatOpen"
+            class="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-harbor-accent text-[0.625rem] font-bold text-white"
           >
-            {{ props.unreadCount > 9 ? '9+' : props.unreadCount }}
+            {{ unreadCount > 9 ? '9+' : unreadCount }}
           </span>
-        </Button>
+        </button>
         <span class="meeting-tooltip">{{ t('meeting.tooltips.chat') }}</span>
       </div>
 
-      <div class="group relative" data-liquid-key="more">
+      <div class="group relative">
         <MeetingActionMenu
           :participants="participants"
           :pinned-participant-id="pinnedParticipantId"
@@ -178,7 +152,6 @@ function onLeave() {
           :can-select-area="canSelectArea"
           :is-presenting="isPresenting"
           :show-connection-status="showConnectionStatus"
-          @open-change="setMenuOpen('more', $event)"
           @set-view-mode="emit('set-view-mode', $event)"
           @toggle-pin="emit('toggle-pin', $event)"
           @invite="emit('invite')"
@@ -187,46 +160,37 @@ function onLeave() {
           @toggle-stats="emit('toggle-stats')"
         />
       </div>
+    </div>
 
-      <span aria-hidden="true" class="h-6 w-px shrink-0 bg-harbor-line" data-controls-separator />
+    <div class="group pointer-events-auto relative">
+      <button
+        type="button"
+        class="call-button call-button-leave call-button-tall"
+        :aria-label="t('meeting.controls.endCall')"
+        @click="onLeave"
+      >
+        <PhoneOff />
+      </button>
+      <span class="meeting-tooltip">{{ t('meeting.tooltips.leave') }}</span>
+    </div>
 
-      <div class="group relative" data-liquid-key="leave">
-        <Button
-          variant="danger"
-          size="icon"
-          @click="onLeave"
-          class="meeting-control-danger size-[var(--meeting-control-size)] border-0 [&_svg]:size-[var(--meeting-control-icon)]"
-          :aria-label="t('meeting.controls.endCall')"
-        >
-          <PhoneOff class="h-5 w-5" />
-        </Button>
-        <span class="meeting-tooltip">{{ t('meeting.tooltips.leave') }}</span>
-      </div>
-    </LiquidGlassSurface>
-
-    <LiquidGlassSurface
-      class="pointer-events-auto absolute right-6 flex rounded-full p-1.5 sm:p-2"
-      :data-tone="dark ? 'dark' : undefined"
-      :target-key="null"
-      follow-hover
-    >
-      <div class="group relative" data-liquid-key="fullscreen">
-        <Button
-          variant="secondary"
-          size="icon"
-          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
+    <div class="call-tray pointer-events-auto absolute right-6">
+      <div class="group relative">
+        <button
+          type="button"
+          class="call-button"
           :aria-label="t(fullscreen ? 'meeting.actions.exitFullscreen' : 'meeting.actions.fullscreen')"
           :aria-pressed="fullscreen"
           data-fullscreen-toggle
           @click="emit('toggle-fullscreen')"
         >
-          <Minimize v-if="fullscreen" class="h-5 w-5" />
-          <Maximize v-else class="h-5 w-5" />
-        </Button>
+          <Minimize v-if="fullscreen" />
+          <Maximize v-else />
+        </button>
         <span class="meeting-tooltip">{{
           t(fullscreen ? 'meeting.actions.exitFullscreen' : 'meeting.actions.fullscreen')
         }}</span>
       </div>
-    </LiquidGlassSurface>
+    </div>
   </div>
 </template>

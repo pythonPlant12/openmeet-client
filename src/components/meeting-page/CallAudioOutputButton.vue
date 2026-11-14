@@ -11,7 +11,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { RoundButton } from '@/components/ui/round-button';
 import { useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
 import {
   type AudioRoute,
@@ -58,19 +57,20 @@ function selectSpeaker(deviceId: unknown) {
 </script>
 
 <template>
-  <RoundButton
+  <button
     v-if="mode === 'picker'"
-    tone="plain"
+    type="button"
+    class="call-button call-chip size-11"
     :aria-label="t('meeting.controls.audioOutput')"
     @click="openPicker"
   >
     <Volume2 />
-  </RoundButton>
+  </button>
   <DropdownMenu v-else-if="mode" @update:open="onMenuOpen">
     <DropdownMenuTrigger as-child>
-      <RoundButton tone="plain" :aria-label="t('meeting.controls.audioOutput')">
+      <button type="button" class="call-button call-chip size-11" :aria-label="t('meeting.controls.audioOutput')">
         <Volume2 />
-      </RoundButton>
+      </button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" :side-offset="10" class="meeting-menu marketing-font w-64">
       <DropdownMenuLabel>{{ t('meeting.controls.speaker') }}</DropdownMenuLabel>

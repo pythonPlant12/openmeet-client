@@ -4,7 +4,6 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { RoundButton, RoundButtonGroup } from '@/components/ui/round-button';
 
 import CallInviteMenuItems from './CallInviteMenuItems.vue';
 
@@ -36,29 +35,27 @@ const chatAriaLabel = computed(() => {
     class="marketing-font pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-50 flex items-center gap-2 px-3 text-harbor-ink"
     data-call-phone-top-bar
   >
-    <div
-      class="pointer-events-auto flex h-11 min-w-0 flex-1 items-center gap-3 rounded-full bg-harbor-surface pl-4 pr-3 shadow-harbor-soft"
-    >
+    <div class="call-chip pointer-events-auto flex h-11 min-w-0 flex-1 items-center gap-3 rounded-[0.875rem] pl-4 pr-3">
       <span class="min-w-0 flex-1 truncate font-semibold">{{ roomName }}</span>
       <span class="flex shrink-0 items-center gap-1 text-sm font-semibold text-harbor-muted">
         <Users class="size-4" aria-hidden="true" />{{ participantCount }}
       </span>
     </div>
-    <RoundButtonGroup class="pointer-events-auto">
+    <div class="pointer-events-auto flex items-center gap-2">
       <slot name="audio-output" />
       <DropdownMenu>
         <DropdownMenuTrigger as-child>
-          <RoundButton tone="plain" :aria-label="t('meeting.controls.openShare')">
+          <button type="button" class="call-button call-chip size-11" :aria-label="t('meeting.controls.openShare')">
             <UserRoundPlus />
-          </RoundButton>
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" :side-offset="10" class="meeting-menu marketing-font w-60">
           <CallInviteMenuItems :meeting-id="meetingId" :invite-mode="inviteMode" @invite="emit('invite')" />
         </DropdownMenuContent>
       </DropdownMenu>
-      <RoundButton
-        tone="plain"
-        class="relative"
+      <button
+        type="button"
+        class="call-button call-chip relative size-11"
         :aria-label="chatAriaLabel"
         :aria-pressed="isChatOpen"
         data-chat-trigger
@@ -71,7 +68,7 @@ const chatAriaLabel = computed(() => {
         >
           {{ unreadCount > 9 ? '9+' : unreadCount }}
         </span>
-      </RoundButton>
-    </RoundButtonGroup>
+      </button>
+    </div>
   </div>
 </template>

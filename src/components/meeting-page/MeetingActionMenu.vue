@@ -4,7 +4,6 @@ import { Bug, Check, Code, Crop, MicOff, MonitorOff, MonitorUp, MoreVertical, Sc
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -90,21 +89,15 @@ function handleOpenChange(open: boolean) {
   <component :is="MenuRoot" :modal="context ? undefined : false" @update:open="handleOpenChange">
     <component :is="MenuTrigger" as-child>
       <slot v-if="context" />
-      <Button
-        v-else
-        variant="secondary"
-        size="icon"
-        class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
-        :aria-label="t('meeting.actions.open')"
-      >
-        <MoreVertical class="size-5" />
-      </Button>
+      <button v-else type="button" class="call-button" :aria-label="t('meeting.actions.open')">
+        <MoreVertical />
+      </button>
     </component>
 
     <component
       :is="MenuContent"
       v-bind="context ? {} : { align: 'end', side: 'top', sideOffset: 10 }"
-      class="w-72 max-w-[calc(100vw-1.5rem)]"
+      class="meeting-menu w-72 max-w-[calc(100vw-1.5rem)]"
     >
       <template v-if="!context">
         <DropdownMenuSub v-if="canPresent">

@@ -140,11 +140,12 @@ describe('MeetingMediaControl', () => {
   it('shows a muted microphone or a camera that is off in red', () => {
     const muted = mountControl('audio', true).get('[data-media-toggle]');
     expect(muted.attributes('data-media-off')).toBe('true');
-    expect(muted.classes()).toContain('meeting-control-alert');
+    expect(muted.attributes('data-off')).toBe('true');
     expect(muted.attributes('aria-label')).toBe('Unmute microphone');
 
     const cameraOn = mountControl('video').get('[data-media-toggle]');
-    expect(cameraOn.classes()).not.toContain('meeting-control-alert');
+    expect(cameraOn.attributes('data-off')).toBe('false');
+    expect(cameraOn.attributes('data-active')).toBe('true');
     expect(cameraOn.attributes('aria-label')).toBe('Turn camera off');
   });
 

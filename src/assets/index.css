@@ -566,18 +566,10 @@
     inset 0 1px 1px rgb(255 255 255 / 0.12) !important;
 }
 
-/* A small glass bubble for labels over video, such as a participant's name tag. */
+/* A small flat label over video, such as a participant's name tag: a dark solid chip with no glass. */
 .meeting-glass-bubble {
   color: #fff;
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%), rgb(16 47 53 / 0.42);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  backdrop-filter: blur(10px) saturate(1.4);
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.55),
-    inset 0 0 0 1px rgb(255 255 255 / 0.22),
-    0 6px 16px -6px rgb(0 0 0 / 0.45);
-  text-shadow: 0 1px 1px rgb(0 0 0 / 0.25);
+  background: rgb(17 27 33 / 0.62);
 }
 
 /* Every menu is liquid glass: a frosted surface with a bright rim, and one bubble (LiquidMenuHighlight) that
@@ -1544,4 +1536,166 @@
 /* Translucent dark tints (quotes, link cards) turn light on the dark chat. */
 .meeting-immersive .harbor-chat-panel .bg-harbor-ink\/\[0\.05\] {
   background-color: rgb(255 255 255 / 0.08) !important;
+}
+
+/* In the components layer, so utilities on a single button or tray can still adjust it. */
+@layer components {
+  /* Call controls: solid, flat buttons in solid trays, with no glass, drop, or bounce. A tray groups related
+     buttons; Leave stands alone in red. State changes only the fill and icon color, quickly. */
+  .call-tray {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.25rem;
+    border: 1px solid rgb(var(--harbor-line));
+    border-radius: 1.125rem;
+    background: rgb(var(--harbor-surface));
+    box-shadow: var(--harbor-shadow-soft);
+  }
+
+  .call-button {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: var(--meeting-control-size);
+    height: var(--meeting-control-size);
+    border-radius: 0.875rem;
+    color: rgb(var(--harbor-ink));
+    background-color: transparent;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .call-button svg {
+    width: var(--meeting-control-icon);
+    height: var(--meeting-control-icon);
+  }
+
+  .call-button:focus-visible {
+    outline: 2px solid rgb(var(--harbor-subtle));
+    outline-offset: -2px;
+  }
+
+  .call-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  /* The chevron that opens a device menu sits right after its button, narrower. */
+  .call-button-chevron {
+    width: 1.5rem;
+    margin-left: -0.125rem;
+    color: rgb(var(--harbor-icon));
+  }
+
+  .call-button-chevron svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .call-button:not(:disabled):active,
+  .call-button[data-state='open'] {
+    background-color: rgb(var(--harbor-hover));
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .call-button:not(:disabled):hover {
+      background-color: rgb(var(--harbor-hover));
+    }
+  }
+
+  /* A muted microphone or a camera that is off shows its icon in red. */
+  .call-button[data-off='true'] {
+    color: rgb(var(--harbor-danger));
+  }
+
+  /* A medium that is live and worth noticing, such as the camera or a screen share, fills solid. */
+  .call-button[data-active='true'],
+  .call-button[data-active='true']:hover {
+    color: rgb(var(--harbor-surface));
+    background-color: rgb(var(--harbor-ink));
+  }
+
+  /* Leave uses fixed reds rather than the danger tokens, which dark scopes lighten for text. */
+  .call-button-leave {
+    width: calc(var(--meeting-control-size) * 1.25);
+    border-radius: 0.875rem;
+    color: #fff;
+    background-color: rgb(196 81 61);
+  }
+
+  .call-button-leave:not(:disabled):active,
+  .call-button-leave:not(:disabled):hover {
+    color: #fff;
+    background-color: rgb(169 67 50);
+  }
+
+  /* Square chips for the phone top bar, the same flat surface as the trays. */
+  .call-chip {
+    border: 1px solid rgb(var(--harbor-line));
+    background-color: rgb(var(--harbor-surface));
+    box-shadow: var(--harbor-shadow-soft);
+  }
+
+  /* Full screen puts the call on the near-black stage, so its chrome (controls, phone bars, chat) switches to a
+     dark Harbor palette. The class sits on the document because the chat opens in a portal. */
+  .meeting-controls-dark,
+  .meeting-immersive :is([data-call-phone-controls], [data-call-phone-top-bar], .harbor-chat-panel) {
+    --harbor-ink: 233 237 239;
+    --harbor-ink-soft: 209 215 219;
+    --harbor-icon: 174 186 193;
+    --harbor-muted: 150 163 171;
+    --harbor-subtle: 134 150 160;
+    --harbor-faint: 102 119 129;
+    --harbor-waveform: 102 119 129;
+    --harbor-avatar: 52 58 63;
+    --harbor-line: 52 57 61;
+    --harbor-hover: 48 54 58;
+    --harbor-canvas: 22 25 27;
+    --harbor-app: 17 20 22;
+    --harbor-surface: 30 33 36;
+    --harbor-accent-soft: 21 64 61;
+    --harbor-danger: 217 137 123;
+    --harbor-danger-strong: 196 81 61;
+    --harbor-danger-soft: 64 34 29;
+    --harbor-shadow-soft: 0 6px 18px rgb(0 0 0 / 0.35);
+    --harbor-shadow-raised: 0 8px 22px rgb(0 0 0 / 0.4);
+    --harbor-shadow-around: 0 0 0 1px rgb(255 255 255 / 0.04), 0 0 8px rgb(0 0 0 / 0.4);
+    --harbor-shadow-float: 0 18px 48px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+    /* Text inherited from outside the scope would keep the light ink. */
+    color: rgb(var(--harbor-ink));
+  }
+
+  /* Meeting menus highlight items with a flat fill instead of the liquid drop, and their icons stay still. */
+  :is(.meeting-menu, .meeting-immersive .liquid-menu) > .liquid-menu-bubble {
+    display: none;
+  }
+
+  :is(.meeting-menu, .meeting-immersive .liquid-menu) [role^='menuitem']:is([data-highlighted], [data-state='open']) {
+    background-color: rgb(var(--harbor-hover)) !important;
+    border-radius: 0.625rem;
+  }
+
+  :is(.meeting-menu, .meeting-immersive .liquid-menu) .liquid-menu-static-icon {
+    animation: none !important;
+  }
+
+  /* Leave beside the trays matches their full height. */
+  .call-button-tall {
+    height: calc(var(--meeting-control-size) + 0.5rem + 2px);
+  }
+}
+
+/* Chat parts written with plain white or a fixed gray follow the dark palette in full screen. Outside
+   the layer, so they win over the utilities. */
+.meeting-immersive .harbor-chat-panel :is(.bg-white, .bg-\[\#D1D7DB\]) {
+  background-color: rgb(var(--harbor-surface));
+}
+
+.meeting-immersive .harbor-chat-panel .bg-\[\#D1D7DB\] {
+  background-color: rgb(var(--harbor-line));
 }

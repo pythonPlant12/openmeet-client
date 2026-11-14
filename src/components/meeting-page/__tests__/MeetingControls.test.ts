@@ -32,7 +32,6 @@ function mountControls(props: Partial<InstanceType<typeof MeetingControls>['$pro
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
       stubs: {
-        LiquidGlassSurface: { template: '<div><slot /></div>' },
         MeetingMediaControl: { props: ['kind'], template: '<i :data-bar-item="kind" />' },
         MeetingScreenShareControl: stub('share'),
         MeetingActionMenu: stub('more'),
@@ -44,17 +43,18 @@ function mountControls(props: Partial<InstanceType<typeof MeetingControls>['$pro
 describe('MeetingControls', () => {
   afterEach(() => haptics.playHaptic.mockReset());
 
-  it('reads mic, camera · share, chat, more · leave, with full screen apart on the right', () => {
+  it('groups mic and camera, then share, chat and more, then leave, with full screen apart on the right', () => {
     const wrapper = mountControls();
-    const order = wrapper
-      .findAll('[data-bar-item], [data-controls-separator], [data-chat-trigger], button[aria-label="End call"]')
-      .map(
-        (item) =>
-          item.attributes('data-bar-item') ??
-          (item.attributes('data-controls-separator') !== undefined ? '·' : item.attributes('aria-label')),
-      );
+    const itemsIn = (selector: string) =>
+      wrapper
+        .get(selector)
+        .findAll('[data-bar-item], [data-chat-trigger]')
+        .map((item) => item.attributes('data-bar-item') ?? item.attributes('aria-label'));
 
-    expect(order).toEqual(['audio', 'video', '·', 'share', 'Open chat', 'more', '·', 'End call']);
+    expect(itemsIn('[data-controls-group="media"]')).toEqual(['audio', 'video']);
+    expect(itemsIn('[data-controls-group="actions"]')).toEqual(['share', 'Open chat', 'more']);
+    expect(wrapper.find('[data-controls-group] button[aria-label="End call"]').exists()).toBe(false);
+    expect(wrapper.get('button[aria-label="End call"]').classes()).toContain('call-button-leave');
     expect(wrapper.get('[data-fullscreen-toggle]').attributes('aria-label')).toBe('Full screen');
   });
 

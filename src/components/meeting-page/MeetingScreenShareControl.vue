@@ -3,7 +3,6 @@ import { Crop, MonitorOff, MonitorUp } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,19 +37,18 @@ const qualityLabel = computed(() =>
   <div class="group relative" data-screen-share-control>
     <DropdownMenu @update:open="emit('open-change', $event)">
       <DropdownMenuTrigger as-child>
-        <Button
-          variant="secondary"
-          size="icon"
+        <button
+          type="button"
           :disabled="disabled"
-          class="meeting-control size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
-          :class="{ '!text-harbor-ink': session }"
+          class="call-button"
           :aria-label="t(session ? 'meeting.controls.presenting' : 'meeting.controls.presentScreen')"
           :data-sharing="!!session"
+          :data-active="!!session"
           data-screen-share-button
         >
           <LoadingRipple v-if="isStarting" size="sm" />
-          <MonitorUp v-else class="h-5 w-5" />
-        </Button>
+          <MonitorUp v-else />
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" side="top" :side-offset="10" class="meeting-menu marketing-font w-72">
         <DropdownMenuItem v-if="session" variant="danger" data-stop-presenting @select="emit('stop')">

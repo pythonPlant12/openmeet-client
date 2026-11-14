@@ -178,7 +178,7 @@ watch(
       :show-overlay="false"
       :data-chat-size="sheetSize"
       :class="sheetSizeClass"
-      class="harbor-chat-panel marketing-font top-auto flex w-full flex-col transition-[height] duration-300 gap-0 overflow-hidden rounded-[1.5rem] border-0 bg-white p-0 text-harbor-ink shadow-harbor-float data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"
+      class="harbor-chat-panel marketing-font top-auto flex w-full flex-col transition-[height] duration-300 gap-0 overflow-hidden rounded-[1.5rem] border-0 bg-harbor-surface p-0 text-harbor-ink shadow-harbor-float data-[state=closed]:fade-out-0 sm:bottom-20 sm:right-4 sm:mb-4 sm:max-w-md"
       @interact-outside="handleInteractOutside"
       @close-auto-focus="restoreChatTriggerFocus"
     >

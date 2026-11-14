@@ -474,23 +474,16 @@ function toggleName(participantId: string) {
 
 .meeting-layout-enter-active,
 .meeting-layout-leave-active {
-  transition:
-    opacity 0.32s ease,
-    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.2s ease;
 }
 
 .meeting-layout-leave-active {
   pointer-events: none;
 }
 
-.meeting-layout-enter-from {
-  opacity: 0;
-  transform: scale(0.97);
-}
-
+.meeting-layout-enter-from,
 .meeting-layout-leave-to {
   opacity: 0;
-  transform: scale(1.025);
 }
 
 @media (prefers-reduced-motion: reduce) {

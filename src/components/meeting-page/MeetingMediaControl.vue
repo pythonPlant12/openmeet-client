@@ -4,7 +4,6 @@ import { ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from
 import { computed, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -120,19 +119,19 @@ onBeforeUnmount(stopLevelMeter);
 
 <template>
   <div class="group relative flex items-center" :data-media-control="kind">
-    <Button
-      variant="secondary"
-      size="icon"
-      class="meeting-control relative size-[var(--meeting-control-size)] rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-[var(--meeting-control-icon)]"
-      :class="{ 'meeting-control-muted meeting-control-alert': off }"
+    <button
+      type="button"
+      class="call-button relative"
       :disabled="!available && !warning"
       :aria-label="toggleLabel"
+      :data-off="off"
+      :data-active="!isAudio && !off && available"
       :data-media-off="off"
       data-media-toggle
       @click="onToggle"
     >
-      <template v-if="isAudio"><MicOff v-if="off" class="h-5 w-5" /><Mic v-else class="h-5 w-5" /></template>
-      <template v-else><VideoOff v-if="off" class="h-5 w-5" /><Video v-else class="h-5 w-5" /></template>
+      <template v-if="isAudio"><MicOff v-if="off" /><Mic v-else /></template>
+      <template v-else><VideoOff v-if="off" /><Video v-else /></template>
       <span
         v-if="warning"
         aria-hidden="true"
@@ -141,19 +140,12 @@ onBeforeUnmount(stopLevelMeter);
       >
         <TriangleAlert />
       </span>
-    </Button>
-    <span aria-hidden="true" class="h-5 w-px shrink-0 bg-harbor-line" />
+    </button>
     <DropdownMenu @update:open="onMenuOpen">
       <DropdownMenuTrigger as-child>
-        <Button
-          variant="secondary"
-          size="icon"
-          class="meeting-control h-[var(--meeting-control-size)] w-7 rounded-full border-0 bg-transparent text-harbor-ink shadow-none [&_svg]:size-4"
-          :aria-label="menuLabel"
-          data-media-menu-trigger
-        >
+        <button type="button" class="call-button call-button-chevron" :aria-label="menuLabel" data-media-menu-trigger>
           <ChevronUp />
-        </Button>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="center"

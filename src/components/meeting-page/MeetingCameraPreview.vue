@@ -118,12 +118,16 @@ async function confirm() {
   close();
 }
 
-watch(previewStream, (stream) => {
-  const video = videoRef.value;
-  if (!video) return;
-  video.srcObject = stream;
-  if (stream) void video.play?.()?.catch(() => undefined);
-}, { flush: 'post' });
+watch(
+  previewStream,
+  (stream) => {
+    const video = videoRef.value;
+    if (!video) return;
+    video.srcObject = stream;
+    if (stream) void video.play?.()?.catch(() => undefined);
+  },
+  { flush: 'post' },
+);
 
 watch(
   open,
