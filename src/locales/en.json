@@ -500,6 +500,8 @@
       "stopVideo": "Turn camera off",
       "startVideo": "Turn camera on",
       "videoUnavailable": "Camera unavailable",
+      "showStrip": "Show everyone",
+      "hideStrip": "Hide everyone else",
       "layout": "Layout",
       "grid": "Grid view",
       "speaker": "Speaker view",

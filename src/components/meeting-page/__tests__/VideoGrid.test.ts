@@ -143,6 +143,36 @@ describe('VideoGrid layout', () => {
   });
 });
 
+describe('VideoGrid strip on desktop', () => {
+  it('collapses the strip below the speaker and shows your own view as a corner picture', async () => {
+    desktop();
+    const wrapper = mountGrid({ participants: people(3), pinnedParticipantId: 'ada', viewMode: 'speaker' });
+    expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'bob']);
+    expect(wrapper.find('[data-testid="self-picture"]').exists()).toBe(false);
+
+    await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(wrapper.find('[data-testid="participant-strip"]').exists()).toBe(false);
+    expect(tileIds(wrapper, '[data-testid="self-picture"]')).toEqual(['me']);
+    expect(wrapper.emitted('togglePin')).toBeUndefined();
+
+    await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'bob']);
+  });
+
+  it('shows no corner picture while you are the speaker', async () => {
+    desktop();
+    const wrapper = mountGrid({ participants: people(3), pinnedParticipantId: 'me', viewMode: 'speaker' });
+    await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(wrapper.find('[data-testid="self-picture"]').exists()).toBe(false);
+  });
+
+  it('keeps the floating strip on a phone, with no toggle', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(5) });
+    expect(wrapper.find('[data-strip-toggle]').exists()).toBe(false);
+  });
+});
+
 describe('VideoGrid own camera', () => {
   it('leaves your own tile out when you hide your own camera, but keeps your screen share', () => {
     desktop();

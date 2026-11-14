@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useElementSize, useMediaQuery } from '@vueuse/core';
+import { ChevronDown, ChevronUp } from 'lucide-vue-next';
 import { computed, onUnmounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -153,7 +154,8 @@ const gridStyle = (participant: Participant) => {
 };
 
 // Speaker view: the main video takes the whole stage. It fills it when it has the stage's orientation, and
-// otherwise fits inside at its own shape; everyone else floats in a strip over its bottom edge.
+// otherwise fits inside at its own shape; everyone else sits in a strip (over its bottom edge on phones and in
+// full screen, below it on desktop).
 const stage = ref<HTMLElement | null>(null);
 const { width: stageWidth, height: stageHeight } = useElementSize(stage);
 const mainFills = computed(() => {
@@ -175,6 +177,28 @@ const stripHeight = computed(() => {
   if (!aspectSum || available <= 0) return preferred;
   return Math.max(MIN_STRIP_TILE_HEIGHT, Math.min(preferred, Math.floor(available / aspectSum)));
 });
+// Desktop: the strip sits below the speaker rather than over the video, and a toggle collapses it. While it is
+// collapsed your own view stays as a small picture in the corner. Phones and full screen keep the floating strip.
+const STRIP_TOGGLE_SPACE = 32;
+const isStripCollapsed = ref(false);
+const stripBelow = computed(() => !isPhone.value && !props.fullscreen && secondaryParticipants.value.length > 0);
+const showsStrip = computed(
+  () => secondaryParticipants.value.length > 0 && !(stripBelow.value && isStripCollapsed.value),
+);
+const selfPicture = computed(() =>
+  stripBelow.value && isStripCollapsed.value
+    ? (secondaryParticipants.value.find((participant) => participant.isLocal && !participant.screenShareOf) ?? null)
+    : null,
+);
+const stageStyle = computed(() => {
+  if (!stripBelow.value) return { height: '100%' };
+  const below = isStripCollapsed.value ? STRIP_TOGGLE_SPACE : stripHeight.value + STRIP_GAP + STRIP_TOGGLE_SPACE;
+  return { height: `calc(100% - ${below}px)` };
+});
+const stripToggleStyle = computed(() => ({
+  bottom: isStripCollapsed.value ? '0.25rem' : `calc(${stripHeight.value}px + 1.5rem)`,
+}));
+
 const stripStyle = (participant: Participant) => ({
   width: `${Math.floor(stripHeight.value * aspectOf(participant))}px`,
 });
@@ -444,7 +468,12 @@ function toggleName(participantId: string) {
         </div>
 
         <div v-else key="speaker" class="absolute inset-0" :class="fullscreen ? '' : 'p-2 sm:p-4'">
-          <div ref="stage" class="relative flex size-full items-center justify-center" data-testid="speaker-stage">
+          <div
+            ref="stage"
+            class="relative flex w-full items-center justify-center"
+            :style="stageStyle"
+            data-testid="speaker-stage"
+          >
             <ParticipantTile
               v-if="speakerParticipant"
               :style="mainStyle"
@@ -466,10 +495,42 @@ function toggleName(participantId: string) {
             />
           </div>
 
-          <!-- Everyone else floats over the bottom of the main video, on phones and desktops alike; it scrolls
-               sideways when it does not fit. -->
+          <!-- Everyone else: a strip over the bottom of the main video on phones and in full screen, below it on
+               desktop. It scrolls sideways when it does not fit. -->
+          <button
+            v-if="stripBelow"
+            type="button"
+            class="call-button call-chip absolute left-1/2 z-10 h-6 w-12 -translate-x-1/2 [&_svg]:!size-4"
+            :style="stripToggleStyle"
+            :aria-label="t(isStripCollapsed ? 'meeting.actions.showStrip' : 'meeting.actions.hideStrip')"
+            :aria-expanded="!isStripCollapsed"
+            data-strip-toggle
+            @click.stop="isStripCollapsed = !isStripCollapsed"
+          >
+            <ChevronUp v-if="isStripCollapsed" />
+            <ChevronDown v-else />
+          </button>
+
           <div
-            v-if="secondaryParticipants.length"
+            v-if="selfPicture"
+            class="absolute bottom-4 right-4 z-10 aspect-video w-52 rounded-[1.4rem] shadow-[0_10px_28px_rgba(0,0,0,0.35)] sm:bottom-6 sm:right-6"
+            data-testid="self-picture"
+          >
+            <ParticipantTile
+              :participant="selfPicture"
+              :avatar-url="participantAvatars?.[selfPicture.id]"
+              :speaking="isSpeaking(selfPicture)"
+              :collapsed="controlsHidden"
+              size="mobile"
+              fit="cover"
+              :show-name-tag="false"
+              :show-actions="false"
+              @aspect="setAspect(selfPicture.id, $event)"
+            />
+          </div>
+
+          <div
+            v-if="showsStrip"
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
             :class="fullscreen && controlsShown ? 'bottom-[var(--call-area-bottom)]' : 'bottom-4 sm:bottom-6'"
           >
