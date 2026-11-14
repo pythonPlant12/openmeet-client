@@ -71,6 +71,14 @@ describe('CallPhoneControls', () => {
     ).toEqual(['toggle', 'toggle']);
   });
 
+  it('keeps 0.5rem between the bar and the home indicator, and 0.25rem more in full screen', async () => {
+    const wrapper = mountControls();
+    const padding = () => wrapper.classes().find((name) => name.startsWith('pb-')) ?? '';
+    expect(padding()).toBe('pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.5rem))]');
+    await wrapper.setProps({ fullscreen: true });
+    expect(padding()).toContain('+0.25rem)]');
+  });
+
   it('shows share only where the screen can be shared', () => {
     expect(mountControls().find('[data-stub-share]').exists()).toBe(false);
   });

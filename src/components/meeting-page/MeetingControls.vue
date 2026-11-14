@@ -76,8 +76,11 @@ function onLeave() {
   <!-- Solid trays: [mic▾ camera▾] [share ⋮] then Leave in red, with invite on the far left and Full screen on the far
        right. -->
   <div
-    class="marketing-font pointer-events-none fixed inset-x-0 bottom-4 z-40 flex items-center justify-center gap-2 text-harbor-ink sm:bottom-6"
-    :class="{ 'meeting-controls-dark': dark }"
+    class="marketing-font pointer-events-none fixed inset-x-0 z-40 flex items-center justify-center gap-2 text-harbor-ink"
+    :class="[
+      fullscreen ? 'bottom-[1.25rem] sm:bottom-[1.75rem]' : 'bottom-4 sm:bottom-6',
+      { 'meeting-controls-dark': dark },
+    ]"
     data-meeting-controls
   >
     <div class="call-tray pointer-events-auto" data-controls-group="media">

@@ -22,6 +22,7 @@ import { swallowNextClick } from '@/lib/swallow-next-click';
 import type { UserStatus } from '@/services/social-api';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
+import CallAudio from './CallAudio.vue';
 import ParticipantTile from './ParticipantTile.vue';
 
 const props = defineProps<{
@@ -51,6 +52,8 @@ const emit = defineEmits<{
   longPress: [];
   /** A vertical swipe on the video area, such as to show or hide the controls in full screen. */
   swipe: [direction: 'up' | 'down'];
+  /** A tap on the big tile of a phone in portrait, which shows everyone in the grid. */
+  showGrid: [];
 }>();
 const { t } = useI18n();
 
@@ -84,6 +87,13 @@ const formFactor = useCallFormFactor();
 const isPhone = computed(() => formFactor.value !== 'desktop');
 // Phones shrink name tags to the mic-off icon while the controls hide; desktop keeps names readable at all times.
 const collapsesNameTags = computed(() => !!props.controlsHidden && isPhone.value);
+// A lone grid tile in full screen on a phone in portrait sits 0.5rem in from the screen's rounded corners, so its
+// own corners follow them (the app sets --device-corner-radius; elsewhere it keeps the usual 1.4rem).
+const loneTileRadius = computed(() =>
+  props.fullscreen && formFactor.value === 'phone-portrait' && gridParticipants.value.length === 1
+    ? 'max(1.4rem, calc(var(--device-corner-radius, 0px) - 0.5rem))'
+    : undefined,
+);
 // In full screen the controls (and a phone's "Add people" card) float over the tiles, so name tags near the
 // bottom rise to just above them (by 0.5rem) while they show. The page sets --call-bottom-chrome to their top edge.
 const nameTagReserve = computed(() =>
@@ -162,7 +172,7 @@ const gridContentStyle = computed(() =>
 watch(gridPageCount, (count) => {
   if (gridPage.value > count - 1) showGridPage(count - 1);
 });
-// Only the shown page plays video; tiles on other pages keep their audio (see `audioOnly` on the tile).
+// Only the shown page plays video; everyone's audio plays from CallAudio (see `offscreen` on the tile).
 const isOffPage = (index: number) => isGridPaged.value && Math.floor(index / PHONE_GRID_PAGE_SIZE) !== gridPage.value;
 function showGridPage(page: number) {
   const target = Math.min(gridPageCount.value - 1, Math.max(0, page));
@@ -266,14 +276,28 @@ let selfViewDrag: {
   areaHeight: number;
 } | null = null;
 const selfViewOffset = ref<{ x: number; y: number } | null>(null);
+// In full screen the corner picture covers the whole screen's corners, so it keeps clear of the notch and the
+// home indicator, and, while the controls show, sits below the top bar and above the controls (and a phone's
+// "Add people" card), sliding with them.
+const selfViewEdges = computed(() => {
+  if (!props.fullscreen) return { top: `${SELF_VIEW_INSET}px`, bottom: `${SELF_VIEW_INSET}px` };
+  if (props.controlsShown) return { top: 'var(--call-area-top)', bottom: 'calc(var(--call-bottom-chrome) + 0.5rem)' };
+  return {
+    top: `calc(env(safe-area-inset-top) + ${SELF_VIEW_INSET}px)`,
+    bottom: `calc(env(safe-area-inset-bottom) + ${SELF_VIEW_INSET}px)`,
+  };
+});
 const selfViewStyle = computed(() => {
   const [vertical, horizontal] = selfViewCorner.value.split('-');
   const left = horizontal === 'left' ? SELF_VIEW_INSET : selfAreaWidth.value - selfViewWidth.value - SELF_VIEW_INSET;
-  const top = vertical === 'top' ? SELF_VIEW_INSET : selfAreaHeight.value - selfViewHeight.value - SELF_VIEW_INSET;
+  const top =
+    vertical === 'top'
+      ? selfViewEdges.value.top
+      : `calc(${selfAreaHeight.value - selfViewHeight.value}px - ${selfViewEdges.value.bottom})`;
   const offset = selfViewOffset.value;
   return {
     left: `${left}px`,
-    top: `${top}px`,
+    top,
     width: `${selfViewWidth.value}px`,
     height: `${selfViewHeight.value}px`,
     transform: offset ? `translate(${offset.x}px, ${offset.y}px)` : undefined,
@@ -321,7 +345,7 @@ function endSelfViewDrag(event: PointerEvent) {
   if (event.type === 'pointerup') swallowNextClick();
 }
 
-// One tap on a tile pins or unpins that person; a double tap anywhere toggles full screen. The single tap waits
+// One tap on a tile acts on that person (see `tapTile`); a double tap anywhere toggles full screen. The single tap waits
 // a moment so a double tap does not also pin. Keyboard presses (no pointer detail) act at once. A touch held
 // still for `LONG_PRESS_MS` anywhere on the video area is a long-press instead, so its click does nothing.
 let lastTapAt = 0;
@@ -374,11 +398,20 @@ function handleCanvasTouchMove(event: TouchEvent) {
 function handleCanvasTouchEnd() {
   swipeStart = null;
 }
+// A phone in portrait moves between the big tile and everyone: a small tile (the corner picture or one in the
+// strip) takes the big tile, and the big tile hands over to the grid of pages of 4. Elsewhere a tap pins or
+// unpins the person.
+function tapTile(participantId: string) {
+  const current = layout.value;
+  const isMainTile = (current.kind === 'speaker' || current.kind === 'self-view') && current.mainId === participantId;
+  if (formFactor.value === 'phone-portrait' && isMainTile) emit('showGrid');
+  else emit('togglePin', participantId);
+}
 function handleCanvasClick(event: MouseEvent) {
   const participantId = (event.target as Element | null)?.closest<HTMLElement>('[data-testid="participant-tile"]')
     ?.dataset.participantId;
   if (event.detail === 0) {
-    if (participantId) emit('togglePin', participantId);
+    if (participantId) tapTile(participantId);
     return;
   }
   if (longPressFired) {
@@ -398,7 +431,7 @@ function handleCanvasClick(event: MouseEvent) {
   pendingTap = participantId
     ? window.setTimeout(() => {
         pendingTap = undefined;
-        emit('togglePin', participantId);
+        tapTile(participantId);
       }, DOUBLE_TAP_MS)
     : undefined;
 }
@@ -446,6 +479,8 @@ function toggleName(participantId: string) {
     @touchcancel="handleCanvasTouchEnd"
     @click="handleCanvasClick"
   >
+    <!-- Everyone's audio, whatever the layout shows or hides. -->
+    <CallAudio :participants="participants" />
     <!-- The video area fills the space between the call screen's top bar and its controls, which the page sets as
          --call-area-top and --call-area-bottom, so no tile hides under either. In full screen it takes the whole
          screen. -->
@@ -496,9 +531,10 @@ function toggleName(participantId: string) {
                 :dark="fullscreen"
                 :collapsed="collapsesNameTags"
                 :controls-reserve="nameTagReserve"
+                :corner-radius="loneTileRadius"
                 fit="cover"
                 size="grid"
-                :audio-only="isOffPage(index)"
+                :offscreen="isOffPage(index)"
                 :is-expanded="pinnedParticipantId === participant.id"
                 :is-fullscreen="isTileFullscreen(participant)"
                 @aspect="setAspect(participant.id, $event)"
@@ -666,7 +702,11 @@ function toggleName(participantId: string) {
           <div
             v-if="showsStrip"
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            :class="fullscreen && controlsShown ? 'bottom-[var(--call-area-bottom)]' : 'bottom-4 sm:bottom-6'"
+            :class="
+              fullscreen && controlsShown
+                ? 'bottom-[calc(var(--call-bottom-chrome)+0.5rem)]'
+                : 'bottom-[calc(env(safe-area-inset-bottom)+1rem)] sm:bottom-6'
+            "
           >
             <div
               class="pointer-events-auto max-w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"

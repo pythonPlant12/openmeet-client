@@ -245,3 +245,24 @@ describe('ParticipantTile interactions', () => {
     expect(tile.find('button[aria-label="Options for Ada Lovelace"]').exists()).toBe(false);
   });
 });
+
+describe('ParticipantTile video', () => {
+  const stream = { getTracks: () => [], getAudioTracks: () => [], getVideoTracks: () => [] } as unknown as MediaStream;
+
+  it('keeps its video muted, since the call plays everyone from its own audio elements', async () => {
+    const wrapper = mountTile(null, 'grid', { participant: { ...participant, stream } as typeof participant });
+    await flushPromises();
+    const video = wrapper.get<HTMLVideoElement>('[data-testid="participant-video"]').element;
+    expect(video.muted).toBe(true);
+    expect(video.srcObject).not.toBeNull();
+  });
+
+  it('lets go of the video while it is off screen and shows the avatar', async () => {
+    const wrapper = mountTile(null, 'grid', { participant: { ...participant, stream } as typeof participant });
+    await flushPromises();
+    await wrapper.setProps({ offscreen: true });
+    await flushPromises();
+    expect(wrapper.get<HTMLVideoElement>('[data-testid="participant-video"]').element.srcObject).toBeNull();
+    expect(wrapper.find('[data-participant-avatar]').exists()).toBe(true);
+  });
+});

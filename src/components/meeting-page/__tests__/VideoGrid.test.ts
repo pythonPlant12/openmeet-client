@@ -123,7 +123,7 @@ describe('VideoGrid layout', () => {
     phone();
     const wrapper = mountGrid({ participants: people(6), viewMode: 'grid' });
     const tiles = wrapper.findAllComponents({ name: 'ParticipantTile' });
-    expect(tiles.map((tile) => tile.props('audioOnly'))).toEqual([false, false, false, false, true, true]);
+    expect(tiles.map((tile) => tile.props('offscreen'))).toEqual([false, false, false, false, true, true]);
   });
 
   it('pages the grid on desktop too, with arrows to move between pages', async () => {
@@ -133,7 +133,7 @@ describe('VideoGrid layout', () => {
     expect(wrapper.find('[data-grid-page-previous]').exists()).toBe(false);
     await wrapper.get('[data-grid-page-next]').trigger('click');
     const tiles = wrapper.findAllComponents({ name: 'ParticipantTile' });
-    expect(tiles.map((tile) => tile.props('audioOnly'))).toEqual([true, true, true, true, false, false]);
+    expect(tiles.map((tile) => tile.props('offscreen'))).toEqual([true, true, true, true, false, false]);
     expect(wrapper.find('[data-grid-page-next]').exists()).toBe(false);
     expect(wrapper.emitted('togglePin')).toBeUndefined();
   });
@@ -236,6 +236,65 @@ describe('VideoGrid tile interactions', () => {
     expect(wrapper.emitted('togglePin')).toBeUndefined();
     vi.advanceTimersByTime(300);
     expect(wrapper.emitted('togglePin')).toEqual([['ada']]);
+  });
+
+  it('on a phone in portrait, puts a tapped small tile on the big tile and shows the grid for a tapped big tile', () => {
+    phone();
+    vi.useFakeTimers();
+    const wrapper = mountGrid();
+    vi.advanceTimersByTime(10);
+    const tap = (id: string) => {
+      wrapper
+        .get(`[data-participant-id="${id}"] [data-participant-surface]`)
+        .element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      vi.advanceTimersByTime(300);
+    };
+
+    // The corner picture is your own view; the big tile is Ada.
+    tap('me');
+    expect(wrapper.emitted('togglePin')).toEqual([['me']]);
+    tap('ada');
+    expect(wrapper.emitted('showGrid')).toHaveLength(1);
+  });
+
+  it('keeps everyone audible when the strip is hidden, with one audio element per other person', async () => {
+    desktop();
+    const stream = {
+      getTracks: () => [],
+      getAudioTracks: () => [],
+      getVideoTracks: () => [],
+    } as unknown as MediaStream;
+    const participants = people(4).map((participant) => ({ ...participant, stream }));
+    const wrapper = mountGrid({ participants, viewMode: 'speaker' });
+    const audioIds = () =>
+      wrapper.findAll('[data-call-audio] audio').map((audio) => audio.attributes('data-participant-id'));
+    expect(audioIds()).toEqual(['ada', 'bob', 'cy']);
+
+    await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(wrapper.find('[data-testid="participant-strip"]').exists()).toBe(false);
+    expect(audioIds()).toEqual(['ada', 'bob', 'cy']);
+    // The tiles' own videos never play sound.
+    expect(wrapper.findAll('video').every((video) => (video.element as HTMLVideoElement).muted)).toBe(true);
+  });
+
+  it('rounds a lone full screen tile on a phone like the screen around it', async () => {
+    phone();
+    const wrapper = mountGrid({ participants: [me], fullscreen: true });
+    const surface = () => wrapper.get('[data-participant-surface]').attributes('style') ?? '';
+    expect(surface()).toContain('var(--device-corner-radius');
+
+    await wrapper.setProps({ fullscreen: false });
+    expect(surface()).not.toContain('--device-corner-radius');
+  });
+
+  it('keeps the corner picture clear of the full screen controls while they show', async () => {
+    phone();
+    const wrapper = mountGrid({ fullscreen: true, controlsShown: false });
+    const selfView = () => wrapper.get('[data-testid="self-view"]').attributes('style');
+    expect(selfView()).toContain('env(safe-area-inset-bottom)');
+
+    await wrapper.setProps({ controlsShown: true });
+    expect(selfView()).toContain('var(--call-bottom-chrome)');
   });
 
   it('pins or unpins at once from the keyboard', async () => {

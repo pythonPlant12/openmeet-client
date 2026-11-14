@@ -167,7 +167,13 @@ watch(policy, () => {
           class="h-11 rounded-xl border border-harbor-line bg-harbor-canvas pl-9 text-sm focus-visible:ring-0"
         />
       </div>
-      <MeetingAccessPicker class="shrink-0" :policy="policy" :editable="isHost" :saving="isSavingAccess" @save="saveAccess" />
+      <MeetingAccessPicker
+        class="shrink-0"
+        :policy="policy"
+        :editable="isHost"
+        :saving="isSavingAccess"
+        @save="saveAccess"
+      />
       <div
         v-if="!guest"
         class="min-h-24 rounded-2xl bg-harbor-hover"

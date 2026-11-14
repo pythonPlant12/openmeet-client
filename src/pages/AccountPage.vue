@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
     <template v-else-if="isAuthenticated">
       <!-- The header floats over the page like the chat header and Profile info, so the form blurs under it. -->
       <header class="pointer-events-none sticky top-0 z-20 px-3 pb-12 pt-3 sm:px-5">
-        <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" />
+        <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" data-system-bar-layer />
         <div class="mx-auto flex max-w-3xl items-center gap-3">
           <button
             type="button"
@@ -308,7 +308,7 @@ onBeforeUnmount(() => {
         :initial="{ opacity: 0, y: 12 }"
         :animate="{ opacity: 1, y: 0 }"
         :transition="{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }"
-        class="mx-auto -mt-12 max-w-3xl space-y-8 px-4 pb-10 sm:px-6"
+        class="mx-auto -mt-12 max-w-3xl space-y-8 px-4 pb-10 max-sm:pb-[calc(2.5rem+var(--liquid-bar-bottom)+var(--liquid-bar-height))] sm:px-6"
       >
         <section class="flex flex-col items-center gap-5 pt-2 text-center">
           <DropdownMenu>

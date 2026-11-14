@@ -175,8 +175,52 @@ function paint(colors: SystemBarColors) {
   }
 }
 
+// What wants the page to cover the status bar area, such as an open chat or a full screen call in portrait.
+const topCovers = new Set<string>();
+
+/**
+ * Lets the page reach under the status bar for `reason` (an open chat, a full screen call), or stops. The OpenMeet
+ * iOS app always lets the page cover the home indicator area, and covers the status bar area while any reason
+ * holds (`set_screen_edges`); browsers ignore it. What the page draws there pads itself with
+ * `env(safe-area-inset-*)`, which reads the real insets of the covered areas.
+ */
+export function coverScreenTop(reason: string, cover: boolean) {
+  const covered = topCovers.size > 0;
+  if (cover) topCovers.add(reason);
+  else topCovers.delete(reason);
+  if (!isTauri() || covered === topCovers.size > 0) return;
+  invoke('set_screen_edges', { top: topCovers.size > 0, bottom: true }).catch((error) =>
+    console.error('[SystemBars] Failed to change the screen edges:', error),
+  );
+}
+
+// The screen's corner radius on iPhones with rounded displays, by their size in points (portrait width x height).
+// iOS keeps the real value private, so this follows Apple's published screen sizes; where two models share a size,
+// the smaller radius is used, which only rounds a little less than the glass.
+const IPHONE_CORNER_RADII: Record<string, number> = {
+  '375x812': 39,
+  '414x896': 39,
+  '390x844': 47.33,
+  '428x926': 53.33,
+  '393x852': 55,
+  '430x932': 55,
+  '402x874': 62,
+  '440x956': 62,
+};
+
+/** The corner radius of a phone screen this size, in CSS pixels, or 0 for square corners or an unknown size. */
+export function deviceCornerRadius(width: number, height: number): number {
+  const [short, long] = width < height ? [width, height] : [height, width];
+  return IPHONE_CORNER_RADII[`${Math.round(short)}x${Math.round(long)}`] ?? 0;
+}
+
 /** Starts following the page background; returns a function that stops. */
 export function startSystemBarSync(): () => void {
+  // Lets a full screen call round its video like the glass around it (see VideoGrid).
+  if (isTauri()) {
+    const radius = deviceCornerRadius(window.screen.width, window.screen.height);
+    if (radius) document.documentElement.style.setProperty('--device-corner-radius', `${radius}px`);
+  }
   let painted: SystemBarColors | null = null;
   let frame: number | null = null;
 

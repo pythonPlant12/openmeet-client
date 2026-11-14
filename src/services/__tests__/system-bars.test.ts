@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startSystemBarSync } from '@/services/system-bars';
+import { coverScreenTop, deviceCornerRadius, startSystemBarSync } from '@/services/system-bars';
 
 const tauri = vi.hoisted(() => ({ isTauri: vi.fn(() => false), invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/core', () => tauri);
@@ -147,5 +147,24 @@ describe('system bars', () => {
     await new Promise(requestAnimationFrame);
 
     expect(tauri.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('covers the status bar area while any reason holds, and tells the app only when that changes', () => {
+    tauri.isTauri.mockReturnValue(true);
+    coverScreenTop('chat', true);
+    coverScreenTop('call', true);
+    coverScreenTop('chat', false);
+    coverScreenTop('call', false);
+
+    expect(tauri.invoke.mock.calls).toEqual([
+      ['set_screen_edges', { top: true, bottom: true }],
+      ['set_screen_edges', { top: false, bottom: true }],
+    ]);
+  });
+
+  it('knows the corner radius of rounded iPhone screens by size, in either orientation', () => {
+    expect(deviceCornerRadius(393, 852)).toBe(55);
+    expect(deviceCornerRadius(852, 393)).toBe(55);
+    expect(deviceCornerRadius(375, 667)).toBe(0);
   });
 });

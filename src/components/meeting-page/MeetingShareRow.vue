@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import { Expand } from '@/components/ui/expand';
 import { emailShareUrl, meetingLink, telegramShareUrl, whatsAppShareUrl } from '@/lib/meeting-share';
 
 // The invite's row of share targets. Share opens the system share sheet and shows only where one exists.
@@ -32,12 +33,15 @@ async function copyLink() {
   copiedTimer = window.setTimeout(() => (isCopied.value = false), 2000);
 }
 
+// The code is made once and kept, so it stays in view while it slides closed.
+const isQrOpen = ref(false);
 async function toggleQrCode() {
-  if (qrCode.value) {
-    qrCode.value = null;
+  if (isQrOpen.value) {
+    isQrOpen.value = false;
     return;
   }
-  qrCode.value = await QRCode.toDataURL(link(), { margin: 1, width: 240 });
+  qrCode.value ??= await QRCode.toDataURL(link(), { margin: 1, width: 240 });
+  isQrOpen.value = true;
 }
 
 const openWhatsApp = () => window.open(whatsAppShareUrl(shareText()), '_blank');
@@ -46,7 +50,7 @@ const emailUrl = () => emailShareUrl(t('meeting.controls.shareTitle'), shareText
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div>
     <!-- One row that scrolls sideways on its own, with no scrollbar, when the targets do not fit. It stays inside
          the sheet's width, so the sheet itself only scrolls up and down. -->
     <div
@@ -63,7 +67,7 @@ const emailUrl = () => emailShareUrl(t('meeting.controls.shareTitle'), shareText
       <button
         type="button"
         class="call-share-target"
-        :aria-pressed="!!qrCode"
+        :aria-pressed="isQrOpen"
         data-share-target="qr"
         @click="toggleQrCode"
       >
@@ -79,8 +83,10 @@ const emailUrl = () => emailShareUrl(t('meeting.controls.shareTitle'), shareText
         <span class="call-share-icon"><Mail /></span>{{ t('meeting.invite.email') }}
       </a>
     </div>
-    <div v-if="qrCode" class="flex justify-center" data-share-qr>
-      <img :src="qrCode" :alt="t('meeting.invite.qrAlt')" class="size-48 rounded-2xl bg-white p-2" />
-    </div>
+    <Expand :open="isQrOpen">
+      <div class="flex justify-center pt-3" data-share-qr>
+        <img v-if="qrCode" :src="qrCode" :alt="t('meeting.invite.qrAlt')" class="size-48 rounded-2xl bg-white p-2" />
+      </div>
+    </Expand>
   </div>
 </template>

@@ -12,6 +12,8 @@ defineOptions({ inheritAttrs: false });
 
 // Like DropdownMenuContent: stay inside the viewport and scroll when taller than it.
 const props = withDefaults(defineProps<DropdownMenuSubContentProps & { class?: HTMLAttributes['class'] }>(), {
+  // A clear gap from the menu it opens from, so the two read as separate surfaces.
+  sideOffset: 8,
   collisionPadding: 12,
   // Shifting keeps the whole menu on screen, even when its trigger sits at an edge.
   sticky: 'always',

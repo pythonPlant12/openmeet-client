@@ -84,7 +84,7 @@ export type CallLayout =
  * The call screen's layout, from the number of tiles, the form factor, the pin and screen share:
  * a pin, or someone else's screen share, takes the stage (a share unless the person picked Grid). Otherwise a
  * phone in portrait shows a 1:1 call with a small self view, 2-4 tiles in a filled grid, and 5 or more in the
- * speaker layout (or, when the person picks Grid, grid pages of 4); phone landscape and desktop show grid pages
+ * speaker layout (when the person picks Grid, every size shows grid pages of 4, a 1:1 call included); phone landscape and desktop show grid pages
  * of 4 too. On a phone in portrait a speaker layout with only one other tile puts that tile in a corner.
  */
 export function selectCallLayout(input: CallLayoutInput): CallLayout {
@@ -119,7 +119,7 @@ export function selectCallLayout(input: CallLayoutInput): CallLayout {
   if (formFactor === 'phone-portrait') {
     const self = participants.find((participant) => participant.isLocal && !participant.screenShareOf);
     const other = participants.find((participant) => participant !== self);
-    if (ids.length === 2 && self && other && !other.isLocal && !other.screenShareOf) {
+    if (ids.length === 2 && viewMode === null && self && other && !other.isLocal && !other.screenShareOf) {
       return { kind: 'self-view', mainId: other.id, selfId: self.id };
     }
     if (ids.length >= PHONE_SPEAKER_FROM && viewMode === null) return speaker(defaultMainId());

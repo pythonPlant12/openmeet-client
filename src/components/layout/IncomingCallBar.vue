@@ -39,8 +39,9 @@ const { t } = useI18n();
       </span>
       <LoadingRipple v-if="isAnswering" class="mr-3 size-5 text-harbor-icon" />
       <template v-else>
+        <!-- Decline is the white disc with a red icon, so Answer keeps the visual weight. -->
         <RoundButton
-          tone="danger"
+          tone="destructive"
           data-incoming-decline
           :aria-label="t('dashboard.decline')"
           :title="t('dashboard.decline')"
