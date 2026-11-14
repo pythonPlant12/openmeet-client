@@ -67,7 +67,12 @@ function mountPreview(cameraOn = false) {
     props: { open: true, cameraOn, 'onUpdate:open': () => {} },
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
-      stubs: { Dialog: DialogStub, DialogContent: passthrough, DialogTitle: passthrough, DialogDescription: passthrough },
+      stubs: {
+        Dialog: DialogStub,
+        DialogContent: passthrough,
+        DialogTitle: passthrough,
+        DialogDescription: passthrough,
+      },
     },
   });
 }
@@ -88,9 +93,12 @@ describe('MeetingCameraPreview', () => {
       return { getVideoTracks: () => [camera], getTracks: () => [camera] };
     });
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
-    vi.stubGlobal('MediaStream', vi.fn(function MediaStream(tracks: unknown[]) {
-      return { tracks, getTracks: () => tracks };
-    }));
+    vi.stubGlobal(
+      'MediaStream',
+      vi.fn(function MediaStream(tracks: unknown[]) {
+        return { tracks, getTracks: () => tracks };
+      }),
+    );
   });
 
   afterEach(() => {

@@ -166,7 +166,7 @@ describe('VideoGrid tile interactions', () => {
     expect(wrapper.emitted('togglePin')).toEqual([['ada']]);
   });
 
-  it('does not pin after a long-press, which opens the layout menu instead', () => {
+  it('reports a long-press on a tile to toggle the call controls, without pinning', () => {
     phone();
     vi.useFakeTimers();
     const wrapper = mountGrid({ participants: people(3) });
@@ -174,10 +174,55 @@ describe('VideoGrid tile interactions', () => {
     vi.advanceTimersByTime(10);
 
     tile.element.dispatchEvent(pointer('pointerdown'));
-    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(499);
+    expect(wrapper.emitted('longPress')).toBeUndefined();
+    vi.advanceTimersByTime(1);
+    expect(wrapper.emitted('longPress')).toHaveLength(1);
+    tile.element.dispatchEvent(pointer('pointerup'));
     tile.element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
     vi.advanceTimersByTime(300);
     expect(wrapper.emitted('togglePin')).toBeUndefined();
+  });
+
+  it('reports a long-press on the empty space around the tiles too', () => {
+    phone();
+    vi.useFakeTimers();
+    const wrapper = mountGrid({ participants: people(3) });
+    vi.advanceTimersByTime(10);
+    canvas(wrapper).element.dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(500);
+    expect(wrapper.emitted('longPress')).toHaveLength(1);
+  });
+
+  it('does nothing on a tap on the empty space around the tiles', () => {
+    phone();
+    vi.useFakeTimers();
+    const wrapper = mountGrid({ participants: people(3) });
+    vi.advanceTimersByTime(10);
+    canvas(wrapper).element.dispatchEvent(pointer('pointerdown'));
+    canvas(wrapper).element.dispatchEvent(pointer('pointerup'));
+    canvas(wrapper).element.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    vi.advanceTimersByTime(300);
+    expect(wrapper.emitted('togglePin')).toBeUndefined();
+    expect(wrapper.emitted('longPress')).toBeUndefined();
+  });
+
+  it('cancels a long-press when the finger moves', () => {
+    phone();
+    vi.useFakeTimers();
+    const wrapper = mountGrid({ participants: people(3) });
+    vi.advanceTimersByTime(10);
+    canvas(wrapper).element.dispatchEvent(pointer('pointerdown', { clientX: 0, clientY: 0 }));
+    canvas(wrapper).element.dispatchEvent(pointer('pointermove', { clientX: 0, clientY: 40 }));
+    vi.advanceTimersByTime(600);
+    expect(wrapper.emitted('longPress')).toBeUndefined();
+  });
+
+  it('collapses the name tags while the call controls are hidden', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(3), controlsHidden: true });
+    const tags = wrapper.findAll('[data-participant-name-tag]');
+    expect(tags.every((tag) => !tag.isVisible())).toBe(true);
   });
 
   it('shows a tile in full screen from its ⋯ menu by pinning it and entering full screen', async () => {

@@ -4,6 +4,7 @@ import { Expand, Eye, EyeOff, MonitorUp, MoreHorizontal, Pin, PinOff } from 'luc
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import ParticipantNameTag from '@/components/meeting-page/ParticipantNameTag.vue';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
-import ParticipantNameTag from '@/components/meeting-page/ParticipantNameTag.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { userStatusOption } from '@/config/user-status.config';
 import type { UserStatus } from '@/services/social-api';
@@ -355,10 +355,7 @@ onMounted(async () => {
       </div>
     </component>
 
-    <ParticipantNameTag
-      v-if="showsNameTag && !(phone && showActions)"
-      v-bind="nameTagProps"
-    />
+    <ParticipantNameTag v-if="showsNameTag && !(phone && showActions)" v-bind="nameTagProps" />
 
     <!-- Expand: full screen for this tile, while its camera shows video. -->
     <button

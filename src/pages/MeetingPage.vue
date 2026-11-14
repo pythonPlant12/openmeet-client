@@ -11,7 +11,6 @@ import CallPhoneControls from '@/components/meeting-page/CallPhoneControls.vue';
 import CallPhoneTopBar from '@/components/meeting-page/CallPhoneTopBar.vue';
 import ChatPanel from '@/components/meeting-page/ChatPanel.vue';
 import ConnectionErrorDialog from '@/components/meeting-page/ConnectionErrorDialog.vue';
-import MeetingActionMenu from '@/components/meeting-page/MeetingActionMenu.vue';
 import MeetingCameraPreview from '@/components/meeting-page/MeetingCameraPreview.vue';
 import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
 import MeetingEntryDialog, { type EntrySettings } from '@/components/meeting-page/MeetingEntryDialog.vue';
@@ -24,8 +23,8 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
 import { useActiveSpeaker } from '@/composables/useActiveSpeaker';
 import { useAuth } from '@/composables/useAuth';
-import { useAutoHideControls } from '@/composables/useAutoHideControls';
 import { useAvatarCache } from '@/composables/useAvatarCache';
+import { useCallControlsVisibility } from '@/composables/useCallControlsVisibility';
 import { useCallFormFactor } from '@/composables/useCallFormFactor';
 import { useCallLayoutState } from '@/composables/useCallLayoutState';
 import { useConnectionHaptics } from '@/composables/useConnectionHaptics';
@@ -753,14 +752,23 @@ const handleToggleChat = () => {
   });
 };
 
-// Full screen works in grid and speaker view alike: only the media shows, on a near-black background. The navbar,
-// top bar, and controls hide; they come back on mouse movement and hide again after 3 s without it, or with a
-// swipe up on touch screens. On desktop it also takes the whole display.
-const FULLSCREEN_SWIPE_PX = 40;
+// Full screen works in grid and speaker view alike: only the media shows, on a near-black background, and on
+// desktop it also takes the whole display. The call controls (top bar, controls, and full name tags) hide after
+// 3 s without mouse movement on desktop, and on a long-press on the video area on a phone.
 const isFullscreen = ref(false);
-const fullscreenControls = useAutoHideControls(isFullscreen);
-const showsControls = fullscreenControls.shown;
-let swipeStart: { x: number; y: number } | null = null;
+const callControls = useCallControlsVisibility(computed(() => !usesPhoneChrome.value));
+const showsControls = callControls.shown;
+
+// Full screen on a phone starts with only the media; a long-press brings the controls back.
+watch(isFullscreen, (fullscreen) => {
+  if (fullscreen && usesPhoneChrome.value) callControls.hide();
+  else callControls.show();
+});
+
+function handleVideoLongPress() {
+  callControls.toggle();
+  playHaptic('selection');
+}
 
 function setFullscreen(fullscreen: boolean) {
   isFullscreen.value = fullscreen;
@@ -795,23 +803,6 @@ watch(hasJoined, (joined) => document.documentElement.classList.toggle('meeting-
 watch(isFullscreen, (fullscreen) => {
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: fullscreen }));
 });
-
-function handleFullscreenTouchStart(event: TouchEvent) {
-  const touch = event.touches[0];
-  swipeStart = isFullscreen.value && touch ? { x: touch.clientX, y: touch.clientY } : null;
-}
-
-// A mostly vertical swipe anywhere: up brings the controls in from the bottom, down hides them again.
-function handleFullscreenTouchEnd(event: TouchEvent) {
-  const touch = event.changedTouches[0];
-  if (!swipeStart || !touch) return;
-  const dx = touch.clientX - swipeStart.x;
-  const dy = touch.clientY - swipeStart.y;
-  swipeStart = null;
-  if (Math.abs(dy) < FULLSCREEN_SWIPE_PX || Math.abs(dy) < Math.abs(dx)) return;
-  if (dy < 0) fullscreenControls.show(false);
-  else fullscreenControls.hide();
-}
 
 // Escape first closes an open menu, chat, or dialog; only with none open does it leave full screen.
 function handleFullscreenKeydown(event: KeyboardEvent) {
@@ -915,8 +906,6 @@ const handleReconnect = () => {
     :class="hasJoined ? ['call-screen-dark', isFullscreen ? 'bg-[#0B0F10]' : 'bg-harbor-app'] : 'bg-harbor-surface'"
     :data-fullscreen="isFullscreen ? 'true' : undefined"
     :style="callAreaStyle"
-    @touchstart.passive="handleFullscreenTouchStart"
-    @touchend.passive="handleFullscreenTouchEnd"
   >
     <div
       v-if="isCheckingSession"
@@ -952,23 +941,25 @@ const handleReconnect = () => {
     />
 
     <div v-if="hasJoined && !isCheckingSession" class="marketing-font h-full text-harbor-ink flex flex-col">
-      <CallPhoneTopBar
-        v-if="usesPhoneChrome && showsControls"
-        :room-name="roomName"
-        :participant-count="participantCount"
-        :meeting-id="meetingId"
-        :invite-mode="inviteMode"
-        :is-chat-open="isChatOpen"
-        :unread-count="unreadCount"
-        @toggle-chat="handleToggleChat"
-        @invite="isInviteOpen = true"
-      >
-        <template #audio-output><CallAudioOutputButton /></template>
-      </CallPhoneTopBar>
+      <Transition name="call-controls-top">
+        <CallPhoneTopBar
+          v-if="usesPhoneChrome && showsControls"
+          :room-name="roomName"
+          :participant-count="participantCount"
+          :meeting-id="meetingId"
+          :invite-mode="inviteMode"
+          :is-chat-open="isChatOpen"
+          :unread-count="unreadCount"
+          @toggle-chat="handleToggleChat"
+          @invite="isInviteOpen = true"
+        >
+          <template #audio-output><CallAudioOutputButton /></template>
+        </CallPhoneTopBar>
+      </Transition>
 
       <!-- Participant Count Badge -->
       <div
-        v-if="!isFullscreen && !usesPhoneChrome"
+        v-if="!isFullscreen && !usesPhoneChrome && showsControls"
         class="fixed left-9 top-[calc(84px+1.25rem)] z-50 flex h-[var(--meeting-control-size)] items-center gap-2 rounded-full bg-harbor-surface px-4 text-harbor-ink shadow-harbor-soft"
       >
         <Users class="h-5 w-5" />
@@ -1096,26 +1087,20 @@ const handleReconnect = () => {
       </div>
 
       <div v-else class="flex-1 flex flex-col">
-        <MeetingActionMenu
-          context
+        <VideoGrid
+          :active-speaker-id="activeSpeakerId"
           :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
-          :view-mode="shownViewMode"
-          @set-view-mode="handleSetViewMode"
-        >
-          <VideoGrid
-            :active-speaker-id="activeSpeakerId"
-            :participants="meetingParticipants"
-            :pinned-participant-id="pinnedParticipantId"
-            :participant-statuses="participantStatuses"
-            :participant-avatars="participantAvatars"
-            :view-mode="viewMode"
-            :fullscreen="isFullscreen"
-            :controls-shown="isFullscreen && showsControls"
-            @toggle-pin="handleTogglePin"
-            @toggle-fullscreen="handleToggleFullscreen"
-          />
-        </MeetingActionMenu>
+          :participant-statuses="participantStatuses"
+          :participant-avatars="participantAvatars"
+          :view-mode="viewMode"
+          :fullscreen="isFullscreen"
+          :controls-shown="isFullscreen && showsControls"
+          :controls-hidden="!showsControls"
+          @toggle-pin="handleTogglePin"
+          @toggle-fullscreen="handleToggleFullscreen"
+          @long-press="handleVideoLongPress"
+        />
 
         <Transition name="meeting-controls">
           <CallPhoneControls
@@ -1231,20 +1216,33 @@ const handleReconnect = () => {
 </template>
 
 <style>
-/* The controls fade in and out in place, with no slide or blur. */
+/* The call controls slide out towards their edge and fade: the bottom bar down, the top bar up. */
 .meeting-controls-enter-active,
-.meeting-controls-leave-active {
-  transition: opacity 0.18s ease;
+.meeting-controls-leave-active,
+.call-controls-top-enter-active,
+.call-controls-top-leave-active {
+  transition:
+    opacity 0.22s ease,
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .meeting-controls-enter-from,
 .meeting-controls-leave-to {
   opacity: 0;
+  transform: translateY(1.25rem);
+}
+
+.call-controls-top-enter-from,
+.call-controls-top-leave-to {
+  opacity: 0;
+  transform: translateY(-1.25rem);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .meeting-controls-enter-active,
-  .meeting-controls-leave-active {
+  .meeting-controls-leave-active,
+  .call-controls-top-enter-active,
+  .call-controls-top-leave-active {
     transition: none;
   }
 }

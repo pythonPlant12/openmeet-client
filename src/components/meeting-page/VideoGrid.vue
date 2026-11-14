@@ -35,11 +35,15 @@ const props = defineProps<{
   fullscreen?: boolean;
   /** Full screen controls are showing, so the strip moves up to stay above them. */
   controlsShown?: boolean;
+  /** The call controls are hidden, so the name tags shrink to the mic-off icon. */
+  controlsHidden?: boolean;
 }>();
 
 const emit = defineEmits<{
   togglePin: [participantId: string];
   toggleFullscreen: [];
+  /** A touch held on the video area, which hides or shows the call controls. */
+  longPress: [];
 }>();
 const { t } = useI18n();
 
@@ -52,8 +56,10 @@ const MIN_STRIP_TILE_HEIGHT = 64;
 const STRIP_GAP = 8;
 /** Two taps this close together are a double tap, which toggles full screen instead of pinning. */
 const DOUBLE_TAP_MS = 280;
-/** A touch held this long is a long-press, which opens the layout menu instead of pinning. */
+/** A touch held this long is a long-press, which hides or shows the call controls instead of pinning. */
 const LONG_PRESS_MS = 500;
+/** A finger that moves further than this is scrolling or dragging, not long-pressing. */
+const LONG_PRESS_SLOP_PX = 10;
 /** The phone 1:1 self view: a portrait picture about a quarter of the screen wide, inset from the edges. */
 const SELF_VIEW_WIDTH_SHARE = 0.28;
 const SELF_VIEW_MIN_WIDTH = 88;
@@ -243,12 +249,34 @@ function endSelfViewDrag(event: PointerEvent) {
 
 // One tap on a tile pins or unpins that person; a double tap anywhere toggles full screen. The single tap waits
 // a moment so a double tap does not also pin. Keyboard presses (no pointer detail) act at once. A touch held
-// long enough opens the layout menu instead, so its click does nothing.
+// still for `LONG_PRESS_MS` anywhere on the video area is a long-press instead, so its click does nothing.
 let lastTapAt = 0;
 let pendingTap: number | undefined;
-let touchPressStartedAt = 0;
+let longPressTimer: number | undefined;
+let longPressStart: { x: number; y: number } | null = null;
+let longPressFired = false;
+function cancelLongPress() {
+  window.clearTimeout(longPressTimer);
+  longPressTimer = undefined;
+  longPressStart = null;
+}
 function handleCanvasPointerDown(event: PointerEvent) {
-  touchPressStartedAt = event.pointerType === 'mouse' ? 0 : Date.now();
+  cancelLongPress();
+  longPressFired = false;
+  if (event.pointerType === 'mouse') return;
+  longPressStart = { x: event.clientX, y: event.clientY };
+  longPressTimer = window.setTimeout(() => {
+    longPressTimer = undefined;
+    longPressStart = null;
+    longPressFired = true;
+    emit('longPress');
+  }, LONG_PRESS_MS);
+}
+function handleCanvasPointerMove(event: PointerEvent) {
+  if (!longPressStart) return;
+  if (Math.hypot(event.clientX - longPressStart.x, event.clientY - longPressStart.y) > LONG_PRESS_SLOP_PX) {
+    cancelLongPress();
+  }
 }
 function handleCanvasClick(event: MouseEvent) {
   const participantId = (event.target as Element | null)?.closest<HTMLElement>('[data-testid="participant-tile"]')
@@ -257,9 +285,10 @@ function handleCanvasClick(event: MouseEvent) {
     if (participantId) emit('togglePin', participantId);
     return;
   }
-  const wasLongPress = touchPressStartedAt > 0 && Date.now() - touchPressStartedAt >= LONG_PRESS_MS;
-  touchPressStartedAt = 0;
-  if (wasLongPress) return;
+  if (longPressFired) {
+    longPressFired = false;
+    return;
+  }
   const now = Date.now();
   if (now - lastTapAt < DOUBLE_TAP_MS) {
     window.clearTimeout(pendingTap);
@@ -277,7 +306,10 @@ function handleCanvasClick(event: MouseEvent) {
       }, DOUBLE_TAP_MS)
     : undefined;
 }
-onUnmounted(() => window.clearTimeout(pendingTap));
+onUnmounted(() => {
+  window.clearTimeout(pendingTap);
+  cancelLongPress();
+});
 
 // "Full screen" on a tile shows that person alone: it pins them, then enters full screen. On the tile already
 // shown in full screen it leaves full screen.
@@ -308,6 +340,9 @@ function toggleName(participantId: string) {
     tabindex="0"
     :aria-label="t('meeting.actions.videoCanvas')"
     @pointerdown="handleCanvasPointerDown"
+    @pointermove="handleCanvasPointerMove"
+    @pointerup="cancelLongPress"
+    @pointercancel="cancelLongPress"
     @click="handleCanvasClick"
   >
     <!-- The video area fills the space between the call screen's top bar and its controls, which the page sets as
@@ -334,6 +369,7 @@ function toggleName(participantId: string) {
               :speaking="isSpeaking(participant)"
               :dark="fullscreen"
               :phone="isPhone"
+              :collapsed="controlsHidden"
               fit="cover"
               size="grid"
               :is-expanded="pinnedParticipantId === participant.id"
@@ -360,6 +396,7 @@ function toggleName(participantId: string) {
               :speaking="isSpeaking(selfViewMain)"
               :dark="fullscreen"
               :phone="isPhone"
+              :collapsed="controlsHidden"
               :bleed="fullscreen"
               fit="cover"
               size="full"
@@ -388,6 +425,7 @@ function toggleName(participantId: string) {
                 :speaking="isSpeaking(selfViewSelf)"
                 :dark="fullscreen"
                 :phone="isPhone"
+                :collapsed="controlsHidden"
                 size="mobile"
                 fit="cover"
                 :show-name-tag="false"
@@ -410,6 +448,7 @@ function toggleName(participantId: string) {
               :fit="mainFills ? 'cover' : 'contain'"
               :dark="fullscreen"
               :phone="isPhone"
+              :collapsed="controlsHidden"
               :bleed="fullscreen"
               size="full"
               :is-expanded="pinnedParticipantId === speakerParticipant.id"
@@ -442,6 +481,7 @@ function toggleName(participantId: string) {
                     :speaking="isSpeaking(participant)"
                     :dark="fullscreen"
                     :phone="isPhone"
+                    :collapsed="controlsHidden"
                     size="mobile"
                     :show-name-tag="isWide || revealedNames.has(participant.id)"
                     :name-toggle="!isWide"
