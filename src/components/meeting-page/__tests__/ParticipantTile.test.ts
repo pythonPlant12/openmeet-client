@@ -17,7 +17,13 @@ const participant = {
 function mountTile(
   status: UserStatus | null,
   size: 'grid' | 'sidebar' | 'full' = 'grid',
-  extra: { speaking?: boolean; participant?: typeof participant; avatarUrl?: string } = {},
+  extra: {
+    speaking?: boolean;
+    participant?: typeof participant;
+    avatarUrl?: string;
+    phone?: boolean;
+    collapsed?: boolean;
+  } = {},
 ) {
   const i18n = createI18n({
     legacy: false,
@@ -32,52 +38,52 @@ function mountTile(
       size,
       speaking: extra.speaking,
       avatarUrl: extra.avatarUrl,
+      phone: extra.phone,
+      collapsed: extra.collapsed,
     },
     global: { plugins: [i18n] },
   });
 }
 
-describe('ParticipantTile status', () => {
-  it('shows only the status dot in the name tag and announces the status to screen readers', () => {
-    const tag = mountTile('doNotDisturb', 'full').get('[data-participant-name-tag]');
-
-    expect(tag.get('[data-participant-status]').attributes('data-status')).toBe('doNotDisturb');
-    expect(tag.get('.sr-only').text()).toBe('Status: Do not disturb');
-    expect(tag.text().replace('Status: Do not disturb', '')).not.toContain('Do not disturb');
+describe('ParticipantTile name tag', () => {
+  it('shows only the name, without a mini avatar or status dot', () => {
+    const tag = mountTile('away', 'grid', { avatarUrl: 'blob:ada' }).get('[data-participant-name-tag]');
+    expect(tag.find('[data-participant-mini-avatar]').exists()).toBe(false);
+    expect(tag.find('[data-participant-status]').exists()).toBe(false);
+    expect(tag.text()).toContain('Ada Lovelace');
   });
 
-  it('shows "appear offline" as plain offline to others', () => {
-    expect(mountTile('offline', 'full').get('[data-participant-name-tag]').text()).toContain('Offline');
+  it('still announces the status to screen readers', () => {
+    expect(mountTile('offline').get('[data-participant-name-tag] .sr-only').text()).toBe('Status: Offline');
   });
 
-  it('shows no status for guests', () => {
-    expect(mountTile(null).find('[data-participant-status]').exists()).toBe(false);
+  it('shows a mic-off icon in the name tag while the person is muted', () => {
+    const muted = mountTile(null, 'grid', { participant: { ...participant, audioEnabled: false } });
+    expect(muted.find('[data-participant-name-tag] [data-participant-muted]').exists()).toBe(true);
+    expect(mountTile(null).find('[data-participant-muted]').exists()).toBe(false);
   });
 
-  it('keeps only the dot on grid and small tiles', () => {
-    for (const size of ['grid', 'sidebar'] as const) {
-      const tag = mountTile('away', size).get('[data-participant-name-tag]');
-      expect(tag.find('[data-participant-status]').exists()).toBe(true);
-      expect(tag.text()).toBe('ALAda LovelaceStatus: Away');
-    }
+  it('shows no mute or camera-off badges on the tile', () => {
+    const tile = mountTile(null, 'grid', { participant: { ...participant, audioEnabled: false, videoEnabled: false } });
+    expect(tile.find('[data-participant-badges]').exists()).toBe(false);
   });
 
-  it('starts the name tag with a mini avatar, falling back to initials', () => {
-    const withImage = mountTile(null, 'grid', { avatarUrl: 'blob:ada' }).get('[data-participant-mini-avatar]');
-    expect(withImage.get('img').attributes('src')).toBe('blob:ada');
-
-    const withInitials = mountTile(null).get('[data-participant-mini-avatar]');
-    expect(withInitials.find('img').exists()).toBe(false);
-    expect(withInitials.text()).toBe('AL');
-  });
-
-  it('keeps the name tag in the bottom-left corner, tighter on small tiles', () => {
-    expect(mountTile(null).get('[data-participant-name-tag]').classes()).toEqual(
-      expect.arrayContaining(['bottom-2', 'left-2', 'text-xs']),
+  it('sits bottom-left on desktop and bottom-centre on a phone', () => {
+    expect(mountTile(null).get('[data-participant-name-tag]').attributes('data-align')).toBe('start');
+    expect(mountTile(null, 'grid', { phone: true }).get('[data-participant-name-tag]').attributes('data-align')).toBe(
+      'center',
     );
-    expect(mountTile(null, 'sidebar').get('[data-participant-name-tag]').classes()).toEqual(
-      expect.arrayContaining(['bottom-1.5', 'left-1.5', 'text-[11px]']),
-    );
+  });
+
+  it('shrinks to the mic-off icon while the call controls are hidden', () => {
+    const muted = mountTile(null, 'grid', { participant: { ...participant, audioEnabled: false }, collapsed: true });
+    const tag = muted.get('[data-participant-name-tag]');
+    expect(tag.find('[data-participant-muted]').exists()).toBe(true);
+    expect(tag.text()).not.toContain('Ada Lovelace');
+  });
+
+  it('hides an unmuted name tag while the call controls are hidden', () => {
+    expect(mountTile(null, 'grid', { collapsed: true }).find('[data-participant-name-tag]').exists()).toBe(false);
   });
 });
 
@@ -222,6 +228,33 @@ describe('ParticipantTile interactions', () => {
     items.find((item) => item.textContent?.includes('Show name'))!.click();
     await flushPromises();
     expect(tile.emitted('toggleName')).toHaveLength(1);
+  });
+
+  it("opens the person's menu from the name tag on a phone, with no options button", async () => {
+    const tile = mountInteractive({ phone: true });
+    expect(tile.find('[data-participant-options]').exists()).toBe(false);
+
+    await tile.get('[data-participant-name-tag]').trigger('click');
+    await flushPromises();
+    const items = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    expect(items.map((item) => item.textContent?.trim())).toEqual(['Pin Ada Lovelace', 'Full screen']);
+    expect(tile.emitted('click')).toBeUndefined();
+  });
+
+  it('offers an expand button on a video tile that makes it full screen', async () => {
+    const stream = { getVideoTracks: () => [{}], getTracks: () => [] } as unknown as MediaStream;
+    const tile = mountInteractive({ participant: { ...participant, stream } });
+    await tile.get('[data-participant-expand]').trigger('click');
+    expect(tile.emitted('toggleFullscreen')).toHaveLength(1);
+    expect(tile.emitted('click')).toBeUndefined();
+  });
+
+  it('offers no expand button while the camera is off', () => {
+    expect(
+      mountInteractive({ participant: { ...participant, videoEnabled: false } })
+        .find('[data-participant-expand]')
+        .exists(),
+    ).toBe(false);
   });
 
   it('shows no options button when the tile has no actions', () => {

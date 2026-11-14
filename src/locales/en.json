@@ -468,6 +468,8 @@
       "showName": "Show name",
       "hideName": "Hide name",
       "connecting": "Connecting…",
+      "muted": "Muted",
+      "expand": "Show {name} full screen",
       "selfView": "Your view. Drag it to any corner."
     },
     "actions": {

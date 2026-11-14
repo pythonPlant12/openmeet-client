@@ -65,6 +65,8 @@ const DRAG_THRESHOLD_PX = 6;
 
 const isWide = useMediaQuery('(min-width: 768px)');
 const formFactor = useCallFormFactor();
+// Phone call screens centre the name tags and open each person's menu from their name tag.
+const isPhone = computed(() => formFactor.value !== 'desktop');
 const hasParticipants = computed(() => props.participants.length > 0);
 const layout = computed(() =>
   selectCallLayout({
@@ -331,6 +333,7 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[participant.id]"
               :speaking="isSpeaking(participant)"
               :dark="fullscreen"
+              :phone="isPhone"
               fit="cover"
               size="grid"
               :is-expanded="pinnedParticipantId === participant.id"
@@ -356,6 +359,7 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[selfViewMain.id]"
               :speaking="isSpeaking(selfViewMain)"
               :dark="fullscreen"
+              :phone="isPhone"
               :bleed="fullscreen"
               fit="cover"
               size="full"
@@ -383,6 +387,7 @@ function toggleName(participantId: string) {
                 :avatar-url="participantAvatars?.[selfViewSelf.id]"
                 :speaking="isSpeaking(selfViewSelf)"
                 :dark="fullscreen"
+                :phone="isPhone"
                 size="mobile"
                 fit="cover"
                 :show-name-tag="false"
@@ -404,6 +409,7 @@ function toggleName(participantId: string) {
               :speaking="isSpeaking(speakerParticipant)"
               :fit="mainFills ? 'cover' : 'contain'"
               :dark="fullscreen"
+              :phone="isPhone"
               :bleed="fullscreen"
               size="full"
               :is-expanded="pinnedParticipantId === speakerParticipant.id"
@@ -435,6 +441,7 @@ function toggleName(participantId: string) {
                     :avatar-url="participantAvatars?.[participant.id]"
                     :speaking="isSpeaking(participant)"
                     :dark="fullscreen"
+                    :phone="isPhone"
                     size="mobile"
                     :show-name-tag="isWide || revealedNames.has(participant.id)"
                     :name-toggle="!isWide"
