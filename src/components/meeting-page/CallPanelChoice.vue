@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="T extends string">
 import { Check, ChevronDown } from 'lucide-vue-next';
-import { computed, ref, useId } from 'vue';
+import { computed, useId } from 'vue';
 
 // One setting in the phone controls panel, such as a camera's source or quality: a row with the setting's name
 // over its current value, which expands in place to the choices.
@@ -24,7 +24,8 @@ const props = defineProps<{
 const emit = defineEmits<{ (event: 'select', value: T): void }>();
 
 const listId = `call-panel-choice-${useId()}`;
-const isOpen = ref(false);
+// The row that holds several choices keeps one open at a time, so it may drive this one.
+const isOpen = defineModel<boolean>('open', { default: false });
 const current = computed(() => props.options.find((option) => option.value === props.value));
 </script>
 

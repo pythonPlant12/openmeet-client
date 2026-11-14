@@ -13,10 +13,10 @@ enableAutoUnmount(afterEach);
 
 // The split buttons and the share control have their own tests; here they only need to be found.
 const MediaControl = {
-  props: ['kind', 'off', 'available', 'warning', 'variant'],
-  emits: ['toggle', 'request-access', 'preview-camera'],
+  props: ['kind', 'off', 'available', 'warning', 'variant', 'expanded'],
+  emits: ['toggle', 'request-access', 'preview-camera', 'update:expanded'],
   template:
-    '<div><button :data-stub-media="kind" :data-variant="variant" @click="$emit(warning ? \'request-access\' : \'toggle\')" /><button v-if="variant === \'row\'" :data-stub-preview="kind" @click="$emit(\'preview-camera\')" /><slot name="extra" /></div>',
+    '<div><button :data-stub-media="kind" :data-variant="variant" @click="$emit(warning ? \'request-access\' : \'toggle\')" /><button v-if="variant === \'row\'" :data-stub-preview="kind" @click="$emit(\'preview-camera\')" /><button v-if="variant === \'row\'" :data-stub-expand="kind" :data-expanded="String(!!expanded)" @click="$emit(\'update:expanded\', !expanded)" /><slot name="extra" /></div>',
 };
 const ShareControl = { template: '<button data-stub-share />' };
 
@@ -166,6 +166,20 @@ describe('CallPhoneControls', () => {
     expect(panel.find('[role="radiogroup"]').exists()).toBe(false);
     expect(panel.find('[data-dev-tools]').exists()).toBe(false);
     expect(panel.text()).not.toContain('Report a bug');
+  });
+
+  it('keeps one section open at a time, and closes it with the panel', async () => {
+    const wrapper = mountControls();
+    await handle(wrapper).trigger('click');
+    const expanded = (kind: string) => wrapper.get(`[data-stub-expand="${kind}"]`).attributes('data-expanded');
+
+    await wrapper.get('[data-stub-expand="audio"]').trigger('click');
+    expect([expanded('audio'), expanded('video')]).toEqual(['true', 'false']);
+    await wrapper.get('[data-stub-expand="video"]').trigger('click');
+    expect([expanded('audio'), expanded('video')]).toEqual(['false', 'true']);
+
+    await handle(wrapper).trigger('click');
+    expect(expanded('video')).toBe('false');
   });
 
   it('toggles showing your own camera from the panel', async () => {

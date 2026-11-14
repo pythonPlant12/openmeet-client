@@ -207,6 +207,26 @@ describe('MeetingMediaControl', () => {
     expect(control.emitted('preview-camera')).toHaveLength(1);
   });
 
+  it("shows one setting's choices at a time in the expanded row", async () => {
+    const control = mountControl('video', false, false, 'row');
+    await control.get('[data-media-menu-trigger]').trigger('click');
+    const isOpen = (name: string) =>
+      control.get(`[data-media-${name}] [data-panel-choice-trigger]`).attributes('aria-expanded');
+
+    await control.get('[data-media-source] [data-panel-choice-trigger]').trigger('click');
+    expect([isOpen('source'), isOpen('quality')]).toEqual(['true', 'false']);
+    await control.get('[data-media-quality] [data-panel-choice-trigger]').trigger('click');
+    expect([isOpen('source'), isOpen('quality')]).toEqual(['false', 'true']);
+  });
+
+  it('puts the sources and speakers behind their own rows in the desktop menu, each with its current value', () => {
+    const wrapper = mountControl('audio');
+    expect(wrapper.get('[data-media-source-menu]').text()).toContain('Source');
+    expect(wrapper.get('[data-media-source-menu]').text()).toContain('Built-in microphone');
+    expect(wrapper.get('[data-media-speaker-menu]').text()).toContain('System default');
+    expect(wrapper.get('[data-media-source-options]').find('[data-device-option="mic-2"]').exists()).toBe(true);
+  });
+
   it('fills the whole control, toggle and chevron, grey while on and red while off', () => {
     const mutedControl = mountControl('audio', true);
     const muted = mutedControl.get('[data-media-toggle]');

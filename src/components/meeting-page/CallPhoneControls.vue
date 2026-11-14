@@ -51,6 +51,18 @@ const card = ref<HTMLElement | null>(null);
 const panelContent = ref<HTMLElement | null>(null);
 const { height: panelHeight } = useElementSize(panelContent, undefined, { box: 'border-box' });
 const isOpen = ref(false);
+// One of the panel's sections shows its settings at a time.
+const openSection = ref<'audio' | 'video' | null>(null);
+const sectionModel = (section: 'audio' | 'video') =>
+  computed({
+    get: () => openSection.value === section,
+    set: (open: boolean) => {
+      if (open) openSection.value = section;
+      else if (openSection.value === section) openSection.value = null;
+    },
+  });
+const audioExpanded = sectionModel('audio');
+const videoExpanded = sectionModel('video');
 // While dragging, how much of the panel shows; null when it rests open or closed.
 const draggedHeight = ref<number | null>(null);
 const revealedHeight = computed(() => draggedHeight.value ?? (isOpen.value ? panelHeight.value : 0));
@@ -58,6 +70,7 @@ const revealedHeight = computed(() => draggedHeight.value ?? (isOpen.value ? pan
 function setOpen(open: boolean) {
   if (open !== isOpen.value) playHaptic('selection');
   isOpen.value = open;
+  if (!open) openSection.value = null;
 }
 
 function toggleOpen() {
@@ -220,6 +233,7 @@ function onLeave() {
         <div ref="panelContent" class="max-h-[55dvh] space-y-3 overflow-y-auto overscroll-contain px-3 pb-3">
           <div class="call-panel-group">
             <MeetingMediaControl
+              v-model:expanded="audioExpanded"
               kind="audio"
               variant="row"
               :off="isMuted"
@@ -230,6 +244,7 @@ function onLeave() {
 
           <div class="call-panel-group">
             <MeetingMediaControl
+              v-model:expanded="videoExpanded"
               kind="video"
               variant="row"
               :off="isVideoOff"
