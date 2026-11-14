@@ -143,10 +143,49 @@ describe('MeetingMediaControl', () => {
     expect(control.find('[data-media-menu-trigger]').exists()).toBe(false);
   });
 
-  it('shows only the device menu as a labelled row in the phone controls panel', () => {
+  it('shows a labelled row with the current device in the phone controls panel', () => {
     const control = mountControl('video', false, false, 'row');
     expect(control.find('[data-media-toggle]').exists()).toBe(false);
-    expect(control.get('[data-media-menu-trigger]').text()).toContain('Camera');
+    const row = control.get('[data-media-menu-trigger]');
+    expect(row.text()).toContain('Camera');
+    expect(row.text()).toContain('Front camera');
+    expect(row.attributes('aria-expanded')).toBe('false');
+    expect(control.find('[data-media-options]').exists()).toBe(false);
+  });
+
+  it('expands the microphone row in place, like an accordion, instead of opening a menu', async () => {
+    const control = mountControl('audio', false, false, 'row');
+    await control.get('[data-media-menu-trigger]').trigger('click');
+
+    expect(control.get('[data-media-menu-trigger]').attributes('aria-expanded')).toBe('true');
+    expect(control.find('[role="menu"]').exists()).toBe(false);
+    expect(settings.startLevelMeter).toHaveBeenCalled();
+    const options = control.get('[data-media-options]');
+    expect(options.get('[data-device-option="mic-1"]').attributes('aria-checked')).toBe('true');
+    await options.get('[data-device-option="mic-2"]').trigger('click');
+    expect(settings.changeDevice).toHaveBeenCalledWith('mic-2');
+    await options.get('[data-speaker-option="speaker-2"]').trigger('click');
+    expect(settings.changeSpeaker).toHaveBeenCalledWith('speaker-2');
+    await options.get<HTMLInputElement>('[data-input-volume]').setValue('40');
+    expect(settings.changeInputVolume).toHaveBeenCalledWith(0.4);
+    expect(options.findAll('[data-input-level] [data-lit]')).toHaveLength(12);
+
+    await control.get('[data-media-menu-trigger]').trigger('click');
+    expect(control.find('[data-media-options]').exists()).toBe(false);
+    expect(settings.stopLevelMeter).toHaveBeenCalled();
+  });
+
+  it('expands the camera row to the cameras and the quality choices', async () => {
+    const control = mountControl('video', false, false, 'row');
+    await control.get('[data-media-menu-trigger]').trigger('click');
+    const options = control.get('[data-media-options]');
+    expect(options.findAll('[data-device-option]').map((option) => option.text())).toEqual([
+      'Front camera',
+      'USB camera',
+    ]);
+    expect(options.get('[data-quality-option="auto"]').attributes('aria-checked')).toBe('true');
+    await options.get('[data-quality-option="720p"]').trigger('click');
+    expect(settings.changeQuality).toHaveBeenCalledWith('720p');
   });
 
   it('fills the whole control, toggle and chevron, grey while on and red while off', () => {

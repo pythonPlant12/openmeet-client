@@ -257,6 +257,26 @@ describe('VideoGrid tile interactions', () => {
     expect(wrapper.emitted('longPress')).toBeUndefined();
   });
 
+  it('reports a vertical swipe on the video area, but not a sideways one', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(3) });
+    const touch = (type: string, x: number, y: number) => {
+      const event = new Event(type, { bubbles: true });
+      const points = [{ clientX: x, clientY: y }];
+      Object.defineProperty(event, type === 'touchend' ? 'changedTouches' : 'touches', { value: points });
+      canvas(wrapper).element.dispatchEvent(event);
+    };
+
+    touch('touchstart', 100, 400);
+    touch('touchend', 104, 300);
+    touch('touchstart', 100, 300);
+    touch('touchend', 98, 380);
+    touch('touchstart', 100, 300);
+    touch('touchend', 220, 320);
+
+    expect(wrapper.emitted('swipe')).toEqual([['up'], ['down']]);
+  });
+
   it('collapses the name tags while the call controls are hidden', () => {
     phone();
     const wrapper = mountGrid({ participants: people(3), controlsHidden: true });

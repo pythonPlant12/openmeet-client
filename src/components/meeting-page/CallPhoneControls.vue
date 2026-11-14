@@ -162,21 +162,21 @@ function onLeave() {
 </script>
 
 <template>
-  <!-- While the panel is open, a tap anywhere else only closes it and presses nothing underneath. -->
-  <div
-    v-if="isOpen"
-    class="fixed inset-0 z-40 touch-none"
-    aria-hidden="true"
-    data-controls-backdrop
-    @pointerdown.prevent
-    @click="setOpen(false)"
-  />
   <div
     class="marketing-font pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-harbor-ink"
   >
+    <!-- While the panel is open, a tap anywhere else only closes it and presses nothing underneath. -->
+    <div
+      v-if="isOpen"
+      class="pointer-events-auto fixed inset-0 touch-none"
+      aria-hidden="true"
+      data-controls-backdrop
+      @pointerdown.prevent
+      @click="setOpen(false)"
+    />
     <div
       ref="card"
-      class="call-tray pointer-events-auto flex w-full max-w-md flex-col items-stretch overflow-hidden rounded-[1.5rem] p-0"
+      class="call-tray pointer-events-auto relative flex w-full max-w-md flex-col items-stretch overflow-hidden rounded-[1.5rem] p-0"
       data-call-phone-controls
       :data-state="isOpen ? 'open' : 'closed'"
     >

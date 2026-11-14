@@ -769,11 +769,23 @@ const isFullscreen = ref(false);
 const callControls = useCallControlsVisibility(computed(() => !usesPhoneChrome.value));
 const showsControls = callControls.shown;
 
-// Full screen on a phone starts with only the media; a long-press brings the controls back.
+// Full screen starts with only the media. On desktop moving the mouse brings the controls back; on a phone a swipe up
+// does, and a swipe down hides them again.
 watch(isFullscreen, (fullscreen) => {
-  if (fullscreen && usesPhoneChrome.value) callControls.hide();
+  if (fullscreen) callControls.hide();
   else callControls.show();
 });
+
+function handleVideoSwipe(direction: 'up' | 'down') {
+  if (!usesPhoneChrome.value || !isFullscreen.value) return;
+  if (direction === 'up' && !showsControls.value) {
+    callControls.show();
+    playHaptic('selection');
+  } else if (direction === 'down' && showsControls.value) {
+    callControls.hide();
+    playHaptic('selection');
+  }
+}
 
 // Hiding your own tile is a per-device view choice; your camera keeps reaching the others.
 const showOwnCamera = ref(loadCallSettings().showOwnCamera);
@@ -1140,6 +1152,7 @@ const handleReconnect = () => {
           @toggle-pin="handleTogglePin"
           @toggle-fullscreen="handleToggleFullscreen"
           @long-press="handleVideoLongPress"
+          @swipe="handleVideoSwipe"
         />
 
         <Transition name="meeting-controls">

@@ -47,6 +47,8 @@ const emit = defineEmits<{
   toggleFullscreen: [];
   /** A touch held on the video area, which hides or shows the call controls. */
   longPress: [];
+  /** A vertical swipe on the video area, such as to show or hide the controls in full screen. */
+  swipe: [direction: 'up' | 'down'];
 }>();
 const { t } = useI18n();
 
@@ -63,6 +65,8 @@ const DOUBLE_TAP_MS = 280;
 const LONG_PRESS_MS = 500;
 /** A finger that moves further than this is scrolling or dragging, not long-pressing. */
 const LONG_PRESS_SLOP_PX = 10;
+/** A finger that travels at least this far, mostly up or down, is a swipe. */
+const SWIPE_MIN_PX = 40;
 /** The phone 1:1 self view: a portrait picture about a quarter of the screen wide, inset from the edges. */
 const SELF_VIEW_WIDTH_SHARE = 0.28;
 const SELF_VIEW_MIN_WIDTH = 88;
@@ -309,6 +313,20 @@ function handleCanvasPointerMove(event: PointerEvent) {
     cancelLongPress();
   }
 }
+// Touch events rather than pointer events, since the browser cancels a pointer as soon as a vertical pan starts.
+let swipeStart: { x: number; y: number } | null = null;
+function handleCanvasTouchStart(event: TouchEvent) {
+  const touch = event.touches[0];
+  swipeStart = event.touches.length === 1 && touch ? { x: touch.clientX, y: touch.clientY } : null;
+}
+function handleCanvasTouchEnd(event: TouchEvent) {
+  const touch = event.changedTouches[0];
+  if (!swipeStart || !touch) return;
+  const dx = touch.clientX - swipeStart.x;
+  const dy = touch.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dy) >= SWIPE_MIN_PX && Math.abs(dy) > Math.abs(dx) * 1.5) emit('swipe', dy < 0 ? 'up' : 'down');
+}
 function handleCanvasClick(event: MouseEvent) {
   const participantId = (event.target as Element | null)?.closest<HTMLElement>('[data-testid="participant-tile"]')
     ?.dataset.participantId;
@@ -374,6 +392,8 @@ function toggleName(participantId: string) {
     @pointermove="handleCanvasPointerMove"
     @pointerup="cancelLongPress"
     @pointercancel="cancelLongPress"
+    @touchstart.passive="handleCanvasTouchStart"
+    @touchend="handleCanvasTouchEnd"
     @click="handleCanvasClick"
   >
     <!-- The video area fills the space between the call screen's top bar and its controls, which the page sets as

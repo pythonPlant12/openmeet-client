@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { GaugeAnimated } from '@respeak/lucide-motion-vue';
-import { ChevronRight, ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
-import { computed, onBeforeUnmount } from 'vue';
+import { Check, ChevronDown, ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import {
@@ -19,8 +19,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { type MediaKind, useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
+import { VIDEO_QUALITY_OPTIONS } from '@/lib/video-quality';
 import { playHaptic } from '@/services/haptics';
 
+import MeetingInputVolume from './MeetingInputVolume.vue';
 import MeetingQualityOptions from './MeetingQualityOptions.vue';
 
 // Split button for one local medium, shared by every controls bar: the main part turns the microphone or
@@ -34,7 +36,8 @@ const props = defineProps<{
   warning?: boolean;
   /**
    * `split` (default): the toggle and the chevron that opens the device menu. `toggle`: the toggle alone, for the
-   * phone bar. `row`: the device menu alone, opened from a row in the phone controls panel.
+   * phone bar. `row`: a row in the phone controls panel that expands in place to the same choices, since phones
+   * get no context menus.
    */
   variant?: 'split' | 'toggle' | 'row';
 }>();
@@ -115,8 +118,19 @@ function selectSpeaker(deviceId: unknown) {
   if (typeof deviceId === 'string') void changeSpeaker(deviceId);
 }
 
-function onVolumeInput(event: Event) {
-  void changeInputVolume(Number((event.target as HTMLInputElement).value) / 100);
+function onVolumeChange(percent: number) {
+  void changeInputVolume(percent / 100);
+}
+
+const isExpanded = ref(false);
+const activeDeviceLabel = computed(() => {
+  const index = devices.value.findIndex((device) => device.deviceId === activeId.value);
+  return index === -1 ? '' : deviceLabel(devices.value[index]!, index);
+});
+
+function toggleExpanded() {
+  isExpanded.value = !isExpanded.value;
+  onMenuOpen(isExpanded.value);
 }
 
 onBeforeUnmount(stopLevelMeter);
@@ -124,151 +138,218 @@ onBeforeUnmount(stopLevelMeter);
 
 <template>
   <div
-    class="group relative flex items-center"
-    :class="variant === 'row' ? 'w-full' : 'call-media'"
+    class="group relative flex"
+    :class="variant === 'row' ? 'w-full flex-col' : 'call-media items-center'"
     :data-off="variant === 'row' ? undefined : off"
     :data-media-control="kind"
     :data-variant="variant ?? 'split'"
   >
-    <button
-      v-if="variant !== 'row'"
-      type="button"
-      class="call-button relative"
-      :disabled="!available && !warning"
-      :aria-label="toggleLabel"
-      :data-off="off"
-      :data-media-off="off"
-      data-media-toggle
-      @click="onToggle"
-    >
-      <template v-if="isAudio"><MicOff v-if="off" /><Mic v-else /></template>
-      <template v-else><VideoOff v-if="off" /><Video v-else /></template>
-      <span
-        v-if="warning"
-        aria-hidden="true"
-        class="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-harbor-danger text-white [&_svg]:!size-2.5"
-        data-media-warning
+    <template v-if="variant === 'row'">
+      <button
+        type="button"
+        class="call-panel-row"
+        :aria-label="menuLabel"
+        :aria-expanded="isExpanded"
+        data-media-menu-trigger
+        @click="toggleExpanded"
       >
-        <TriangleAlert />
-      </span>
-    </button>
-    <DropdownMenu v-if="variant !== 'toggle'" @update:open="onMenuOpen">
-      <DropdownMenuTrigger as-child>
-        <button
-          v-if="variant === 'row'"
-          type="button"
-          class="call-panel-row"
-          :aria-label="menuLabel"
-          data-media-menu-trigger
-        >
-          <component :is="isAudio ? Mic : Video" class="call-panel-row-icon" />
-          <span class="flex-1 text-left">{{
-            t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera')
+        <component :is="isAudio ? Mic : Video" class="call-panel-row-icon" />
+        <span class="min-w-0 flex-1 text-left">
+          <span class="block">{{ t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera') }}</span>
+          <span v-if="activeDeviceLabel" class="block truncate text-xs font-normal text-harbor-muted">{{
+            activeDeviceLabel
           }}</span>
-          <ChevronRight class="size-4 text-harbor-icon" aria-hidden="true" />
-        </button>
-        <button
-          v-else
-          type="button"
-          class="call-button call-button-chevron"
-          :aria-label="menuLabel"
-          data-media-menu-trigger
-        >
-          <ChevronUp />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="center"
-        side="top"
-        :side-offset="10"
-        class="meeting-menu marketing-font w-72"
-        data-media-options
-      >
-        <DropdownMenuLabel>{{
-          t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera')
-        }}</DropdownMenuLabel>
-        <p v-if="!devices.length" class="px-2 py-1.5 text-sm text-harbor-muted">
+        </span>
+        <ChevronDown
+          class="size-4 shrink-0 text-harbor-icon transition-transform duration-200"
+          :class="{ 'rotate-180': isExpanded }"
+          aria-hidden="true"
+        />
+      </button>
+      <div v-if="isExpanded" class="space-y-3 px-3 pb-3" data-media-options>
+        <p v-if="!devices.length" class="px-1 text-sm text-harbor-muted">
           {{ t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras') }}
         </p>
-        <DropdownMenuRadioGroup :model-value="activeId" @update:model-value="selectDevice">
-          <DropdownMenuRadioItem
+        <div v-else role="radiogroup" :aria-label="menuLabel" class="call-choice-list">
+          <button
             v-for="(device, index) in devices"
             :key="device.deviceId"
-            :value="device.deviceId"
+            type="button"
+            role="radio"
+            class="call-choice"
+            :aria-checked="device.deviceId === activeId"
+            :data-state="device.deviceId === activeId ? 'checked' : 'unchecked'"
             :disabled="busy"
             :data-device-option="device.deviceId"
+            @click="selectDevice(device.deviceId)"
           >
-            <span class="truncate">{{ deviceLabel(device, index) }}</span>
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
+            <span class="min-w-0 flex-1 truncate text-left">{{ deviceLabel(device, index) }}</span>
+            <Check v-if="device.deviceId === activeId" class="size-4 shrink-0" aria-hidden="true" />
+          </button>
+        </div>
 
         <template v-if="isAudio">
           <template v-if="canChooseSpeaker && speakers.length">
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>{{ t('meeting.controls.speaker') }}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup :model-value="speakerId" @update:model-value="selectSpeaker">
-              <DropdownMenuRadioItem
+            <p class="px-1 text-xs font-semibold text-harbor-muted">{{ t('meeting.controls.speaker') }}</p>
+            <div role="radiogroup" :aria-label="t('meeting.controls.speaker')" class="call-choice-list">
+              <button
                 v-for="(speaker, index) in speakers"
                 :key="speaker.deviceId"
-                :value="speaker.deviceId"
+                type="button"
+                role="radio"
+                class="call-choice"
+                :aria-checked="speaker.deviceId === speakerId"
                 :data-speaker-option="speaker.deviceId"
+                @click="selectSpeaker(speaker.deviceId)"
               >
-                <span class="truncate">{{ speaker.label || `${t('meeting.controls.speaker')} ${index + 1}` }}</span>
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </template>
-
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>{{ t('meeting.controls.inputVolume') }}</DropdownMenuLabel>
-          <!-- Arrow keys move the slider, not the menu's focus. -->
-          <div class="px-2 pb-2" @keydown.stop>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              :value="volumePercent"
-              :aria-label="t('meeting.controls.inputVolume')"
-              class="w-full cursor-pointer accent-harbor-accent"
-              data-input-volume
-              @input="onVolumeInput"
-            />
-            <div
-              role="meter"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              :aria-valuenow="levelPercent"
-              :aria-label="t('meeting.controls.inputLevel')"
-              class="mt-2 h-1.5 overflow-hidden rounded-full bg-harbor-hover"
-              data-input-level
-            >
-              <div class="h-full rounded-full bg-harbor-accent" :style="{ width: `${levelPercent}%` }" />
+                <span class="min-w-0 flex-1 truncate text-left">{{
+                  speaker.label || `${t('meeting.controls.speaker')} ${index + 1}`
+                }}</span>
+                <Check v-if="speaker.deviceId === speakerId" class="size-4 shrink-0" aria-hidden="true" />
+              </button>
             </div>
-          </div>
+          </template>
+          <MeetingInputVolume
+            class="!px-1"
+            :volume-percent="volumePercent"
+            :level-percent="levelPercent"
+            @change="onVolumeChange"
+          />
         </template>
 
         <template v-else>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem data-preview-camera @select="emit('preview-camera')">
-            <LiquidMenuIcon class="text-harbor-ink" :fallback="ScanFace" />{{ t('meeting.controls.previewCamera') }}
-          </DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger data-media-quality-menu>
-              <LiquidMenuIcon class="text-harbor-ink" :animated="GaugeAnimated" />{{ t('meeting.controls.quality') }}
-              <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{ qualityLabel }}</span>
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent class="meeting-menu marketing-font w-64">
-              <MeetingQualityOptions
-                :quality="quality"
-                :disabled="busy"
-                :sent-height="sentHeight"
-                @select="changeQuality"
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          <p class="px-1 text-xs font-semibold text-harbor-muted">{{ t('meeting.controls.quality') }}</p>
+          <div role="radiogroup" :aria-label="t('meeting.controls.quality')" class="call-choice-list">
+            <button
+              v-for="option in VIDEO_QUALITY_OPTIONS"
+              :key="option.value"
+              type="button"
+              role="radio"
+              class="call-choice"
+              :aria-checked="quality === option.value"
+              :disabled="busy"
+              :data-quality-option="option.value"
+              @click="changeQuality(option.value)"
+            >
+              <span class="min-w-0 flex-1 text-left">
+                <span class="block"
+                  >{{ option.label
+                  }}<span
+                    v-if="option.value === 'auto' && quality === 'auto' && sentHeight"
+                    class="font-normal text-harbor-muted"
+                  >
+                    · {{ sentHeight }}p</span
+                  ></span
+                >
+                <span class="block text-xs font-normal text-harbor-muted">{{ option.description }}</span>
+              </span>
+              <Check v-if="quality === option.value" class="size-4 shrink-0" aria-hidden="true" />
+            </button>
+          </div>
         </template>
-      </DropdownMenuContent>
-    </DropdownMenu>
-    <span class="meeting-tooltip">{{ toggleLabel }}</span>
+      </div>
+    </template>
+
+    <template v-else>
+      <button
+        type="button"
+        class="call-button relative"
+        :disabled="!available && !warning"
+        :aria-label="toggleLabel"
+        :data-off="off"
+        :data-media-off="off"
+        data-media-toggle
+        @click="onToggle"
+      >
+        <template v-if="isAudio"><MicOff v-if="off" /><Mic v-else /></template>
+        <template v-else><VideoOff v-if="off" /><Video v-else /></template>
+        <span
+          v-if="warning"
+          aria-hidden="true"
+          class="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-harbor-danger text-white [&_svg]:!size-2.5"
+          data-media-warning
+        >
+          <TriangleAlert />
+        </span>
+      </button>
+      <DropdownMenu v-if="variant !== 'toggle'" @update:open="onMenuOpen">
+        <DropdownMenuTrigger as-child>
+          <button type="button" class="call-button call-button-chevron" :aria-label="menuLabel" data-media-menu-trigger>
+            <ChevronUp />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="center"
+          side="top"
+          :side-offset="10"
+          class="meeting-menu marketing-font w-72"
+          data-media-options
+        >
+          <DropdownMenuLabel>{{
+            t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera')
+          }}</DropdownMenuLabel>
+          <p v-if="!devices.length" class="px-2 py-1.5 text-sm text-harbor-muted">
+            {{ t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras') }}
+          </p>
+          <DropdownMenuRadioGroup :model-value="activeId" @update:model-value="selectDevice">
+            <DropdownMenuRadioItem
+              v-for="(device, index) in devices"
+              :key="device.deviceId"
+              :value="device.deviceId"
+              :disabled="busy"
+              :data-device-option="device.deviceId"
+            >
+              <span class="truncate">{{ deviceLabel(device, index) }}</span>
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+
+          <template v-if="isAudio">
+            <template v-if="canChooseSpeaker && speakers.length">
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{{ t('meeting.controls.speaker') }}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup :model-value="speakerId" @update:model-value="selectSpeaker">
+                <DropdownMenuRadioItem
+                  v-for="(speaker, index) in speakers"
+                  :key="speaker.deviceId"
+                  :value="speaker.deviceId"
+                  :data-speaker-option="speaker.deviceId"
+                >
+                  <span class="truncate">{{ speaker.label || `${t('meeting.controls.speaker')} ${index + 1}` }}</span>
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </template>
+
+            <DropdownMenuSeparator />
+            <MeetingInputVolume
+              :volume-percent="volumePercent"
+              :level-percent="levelPercent"
+              @change="onVolumeChange"
+            />
+          </template>
+
+          <template v-else>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem data-preview-camera @select="emit('preview-camera')">
+              <LiquidMenuIcon class="text-harbor-ink" :fallback="ScanFace" />{{ t('meeting.controls.previewCamera') }}
+            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger data-media-quality-menu>
+                <LiquidMenuIcon class="text-harbor-ink" :animated="GaugeAnimated" />{{ t('meeting.controls.quality') }}
+                <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{ qualityLabel }}</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent class="meeting-menu marketing-font w-64">
+                <MeetingQualityOptions
+                  :quality="quality"
+                  :disabled="busy"
+                  :sent-height="sentHeight"
+                  @select="changeQuality"
+                />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </template>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <span class="meeting-tooltip">{{ toggleLabel }}</span>
+    </template>
   </div>
 </template>

@@ -68,10 +68,10 @@ describe('ParticipantTile name tag', () => {
     expect(tile.find('[data-participant-badges]').exists()).toBe(false);
   });
 
-  it('sits bottom-left on desktop and bottom-centre on a phone', () => {
+  it('sits bottom-left on desktop and on a phone', () => {
     expect(mountTile(null).get('[data-participant-name-tag]').attributes('data-align')).toBe('start');
     expect(mountTile(null, 'grid', { phone: true }).get('[data-participant-name-tag]').attributes('data-align')).toBe(
-      'center',
+      'start',
     );
   });
 

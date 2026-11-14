@@ -148,7 +148,7 @@ const nameTagProps = computed(() => ({
   isLocal: props.participant.isLocal,
   muted: !props.participant.audioEnabled,
   collapsed: props.collapsed,
-  align: props.phone ? ('center' as const) : ('start' as const),
+  align: 'start' as const,
   compact: isCompact.value,
   statusLabel: statusLabel.value,
 }));
