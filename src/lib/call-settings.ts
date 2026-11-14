@@ -10,6 +10,8 @@ export interface CallSettings {
   /** The camera preview opened once on this device, so later camera turn-ons skip it. */
   cameraPreviewSeen: boolean;
   micOn: boolean;
+  /** Off leaves your own tile out of the call screen; your camera still reaches the others. */
+  showOwnCamera: boolean;
 }
 
 export type CallDevices = Pick<CallSettings, 'microphoneId' | 'cameraId' | 'speakerId'>;
@@ -20,6 +22,7 @@ const DEFAULTS: CallSettings = {
   speakerId: null,
   cameraPreviewSeen: false,
   micOn: false,
+  showOwnCamera: true,
 };
 
 const DEVICE_KINDS: Record<keyof CallDevices, MediaDeviceKind> = {
@@ -49,6 +52,7 @@ export function loadCallSettings(): CallSettings {
     speakerId: deviceId(stored.speakerId),
     cameraPreviewSeen: flag(stored.cameraPreviewSeen),
     micOn: flag(stored.micOn),
+    showOwnCamera: stored.showOwnCamera !== false,
   };
 }
 

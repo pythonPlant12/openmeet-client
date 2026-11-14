@@ -419,7 +419,8 @@
       "shareTitle": "Join my video call",
       "moreControls": "More controls",
       "audioOutput": "Audio output",
-      "showChat": "Show chat"
+      "showChat": "Show chat",
+      "showOwnCamera": "Show my own camera"
     },
     "preview": {
       "title": "Camera preview",

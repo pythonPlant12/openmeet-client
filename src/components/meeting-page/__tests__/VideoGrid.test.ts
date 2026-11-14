@@ -143,6 +143,15 @@ describe('VideoGrid layout', () => {
   });
 });
 
+describe('VideoGrid own camera', () => {
+  it('leaves your own tile out when you hide your own camera, but keeps your screen share', () => {
+    desktop();
+    const myScreen = person('me-screen', { isLocal: true, screenShareOf: 'me' });
+    const wrapper = mountGrid({ participants: [...people(3), myScreen], hideOwnCamera: true, viewMode: 'grid' });
+    expect(tileIds(wrapper, '[data-testid="participant-grid"]')).toEqual(['ada', 'bob', 'me-screen']);
+  });
+});
+
 describe('VideoGrid tile interactions', () => {
   it('pins a tapped tile after the double-tap window', async () => {
     desktop();

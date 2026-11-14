@@ -10,6 +10,7 @@ import {
   PhoneOff,
   ScanEye,
   ScanFace,
+  SquareUser,
   UserRoundPlus,
 } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, useId } from 'vue';
@@ -34,6 +35,8 @@ defineProps<{
   viewMode: 'grid' | 'speaker';
   /** The panel's Invite people row shows only where inviting is possible. */
   canInvite: boolean;
+  /** Your own tile shows in the call screen. */
+  showOwnCamera?: boolean;
   showConnectionStatus: boolean;
   /** The call could not get the microphone or camera; its button shows a warning that asks again. */
   audioWarning?: boolean;
@@ -53,6 +56,7 @@ const emit = defineEmits<{
   (e: 'toggle-stats'): void;
   (e: 'toggle-chat'): void;
   (e: 'invite'): void;
+  (e: 'toggle-own-camera'): void;
 }>();
 
 const { t } = useI18n();
@@ -286,6 +290,30 @@ function onLeave() {
                 <component :is="layout.icon" class="size-4" />{{ layout.label }}
               </button>
             </div>
+          </div>
+
+          <div class="call-panel-group">
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="showOwnCamera"
+              class="call-panel-row"
+              data-panel-row="own-camera"
+              @click="emit('toggle-own-camera')"
+            >
+              <SquareUser class="call-panel-row-icon" />
+              <span class="flex-1 text-left">{{ t('meeting.controls.showOwnCamera') }}</span>
+              <span
+                aria-hidden="true"
+                class="relative h-6 w-10 shrink-0 rounded-full transition-colors"
+                :class="showOwnCamera ? 'bg-harbor-accent' : 'bg-harbor-line'"
+              >
+                <span
+                  class="absolute top-0.5 size-5 rounded-full bg-white shadow-harbor-soft transition-[left]"
+                  :class="showOwnCamera ? 'left-[1.125rem]' : 'left-0.5'"
+                />
+              </span>
+            </button>
           </div>
 
           <div v-if="canInvite" class="call-panel-group">

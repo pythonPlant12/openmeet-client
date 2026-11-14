@@ -37,6 +37,8 @@ const props = defineProps<{
   controlsShown?: boolean;
   /** The call controls are hidden, so the name tags shrink to the mic-off icon. */
   controlsHidden?: boolean;
+  /** Leaves your own camera tile out of the layout; your screen share stays. */
+  hideOwnCamera?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -73,10 +75,15 @@ const isWide = useMediaQuery('(min-width: 768px)');
 const formFactor = useCallFormFactor();
 // Phone call screens centre the name tags and open each person's menu from their name tag.
 const isPhone = computed(() => formFactor.value !== 'desktop');
-const hasParticipants = computed(() => props.participants.length > 0);
+const shownParticipants = computed(() =>
+  props.hideOwnCamera
+    ? props.participants.filter((participant) => !participant.isLocal || participant.screenShareOf)
+    : props.participants,
+);
+const hasParticipants = computed(() => shownParticipants.value.length > 0);
 const layout = computed(() =>
   selectCallLayout({
-    participants: props.participants,
+    participants: shownParticipants.value,
     formFactor: formFactor.value,
     viewMode: props.viewMode,
     pinnedParticipantId: props.pinnedParticipantId,

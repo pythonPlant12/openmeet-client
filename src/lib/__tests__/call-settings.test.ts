@@ -32,6 +32,7 @@ describe('call settings', () => {
       speakerId: null,
       cameraPreviewSeen: false,
       micOn: false,
+      showOwnCamera: true,
     });
   });
 
@@ -45,7 +46,16 @@ describe('call settings', () => {
       speakerId: 'speaker-2',
       cameraPreviewSeen: true,
       micOn: true,
+      showOwnCamera: true,
     });
+  });
+
+  it('restores hiding your own camera, and shows it again when the stored value is not a choice', () => {
+    saveCallSettings({ showOwnCamera: false });
+    expect(loadCallSettings().showOwnCamera).toBe(false);
+
+    localStorage.setItem('openmeet:call-settings', JSON.stringify({ showOwnCamera: 'no' }));
+    expect(loadCallSettings().showOwnCamera).toBe(true);
   });
 
   it('never restores the camera turned on', () => {
@@ -87,6 +97,7 @@ describe('call settings', () => {
       speakerId: null,
       cameraPreviewSeen: false,
       micOn: false,
+      showOwnCamera: true,
     });
   });
 
@@ -110,6 +121,7 @@ describe('call settings', () => {
       speakerId: null,
       cameraPreviewSeen: false,
       micOn: false,
+      showOwnCamera: true,
     });
   });
 

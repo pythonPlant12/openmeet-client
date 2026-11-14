@@ -765,6 +765,13 @@ watch(isFullscreen, (fullscreen) => {
   else callControls.show();
 });
 
+// Hiding your own tile is a per-device view choice; your camera keeps reaching the others.
+const showOwnCamera = ref(loadCallSettings().showOwnCamera);
+function toggleOwnCamera() {
+  showOwnCamera.value = !showOwnCamera.value;
+  saveCallSettings({ showOwnCamera: showOwnCamera.value });
+}
+
 function handleVideoLongPress() {
   callControls.toggle();
   playHaptic('selection');
@@ -1097,6 +1104,7 @@ const handleReconnect = () => {
           :fullscreen="isFullscreen"
           :controls-shown="isFullscreen && showsControls"
           :controls-hidden="!showsControls"
+          :hide-own-camera="!showOwnCamera"
           @toggle-pin="handleTogglePin"
           @toggle-fullscreen="handleToggleFullscreen"
           @long-press="handleVideoLongPress"
@@ -1113,6 +1121,7 @@ const handleReconnect = () => {
             :can-present="screenShare.isSupported"
             :view-mode="shownViewMode"
             :can-invite="inviteMode === 'enabled'"
+            :show-own-camera="showOwnCamera"
             :show-connection-status="showConnectionStatus"
             :audio-warning="audioWarning"
             :video-warning="videoWarning"
@@ -1128,6 +1137,7 @@ const handleReconnect = () => {
             @toggle-stats="handleToggleStats"
             @toggle-chat="handleToggleChat"
             @invite="isInviteOpen = true"
+            @toggle-own-camera="toggleOwnCamera"
           />
           <MeetingControls
             v-else

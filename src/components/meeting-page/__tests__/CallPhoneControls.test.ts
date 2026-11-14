@@ -169,6 +169,15 @@ describe('CallPhoneControls', () => {
     expect(report.element.href).toContain('Area%3A+meeting');
   });
 
+  it('toggles showing your own camera from the panel', async () => {
+    const wrapper = mountControls({ showOwnCamera: true });
+    const toggle = wrapper.get('[data-panel-row="own-camera"]');
+    expect(toggle.attributes('role')).toBe('switch');
+    expect(toggle.attributes('aria-checked')).toBe('true');
+    await toggle.trigger('click');
+    expect(wrapper.emitted('toggle-own-camera')).toHaveLength(1);
+  });
+
   it('leaves out the invite row where inviting is not possible', async () => {
     const wrapper = mountControls({ canInvite: false });
     expect(wrapper.find('[data-panel-row="invite"]').exists()).toBe(false);
