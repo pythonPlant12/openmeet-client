@@ -89,6 +89,17 @@ describe('useCallControlsVisibility', () => {
       expect(shown.value).toBe(true);
     });
 
+    it.each([
+      ['the chat', '<div class="harbor-chat-panel" data-state="open"></div>'],
+      ['the drag-up panel', '<div data-call-phone-controls data-state="open"></div>'],
+      ['a sheet', '<div role="dialog"></div>'],
+    ])('keeps the controls on a long-press while %s is open', (_, html) => {
+      const { shown, toggle } = setUp(false);
+      document.body.innerHTML = html;
+      toggle();
+      expect(shown.value).toBe(true);
+    });
+
     it('ignores mouse movement', () => {
       const { shown, toggle } = setUp(false);
       toggle();

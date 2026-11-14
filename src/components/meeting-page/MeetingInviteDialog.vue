@@ -52,7 +52,7 @@ watch(open, (isOpen) => {
     <SheetContent
       side="bottom"
       hide-close
-      overlay-class="bg-black/50 sm:bg-black/50"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md sm:bg-harbor-ink/30"
       class="marketing-font flex flex-col gap-3 rounded-t-[1.75rem] border-0 bg-harbor-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 text-harbor-ink transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
       :class="isExpanded ? 'h-[92dvh]' : 'h-[62dvh]'"
       :data-expanded="isExpanded"
@@ -84,7 +84,7 @@ watch(open, (isOpen) => {
 
   <Dialog v-else v-model:open="open">
     <HarborDialogContent
-      overlay-class="bg-black/50 backdrop-blur-md"
+      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
       class="marketing-font max-h-[calc(100dvh-4rem)] w-[calc(100%-2rem)] max-w-lg grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-harbor-float sm:w-full"
       data-meeting-invite
     >

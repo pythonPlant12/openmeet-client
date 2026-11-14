@@ -101,9 +101,9 @@ const isMeetingChatOpen = ref(false);
 // A meeting in full screen shows only its media, so the navbar steps aside until it ends.
 const isMeetingFullscreen = ref(false);
 // The call screen draws its own top and bottom bars, so the navbar steps aside for it too.
-const isMeetingPhoneChrome = ref(false);
+const isMeetingCallChrome = ref(false);
 const isHiddenForMeeting = computed(
-  () => isMeetingFullscreen.value || (isMeetingPage.value && isMeetingPhoneChrome.value),
+  () => isMeetingFullscreen.value || (isMeetingPage.value && isMeetingCallChrome.value),
 );
 const isDashboardChatOpen = ref(false);
 const dashboardPanel = ref<DashboardPanelState>(null);
@@ -526,9 +526,9 @@ function handleMeetingFullscreen(event: Event) {
   if (isMeetingFullscreen.value) closeMobileMenu();
 }
 
-function handleMeetingPhoneChrome(event: Event) {
-  isMeetingPhoneChrome.value = (event as CustomEvent<boolean>).detail;
-  if (isMeetingPhoneChrome.value) closeMobileMenu();
+function handleMeetingCallChrome(event: Event) {
+  isMeetingCallChrome.value = (event as CustomEvent<boolean>).detail;
+  if (isMeetingCallChrome.value) closeMobileMenu();
 }
 
 function handleDashboardPanelState(event: Event) {
@@ -604,7 +604,7 @@ onMounted(() => {
   window.addEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
   window.addEventListener('openmeet:dashboard-panel-state', handleDashboardPanelState);
   window.addEventListener('openmeet:meeting-fullscreen', handleMeetingFullscreen);
-  window.addEventListener('openmeet:meeting-phone-chrome', handleMeetingPhoneChrome);
+  window.addEventListener('openmeet:meeting-call-chrome', handleMeetingCallChrome);
   document.addEventListener('pointerdown', closeMobileStatusOnOutsidePress, true);
   if ('ResizeObserver' in window) navResizeObserver = new ResizeObserver(updateNavLayout);
   updateNavLayout();
@@ -621,7 +621,7 @@ onUnmounted(() => {
   window.removeEventListener('openmeet:dashboard-chat-state', handleDashboardChatState);
   window.removeEventListener('openmeet:dashboard-panel-state', handleDashboardPanelState);
   window.removeEventListener('openmeet:meeting-fullscreen', handleMeetingFullscreen);
-  window.removeEventListener('openmeet:meeting-phone-chrome', handleMeetingPhoneChrome);
+  window.removeEventListener('openmeet:meeting-call-chrome', handleMeetingCallChrome);
 });
 
 watch([mobileMenuExpanded, activeMobileMenuIsContentSized], () => requestAnimationFrame(updateNavLayout));

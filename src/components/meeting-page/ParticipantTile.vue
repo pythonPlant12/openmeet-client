@@ -385,9 +385,9 @@ onMounted(async () => {
           type="button"
           :class="[
             'meeting-glass-bubble absolute flex items-center justify-center rounded-lg transition-opacity',
-            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+            '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',
             isCompact ? 'bottom-1.5 right-1.5 size-6' : 'bottom-2 right-2 size-8',
-            isOptionsOpen ? 'opacity-100' : '',
+            isOptionsOpen ? '[@media(hover:hover)]:opacity-100' : '',
           ]"
           data-participant-options
           :aria-label="t('meeting.participant.options', { name: participant.name })"

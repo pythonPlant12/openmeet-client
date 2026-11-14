@@ -603,7 +603,7 @@ onUnmounted(() => {
   if (isFullscreen.value) setFullscreen(false);
   document.documentElement.classList.remove('meeting-immersive');
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-fullscreen', { detail: false }));
-  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-phone-chrome', { detail: false }));
+  window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-call-chrome', { detail: false }));
   cancelRingingCall();
   window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: false }));
   endCall();
@@ -821,7 +821,7 @@ useEventListener(document, 'fullscreenchange', () => {
 // The call screen draws its own bars on phones and on desktop alike, so the navbar steps aside while it shows.
 watch(
   hasJoined,
-  (joined) => window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-phone-chrome', { detail: joined })),
+  (joined) => window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-call-chrome', { detail: joined })),
   { immediate: true },
 );
 
