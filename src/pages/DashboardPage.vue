@@ -70,7 +70,6 @@ import {
   type MessageReaction,
   SocialApiError,
   type UserSearchResult,
-  type UserStatus,
   socialApi,
 } from '@/services/social-api';
 import { cookieUtils } from '@/utils';
@@ -2067,18 +2066,18 @@ async function startSelectedConversationCall(options?: { video: boolean }) {
   await startConversationCall(conversation, options);
 }
 
-async function startContactProfileCall() {
+async function startContactProfileCall(options?: { video: boolean }) {
   const friend = contactProfileFriend.value;
   if (!friend) return;
   setContactProfileDialogOpen(false);
-  await startFriendCall(friend);
+  await startFriendCall(friend, options);
 }
 
-async function startFriendCall(friend: Friend) {
+async function startFriendCall(friend: Friend, options?: { video: boolean }) {
   if (isCallLaunchActive.value) return;
   const conversation = await openFriendConversation(friend);
   if (!conversation) return;
-  await startConversationCall(conversation);
+  await startConversationCall(conversation, options);
 }
 
 // Swipe actions: read state updates optimistically and rolls back if the server rejects it.
@@ -2160,25 +2159,6 @@ async function addProfileFriend() {
       description: error instanceof SocialApiError ? error.message : undefined,
       variant: 'destructive',
     });
-  }
-}
-
-async function updateOwnStatus(status: UserStatus) {
-  const token = accessToken.value;
-  if (!token) return;
-  try {
-    const profile = await socialApi.updateCurrentUserStatus(token, status);
-    if (contactProfile.value?.id === profile.id) {
-      contactProfile.value = {
-        ...profile,
-        isOnline: contactProfile.value.isOnline,
-        lastSeenAt: contactProfile.value.lastSeenAt,
-      };
-    }
-    window.dispatchEvent(new Event('openmeet:profile-updated'));
-  } catch (error) {
-    console.error('[Dashboard] Failed to update status:', error);
-    toast({ title: 'Could not update your status.', variant: 'destructive' });
   }
 }
 
@@ -2735,7 +2715,6 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       @add-friend="addProfileFriend"
       @accept-request="respondToFriendRequest($event, true)"
       @decline-request="respondToFriendRequest($event, false)"
-      @update-status="updateOwnStatus"
     />
   </main>
 </template>

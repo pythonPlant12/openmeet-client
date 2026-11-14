@@ -689,7 +689,7 @@ defineExpose({
                   type="button"
                   data-swipe-action
                   class="flex flex-1 items-center justify-start text-white transition-colors"
-                  :class="armed ? 'bg-harbor-accent-hover' : 'bg-harbor-accent'"
+                  :class="armed ? 'bg-harbor-ink-soft' : 'bg-harbor-icon'"
                   :aria-label="`Message ${member.name}`"
                   @click="
                     close();
@@ -719,7 +719,7 @@ defineExpose({
                   v-if="!isSelf(member) && !isFriend(member)"
                   type="button"
                   data-swipe-action
-                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-accent text-[11px] font-semibold text-white"
+                  class="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden bg-harbor-icon text-[11px] font-semibold text-white"
                   :aria-label="`Add ${member.name} as a friend`"
                   @click="
                     close();
@@ -860,8 +860,8 @@ defineExpose({
 
   <Dialog :open="isSettingsOpen" @update:open="setSettingsOpen">
     <HarborDialogContent
-      class="marketing-font w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
-      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font !z-[1050] w-[calc(100%-2rem)] max-w-md rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
+      overlay-class="!z-[1050] bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
         ><DialogTitle>Group settings</DialogTitle
@@ -951,8 +951,8 @@ defineExpose({
 
   <Dialog :open="isAddMembersOpen" @update:open="setAddMembersOpen">
     <HarborDialogContent
-      class="marketing-font flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
-      overlay-class="bg-harbor-ink/30 backdrop-blur-md"
+      class="marketing-font !z-[1050] flex max-h-[min(42rem,calc(100dvh-3rem))] w-[calc(100%-2rem)] max-w-lg flex-col rounded-[1.75rem] border-harbor-line bg-harbor-surface p-6 text-harbor-ink shadow-[0_24px_70px_rgba(16,47,53,0.18)] sm:w-full"
+      overlay-class="!z-[1050] bg-harbor-ink/30 backdrop-blur-md"
     >
       <DialogHeader
         ><DialogTitle>{{ addActionLabel }}</DialogTitle

@@ -213,7 +213,7 @@ function userInitials(name: string) {
             size="icon"
             :disabled="callingFriendId !== null"
             :aria-label="t('dashboard.callFriend', { name: friend.name })"
-            class="size-9 rounded-full bg-harbor-hover text-harbor-accent hover:bg-harbor-accent hover:text-white"
+            class="size-9 rounded-full bg-harbor-hover text-harbor-ink hover:bg-harbor-line hover:text-harbor-ink"
             @click="emit('call-friend', friend)"
           >
             <LoadingRipple v-if="callingFriendId === friend.id" size="sm" />

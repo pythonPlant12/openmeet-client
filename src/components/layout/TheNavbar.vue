@@ -49,6 +49,7 @@ import { useOwnProfile } from '@/composables/useOwnProfile';
 import { useBranding } from '@/config/branding.config';
 import { USER_STATUS_OPTIONS } from '@/config/user-status.config';
 import type { DashboardPanelState } from '@/pages/dashboard-group-state';
+import { playHaptic } from '@/services/haptics';
 import type { UserStatus } from '@/services/social-api';
 import { AuthEventType } from '@/xstate/machines/auth/types';
 
@@ -542,6 +543,13 @@ function handleTabSelect(key: string) {
   else if (key === 'login') handleGoToLogin();
 }
 
+// On a phone, holding the Calls tab starts a new empty call instead of opening the call history.
+function handleTabLongPress(key: string) {
+  if (key !== 'calls') return;
+  playHaptic('medium');
+  handleStartMeeting();
+}
+
 const handleGoToLogin = () => {
   if (isAuthBusy.value) return;
   if (hasRegisterError.value) {
@@ -666,7 +674,9 @@ watch(mobileAccountActionsRef, (element, previous) => {
         :items="workspaceTabs"
         :active-key="activeWorkspaceTab"
         :label="t('nav.workspaceNavigation')"
+        :long-press-keys="['calls']"
         @select="handleTabSelect"
+        @long-press="handleTabLongPress"
       >
         <template #item-account="{ attrs }">
           <button
@@ -905,7 +915,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
       <template #item-home="{ attrs }">
         <RouterLink :to="homePath" v-bind="attrs" @click="handleBrandNavigation">
           <span
-            class="liquid-glass-primary relative flex size-7 items-center justify-center rounded-[0.65rem] text-white"
+            class="liquid-glass-primary relative flex size-7 items-center justify-center rounded-[0.65rem]"
             aria-hidden="true"
           >
             <Video class="size-4" :stroke-width="2.25" />
@@ -1095,7 +1105,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
               @click="handleBrandNavigation"
             >
               <span
-                class="liquid-glass-primary relative flex size-9 items-center justify-center rounded-xl text-white"
+                class="liquid-glass-primary relative flex size-9 items-center justify-center rounded-xl"
                 aria-hidden="true"
               >
                 <Video class="size-5" :stroke-width="2.25" />

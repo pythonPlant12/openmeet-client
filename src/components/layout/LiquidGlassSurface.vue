@@ -30,8 +30,10 @@ const props = withDefaults(
     followHover?: boolean;
     // Changes when items are added, removed, or resized without the surface's width changing.
     measureKey?: string;
+    // A flat surface: a plain gray pill whose highlight slides between items, without glass, water, or shadows.
+    flat?: boolean;
   }>(),
-  { tag: 'div', followHover: false, measureKey: '' },
+  { tag: 'div', followHover: false, measureKey: '', flat: false },
 );
 
 defineSlots<{ default: (props: { targetKey: string | null }) => unknown }>();
@@ -162,6 +164,7 @@ function handlePointerLeave() {
 }
 
 function handlePointerDown(event: PointerEvent) {
+  if (props.flat) return;
   const point = localPoint(event.clientX, event.clientY);
   addRipple(state, point.x, point.y, 0.8);
   startLoop();
@@ -183,9 +186,9 @@ watch(prefersReducedMotion, (reduce) => (state.reduce = reduce), { immediate: tr
 
 onMounted(() => {
   refraction.value =
-    supportsLiquidRefraction() && !window.matchMedia?.('(prefers-reduced-transparency: reduce)').matches;
+    !props.flat && supportsLiquidRefraction() && !window.matchMedia?.('(prefers-reduced-transparency: reduce)').matches;
   const canvas = canvasRef.value;
-  glc = canvas ? initLiquidGl(canvas) : null;
+  glc = canvas && !props.flat ? initLiquidGl(canvas) : null;
   if (!glc) glMode.value = 'off';
   canvas?.addEventListener('webglcontextlost', handleContextLost);
   document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -232,6 +235,7 @@ onUnmounted(() => {
     :data-refract="refraction ? 'on' : 'off'"
     :data-idle="hasTarget ? undefined : 'true'"
     :data-accent="hasAccent ? 'true' : undefined"
+    :data-flat="flat ? 'true' : undefined"
     @pointermove="handlePointerMove"
     @pointerleave="handlePointerLeave"
     @pointerdown="handlePointerDown"
@@ -335,6 +339,29 @@ onUnmounted(() => {
 .liquid-surface[data-idle='true'] .liquid-surface-water,
 .liquid-surface[data-idle='true'] .liquid-surface-drop {
   visibility: hidden;
+}
+
+/* Flat surfaces: a plain gray pill and a plain highlight that slides between items, with no glass, rim, or
+   shadow. The highlight keeps the drop's movement. */
+.liquid-surface[data-flat='true'] .liquid-surface-glass {
+  background: rgb(var(--harbor-hover));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.liquid-surface[data-flat='true'] .liquid-surface-drop,
+.liquid-surface[data-flat='true'][data-accent='true'] .liquid-surface-drop {
+  background: rgb(var(--harbor-surface));
+  box-shadow: none;
+}
+
+.liquid-surface[data-flat='true'][data-tone='dark'] .liquid-surface-glass {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.liquid-surface[data-flat='true'][data-tone='dark'] .liquid-surface-drop {
+  background: rgb(255 255 255 / 0.16);
 }
 
 /* Items sit above the glass and the drop. */

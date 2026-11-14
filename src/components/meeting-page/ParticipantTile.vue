@@ -44,6 +44,11 @@ interface Props {
   nameToggle?: boolean;
   /** The call controls are hidden, so the name tag shrinks to the mic-off icon. */
   collapsed?: boolean;
+  /**
+   * The tile is off screen, such as on another grid page: it keeps playing the person's audio but drops their
+   * video, so the device does not render cameras nobody sees.
+   */
+  audioOnly?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -60,6 +65,7 @@ const props = withDefaults(defineProps<Props>(), {
   isFullscreen: false,
   nameToggle: false,
   collapsed: false,
+  audioOnly: false,
 });
 const { t } = useI18n();
 
@@ -79,10 +85,17 @@ const isOptionsOpen = ref(false);
 const videoRef = ref<HTMLVideoElement | null>(null);
 // A remote camera is "loading" from joining until its first frame renders.
 const hasVideoFrames = ref(false);
+// An audio-only tile plays a stream with just the audio tracks, so its video track has nothing to render into.
+const mediaStream = computed(() => {
+  const stream = props.participant.stream;
+  if (!stream || !props.audioOnly) return stream;
+  return new MediaStream(stream.getAudioTracks());
+});
+const showsVideo = computed(() => props.participant.videoEnabled && !props.audioOnly);
 const isMediaLoading = computed(
   () =>
     !props.participant.isLocal &&
-    props.participant.videoEnabled &&
+    showsVideo.value &&
     (!props.participant.stream || (props.participant.stream.getVideoTracks().length > 0 && !hasVideoFrames.value)),
 );
 
@@ -99,7 +112,7 @@ function markVideoFrames() {
 
 const playAttachedVideo = async () => {
   const video = videoRef.value;
-  if (!video || !props.participant.stream) {
+  if (!video || !mediaStream.value) {
     return;
   }
 
@@ -164,14 +177,15 @@ const surfaceClass = computed(() => (props.dark ? 'bg-[#161C1E]' : 'bg-harbor-li
 
 const attachStream = async () => {
   await nextTick();
-  if (videoRef.value && props.participant.stream) {
+  const stream = mediaStream.value;
+  if (videoRef.value && stream) {
     // Only set srcObject if it's different from what's currently set
-    if (videoRef.value.srcObject !== props.participant.stream) {
+    if (videoRef.value.srcObject !== stream) {
       console.log(`[ParticipantTile] Attaching stream for ${props.participant.name}`);
-      videoRef.value.srcObject = props.participant.stream;
+      videoRef.value.srcObject = stream;
     }
 
-    props.participant.stream.getTracks().forEach((track) => {
+    stream.getTracks().forEach((track) => {
       track.onunmute = () => {
         void playAttachedVideo();
       };
@@ -181,14 +195,11 @@ const attachStream = async () => {
   }
 };
 
-watch(
-  () => props.participant.stream,
-  async (stream) => {
-    console.log(`[ParticipantTile] Stream changed for ${props.participant.name}:`, stream);
-    hasVideoFrames.value = false;
-    await attachStream();
-  },
-);
+watch(mediaStream, async (stream) => {
+  console.log(`[ParticipantTile] Stream changed for ${props.participant.name}:`, stream);
+  hasVideoFrames.value = false;
+  await attachStream();
+});
 
 watch(
   () => props.participant.videoEnabled,
@@ -269,13 +280,13 @@ onMounted(async () => {
           bleed ? 'rounded-none' : 'rounded-[1.25rem]',
           surfaceClass,
           objectFitClass,
-          { hidden: !participant.videoEnabled, '-scale-x-100': participant.isLocal && !isScreen },
+          { hidden: !showsVideo, '-scale-x-100': participant.isLocal && !isScreen },
         ]"
       />
 
       <!-- Avatar (shown when no stream or video disabled) -->
       <div
-        v-if="!participant.stream || !participant.videoEnabled"
+        v-if="!participant.stream || !showsVideo"
         data-participant-avatar
         class="absolute inset-0 flex items-center justify-center"
         :class="surfaceClass"

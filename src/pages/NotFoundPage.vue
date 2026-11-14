@@ -72,10 +72,7 @@ const handleGoBack = () => {
               <ArrowLeft class="size-4" />
               {{ t('notFound.goBack') }}
             </Button>
-            <Button
-              class="harbor-primary-action h-11 rounded-full bg-[#0B7A75] px-5 text-white"
-              @click="router.push('/')"
-            >
+            <Button variant="pill" class="px-5" @click="router.push('/')">
               <Home class="size-4" />
               {{ t('notFound.home', { appName: branding.appName }) }}
             </Button>

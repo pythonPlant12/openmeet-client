@@ -5,7 +5,6 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
-import { Button } from '@/components/ui/button';
 import { Dialog, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -279,78 +278,81 @@ onBeforeUnmount(() => {
 
 <template>
   <main
-    class="marketing-font h-[calc(100dvh-84px)] overflow-y-auto overscroll-contain bg-harbor-surface px-4 pb-10 pt-3 text-harbor-ink sm:px-6 sm:pt-6"
+    class="marketing-font relative h-[calc(100dvh-84px)] overflow-y-auto overscroll-contain bg-white text-harbor-ink"
   >
     <div v-if="isCheckingSession" class="flex min-h-[calc(100dvh-132px)] items-center justify-center">
-      <LoadingRipple class="size-8 text-harbor-accent" />
+      <LoadingRipple class="size-8 text-harbor-icon" />
       <span class="sr-only">{{ t('common.loading') }}</span>
     </div>
 
-    <motion.section
-      v-else-if="isAuthenticated"
-      :initial="{ opacity: 0, y: 12 }"
-      :animate="{ opacity: 1, y: 0 }"
-      :transition="{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }"
-      class="mx-auto max-w-5xl"
-    >
-      <button
-        type="button"
-        class="harbor-ghost-action inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-harbor-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-accent"
-        @click="router.push('/dashboard')"
-      >
-        <ArrowLeft class="size-4" />
-        {{ t('account.backToDashboard') }}
-      </button>
+    <template v-else-if="isAuthenticated">
+      <!-- The header floats over the page like the chat header and Profile info, so the form blurs under it. -->
+      <header class="pointer-events-none sticky top-0 z-20 px-3 pb-12 pt-3 sm:px-5">
+        <span class="harbor-chat-header-fade absolute inset-0 -z-10" aria-hidden="true" />
+        <div class="mx-auto flex max-w-3xl items-center gap-3">
+          <button
+            type="button"
+            class="harbor-round-button pointer-events-auto size-10 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
+            :aria-label="t('account.backToDashboard')"
+            :title="t('account.backToDashboard')"
+            @click="router.push('/dashboard')"
+          >
+            <ArrowLeft class="size-5" />
+          </button>
+          <h1 class="truncate text-base font-semibold">{{ t('account.title') }}</h1>
+        </div>
+      </header>
 
-      <div
-        class="mt-6 overflow-hidden rounded-[2rem] border border-harbor-line bg-white shadow-[0_24px_70px_rgba(16,47,53,0.09)]"
+      <motion.div
+        :initial="{ opacity: 0, y: 12 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }"
+        class="mx-auto -mt-12 max-w-3xl space-y-8 px-4 pb-10 sm:px-6"
       >
-        <section
-          class="relative overflow-hidden border-b border-harbor-line bg-harbor-hover px-6 py-8 sm:px-10 sm:py-10"
-        >
-          <div class="absolute right-0 top-0 size-48 -translate-y-1/2 translate-x-1/3 rounded-full bg-harbor-line/70" />
-          <div class="relative flex flex-col gap-6 sm:flex-row sm:items-center">
-            <DropdownMenu>
-              <DropdownMenuTrigger as-child>
-                <button
-                  type="button"
-                  class="harbor-ghost-action relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-[2rem] bg-harbor-accent p-0 text-3xl font-semibold text-white shadow-[0_16px_32px_rgba(11,122,117,0.2)]"
-                  aria-label="Manage profile avatar"
-                >
-                  <img v-if="avatarUrl" :src="avatarUrl" alt="Your profile avatar" class="size-full object-cover" />
-                  <LoadingRipple v-else-if="isLoadingProfile" class="size-7 text-white" />
-                  <span v-else>{{ initials }}</span>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" :side-offset="10" class="min-w-48">
-                <DropdownMenuItem v-if="avatarUrl" @select="isAvatarPreviewOpen = true">
-                  <Eye class="size-4" />View
-                </DropdownMenuItem>
-                <DropdownMenuSeparator v-if="avatarUrl" class="mx-1 my-2 bg-harbor-line" />
-                <DropdownMenuItem :disabled="isSaving" @select="chooseAvatar">
-                  <Camera class="size-4" />Change avatar
-                </DropdownMenuItem>
-                <DropdownMenuItem v-if="avatarUrl" variant="danger" :disabled="isSaving" @select="removeAvatar">
-                  <Trash2 class="size-4" />Remove avatar
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <input
-              ref="avatarInput"
-              class="sr-only"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              @change="handleAvatarChange"
-            />
-            <div class="min-w-0">
-              <h1 class="truncate text-4xl font-semibold tracking-[-0.05em] text-harbor-ink sm:text-5xl">
-                {{ name || nickname || email }}
-              </h1>
+        <section class="flex flex-col items-center gap-5 pt-2 text-center">
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <button
+                type="button"
+                class="harbor-ghost-action relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar p-0 text-3xl font-semibold text-harbor-icon"
+                aria-label="Manage profile avatar"
+              >
+                <img v-if="avatarUrl" :src="avatarUrl" alt="Your profile avatar" class="size-full object-cover" />
+                <LoadingRipple v-else-if="isLoadingProfile" class="size-7 text-harbor-icon" />
+                <span v-else>{{ initials }}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" :side-offset="10" class="min-w-48">
+              <DropdownMenuItem v-if="avatarUrl" @select="isAvatarPreviewOpen = true">
+                <Eye class="size-4" />View
+              </DropdownMenuItem>
+              <DropdownMenuSeparator v-if="avatarUrl" class="mx-1 my-2 bg-harbor-line" />
+              <DropdownMenuItem :disabled="isSaving" @select="chooseAvatar">
+                <Camera class="size-4" />Change avatar
+              </DropdownMenuItem>
+              <DropdownMenuItem v-if="avatarUrl" variant="danger" :disabled="isSaving" @select="removeAvatar">
+                <Trash2 class="size-4" />Remove avatar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <input
+            ref="avatarInput"
+            class="sr-only"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            @change="handleAvatarChange"
+          />
+          <div class="min-w-0 max-w-full">
+            <h2 class="truncate text-3xl font-semibold leading-tight tracking-[-0.03em]">
+              {{ name || nickname || email }}
+            </h2>
+            <div class="mt-1 flex items-center justify-center gap-1 text-base text-harbor-muted">
+              <span class="truncate">@{{ nickname || 'nickname' }}</span>
               <button
                 v-if="nickname"
                 type="button"
                 data-copy-nickname
-                class="harbor-ghost-action mt-2 inline-flex max-w-full items-center gap-2 rounded-lg px-1 text-lg font-semibold text-harbor-accent"
+                class="harbor-ghost-action shrink-0 rounded-md p-1 text-harbor-icon"
                 :aria-label="
                   isNicknameCopied ? t('nav.nicknameCopied') : t('nav.copyNickname', { nickname: `@${nickname}` })
                 "
@@ -359,50 +361,46 @@ onBeforeUnmount(() => {
                 "
                 @click="copyNickname"
               >
-                <span class="truncate">@{{ nickname }}</span>
-                <Check v-if="isNicknameCopied" class="size-4 shrink-0" />
-                <Copy v-else class="size-4 shrink-0" />
+                <Check v-if="isNicknameCopied" class="size-4" /><Copy v-else class="size-4" />
               </button>
-              <p v-else class="mt-2 truncate text-lg font-semibold text-harbor-accent">@nickname</p>
             </div>
           </div>
         </section>
 
-        <section class="p-6 sm:p-10">
-          <p v-if="isLoadingProfile" class="mb-5 text-sm text-harbor-muted">{{ t('common.loading') }}</p>
-          <form class="space-y-6" @submit.prevent="handleProfileSave">
-            <div class="grid gap-5 sm:grid-cols-2">
-              <div class="space-y-2">
-                <Label for="account-name" class="text-harbor-ink-soft">{{ t('account.name') }}</Label>
-                <Input
-                  id="account-name"
-                  v-model="name"
-                  :disabled="isSaving"
-                  class="h-11 rounded-xl border-harbor-line bg-harbor-app px-4 text-harbor-icon shadow-none"
-                />
-              </div>
-              <div class="space-y-2">
-                <Label for="account-nickname" class="text-harbor-ink-soft">{{ t('account.nickname') }}</Label>
-                <Input
-                  id="account-nickname"
-                  v-model="nickname"
-                  :disabled="isSaving"
-                  class="h-11 rounded-xl border-harbor-line bg-harbor-app px-4 text-harbor-icon shadow-none"
-                />
-              </div>
-            </div>
-
+        <p v-if="isLoadingProfile" class="text-center text-sm text-harbor-muted">{{ t('common.loading') }}</p>
+        <form class="space-y-6" @submit.prevent="handleProfileSave">
+          <section class="grid gap-5 rounded-[1.4rem] bg-harbor-app p-4 sm:grid-cols-2 sm:p-5">
             <div class="space-y-2">
+              <Label for="account-name" class="text-harbor-ink-soft">{{ t('account.name') }}</Label>
+              <Input
+                id="account-name"
+                v-model="name"
+                :disabled="isSaving"
+                class="h-11 rounded-xl border-harbor-line bg-white px-4 text-harbor-ink shadow-none"
+              />
+            </div>
+            <div class="space-y-2">
+              <Label for="account-nickname" class="text-harbor-ink-soft">{{ t('account.nickname') }}</Label>
+              <Input
+                id="account-nickname"
+                v-model="nickname"
+                :disabled="isSaving"
+                class="h-11 rounded-xl border-harbor-line bg-white px-4 text-harbor-ink shadow-none"
+              />
+            </div>
+            <div class="space-y-2 sm:col-span-2">
               <Label for="account-email" class="text-harbor-ink-soft">{{ t('account.email') }}</Label>
               <Input
                 id="account-email"
                 v-model="email"
                 type="email"
                 disabled
-                class="h-11 rounded-xl border-harbor-line bg-harbor-app px-4 text-harbor-icon shadow-none"
+                class="h-11 rounded-xl border-harbor-line bg-white px-4 text-harbor-icon shadow-none"
               />
             </div>
+          </section>
 
+          <section class="space-y-5 rounded-[1.4rem] bg-harbor-app p-4 sm:p-5">
             <fieldset v-if="status" class="space-y-2" data-account-status>
               <legend class="text-sm font-medium text-harbor-ink-soft">{{ t('nav.status') }}</legend>
               <div class="flex flex-wrap gap-2" role="radiogroup" :aria-label="t('nav.status')">
@@ -413,11 +411,11 @@ onBeforeUnmount(() => {
                   role="radio"
                   :aria-checked="option.value === status"
                   :disabled="isUpdatingStatus"
-                  class="inline-flex min-h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors disabled:opacity-60"
+                  class="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle disabled:opacity-60"
                   :class="
                     option.value === status
-                      ? 'border-harbor-accent bg-harbor-hover text-harbor-ink'
-                      : 'border-harbor-line bg-white text-harbor-ink-soft [@media(hover:hover)]:hover:bg-harbor-hover'
+                      ? 'bg-white text-harbor-ink shadow-harbor-soft'
+                      : 'text-harbor-ink-soft [@media(hover:hover)]:hover:bg-harbor-hover'
                   "
                   @click="updateStatus(option.value)"
                 >
@@ -433,20 +431,25 @@ onBeforeUnmount(() => {
                 v-model="statusMessage"
                 :disabled="isSaving"
                 :placeholder="t('account.statusMessagePlaceholder')"
-                class="h-11 rounded-xl border-harbor-line bg-harbor-app px-4 text-harbor-icon shadow-none placeholder:text-harbor-subtle"
+                class="h-11 rounded-xl border-harbor-line bg-white px-4 text-harbor-ink shadow-none placeholder:text-harbor-subtle"
               />
             </div>
+          </section>
 
-            <p v-if="profileError" role="status" class="text-sm text-harbor-danger-strong">{{ profileError }}</p>
-            <div class="flex justify-end border-t border-harbor-line pt-6">
-              <Button type="submit" :disabled="isSaving" variant="accent" size="pill" class="px-6">
-                {{ isSaving ? t('common.loading') : t('account.save') }}
-              </Button>
-            </div>
-          </form>
-        </section>
-      </div>
-    </motion.section>
+          <p v-if="profileError" role="status" class="text-sm text-harbor-danger-strong">{{ profileError }}</p>
+          <div class="flex justify-end">
+            <button
+              type="submit"
+              :disabled="isSaving"
+              class="harbor-pill-button inline-flex items-center gap-2 px-6 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle disabled:opacity-60"
+            >
+              <LoadingRipple v-if="isSaving" size="sm" /><Check v-else class="size-4" />
+              {{ isSaving ? t('common.loading') : t('account.save') }}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </template>
     <Dialog :open="isAvatarPreviewOpen" @update:open="isAvatarPreviewOpen = $event"
       ><HarborDialogContent
         overlay-class="bg-harbor-ink/50 backdrop-blur-lg"

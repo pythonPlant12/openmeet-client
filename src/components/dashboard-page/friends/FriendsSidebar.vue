@@ -210,7 +210,7 @@ onBeforeUnmount(clearLongPress);
         <template v-if="view === 'groups'">
           <ListRow data-create-group class="mb-1 text-harbor-accent" @click="emit('create-group')">
             <template #avatar
-              ><Avatar class="bg-harbor-accent-soft text-harbor-accent"><Plus /></Avatar
+              ><Avatar class="bg-harbor-hover text-harbor-ink"><Plus /></Avatar
             ></template>
             Create group
             <template #subtitle>Start a new group chat</template>
@@ -348,7 +348,7 @@ onBeforeUnmount(clearLongPress);
                     type="button"
                     data-swipe-action
                     class="flex h-full w-full items-center justify-start text-white transition-colors"
-                    :class="armed ? 'bg-harbor-accent-hover' : 'bg-harbor-accent'"
+                    :class="armed ? 'bg-harbor-ink-soft' : 'bg-harbor-icon'"
                     :aria-label="`Call ${friend.name}`"
                     @click="
                       close();

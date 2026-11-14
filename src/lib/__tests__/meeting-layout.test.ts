@@ -12,6 +12,7 @@ import {
   layoutWithoutPin,
   mainVideoFills,
   nearestCorner,
+  pagedGridCells,
   selectCallLayout,
 } from '@/lib/meeting-layout';
 
@@ -47,7 +48,7 @@ describe('selectCallLayout', () => {
   });
 
   it('fills a phone with one column for yourself alone', () => {
-    expect(layoutFor([me], 'phone-portrait')).toEqual({ kind: 'grid', ids: ['me'], columns: 1 });
+    expect(layoutFor([me], 'phone-portrait')).toEqual({ kind: 'grid', ids: ['me'], columns: 1, paged: true });
   });
 
   it('uses a 2-column grid for 3 and 4 people on a phone', () => {
@@ -55,6 +56,7 @@ describe('selectCallLayout', () => {
       kind: 'grid',
       ids: ['me', 'ada', 'bob'],
       columns: 2,
+      paged: true,
     });
     expect(layoutFor([me, person('ada'), person('bob'), person('cy')], 'phone-portrait')).toMatchObject({
       kind: 'grid',
@@ -72,18 +74,32 @@ describe('selectCallLayout', () => {
     expect(layoutFor(people, 'phone-portrait')).toMatchObject({ kind: 'speaker', mainId: 'ada' });
   });
 
-  it('still shows a 2-column grid of 5 or more on a phone when the person picks Grid', () => {
+  it('shows grid pages of 5 or more on a phone when the person picks Grid', () => {
     const people = [me, person('ada'), person('bob'), person('cy'), person('dee')];
-    expect(layoutFor(people, 'phone-portrait', { viewMode: 'grid' })).toMatchObject({ kind: 'grid', columns: 2 });
+    expect(layoutFor(people, 'phone-portrait', { viewMode: 'grid' })).toMatchObject({ kind: 'grid', paged: true });
   });
 
-  it('fits the grid to the window shape on phone landscape and desktop', () => {
+  it('shows grid pages on phone landscape and desktop too', () => {
     for (const formFactor of ['phone-landscape', 'desktop'] as const) {
-      expect(layoutFor([me, person('ada')], formFactor)).toEqual({ kind: 'grid', ids: ['me', 'ada'], columns: null });
+      expect(layoutFor([me, person('ada')], formFactor)).toEqual({
+        kind: 'grid',
+        ids: ['me', 'ada'],
+        columns: null,
+        paged: true,
+      });
       expect(
         layoutFor([me, person('ada'), person('bob'), person('cy'), person('dee'), person('eve')], formFactor),
-      ).toMatchObject({ kind: 'grid', columns: null });
+      ).toMatchObject({ kind: 'grid', paged: true });
     }
+  });
+
+  it('puts the only other tile of a phone speaker layout in a corner instead of a strip', () => {
+    expect(layoutFor([me, person('ada')], 'phone-portrait', { pinned: 'me' })).toEqual({
+      kind: 'self-view',
+      mainId: 'me',
+      selfId: 'ada',
+    });
+    expect(layoutFor([me, person('ada')], 'phone-landscape', { pinned: 'me' })).toMatchObject({ kind: 'speaker' });
   });
 
   it('puts a pinned person on stage in the speaker layout on every form factor', () => {
@@ -126,13 +142,13 @@ describe('selectCallLayout', () => {
       stripIds: ['me', 'bob'],
     });
     expect(layoutFor([me, person('ada')], 'phone-portrait', { viewMode: 'speaker', speaker: 'me' })).toMatchObject({
-      kind: 'speaker',
+      kind: 'self-view',
       mainId: 'me',
     });
   });
 
   it('shows an empty grid without participants', () => {
-    expect(layoutFor([], 'desktop')).toEqual({ kind: 'grid', ids: [], columns: null });
+    expect(layoutFor([], 'desktop')).toEqual({ kind: 'grid', ids: [], columns: null, paged: true });
   });
 });
 
@@ -194,6 +210,49 @@ describe('fitGridColumns', () => {
     expect(fitGridColumns(4, 1200, 700, 12)).toBe(2);
     expect(fitGridColumns(6, 1600, 800, 12)).toBe(3);
     expect(fitGridColumns(0, 1200, 700, 12)).toBe(1);
+  });
+});
+
+describe('pagedGridCells', () => {
+  it('puts one wide tile above two for 3 tiles on a page', () => {
+    expect(pagedGridCells(3, 400, 610, 10)).toEqual([
+      { left: 0, top: 0, width: 400, height: 300 },
+      { left: 0, top: 310, width: 195, height: 300 },
+      { left: 205, top: 310, width: 195, height: 300 },
+    ]);
+  });
+
+  it('fills a page with 1, 2, or 4 tiles', () => {
+    expect(pagedGridCells(1, 400, 600, 10)).toEqual([{ left: 0, top: 0, width: 400, height: 600 }]);
+    expect(pagedGridCells(2, 400, 610, 10).map(({ top, width }) => [top, width])).toEqual([
+      [0, 400],
+      [310, 400],
+    ]);
+    expect(pagedGridCells(4, 410, 610, 10).map(({ left, top }) => [left, top])).toEqual([
+      [0, 0],
+      [210, 0],
+      [0, 310],
+      [210, 310],
+    ]);
+  });
+
+  it('turns the split sideways on a landscape page', () => {
+    expect(pagedGridCells(2, 610, 400, 10)).toEqual([
+      { left: 0, top: 0, width: 300, height: 400 },
+      { left: 310, top: 0, width: 300, height: 400 },
+    ]);
+    expect(pagedGridCells(3, 610, 400, 10)).toEqual([
+      { left: 0, top: 0, width: 300, height: 400 },
+      { left: 310, top: 0, width: 300, height: 195 },
+      { left: 310, top: 205, width: 300, height: 195 },
+    ]);
+  });
+
+  it('puts tiles past the fourth on the next page, one page width plus a gap to the right', () => {
+    const boxes = pagedGridCells(6, 400, 610, 10);
+    expect(boxes).toHaveLength(6);
+    expect(boxes[4]).toEqual({ left: 410, top: 0, width: 400, height: 300 });
+    expect(boxes[5]).toEqual({ left: 410, top: 310, width: 400, height: 300 });
   });
 });
 

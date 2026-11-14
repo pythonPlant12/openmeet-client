@@ -11,7 +11,7 @@ export interface LiquidTab {
   // An animated icon from @respeak/lucide-motion-vue; custom items render their own content.
   icon?: Component;
   to?: RouteLocationRaw;
-  // Primary items are actions, set apart by a green glass rim.
+  // Primary items are actions, such as Start meeting, placed at the end of the bar.
   variant?: 'primary';
   disabled?: boolean;
   // Custom items render through the `item-<key>` slot, which receives `attrs` to bind on the control.
@@ -31,11 +31,13 @@ const props = withDefaults(
     highlightKey?: string | null;
     // With a mouse, the drop follows the hovered item and returns when the pointer leaves the bar.
     followHover?: boolean;
+    // Items a held touch acts on, such as Calls starting a new call; the hold replaces the item's tap.
+    longPressKeys?: string[];
   }>(),
-  { compact: false, size: 'md', highlightKey: null, followHover: false },
+  { compact: false, size: 'md', highlightKey: null, followHover: false, longPressKeys: () => [] },
 );
 
-const emit = defineEmits<{ select: [key: string] }>();
+const emit = defineEmits<{ select: [key: string]; longPress: [key: string] }>();
 
 defineSlots<
   Record<`item-${string}`, (props: { item: LiquidTab; attrs: Record<string, unknown>; pressed: boolean }) => unknown>
@@ -43,6 +45,9 @@ defineSlots<
 
 // One icon press animation runs for roughly this long before the icon returns to rest.
 const ICON_PRESS_DURATION = 900;
+// A touch held this long on a long-press item is a long-press; moving further than the slop cancels it.
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_SLOP_PX = 10;
 
 const supportsHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
@@ -61,6 +66,46 @@ function playIconPress(key: string) {
     pressedKey.value = key;
     pressTimer = window.setTimeout(() => (pressedKey.value = null), ICON_PRESS_DURATION);
   });
+}
+
+let longPressTimer: number | undefined;
+let longPressStart: { x: number; y: number } | null = null;
+// The click that ends a long-press must not also select the item.
+let longPressFired = false;
+
+function cancelLongPress() {
+  window.clearTimeout(longPressTimer);
+  longPressTimer = undefined;
+  longPressStart = null;
+}
+
+function handlePointerDown(item: LiquidTab, event: PointerEvent) {
+  cancelLongPress();
+  longPressFired = false;
+  if (event.pointerType === 'mouse' || item.disabled || !props.longPressKeys.includes(item.key)) return;
+  longPressStart = { x: event.clientX, y: event.clientY };
+  longPressTimer = window.setTimeout(() => {
+    longPressTimer = undefined;
+    longPressStart = null;
+    longPressFired = true;
+    playIconPress(item.key);
+    emit('longPress', item.key);
+  }, LONG_PRESS_MS);
+}
+
+function handlePointerMove(event: PointerEvent) {
+  if (!longPressStart) return;
+  if (Math.hypot(event.clientX - longPressStart.x, event.clientY - longPressStart.y) > LONG_PRESS_SLOP_PX) {
+    cancelLongPress();
+  }
+}
+
+// Runs before the item's own click (and a link's navigation), so a long-press stops both.
+function handleClickCapture(event: MouseEvent) {
+  if (!longPressFired) return;
+  longPressFired = false;
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function handleSelect(item: LiquidTab) {
@@ -82,6 +127,18 @@ function itemAttrs(item: LiquidTab, targetKey: string | null) {
     'aria-label': props.compact ? item.label : undefined,
     title: props.compact ? item.label : undefined,
     onClick: () => handleSelect(item),
+    ...(props.longPressKeys.includes(item.key)
+      ? {
+          'data-long-press': 'true',
+          onPointerdown: (event: PointerEvent) => handlePointerDown(item, event),
+          onPointermove: handlePointerMove,
+          onPointerup: cancelLongPress,
+          onPointercancel: cancelLongPress,
+          onClickCapture: handleClickCapture,
+          // Stops the phone's own long-press menu, such as a link preview.
+          onContextmenu: (event: Event) => event.preventDefault(),
+        }
+      : {}),
   };
 }
 
@@ -95,7 +152,10 @@ function handleKeydown(event: KeyboardEvent) {
   elements[(current + (event.key === 'ArrowRight' ? 1 : -1) + elements.length) % elements.length]?.focus();
 }
 
-onUnmounted(() => window.clearTimeout(pressTimer));
+onUnmounted(() => {
+  window.clearTimeout(pressTimer);
+  cancelLongPress();
+});
 </script>
 
 <template>
@@ -104,6 +164,7 @@ onUnmounted(() => window.clearTimeout(pressTimer));
     v-slot="{ targetKey }"
     tag="nav"
     class="liquid-tab-bar"
+    flat
     :target-key="highlightKey ?? activeKey"
     :follow-hover="followHover"
     :measure-key="measureKey"
@@ -186,25 +247,13 @@ onUnmounted(() => window.clearTimeout(pressTimer));
   color: #111b21;
 }
 
-/* Primary actions read like the other items, set apart by a teal glass rim. The rim is strongest at rest and
-   fades while the drop sits on the item, so the drop takes over as its highlight. */
+/* Primary actions read like the other items; only their place at the end of the bar sets them apart. */
 .liquid-tab[data-variant='primary'] {
   margin-left: 4px;
-  color: rgb(var(--harbor-accent));
-  background: rgb(var(--harbor-accent-soft) / 0.35);
-  box-shadow:
-    inset 0 0 0 1.5px rgb(var(--harbor-accent) / 0.55),
-    inset 0 1px 1px rgb(255 255 255 / 0.85);
-  transition:
-    color 0.25s,
-    background-color 0.25s,
-    box-shadow 0.25s;
 }
 
-.liquid-tab[data-variant='primary'][data-targeted='true'] {
-  color: rgb(var(--harbor-accent-hover));
-  background: transparent;
-  box-shadow: inset 0 0 0 1px rgb(var(--harbor-accent) / 0.22);
+.liquid-tab[data-long-press='true'] {
+  -webkit-touch-callout: none;
 }
 
 .liquid-tab:disabled {
@@ -250,7 +299,7 @@ onUnmounted(() => window.clearTimeout(pressTimer));
   transform: translateY(-1px) scale(1.08);
 }
 
-/* A rounded picture used as a tab icon, such as the account avatar, shown as a small glass bubble. */
+/* A rounded picture used as a tab icon, such as the account avatar: a plain round picture, without shadow. */
 .liquid-tab-avatar {
   position: relative;
   display: inline-flex;
@@ -259,27 +308,11 @@ onUnmounted(() => window.clearTimeout(pressTimer));
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgb(233 237 239 / 0.85);
-  box-shadow:
-    0 0 0 2px rgb(255 255 255 / 0.65),
-    0 0 0 3px rgb(233 237 239 / 0.9),
-    0 4px 10px -4px rgb(17 27 33 / 0.35);
+  background: rgb(var(--harbor-line));
   transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
 }
 
-.liquid-tab-avatar::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(120% 90% at 30% 0%, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0) 55%);
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.8),
-    inset 0 -2px 4px rgb(17 27 33 / 0.16);
-  pointer-events: none;
-}
-
-/* The status dot sits on top of the glass sheen. */
+/* The status dot sits on top of the picture. */
 .liquid-tab-avatar > span {
   z-index: 1;
 }

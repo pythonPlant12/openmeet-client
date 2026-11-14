@@ -503,6 +503,8 @@
       "videoUnavailable": "Camera unavailable",
       "showStrip": "Show everyone",
       "hideStrip": "Hide everyone else",
+      "previousPage": "Previous page of people",
+      "nextPage": "Next page of people",
       "layout": "Layout",
       "grid": "Grid view",
       "speaker": "Speaker view",
