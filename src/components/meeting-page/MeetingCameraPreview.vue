@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { X } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -13,8 +14,13 @@ import MeetingSelect from './MeetingSelect.vue';
 
 // The camera preview: shows the camera before others see it, with the microphone and camera to choose over its
 // bottom edge. Turning the camera on hands the previewed track to the call; a tap outside closes it and leaves
-// the camera off. With the camera already on, it shows the live camera instead of opening it again.
-const props = defineProps<{ cameraOn: boolean }>();
+// the camera off. With the camera already on, it shows the live camera instead of opening it again. On a phone it
+// fills the screen, and a tap on the video switches between filling the screen and showing the whole picture.
+const props = defineProps<{
+  cameraOn: boolean;
+  /** Phone call screens show the preview full screen. */
+  phone?: boolean;
+}>();
 const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{
   /** The track to send, or null when the camera was already on. */
@@ -27,6 +33,8 @@ const camera = useMeetingMediaSettings('video');
 const videoRef = ref<HTMLVideoElement | null>(null);
 const previewStream = shallowRef<MediaStream | null>(null);
 const isLoading = ref(false);
+// On a phone the video fills the screen (cropped) until a tap shows all of it.
+const fillsScreen = ref(true);
 let ownedTrack: MediaStreamTrack | null = null;
 let request = 0;
 // The camera the preview is still opening, so a quick confirm waits for it instead of sending nothing.
@@ -132,6 +140,7 @@ watch(
   open,
   async (isOpen) => {
     if (!isOpen) return;
+    fillsScreen.value = true;
     await load(async () => {
       await Promise.all([microphone.refresh(), camera.refresh()]);
       if (open.value) await showPreview();
@@ -151,17 +160,48 @@ onBeforeUnmount(() => {
     <DialogContent
       hide-close
       overlay-class="bg-harbor-ink/30 backdrop-blur-md"
-      class="w-[calc(100%-2rem)] max-w-xl gap-4 border-0 bg-transparent p-0 shadow-none"
+      :class="
+        phone
+          ? 'harbor-media-viewer left-0 top-0 flex h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 bg-black p-0 shadow-none sm:rounded-none'
+          : 'w-[calc(100%-2rem)] max-w-xl gap-4 border-0 bg-transparent p-0 shadow-none'
+      "
       data-camera-preview
+      :data-phone="phone ? 'true' : undefined"
     >
       <DialogTitle class="sr-only">{{ t('meeting.preview.title') }}</DialogTitle>
       <DialogDescription class="sr-only">{{ t('meeting.preview.description') }}</DialogDescription>
-      <div class="relative aspect-video overflow-hidden rounded-3xl bg-harbor-ink shadow-harbor-float">
-        <video ref="videoRef" autoplay playsinline muted class="size-full -scale-x-100 object-cover" />
-        <div v-if="isLoading" class="absolute inset-0 flex items-center justify-center">
+      <div
+        class="relative overflow-hidden bg-harbor-ink"
+        :class="phone ? 'min-h-0 flex-1 bg-black' : 'aspect-video rounded-3xl shadow-harbor-float'"
+      >
+        <video
+          ref="videoRef"
+          autoplay
+          playsinline
+          muted
+          class="size-full -scale-x-100"
+          :class="!phone || fillsScreen ? 'object-cover' : 'object-contain'"
+          :data-fit="phone ? (fillsScreen ? 'cover' : 'contain') : undefined"
+          data-preview-video
+          @click="phone && (fillsScreen = !fillsScreen)"
+        />
+        <div v-if="isLoading" class="pointer-events-none absolute inset-0 flex items-center justify-center">
           <LoadingRipple class="size-8 text-harbor-accent" />
         </div>
-        <div class="absolute inset-x-3 bottom-3 grid grid-cols-2 gap-2">
+        <button
+          v-if="phone"
+          type="button"
+          class="call-button call-chip absolute right-3 top-[calc(env(safe-area-inset-top)+0.5rem)] size-11"
+          :aria-label="t('common.close')"
+          data-camera-preview-close
+          @click="close"
+        >
+          <X />
+        </button>
+        <div
+          class="absolute inset-x-3 grid grid-cols-2 gap-2"
+          :class="phone ? 'bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+4rem)]' : 'bottom-3'"
+        >
           <div data-preview-microphone>
             <MeetingSelect
               v-model="microphoneId"
@@ -182,7 +222,10 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <div class="flex justify-center">
+      <div
+        class="flex justify-center"
+        :class="phone ? 'absolute inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))]' : ''"
+      >
         <button
           type="button"
           class="call-button call-chip h-12 w-auto px-6 text-sm font-semibold"

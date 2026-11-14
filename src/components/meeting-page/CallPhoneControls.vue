@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core';
 import { PhoneOff, SquareUser } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, ref, useId } from 'vue';
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { swallowNextClick } from '@/lib/swallow-next-click';
@@ -66,6 +66,18 @@ const videoExpanded = sectionModel('video');
 // While dragging, how much of the panel shows; null when it rests open or closed.
 const draggedHeight = ref<number | null>(null);
 const revealedHeight = computed(() => draggedHeight.value ?? (isOpen.value ? panelHeight.value : 0));
+// The card's height with the panel closed, so the call screen can lay out the video and the "Add people" card
+// above it. The panel is left out because it opens over them, so the card is only measured while the panel is
+// fully closed. A hidden card measures 0, so the last real height is kept.
+const panel = ref<HTMLElement | null>(null);
+const { height: cardHeight } = useElementSize(card, undefined, { box: 'border-box' });
+const { height: panelShownHeight } = useElementSize(panel, undefined, { box: 'border-box' });
+const restingHeight = ref(0);
+watch([cardHeight, panelShownHeight], ([cardSize, panelSize]) => {
+  if (cardSize > 0 && panelSize === 0 && !isOpen.value && draggedHeight.value === null) {
+    restingHeight.value = cardSize;
+  }
+});
 
 function setOpen(open: boolean) {
   if (open !== isOpen.value) playHaptic('selection');
@@ -135,7 +147,7 @@ function stopListening() {
 onBeforeUnmount(stopListening);
 
 // The top bar's room name opens the panel too.
-defineExpose({ open: () => setOpen(true) });
+defineExpose({ open: () => setOpen(true), restingHeight });
 
 /** A panel row that does one thing closes the panel, so its result is in view. */
 function fromPanel(action: () => void) {
@@ -223,6 +235,7 @@ function onLeave() {
       </div>
 
       <div
+        ref="panel"
         :id="panelId"
         class="order-3 overflow-hidden"
         :class="draggedHeight === null ? 'transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]' : ''"

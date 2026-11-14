@@ -47,7 +47,12 @@ const emailUrl = () => emailShareUrl(t('meeting.controls.shareTitle'), shareText
 
 <template>
   <div class="space-y-3">
-    <div class="-mx-1 flex gap-1 overflow-x-auto border-b border-harbor-line pb-4" data-share-row>
+    <!-- One row that scrolls sideways on its own, with no scrollbar, when the targets do not fit. It stays inside
+         the sheet's width, so the sheet itself only scrolls up and down. -->
+    <div
+      class="flex gap-1 overflow-x-auto overscroll-x-contain border-b border-harbor-line pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      data-share-row
+    >
       <button v-if="canShare" type="button" class="call-share-target" data-share-target="share" @click="shareLink">
         <span class="call-share-icon"><Share /></span>{{ t('meeting.invite.share') }}
       </button>

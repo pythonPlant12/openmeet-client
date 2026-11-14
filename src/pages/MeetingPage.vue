@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useEventListener, useIntervalFn } from '@vueuse/core';
+import { useElementSize, useEventListener, useIntervalFn } from '@vueuse/core';
 import { AlertTriangle, ChevronDown } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
@@ -165,17 +165,36 @@ const showsAddPeople = computed(
   () => usesPhoneChrome.value && showsControls.value && participantCount.value <= 1 && inviteMode.value !== 'hidden',
 );
 // The video area sits between the call screen's top chrome and its controls (and the "Add people" card above
-// them); VideoGrid reads these variables.
-const PHONE_CONTROLS_HEIGHT = 'calc(max(0.5rem, env(safe-area-inset-bottom)) + var(--meeting-control-size) + 2.25rem)';
+// them); VideoGrid reads these variables. The controls and the card are measured, so the gaps stay exact: the
+// video sits 1rem below the top bar and 1rem above the card, and the card sits 0.5rem (its row's bottom padding)
+// above the controls. VideoGrid pads the video area by 0.5rem itself.
+const phoneControls = ref<InstanceType<typeof CallPhoneControls> | null>(null);
+const addPeopleRow = ref<HTMLElement | null>(null);
+const { height: addPeopleRowHeight } = useElementSize(addPeopleRow, undefined, { box: 'border-box' });
+const phoneControlsHeight = computed(() => {
+  const measured = phoneControls.value?.restingHeight ?? 0;
+  const tray = measured > 0 ? `${measured}px` : 'calc(var(--meeting-control-size) + 2.25rem)';
+  return `calc(max(0.5rem, env(safe-area-inset-bottom)) + ${tray})`;
+});
 const callAreaStyle = computed(() =>
   usesPhoneChrome.value
     ? {
         '--call-area-top': 'calc(env(safe-area-inset-top) + 3.75rem)',
-        '--call-controls-height': PHONE_CONTROLS_HEIGHT,
-        '--call-area-bottom': showsAddPeople.value ? `calc(${PHONE_CONTROLS_HEIGHT} + 4rem)` : PHONE_CONTROLS_HEIGHT,
+        '--call-controls-height': phoneControlsHeight.value,
+        // The top edge of everything at the bottom of the screen: the controls, and the "Add people" card (its row
+        // holds the card and the gap under it) while it shows.
+        '--call-bottom-chrome': showsAddPeople.value
+          ? `calc(${phoneControlsHeight.value} + ${addPeopleRowHeight.value || 64}px)`
+          : phoneControlsHeight.value,
+        '--call-area-bottom': showsAddPeople.value
+          ? `calc(${phoneControlsHeight.value} + ${addPeopleRowHeight.value || 64}px + 0.5rem)`
+          : phoneControlsHeight.value,
       }
     : {
         '--call-area-top': 'calc(2.25rem + var(--meeting-control-size))',
+        // The controls bar's top edge: 1.5rem from the bottom, plus the tray (the buttons, its padding and border).
+        '--call-controls-height': 'calc(var(--meeting-control-size) + 2rem + 2px)',
+        '--call-bottom-chrome': 'var(--call-controls-height)',
         '--call-area-bottom': 'calc(var(--meeting-control-size) + 3.5rem)',
       },
 );
@@ -795,7 +814,6 @@ function toggleOwnCamera() {
   saveCallSettings({ showOwnCamera: showOwnCamera.value });
 }
 
-const phoneControls = ref<InstanceType<typeof CallPhoneControls> | null>(null);
 
 // The top bar's camera flip moves to the next camera, such as from the front to the back camera of a phone.
 const cameraSettings = useMeetingMediaSettings('video');
@@ -1159,6 +1177,7 @@ const handleReconnect = () => {
         <Transition name="meeting-controls">
           <div
             v-if="showsAddPeople"
+            ref="addPeopleRow"
             class="pointer-events-none fixed inset-x-0 bottom-[var(--call-controls-height)] z-40 flex justify-center px-2 pb-2"
           >
             <CallAddPeopleCard alone @invite="isInviteOpen = true" />
@@ -1239,6 +1258,7 @@ const handleReconnect = () => {
       v-if="isCameraPreviewOpen"
       v-model:open="isCameraPreviewOpen"
       :camera-on="!isVideoOff"
+      :phone="usesPhoneChrome"
       @confirm="handleCameraPreviewConfirm"
     />
 

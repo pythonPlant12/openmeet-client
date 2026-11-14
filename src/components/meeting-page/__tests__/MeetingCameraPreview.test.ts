@@ -62,9 +62,9 @@ const DialogStub = defineComponent({
 });
 const passthrough = { template: '<div><slot /></div>' };
 
-function mountPreview(cameraOn = false) {
+function mountPreview(cameraOn = false, phone = false) {
   return mount(MeetingCameraPreview, {
-    props: { open: true, cameraOn, 'onUpdate:open': () => {} },
+    props: { open: true, cameraOn, phone, 'onUpdate:open': () => {} },
     global: {
       plugins: [createI18n({ legacy: false, locale: 'en', messages: { en } })],
       stubs: {
@@ -180,5 +180,30 @@ describe('MeetingCameraPreview', () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     await wrapper.get('[data-camera-preview-confirm]').trigger('click');
     expect(wrapper.emitted('confirm')).toEqual([[null]]);
+  });
+
+  it('fills the screen on a phone, and a tap on the video shows the whole picture and back', async () => {
+    const wrapper = mountPreview(false, true);
+    await flushPromises();
+    const video = wrapper.get('[data-preview-video]');
+    expect(video.classes()).toContain('object-cover');
+
+    await video.trigger('click');
+    expect(video.classes()).toContain('object-contain');
+    await video.trigger('click');
+    expect(video.classes()).toContain('object-cover');
+
+    await wrapper.get('[data-camera-preview-close]').trigger('click');
+    const updates = wrapper.emitted('update:open') ?? [];
+    expect(updates[updates.length - 1]).toEqual([false]);
+  });
+
+  it('keeps the video filling its frame on desktop, where a tap does nothing', async () => {
+    const wrapper = mountPreview();
+    await flushPromises();
+    const video = wrapper.get('[data-preview-video]');
+    await video.trigger('click');
+    expect(video.classes()).toContain('object-cover');
+    expect(wrapper.find('[data-camera-preview-close]').exists()).toBe(false);
   });
 });

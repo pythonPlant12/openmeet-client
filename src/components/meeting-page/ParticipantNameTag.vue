@@ -37,7 +37,7 @@ const { t } = useI18n();
     :data-align="align"
     :data-collapsed="collapsed || undefined"
     :class="[
-      'call-name-tag absolute z-10 flex items-center justify-center font-semibold transition-[padding,opacity] duration-200',
+      'call-name-tag absolute z-10 flex items-center justify-center font-semibold transition-[padding,opacity,bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
       align === 'center' ? 'left-1/2 -translate-x-1/2' : compact ? 'left-1.5' : 'left-2',
       compact ? 'bottom-1.5 h-6 text-[11px]' : 'bottom-2 h-7 text-[13px]',
       collapsed ? (compact ? 'w-6' : 'w-7') : compact ? 'gap-1 px-2' : 'gap-1.5 px-2.5',

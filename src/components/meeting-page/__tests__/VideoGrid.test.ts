@@ -334,6 +334,30 @@ describe('VideoGrid tile interactions', () => {
     expect(tags.every((tag) => !tag.isVisible())).toBe(true);
   });
 
+  it('keeps desktop name tags whole while the full screen controls are hidden', () => {
+    desktop();
+    const wrapper = mountGrid({ participants: people(3), fullscreen: true, controlsHidden: true });
+    const tags = wrapper.findAll('[data-participant-name-tag]');
+    expect(tags.length).toBeGreaterThan(0);
+    // jsdom has no layout, so tiles stay unplaced; the tags' own state is what matters.
+    expect(tags.every((tag) => tag.attributes('data-collapsed') === undefined && tag.text().length > 0)).toBe(true);
+  });
+
+  it('raises the name tags above the full screen controls only while they show', async () => {
+    desktop();
+    const wrapper = mountGrid({ participants: people(3), fullscreen: true, controlsShown: true });
+    const tag = () => wrapper.get('[data-participant-name-tag]');
+    expect(tag().attributes('style')).toContain('calc(var(--call-bottom-chrome) + 0.5rem)');
+
+    await wrapper.setProps({ controlsShown: false, controlsHidden: true });
+    expect(tag().attributes('style') ?? '').not.toContain('--call-bottom-chrome');
+  });
+
+  it('keeps a double click on the video from selecting the tiles', () => {
+    desktop();
+    expect(canvas(mountGrid({ participants: people(3) })).classes()).toContain('select-none');
+  });
+
   it('shows a tile in full screen from its ⋯ menu by pinning it and entering full screen', async () => {
     desktop();
     const wrapper = mountGrid({ participants: people(3) });

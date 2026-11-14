@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { MaximizeAnimated, MinimizeAnimated, PinAnimated, PinOffAnimated } from '@respeak/lucide-motion-vue';
 import { Eye, EyeOff, MonitorUp } from 'lucide-vue-next';
+import { useElementBounding, useWindowSize } from '@vueuse/core';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -49,6 +50,11 @@ interface Props {
    * video, so the device does not render cameras nobody sees.
    */
   audioOnly?: boolean;
+  /**
+   * How much of the screen's bottom the full screen call controls cover, as a CSS length, while they show. The
+   * name tag rises so it stays above them.
+   */
+  controlsReserve?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -66,6 +72,7 @@ const props = withDefaults(defineProps<Props>(), {
   nameToggle: false,
   collapsed: false,
   audioOnly: false,
+  controlsReserve: undefined,
 });
 const { t } = useI18n();
 
@@ -151,6 +158,21 @@ const sizeClasses = computed(() => {
 const statusOption = computed(() => (props.status ? userStatusOption(props.status) : null));
 // While the call controls are hidden only a muted person keeps a (shrunk) name tag.
 const showsNameTag = computed(() => props.showNameTag && (!props.collapsed || !props.participant.audioEnabled));
+// Over the full screen controls the tag rises by the part of the controls that overlaps this tile, measured from
+// the tile's bottom edge to the screen's, so tiles higher up keep their tag in place.
+const tileRoot = ref<HTMLElement | null>(null);
+const { bottom: tileBottom, update: measureTile } = useElementBounding(tileRoot);
+const { height: windowHeight } = useWindowSize();
+watch(
+  () => props.controlsReserve,
+  () => measureTile(),
+);
+const nameTagStyle = computed(() => {
+  if (!props.controlsReserve) return undefined;
+  const belowTile = Math.max(0, windowHeight.value - tileBottom.value);
+  const base = isCompact.value ? '0.375rem' : '0.5rem';
+  return { bottom: `max(${base}, calc(${props.controlsReserve} - ${belowTile}px))` };
+});
 const nameTagProps = computed(() => ({
   name: props.participant.name,
   isLocal: props.participant.isLocal,
@@ -165,6 +187,10 @@ const statusLabel = computed(() =>
   props.status === 'offline' ? t('meeting.participant.offline') : (statusOption.value?.label ?? ''),
 );
 const isCompact = computed(() => props.size === 'sidebar' || props.size === 'mobile');
+// What sits inside the tile's 2px border is rounded to the border's inner curve, so the speaking border hugs the
+// video with no gap at the corners. Phone webviews do not always clip a video to its parent's corners, so the
+// video and the layers over it carry the curve themselves.
+const innerRadiusClass = computed(() => (props.bleed ? 'rounded-none' : 'rounded-[calc(1.4rem-2px)]'));
 
 // Screens are never cropped or mirrored, so their text stays whole and readable.
 const isScreen = computed(() => !!props.participant.screenShareOf);
@@ -219,6 +245,7 @@ onMounted(async () => {
 
 <template>
   <div
+    ref="tileRoot"
     :class="['group relative', sizeClasses]"
     data-testid="participant-tile"
     :data-participant-id="participant.id"
@@ -277,7 +304,7 @@ onMounted(async () => {
         @resize="markVideoFrames"
         :class="[
           'w-full h-full',
-          bleed ? 'rounded-none' : 'rounded-[1.25rem]',
+          innerRadiusClass,
           surfaceClass,
           objectFitClass,
           { hidden: !showsVideo, '-scale-x-100': participant.isLocal && !isScreen },
@@ -289,7 +316,7 @@ onMounted(async () => {
         v-if="!participant.stream || !showsVideo"
         data-participant-avatar
         class="absolute inset-0 flex items-center justify-center"
-        :class="surfaceClass"
+        :class="[surfaceClass, innerRadiusClass]"
       >
         <div
           :class="[
@@ -308,7 +335,7 @@ onMounted(async () => {
         v-if="isMediaLoading"
         data-participant-loading
         class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-harbor-accent backdrop-blur-[2px]"
-        :class="dark ? 'bg-[#161C1E]/70' : 'bg-harbor-line/70'"
+        :class="[dark ? 'bg-[#161C1E]/70' : 'bg-harbor-line/70', innerRadiusClass]"
         role="status"
       >
         <LoadingRipple :size="isCompact ? 'sm' : 'lg'" />
@@ -319,7 +346,7 @@ onMounted(async () => {
       </div>
     </component>
 
-    <ParticipantNameTag v-if="showsNameTag && !showActions" v-bind="nameTagProps" />
+    <ParticipantNameTag v-if="showsNameTag && !showActions" v-bind="nameTagProps" :style="nameTagStyle" />
 
     <!-- Per-person actions open from the name tag; tiles carry no other buttons. -->
     <DropdownMenu v-if="showActions" v-model:open="isOptionsOpen" :modal="false">
@@ -327,6 +354,7 @@ onMounted(async () => {
         <ParticipantNameTag
           v-show="showsNameTag"
           v-bind="nameTagProps"
+          :style="nameTagStyle"
           as="button"
           :aria-label="t('meeting.participant.options', { name: participant.name })"
           @click.stop

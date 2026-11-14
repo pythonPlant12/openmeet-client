@@ -42,6 +42,12 @@ describe('MeetingShareRow', () => {
     expect(names).toEqual(['copy', 'qr', 'whatsapp', 'telegram', 'email']);
   });
 
+  it('keeps the share targets in one row that scrolls sideways without a scrollbar or overhang', () => {
+    const row = mountRow().get('[data-share-row]');
+    expect(row.classes()).toEqual(expect.arrayContaining(['flex', 'overflow-x-auto', '[scrollbar-width:none]']));
+    expect(row.classes().some((name) => name.startsWith('-mx'))).toBe(false);
+  });
+
   it('opens the system share sheet with the room link where there is one', async () => {
     const share = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'share', { configurable: true, value: share });
