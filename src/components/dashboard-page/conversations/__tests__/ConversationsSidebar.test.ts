@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { enableAutoUnmount, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ConversationsSidebar from '@/components/dashboard-page/conversations/ConversationsSidebar.vue';
@@ -67,6 +67,10 @@ beforeEach(() => {
     },
   );
 });
+
+// Unmounting after each test stops the rows' motion animations, which would otherwise run on after the test
+// environment is torn down and fail the run with an unhandled error.
+enableAutoUnmount(afterEach);
 
 afterEach(() => {
   vi.useRealTimers();
