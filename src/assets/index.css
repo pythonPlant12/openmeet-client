@@ -426,10 +426,9 @@
   background: rgb(255 255 255 / 0.95);
 }
 
-/* Filled actions are drops of the same glass: a top-left sheen, a rim light, and a soft inner shade. Teal marks
-   the primary action and red a destructive one. Use them through the `accent` and `danger` tones of `Button` and
+/* Primary actions are plain white pills like the chat header's buttons: no teal fill, only the surface and a soft
+   shadow. Destructive actions are drops of red glass: a top-left sheen, a rim light, and a soft inner shade. Use them through the `accent` and `danger` tones of `Button` and
    `RoundButton`, never by hand. Hover darkens only on pointer devices; touch gets the darker fill while pressed. */
-.liquid-glass-primary,
 .liquid-glass-danger {
   color: #fff;
   -webkit-backdrop-filter: blur(8px) saturate(1.4);
@@ -443,14 +442,14 @@
 }
 
 .liquid-glass-primary {
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0) 55%),
-    linear-gradient(180deg, rgb(var(--harbor-accent) / 0.82), rgb(var(--harbor-accent-hover) / 0.92));
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.7),
-    inset 0 -2px 6px rgb(17 27 33 / 0.3),
-    inset 0 0 0 1px rgb(255 255 255 / 0.22),
-    0 6px 16px -6px rgb(var(--harbor-accent) / 0.6);
+  color: rgb(var(--harbor-ink));
+  background: rgb(var(--harbor-surface));
+  box-shadow: var(--harbor-shadow-soft);
+  transition:
+    background 0.2s,
+    box-shadow 0.2s,
+    opacity 0.15s,
+    transform 0.15s;
 }
 
 .liquid-glass-danger {
@@ -470,9 +469,7 @@
 }
 
 .liquid-glass-primary:not(:disabled):active {
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
-    linear-gradient(180deg, rgb(var(--harbor-accent-hover) / 0.9), rgb(var(--harbor-accent-hover) / 0.98));
+  background: rgb(var(--harbor-hover));
 }
 
 .liquid-glass-danger:not(:disabled):active {
@@ -483,10 +480,9 @@
 
 @media (hover: hover) and (pointer: fine) {
   .liquid-glass-primary:not(:disabled):hover {
-    color: #fff;
-    background:
-      radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
-      linear-gradient(180deg, rgb(var(--harbor-accent-hover) / 0.9), rgb(var(--harbor-accent-hover) / 0.98));
+    color: rgb(var(--harbor-ink));
+    background: rgb(var(--harbor-app));
+    box-shadow: var(--harbor-shadow-raised);
   }
 
   .liquid-glass-danger:not(:disabled):hover {
@@ -499,7 +495,6 @@
 
 /* Over the near-black stage the sheen and rim dim and the coloured glow turns into a plain dark shadow. Dark
    scopes may lighten the danger tokens for text, so the red glass keeps the light palette's reds for its fill. */
-:is(.meeting-immersive, .meeting-controls-dark, .liquid-surface[data-tone='dark']) .liquid-glass-primary,
 :is(.meeting-immersive, .meeting-controls-dark, .liquid-surface[data-tone='dark']) .liquid-glass-danger {
   box-shadow:
     inset 0 1px 1px rgb(255 255 255 / 0.35),
@@ -572,17 +567,13 @@
   background: rgb(17 27 33 / 0.62);
 }
 
-/* Every menu is liquid glass: a frosted surface with a bright rim, and one bubble (LiquidMenuHighlight) that
-   glides to the highlighted item. Usages may set their own colors, so the shared look wins here. */
+/* Every menu is a plain white surface, and one flat gray highlight (LiquidMenuHighlight) glides to the
+   highlighted item, like the navbar's. The menu keeps one soft shadow so it stands off the page. Usages may set
+   their own colors, so the shared look wins here. */
 .liquid-menu {
-  border-color: rgb(233 237 239 / 0.95) !important;
-  background: rgb(255 255 255 / 0.88) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.9),
-    0 20px 50px -18px rgb(17 27 33 / 0.32),
-    0 2px 8px rgb(17 27 33 / 0.08) !important;
+  border-color: transparent !important;
+  background: rgb(var(--harbor-surface)) !important;
+  box-shadow: var(--harbor-shadow-raised) !important;
 }
 
 /* Items sit above the bubble and leave the highlight to it. */
@@ -607,35 +598,21 @@
   border-radius: 0.75rem;
   opacity: 0;
   pointer-events: none;
-  /* Neutral gray glass: a soft slate fill with a light rim, so menus stay gray and white. */
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.7), rgb(255 255 255 / 0) 55%), rgb(233 237 239 / 0.85);
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.95),
-    inset 0 0 0 1px rgb(209 215 219 / 0.9),
-    0 6px 14px -8px rgb(17 27 33 / 0.25);
-  transition:
-    opacity 0.18s ease,
-    scale 0.18s ease,
-    box-shadow 0.2s ease;
+  /* A flat gray fill, with no gradient, rim, or shadow. */
+  background: rgb(var(--harbor-hover));
+  transition: opacity 0.18s ease;
 }
 
 .liquid-menu-bubble[data-gliding='true'] {
   transition:
-    transform 0.34s cubic-bezier(0.3, 1.25, 0.5, 1),
-    width 0.34s cubic-bezier(0.3, 1.25, 0.5, 1),
-    height 0.34s cubic-bezier(0.3, 1.25, 0.5, 1),
-    opacity 0.18s ease,
-    scale 0.18s ease,
-    box-shadow 0.2s ease;
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
 }
 
 .liquid-menu-bubble[data-visible='true'] {
   opacity: 1;
-}
-
-.liquid-menu-bubble[data-pressed='true'] {
-  scale: 0.97;
 }
 
 /* Icons the animated library lacks get a short bounce on the same triggers: hover or highlight, and press. */
@@ -663,12 +640,9 @@
   color: rgb(var(--harbor-danger)) !important;
 }
 
-/* Destructive items get a warm drop, so the color still warns. */
+/* Destructive items get a soft red highlight, so the color still warns. */
 .liquid-menu-bubble[data-tone='danger'] {
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.95),
-    inset 0 0 0 1.5px rgb(196 81 61 / 0.3),
-    0 6px 14px -8px rgb(120 40 30 / 0.25);
+  background: rgb(var(--harbor-danger-soft));
 }
 
 /* The highlighted item's text darkens instead of taking a tint. */
@@ -679,12 +653,10 @@
 /* Full screen meetings turn every menu into dark glass. The class sits on the document because menus open in
    portals outside the page. */
 .meeting-immersive .liquid-menu {
-  border-color: rgb(255 255 255 / 0.1) !important;
-  background: rgb(22 24 26 / 0.86) !important;
+  border-color: transparent !important;
+  background: rgb(22 24 26) !important;
   color: #e9edef !important;
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.12),
-    0 20px 55px rgb(0 0 0 / 0.55) !important;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.5) !important;
 }
 
 .meeting-immersive .liquid-menu [role^='menuitem'],
@@ -720,19 +692,11 @@
 }
 
 .meeting-immersive .liquid-menu-bubble {
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0) 55%), rgb(255 255 255 / 0.04);
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.2),
-    inset 0 0 0 1px rgb(255 255 255 / 0.22),
-    0 6px 14px -8px rgb(0 0 0 / 0.6);
+  background: rgb(255 255 255 / 0.1);
 }
 
 .meeting-immersive .liquid-menu-bubble[data-tone='danger'] {
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.2),
-    inset 0 0 0 1.5px rgb(217 137 123 / 0.45),
-    0 6px 14px -8px rgb(0 0 0 / 0.6);
+  background: rgb(217 137 123 / 0.16);
 }
 
 .meeting-immersive
@@ -825,8 +789,28 @@
   transform-origin: center;
 }
 
+/* Info pages (Profile info, Group info) open like a new page: they slide in from the right and back out. */
+.harbor-dialog-content.harbor-info-page[data-state='open'] {
+  animation: harbor-info-page-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.harbor-dialog-content.harbor-info-page[data-state='closed'] {
+  animation: harbor-info-page-out 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .harbor-dialog-content.harbor-info-page[data-state='open'],
+  .harbor-dialog-content.harbor-info-page[data-state='closed'] {
+    animation-name: harbor-dialog-surface-in;
+  }
+
+  .harbor-dialog-content.harbor-info-page[data-state='closed'] {
+    animation-name: harbor-dialog-surface-out;
+  }
+}
+
 @media (max-width: 639px) {
-  .harbor-dialog-content:not(.harbor-mobile-account-sheet, .harbor-media-viewer) {
+  .harbor-dialog-content:not(.harbor-mobile-account-sheet, .harbor-media-viewer, .harbor-info-page) {
     top: 50% !important;
     max-height: calc(100dvh - 2rem) !important;
   }
@@ -970,6 +954,28 @@
   }
 }
 
+@keyframes harbor-info-page-in {
+  from {
+    transform: translateX(2.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes harbor-info-page-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(2.5rem);
+    opacity: 0;
+  }
+}
+
 @keyframes harbor-mobile-account-sheet-in {
   from {
     transform: scaleX(0.12) scaleY(0.06);
@@ -1034,11 +1040,6 @@
       box-shadow 220ms ease;
   }
 
-  .harbor-floating-menu-item:not([data-disabled]):hover,
-  .harbor-floating-menu-item:not([data-disabled]):focus {
-    box-shadow: 0 10px 24px rgb(17 27 33 / 0.08);
-  }
-
   .harbor-ghost-action:hover,
   .harbor-soft-action:hover {
     color: #111b21 !important;
@@ -1051,11 +1052,6 @@
   .harbor-soft-action:hover {
     background-color: #e9edef !important;
   }
-
-  .harbor-primary-action:hover {
-    color: #ffffff !important;
-    background-color: #08635f !important;
-  }
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -1064,12 +1060,6 @@
   .harbor-soft-action:hover,
   .harbor-soft-action:active {
     color: #3b4a54 !important;
-  }
-
-  .harbor-primary-action:hover,
-  .harbor-primary-action:active {
-    color: #ffffff !important;
-    background-color: #0b7a75 !important;
   }
 }
 
@@ -1418,6 +1408,11 @@
   cursor: not-allowed;
 }
 
+/* A destructive action in a group, such as Remove friend, keeps a red icon. */
+.harbor-round-group > button[data-tone='destructive'] {
+  color: rgb(var(--harbor-danger-strong));
+}
+
 .harbor-round-group > button[data-state='open'] {
   color: rgb(var(--harbor-ink));
   background: rgb(var(--harbor-hover));
@@ -1427,6 +1422,11 @@
   .harbor-round-group > button:not(:disabled):hover {
     color: rgb(var(--harbor-ink));
     background: rgb(var(--harbor-hover));
+  }
+
+  .harbor-round-group > button[data-tone='destructive']:not(:disabled):hover {
+    color: rgb(var(--harbor-danger-strong));
+    background: rgb(var(--harbor-danger-soft));
   }
 }
 
@@ -1546,7 +1546,7 @@
   .call-tray {
     display: flex;
     align-items: center;
-    gap: 0.125rem;
+    gap: 4px;
     padding: 0.25rem;
     border: 1px solid rgb(var(--harbor-line));
     border-radius: calc(var(--meeting-control-size) * 0.4 + 0.25rem);

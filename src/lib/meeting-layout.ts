@@ -9,6 +9,8 @@ export const PHONE_BREAKPOINT = 768;
 const PHONE_LANDSCAPE_MAX_HEIGHT = 500;
 /** From this many tiles a phone in portrait shows the speaker layout instead of the grid. */
 const PHONE_SPEAKER_FROM = 5;
+/** A grid page shows at most this many tiles; more tiles go on pages scrolled sideways. */
+export const PHONE_GRID_PAGE_SIZE = 4;
 
 export function callFormFactor(width: number, height: number): CallFormFactor {
   const portrait = height >= width;
@@ -65,18 +67,25 @@ export interface CallLayoutInput {
 }
 
 export type CallLayout =
-  /** Equal cells; `columns` null fits the column count to the area's shape. */
-  | { kind: 'grid'; ids: string[]; columns: number | null }
+  /**
+   * Equal cells; `columns` null fits the column count to the area's shape. `paged` splits the tiles into pages
+   * of `PHONE_GRID_PAGE_SIZE` that fill the area each (see `pagedGridCells`).
+   */
+  | { kind: 'grid'; ids: string[]; columns: number | null; paged?: boolean }
   /** One tile on stage, everyone else in a strip. */
   | { kind: 'speaker'; mainId: string; stripIds: string[] }
-  /** Phone 1:1: the other person fills the screen, your own view is a small picture in a corner. */
+  /**
+   * Phone with two tiles: one fills the screen and the other is a small picture in a corner. The corner picture is
+   * your own view, unless you put yourself on stage.
+   */
   | { kind: 'self-view'; mainId: string; selfId: string };
 
 /**
  * The call screen's layout, from the number of tiles, the form factor, the pin and screen share:
  * a pin, or someone else's screen share, takes the stage (a share unless the person picked Grid). Otherwise a
  * phone in portrait shows a 1:1 call with a small self view, 2-4 tiles in a filled grid, and 5 or more in the
- * speaker layout; phone landscape and desktop show a grid that fits the window.
+ * speaker layout (or, when the person picks Grid, grid pages of 4); phone landscape and desktop show grid pages
+ * of 4 too. On a phone in portrait a speaker layout with only one other tile puts that tile in a corner.
  */
 export function selectCallLayout(input: CallLayoutInput): CallLayout {
   const { participants, formFactor, viewMode, pinnedParticipantId, activeSpeakerId } = input;
@@ -87,7 +96,16 @@ export function selectCallLayout(input: CallLayoutInput): CallLayout {
     stripIds: ids.filter((id) => id !== mainId),
   });
 
-  if (pinnedParticipantId && ids.includes(pinnedParticipantId)) return speaker(pinnedParticipantId);
+  // A phone in portrait shows a speaker layout with only one other tile as that tile in a corner, not a strip.
+  const stage = (mainId: string): CallLayout => {
+    const layout = speaker(mainId);
+    if (formFactor === 'phone-portrait' && layout.kind === 'speaker' && layout.stripIds.length === 1) {
+      return { kind: 'self-view', mainId, selfId: layout.stripIds[0]! };
+    }
+    return layout;
+  };
+
+  if (pinnedParticipantId && ids.includes(pinnedParticipantId)) return stage(pinnedParticipantId);
 
   const screen = participants.find((participant) => participant.screenShareOf && !participant.isLocal);
   const defaultMainId = () =>
@@ -95,7 +113,7 @@ export function selectCallLayout(input: CallLayoutInput): CallLayout {
     participants.find((participant) => !participant.isLocal)?.id ??
     ids[0]!;
   if (ids.length && (viewMode === 'speaker' || (viewMode === null && screen))) {
-    return speaker(screen?.id ?? defaultMainId());
+    return stage(screen?.id ?? defaultMainId());
   }
 
   if (formFactor === 'phone-portrait') {
@@ -105,9 +123,9 @@ export function selectCallLayout(input: CallLayoutInput): CallLayout {
       return { kind: 'self-view', mainId: other.id, selfId: self.id };
     }
     if (ids.length >= PHONE_SPEAKER_FROM && viewMode === null) return speaker(defaultMainId());
-    return { kind: 'grid', ids, columns: ids.length <= 2 ? 1 : 2 };
+    return { kind: 'grid', ids, columns: ids.length <= 2 ? 1 : 2, paged: true };
   }
-  return { kind: 'grid', ids, columns: null };
+  return { kind: 'grid', ids, columns: null, paged: true };
 }
 
 /** Shape the fitted grid aims its cells at, so most cameras crop little. */
@@ -165,6 +183,41 @@ export function gridCells(
       boxes.push({ left, top, width: rowCellWidth, height: cellHeight });
       left += rowCellWidth + gap;
     }
+  }
+  return boxes;
+}
+
+/**
+ * Grid pages: each page of up to `PHONE_GRID_PAGE_SIZE` tiles fills a `width` x `height` area. One tile fills it,
+ * two split it in half, three put one large tile beside two, and four make a 2 x 2 grid. A portrait area splits
+ * into rows (two stack; three put one wide tile above two); a landscape area turns the same split sideways
+ * (two side by side; three put one tall tile left of two). Page `n` sits `n` page widths (plus gaps) to the right,
+ * so the pages scroll sideways.
+ */
+export function pagedGridCells(count: number, width: number, height: number, gap: number): TileBox[] {
+  if (!count || width <= 0 || height <= 0) return [];
+  const landscape = width > height;
+  // Lay a landscape page out as a portrait one with its axes swapped, then swap each box back.
+  const across = landscape ? height : width;
+  const along = landscape ? width : height;
+  const boxes: TileBox[] = [];
+  for (let start = 0; start < count; start += PHONE_GRID_PAGE_SIZE) {
+    const onPage = Math.min(PHONE_GRID_PAGE_SIZE, count - start);
+    const offset = (start / PHONE_GRID_PAGE_SIZE) * (width + gap);
+    const rows = onPage === 1 ? [1] : onPage === 2 ? [1, 1] : onPage === 3 ? [1, 2] : [2, 2];
+    const rowSize = (along - gap * (rows.length - 1)) / rows.length;
+    rows.forEach((inRow, row) => {
+      const cellSize = (across - gap * (inRow - 1)) / inRow;
+      for (let column = 0; column < inRow; column += 1) {
+        const x = column * (cellSize + gap);
+        const y = row * (rowSize + gap);
+        boxes.push(
+          landscape
+            ? { left: offset + y, top: x, width: rowSize, height: cellSize }
+            : { left: offset + x, top: y, width: cellSize, height: rowSize },
+        );
+      }
+    });
   }
   return boxes;
 }

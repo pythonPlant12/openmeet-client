@@ -12,7 +12,7 @@ export const buttonVariants = cva(
         destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
         outline: 'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
-        // Filled actions are glass pills: teal for the primary action, red for a destructive one.
+        // The primary action is a white pill like the chat header's buttons; a destructive one is red glass.
         accent: 'liquid-glass-primary',
         danger: 'liquid-glass-danger',
         ghost: 'harbor-ghost-action',

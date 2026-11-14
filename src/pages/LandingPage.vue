@@ -124,11 +124,7 @@ onUnmounted(() => {
               :transition="{ duration: 0.5, delay: 0.32 }"
               class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
             >
-              <Button
-                size="lg"
-                class="h-12 rounded-full bg-[#0B7A75] px-6 text-base text-white shadow-[0_12px_28px_rgba(11,122,117,0.25)] hover:bg-[#08635F]"
-                @click="createMeeting"
-              >
+              <Button size="lg" variant="pill" class="h-12 px-6 text-base" @click="createMeeting">
                 {{ t('common.startMeeting') }}
                 <ArrowRight class="size-4" />
               </Button>
@@ -322,11 +318,7 @@ onUnmounted(() => {
             :delay="80"
             class="mt-4 text-balance text-4xl font-semibold leading-tight tracking-[-0.045em] sm:text-6xl"
           />
-          <Button
-            size="lg"
-            class="mt-8 h-12 rounded-full bg-[#0B7A75] px-7 text-base text-white shadow-[0_12px_28px_rgba(11,122,117,0.22)] hover:bg-[#08635F]"
-            @click="createMeeting"
-          >
+          <Button size="lg" variant="pill" class="mt-8 h-12 px-7 text-base" @click="createMeeting">
             {{ t('landing.startWithoutAccount') }}
             <ArrowRight class="size-4" />
           </Button>

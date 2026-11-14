@@ -183,17 +183,18 @@ const callAreaStyle = computed(() =>
 const belowTopRowClass = computed(() => (usesPhoneChrome.value ? 'top-[var(--call-area-top)]' : 'top-5'));
 const roomName = computed(() => (isConversationCall.value ? t('meeting.callTitle') : meetingId.value));
 // The menus show the layout on screen, which follows the call's size and form factor until the person picks one.
-const shownViewMode = computed(() =>
-  selectCallLayout({
+// A phone shows a speaker layout with only one other tile as the corner picture, which still counts as Speaker.
+const shownViewMode = computed(() => {
+  const { kind } = selectCallLayout({
     participants: meetingParticipants.value,
     formFactor: callFormFactor.value,
     viewMode: viewMode.value,
     pinnedParticipantId: pinnedParticipantId.value,
     activeSpeakerId: activeSpeakerId.value,
-  }).kind === 'speaker'
-    ? 'speaker'
-    : 'grid',
-);
+  });
+  if (kind === 'speaker') return 'speaker';
+  return kind === 'self-view' && (viewMode.value === 'speaker' || pinnedParticipantId.value) ? 'speaker' : 'grid';
+});
 const audioAvailable = ref(false);
 const videoAvailable = ref(false);
 // Why the call has no microphone or camera, such as a refused permission; the button warns and asks again.

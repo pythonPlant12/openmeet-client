@@ -164,11 +164,7 @@ const goToRegister = () => {
             {{ errorMessage }}
           </div>
 
-          <Button
-            type="submit"
-            class="harbor-primary-action h-12 w-full rounded-full bg-[#0B7A75] text-base text-white shadow-[0_12px_28px_rgba(11,122,117,0.18)]"
-            :disabled="isAuthenticating"
-          >
+          <Button type="submit" variant="pill" class="h-12 w-full text-base" :disabled="isAuthenticating">
             <LoadingRipple v-if="isAuthenticating" size="sm" />
             {{ isAuthenticating ? t('auth.login.submitting') : t('common.logIn') }}
             <ArrowRightAnimated

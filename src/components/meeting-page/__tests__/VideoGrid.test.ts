@@ -112,6 +112,46 @@ describe('VideoGrid layout', () => {
     expect(tileIds(wrapper, '[data-testid="participant-grid"]')).toEqual(['me', 'ada', 'bob', 'cy']);
   });
 
+  it('splits a phone grid of more than 4 people into pages of 4 with page dots', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(6), viewMode: 'grid' });
+    expect(wrapper.get('[data-testid="participant-grid"]').attributes('data-pages')).toBe('2');
+    expect(wrapper.findAll('[data-testid="grid-pages"] span')).toHaveLength(2);
+  });
+
+  it('plays video only on the shown page and keeps audio on the others', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(6), viewMode: 'grid' });
+    const tiles = wrapper.findAllComponents({ name: 'ParticipantTile' });
+    expect(tiles.map((tile) => tile.props('audioOnly'))).toEqual([false, false, false, false, true, true]);
+  });
+
+  it('pages the grid on desktop too, with arrows to move between pages', async () => {
+    desktop();
+    const wrapper = mountGrid({ participants: people(6) });
+    expect(wrapper.get('[data-testid="participant-grid"]').attributes('data-pages')).toBe('2');
+    expect(wrapper.find('[data-grid-page-previous]').exists()).toBe(false);
+    await wrapper.get('[data-grid-page-next]').trigger('click');
+    const tiles = wrapper.findAllComponents({ name: 'ParticipantTile' });
+    expect(tiles.map((tile) => tile.props('audioOnly'))).toEqual([true, true, true, true, false, false]);
+    expect(wrapper.find('[data-grid-page-next]').exists()).toBe(false);
+    expect(wrapper.emitted('togglePin')).toBeUndefined();
+  });
+
+  it('shows no page dots for 4 people or fewer on a phone', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(4) });
+    expect(wrapper.get('[data-testid="participant-grid"]').attributes('data-pages')).toBe('1');
+    expect(wrapper.find('[data-testid="grid-pages"]').exists()).toBe(false);
+  });
+
+  it('puts the only other tile of a phone speaker layout in a corner', () => {
+    phone();
+    const wrapper = mountGrid({ participants: people(2), viewMode: 'speaker', pinnedParticipantId: 'me' });
+    expect(canvas(wrapper).attributes('data-layout')).toBe('self-view');
+    expect(tileIds(wrapper, '[data-testid="self-view"]')).toEqual(['ada']);
+  });
+
   it('shows 5 or more people on a phone in the speaker layout with a strip', () => {
     phone();
     const wrapper = mountGrid({ participants: people(5), activeSpeakerId: 'cy' });
@@ -257,7 +297,7 @@ describe('VideoGrid tile interactions', () => {
     expect(wrapper.emitted('longPress')).toBeUndefined();
   });
 
-  it('reports a vertical swipe on the video area, but not a sideways one', () => {
+  it('reports a vertical swipe on the video area as the finger moves, but not a sideways one', () => {
     phone();
     const wrapper = mountGrid({ participants: people(3) });
     const touch = (type: string, x: number, y: number) => {
@@ -268,13 +308,23 @@ describe('VideoGrid tile interactions', () => {
     };
 
     touch('touchstart', 100, 400);
-    touch('touchend', 104, 300);
+    touch('touchmove', 104, 300);
+    // A phone browser can cancel the touch instead of ending it; the swipe has already counted.
+    canvas(wrapper).element.dispatchEvent(new Event('touchcancel', { bubbles: true }));
     touch('touchstart', 100, 300);
-    touch('touchend', 98, 380);
+    touch('touchmove', 98, 380);
+    touch('touchmove', 98, 420);
+    touch('touchend', 98, 420);
     touch('touchstart', 100, 300);
+    touch('touchmove', 220, 320);
     touch('touchend', 220, 320);
 
     expect(wrapper.emitted('swipe')).toEqual([['up'], ['down']]);
+  });
+
+  it('lets the browser pan the video area only sideways on a phone', () => {
+    phone();
+    expect(canvas(mountGrid({ participants: people(3) })).classes()).toContain('touch-pan-x');
   });
 
   it('collapses the name tags while the call controls are hidden', () => {

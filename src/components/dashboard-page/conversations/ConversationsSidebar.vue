@@ -251,7 +251,7 @@ onBeforeUnmount(clearLongPress);
         @click="emit('create-group')"
       >
         <template #avatar
-          ><Avatar class="bg-harbor-accent-soft text-harbor-accent"><Plus /></Avatar
+          ><Avatar class="bg-harbor-hover text-harbor-ink"><Plus /></Avatar
         ></template>
         Create group
         <template #subtitle>Start a new group chat</template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useElementSize, useMediaQuery } from '@vueuse/core';
-import { ChevronDown, ChevronUp } from 'lucide-vue-next';
-import { computed, onUnmounted, reactive, ref } from 'vue';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-vue-next';
+import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { useCallFormFactor } from '@/composables/useCallFormFactor';
@@ -9,11 +9,13 @@ import {
   type Corner,
   DEFAULT_TILE_ASPECT,
   type MeetingViewMode,
+  PHONE_GRID_PAGE_SIZE,
   fitGridColumns,
   fitTilesInRows,
   gridCells,
   mainVideoFills,
   nearestCorner,
+  pagedGridCells,
   selectCallLayout,
 } from '@/lib/meeting-layout';
 import { swallowNextClick } from '@/lib/swallow-next-click';
@@ -139,15 +141,43 @@ const gridColumns = computed(() => {
     fitGridColumns(gridParticipants.value.length, gridWidth.value, gridHeight.value, gridGap.value)
   );
 });
+// Phone grid pages: four tiles at most fill each page, and the area scrolls sideways one page at a time.
+const isGridPaged = computed(() => layout.value.kind === 'grid' && !!layout.value.paged);
+const gridPageCount = computed(() =>
+  isGridPaged.value ? Math.max(1, Math.ceil(gridParticipants.value.length / PHONE_GRID_PAGE_SIZE)) : 1,
+);
+const gridPage = ref(0);
+const gridPageLeft = (page: number) => page * (gridWidth.value + gridGap.value);
+const gridContentStyle = computed(() =>
+  gridPageCount.value > 1 ? { width: `${gridPageLeft(gridPageCount.value - 1) + gridWidth.value}px` } : {},
+);
+// When people leave and a page disappears, the grid shows the last page that is left.
+watch(gridPageCount, (count) => {
+  if (gridPage.value > count - 1) showGridPage(count - 1);
+});
+// Only the shown page plays video; tiles on other pages keep their audio (see `audioOnly` on the tile).
+const isOffPage = (index: number) => isGridPaged.value && Math.floor(index / PHONE_GRID_PAGE_SIZE) !== gridPage.value;
+function showGridPage(page: number) {
+  const target = Math.min(gridPageCount.value - 1, Math.max(0, page));
+  gridArea.value?.scrollTo?.({ left: gridPageLeft(target), behavior: 'smooth' });
+  gridPage.value = target;
+}
+function handleGridScroll() {
+  const area = gridArea.value;
+  const pageWidth = gridWidth.value + gridGap.value;
+  if (area && pageWidth > 0) gridPage.value = Math.round(area.scrollLeft / pageWidth);
+}
 const gridBoxes = computed(() => {
-  const cells = gridCells(
-    gridParticipants.value.length,
-    gridColumns.value,
-    gridWidth.value,
-    gridHeight.value,
-    gridGap.value,
-    layout.value.kind === 'grid' && layout.value.columns !== null,
-  );
+  const cells = isGridPaged.value
+    ? pagedGridCells(gridParticipants.value.length, gridWidth.value, gridHeight.value, gridGap.value)
+    : gridCells(
+        gridParticipants.value.length,
+        gridColumns.value,
+        gridWidth.value,
+        gridHeight.value,
+        gridGap.value,
+        layout.value.kind === 'grid' && layout.value.columns !== null,
+      );
   return new Map(gridParticipants.value.map((participant, index) => [participant.id, cells[index]]));
 });
 const gridStyle = (participant: Participant) => {
@@ -174,8 +204,10 @@ const mainStyle = computed(() => {
   const [row] = fitTilesInRows([aspect], stageWidth.value, stageHeight.value, 0);
   return row ? { width: `${Math.floor(row.height * aspect)}px`, height: `${row.height}px` } : {};
 });
+// Phones keep the strip tiles at full size and let the strip scroll sideways; larger screens shrink them to fit.
 const stripHeight = computed(() => {
   const preferred = isWide.value ? WIDE_STRIP_TILE_HEIGHT : STRIP_TILE_HEIGHT;
+  if (isPhone.value) return preferred;
   const aspectSum = secondaryParticipants.value.reduce((sum, participant) => sum + aspectOf(participant), 0);
   const available = stageWidth.value - 24 - STRIP_GAP * (secondaryParticipants.value.length - 1);
   if (!aspectSum || available <= 0) return preferred;
@@ -313,19 +345,27 @@ function handleCanvasPointerMove(event: PointerEvent) {
     cancelLongPress();
   }
 }
-// Touch events rather than pointer events, since the browser cancels a pointer as soon as a vertical pan starts.
+// Touch events rather than pointer events, since the browser cancels a pointer as soon as a pan starts. On phones
+// the video area only lets the browser pan sideways (`touch-pan-x`), so a vertical swipe never turns into a page
+// scroll or pull-to-refresh that cancels the touch. The swipe counts as soon as the finger has travelled far
+// enough, so a phone browser that cancels the touch before it ends still gets it.
 let swipeStart: { x: number; y: number } | null = null;
 function handleCanvasTouchStart(event: TouchEvent) {
   const touch = event.touches[0];
   swipeStart = event.touches.length === 1 && touch ? { x: touch.clientX, y: touch.clientY } : null;
 }
-function handleCanvasTouchEnd(event: TouchEvent) {
-  const touch = event.changedTouches[0];
-  if (!swipeStart || !touch) return;
+function handleCanvasTouchMove(event: TouchEvent) {
+  const touch = event.touches[0];
+  if (!swipeStart || !touch || event.touches.length !== 1) return;
   const dx = touch.clientX - swipeStart.x;
   const dy = touch.clientY - swipeStart.y;
+  if (Math.abs(dy) < SWIPE_MIN_PX || Math.abs(dy) <= Math.abs(dx) * 1.5) return;
   swipeStart = null;
-  if (Math.abs(dy) >= SWIPE_MIN_PX && Math.abs(dy) > Math.abs(dx) * 1.5) emit('swipe', dy < 0 ? 'up' : 'down');
+  cancelLongPress();
+  emit('swipe', dy < 0 ? 'up' : 'down');
+}
+function handleCanvasTouchEnd() {
+  swipeStart = null;
 }
 function handleCanvasClick(event: MouseEvent) {
   const participantId = (event.target as Element | null)?.closest<HTMLElement>('[data-testid="participant-tile"]')
@@ -381,19 +421,22 @@ function toggleName(participantId: string) {
 
 <template>
   <div
-    class="relative h-full w-full flex-1 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-accent"
+    class="relative h-full w-full flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-harbor-accent"
     data-testid="meeting-video-canvas"
     :data-view-mode="layout.kind === 'speaker' ? 'speaker' : 'grid'"
     :data-layout="layout.kind"
     :data-fullscreen="fullscreen ? 'true' : undefined"
     tabindex="0"
     :aria-label="t('meeting.actions.videoCanvas')"
+    :class="isPhone ? 'touch-pan-x' : 'touch-manipulation'"
     @pointerdown="handleCanvasPointerDown"
     @pointermove="handleCanvasPointerMove"
     @pointerup="cancelLongPress"
     @pointercancel="cancelLongPress"
     @touchstart.passive="handleCanvasTouchStart"
+    @touchmove.passive="handleCanvasTouchMove"
     @touchend="handleCanvasTouchEnd"
+    @touchcancel="handleCanvasTouchEnd"
     @click="handleCanvasClick"
   >
     <!-- The video area fills the space between the call screen's top bar and its controls, which the page sets as
@@ -407,26 +450,91 @@ function toggleName(participantId: string) {
       "
     >
       <Transition name="meeting-layout" mode="out-in">
-        <div v-if="layout.kind === 'grid'" key="grid" class="absolute inset-0 p-2 sm:p-4">
-          <div ref="gridArea" class="relative size-full" data-testid="participant-grid" :data-columns="gridColumns">
-            <ParticipantTile
-              v-for="participant in gridParticipants"
-              :key="participant.id"
-              class="meeting-grid-tile !absolute"
-              :style="gridStyle(participant)"
-              :participant="participant"
-              :status="participantStatuses?.[participant.id]"
-              :avatar-url="participantAvatars?.[participant.id]"
-              :speaking="isSpeaking(participant)"
-              :dark="fullscreen"
-              :collapsed="controlsHidden"
-              fit="cover"
-              size="grid"
-              :is-expanded="pinnedParticipantId === participant.id"
-              :is-fullscreen="isTileFullscreen(participant)"
-              @aspect="setAspect(participant.id, $event)"
-              @toggle-pin="emit('togglePin', participant.id)"
-              @toggle-fullscreen="showTileFullscreen(participant)"
+        <div
+          v-if="layout.kind === 'grid'"
+          key="grid"
+          class="absolute inset-0 p-2 sm:p-4"
+          :class="gridPageCount > 1 ? 'pb-6 sm:pb-6' : ''"
+        >
+          <div
+            ref="gridArea"
+            class="size-full"
+            :class="
+              gridPageCount > 1
+                ? 'snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+                : 'relative'
+            "
+            data-testid="participant-grid"
+            :data-columns="gridColumns"
+            :data-pages="gridPageCount"
+            @scroll.passive="handleGridScroll"
+          >
+            <div class="relative size-full" :style="gridContentStyle">
+              <span
+                v-for="page in gridPageCount > 1 ? gridPageCount : 0"
+                :key="`page-${page}`"
+                class="pointer-events-none absolute inset-y-0 snap-start"
+                :style="{ left: `${gridPageLeft(page - 1)}px`, width: `${gridWidth}px` }"
+                aria-hidden="true"
+              />
+              <ParticipantTile
+                v-for="(participant, index) in gridParticipants"
+                :key="participant.id"
+                class="meeting-grid-tile !absolute"
+                :style="gridStyle(participant)"
+                :participant="participant"
+                :status="participantStatuses?.[participant.id]"
+                :avatar-url="participantAvatars?.[participant.id]"
+                :speaking="isSpeaking(participant)"
+                :dark="fullscreen"
+                :collapsed="controlsHidden"
+                fit="cover"
+                size="grid"
+                :audio-only="isOffPage(index)"
+                :is-expanded="pinnedParticipantId === participant.id"
+                :is-fullscreen="isTileFullscreen(participant)"
+                @aspect="setAspect(participant.id, $event)"
+                @toggle-pin="emit('togglePin', participant.id)"
+                @toggle-fullscreen="showTileFullscreen(participant)"
+              />
+            </div>
+          </div>
+          <!-- With a mouse, arrows move between the pages; touch screens swipe. -->
+          <template v-if="gridPageCount > 1 && !isPhone">
+            <button
+              v-if="gridPage > 0"
+              type="button"
+              class="call-button call-chip absolute left-4 top-1/2 z-10 size-10 -translate-y-1/2 sm:left-6"
+              :aria-label="t('meeting.actions.previousPage')"
+              data-grid-page-previous
+              @click.stop="showGridPage(gridPage - 1)"
+            >
+              <ChevronLeft class="size-5" />
+            </button>
+            <button
+              v-if="gridPage < gridPageCount - 1"
+              type="button"
+              class="call-button call-chip absolute right-4 top-1/2 z-10 size-10 -translate-y-1/2 sm:right-6"
+              :aria-label="t('meeting.actions.nextPage')"
+              data-grid-page-next
+              @click.stop="showGridPage(gridPage + 1)"
+            >
+              <ChevronRight class="size-5" />
+            </button>
+          </template>
+          <!-- Page dots: which of the grid's pages shows, for calls with more than four tiles. -->
+          <div
+            v-if="gridPageCount > 1"
+            class="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1.5"
+            data-testid="grid-pages"
+            aria-hidden="true"
+          >
+            <span
+              v-for="page in gridPageCount"
+              :key="page"
+              class="size-1.5 rounded-full transition-colors duration-200"
+              :class="page - 1 === gridPage ? 'bg-harbor-ink' : 'bg-harbor-ink/30'"
+              :data-active="page - 1 === gridPage ? 'true' : undefined"
             />
           </div>
         </div>
@@ -550,12 +658,15 @@ function toggleName(participantId: string) {
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
             :class="fullscreen && controlsShown ? 'bottom-[var(--call-area-bottom)]' : 'bottom-4 sm:bottom-6'"
           >
-            <div class="pointer-events-auto max-w-full overflow-x-auto" data-testid="participant-strip">
+            <div
+              class="pointer-events-auto max-w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              data-testid="participant-strip"
+            >
               <div class="flex w-max gap-2" :style="{ height: `${stripHeight}px` }">
                 <div
                   v-for="participant in secondaryParticipants"
                   :key="participant.id"
-                  class="relative h-full shrink-0 rounded-[1.4rem] shadow-[0_10px_28px_rgba(0,0,0,0.35)]"
+                  class="relative h-full shrink-0 snap-start rounded-[1.4rem] shadow-[0_10px_28px_rgba(0,0,0,0.35)]"
                   :style="stripStyle(participant)"
                 >
                   <ParticipantTile

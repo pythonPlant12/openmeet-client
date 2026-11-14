@@ -114,14 +114,12 @@ function initials(name: string) {
     <PaneHeader v-model:query="query" title="Calls" heading-id="calls-heading" search-label="Search calls">
       <template #badge><SectionBadge :count="badge" singular="missed call" plural="missed calls" /></template>
       <template #trailing>
-        <RoundButton
-          tone="accent"
-          aria-label="Start a meeting"
-          title="Start a meeting"
-          class="[&_svg]:!size-6"
-          @click="emit('start-meeting')"
-          ><Plus
-        /></RoundButton>
+        <RoundButton tone="accent" aria-label="Start a meeting" title="Start a meeting" @click="emit('start-meeting')">
+          <!-- A new call: the handset with a plus in its empty top-right corner. -->
+          <span class="relative inline-flex" aria-hidden="true"
+            ><Phone class="!size-5" /><Plus class="absolute -right-1 -top-1 !size-3" :stroke-width="3"
+          /></span>
+        </RoundButton>
       </template>
     </PaneHeader>
     <!-- On phones the workspace tabs float over the list, so its end scrolls clear of them. -->
@@ -173,7 +171,7 @@ function initials(name: string) {
               type="button"
               data-swipe-action
               class="flex h-full w-full items-center justify-start text-white transition-colors"
-              :class="armed ? 'bg-harbor-accent-hover' : 'bg-harbor-accent'"
+              :class="armed ? 'bg-harbor-ink-soft' : 'bg-harbor-icon'"
               :aria-label="meeting.unread ? 'Mark call read' : 'Mark call unread'"
               @click="
                 close();
@@ -195,7 +193,7 @@ function initials(name: string) {
               data-swipe-action
               data-call-read-action
               class="flex h-full w-full items-center justify-end text-white transition-colors"
-              :class="armed ? 'bg-harbor-accent-hover' : 'bg-harbor-accent'"
+              :class="armed ? 'bg-harbor-ink-soft' : 'bg-harbor-icon'"
               aria-label="Mark call read"
               @click="
                 close();

@@ -89,11 +89,11 @@ describe('ContactProfileDialog', () => {
     });
 
     expect(wrapper.find('[data-online-indicator]').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Online');
-    expect(wrapper.text()).toContain('Friend');
+    expect(wrapper.text()).not.toContain('Online');
     expect(wrapper.text()).toContain('“Building OpenMeet”');
     expect(wrapper.text()).toContain('alex@example.com');
-    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Start direct call"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Start a video call"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Start an audio call"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Profile actions"] [aria-label="Remove friend"]').exists()).toBe(true);
   });
 
@@ -128,7 +128,7 @@ describe('ContactProfileDialog', () => {
       global: { stubs },
     });
 
-    expect(wrapper.text()).toContain('Status shared with friends');
+    expect(wrapper.text()).not.toContain('Status shared with friends');
     expect(wrapper.text()).toContain('Shared with friends');
     expect(wrapper.text()).not.toContain('Appear offline');
     await wrapper.get('[data-add-friend]').trigger('click');
@@ -180,7 +180,7 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.emitted('decline-request')?.[0]).toEqual([request]);
   });
 
-  it('lets people change their own status from their profile', () => {
+  it('shows your own status on the avatar, without status chips', () => {
     const wrapper = mount(ContactProfileDialog, {
       props: {
         open: true,
@@ -208,18 +208,10 @@ describe('ContactProfileDialog', () => {
         avatarLoading: false,
         formatDate: () => '17 Aug 2026',
       },
-      global: {
-        stubs: {
-          ...stubs,
-          DropdownMenu: { template: '<div><slot /></div>' },
-          DropdownMenuTrigger: { template: '<div><slot /></div>' },
-          DropdownMenuContent: { template: '<div><slot /></div>' },
-          DropdownMenuItem: { template: '<button @click="$emit(\'select\')"><slot /></button>' },
-        },
-      },
+      global: { stubs },
     });
 
-    expect(wrapper.get('[data-status-menu]').text()).toContain('Sleeping');
+    expect(wrapper.find('[data-status-menu]').exists()).toBe(false);
     const indicator = wrapper.get('[data-online-indicator]');
     const avatar = indicator.element.previousElementSibling as HTMLElement;
 
@@ -228,7 +220,7 @@ describe('ContactProfileDialog', () => {
     expect(indicator.classes()).toContain('border-[3px]');
     expect(indicator.classes()).toContain('border-harbor-surface');
     expect(indicator.classes()).toContain('bg-[#6B7BC4]');
-    expect(indicator.classes()).toEqual(expect.arrayContaining(['bottom-0', 'right-0']));
+    expect(indicator.classes()).toEqual(expect.arrayContaining(['bottom-0.5', 'right-0.5']));
   });
 
   it('opens an image-only profile picture preview', async () => {
