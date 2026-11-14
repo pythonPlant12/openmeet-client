@@ -18,7 +18,7 @@ function onInput(event: Event) {
 
 <template>
   <!-- Arrow keys move the slider, not the menu's focus. -->
-  <div class="call-volume space-y-4 px-2 pb-2 pt-1" @keydown.stop>
+  <div class="space-y-4 px-2 pb-2 pt-1" @keydown.stop>
     <div class="space-y-2">
       <p class="text-sm font-semibold text-harbor-ink">{{ t('meeting.controls.inputVolume') }}</p>
       <input

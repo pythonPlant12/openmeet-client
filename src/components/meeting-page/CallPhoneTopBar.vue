@@ -94,7 +94,7 @@ const chatAriaLabel = computed(() => {
         <MessageSquare />
         <span
           v-if="unreadCount > 0 && !isChatOpen"
-          class="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-harbor-accent text-[0.6875rem] font-bold text-white"
+          class="absolute -right-0.5 -top-0.5 flex size-5 items-center justify-center rounded-full bg-harbor-accent text-[0.6875rem] font-bold text-harbor-app"
         >
           {{ unreadCount > 9 ? '9+' : unreadCount }}
         </span>

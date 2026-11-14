@@ -406,6 +406,7 @@
       "cameraOptions": "Camera options",
       "microphone": "Microphone",
       "speaker": "Speaker",
+      "source": "Source",
       "inputVolume": "Input volume",
       "inputLevel": "Microphone level",
       "camera": "Camera",

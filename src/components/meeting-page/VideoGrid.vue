@@ -371,7 +371,7 @@ function showTileFullscreen(participant: Participant) {
   if (!props.fullscreen) emit('toggleFullscreen');
 }
 
-// Strip tiles on phones hide names to keep the small videos clear; the tile's ⋯ menu reveals one.
+// Strip tiles on phones hide names to keep the small videos clear; the tile's menu reveals one.
 const revealedNames = reactive(new Set<string>());
 function toggleName(participantId: string) {
   if (revealedNames.has(participantId)) revealedNames.delete(participantId);
@@ -419,7 +419,6 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[participant.id]"
               :speaking="isSpeaking(participant)"
               :dark="fullscreen"
-              :phone="isPhone"
               :collapsed="controlsHidden"
               fit="cover"
               size="grid"
@@ -446,7 +445,6 @@ function toggleName(participantId: string) {
               :avatar-url="participantAvatars?.[selfViewMain.id]"
               :speaking="isSpeaking(selfViewMain)"
               :dark="fullscreen"
-              :phone="isPhone"
               :collapsed="controlsHidden"
               :bleed="fullscreen"
               fit="cover"
@@ -475,7 +473,6 @@ function toggleName(participantId: string) {
                 :avatar-url="participantAvatars?.[selfViewSelf.id]"
                 :speaking="isSpeaking(selfViewSelf)"
                 :dark="fullscreen"
-                :phone="isPhone"
                 :collapsed="controlsHidden"
                 size="mobile"
                 fit="cover"
@@ -503,7 +500,6 @@ function toggleName(participantId: string) {
               :speaking="isSpeaking(speakerParticipant)"
               :fit="mainFills ? 'cover' : 'contain'"
               :dark="fullscreen"
-              :phone="isPhone"
               :collapsed="controlsHidden"
               :bleed="fullscreen"
               size="full"
@@ -568,7 +564,6 @@ function toggleName(participantId: string) {
                     :avatar-url="participantAvatars?.[participant.id]"
                     :speaking="isSpeaking(participant)"
                     :dark="fullscreen"
-                    :phone="isPhone"
                     :collapsed="controlsHidden"
                     size="mobile"
                     :show-name-tag="isWide || revealedNames.has(participant.id)"

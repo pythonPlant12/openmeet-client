@@ -1173,10 +1173,7 @@ const handleReconnect = () => {
             :is-muted="isMuted"
             :is-video-off="isVideoOff"
             :can-present="screenShare.isSupported"
-            :view-mode="shownViewMode"
-            :can-invite="inviteMode !== 'hidden'"
             :show-own-camera="showOwnCamera"
-            :show-connection-status="showConnectionStatus"
             :audio-warning="audioWarning"
             :video-warning="videoWarning"
             @toggle-mute="handleToggleMute"
@@ -1187,10 +1184,6 @@ const handleReconnect = () => {
             @media-changed="refreshMediaAvailability"
             @start-screen-share="handleStartScreenShare"
             @stop-screen-share="screenShare.stop()"
-            @set-view-mode="handleSetViewMode"
-            @toggle-stats="handleToggleStats"
-            @toggle-chat="handleToggleChat"
-            @invite="isInviteOpen = true"
             @toggle-own-camera="toggleOwnCamera"
           />
           <MeetingControls

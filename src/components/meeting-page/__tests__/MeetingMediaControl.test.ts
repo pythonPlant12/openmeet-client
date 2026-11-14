@@ -143,49 +143,68 @@ describe('MeetingMediaControl', () => {
     expect(control.find('[data-media-menu-trigger]').exists()).toBe(false);
   });
 
-  it('shows a labelled row with the current device in the phone controls panel', () => {
+  it('shows a Microphone or Camera row in the phone controls panel, which expands in place', async () => {
     const control = mountControl('video', false, false, 'row');
     expect(control.find('[data-media-toggle]').exists()).toBe(false);
     const row = control.get('[data-media-menu-trigger]');
     expect(row.text()).toContain('Camera');
-    expect(row.text()).toContain('Front camera');
     expect(row.attributes('aria-expanded')).toBe('false');
     expect(control.find('[data-media-options]').exists()).toBe(false);
+
+    await row.trigger('click');
+    expect(row.attributes('aria-expanded')).toBe('true');
+    expect(control.find('[role="menu"]').exists()).toBe(false);
   });
 
-  it('expands the microphone row in place, like an accordion, instead of opening a menu', async () => {
+  it('expands the microphone to its Source and Speaker choices and the volume', async () => {
     const control = mountControl('audio', false, false, 'row');
     await control.get('[data-media-menu-trigger]').trigger('click');
-
-    expect(control.get('[data-media-menu-trigger]').attributes('aria-expanded')).toBe('true');
-    expect(control.find('[role="menu"]').exists()).toBe(false);
     expect(settings.startLevelMeter).toHaveBeenCalled();
-    const options = control.get('[data-media-options]');
-    expect(options.get('[data-device-option="mic-1"]').attributes('aria-checked')).toBe('true');
-    await options.get('[data-device-option="mic-2"]').trigger('click');
+
+    const source = control.get('[data-media-source]');
+    expect(source.get('[data-panel-choice-trigger]').text()).toContain('Source');
+    expect(source.get('[data-panel-choice-value]').text()).toBe('Built-in microphone');
+    expect(source.find('[data-device-option]').exists()).toBe(false);
+    await source.get('[data-panel-choice-trigger]').trigger('click');
+    expect(source.get('[data-device-option="mic-1"]').attributes('aria-checked')).toBe('true');
+    await source.get('[data-device-option="mic-2"]').trigger('click');
     expect(settings.changeDevice).toHaveBeenCalledWith('mic-2');
-    await options.get('[data-speaker-option="speaker-2"]').trigger('click');
+
+    const speaker = control.get('[data-media-speaker]');
+    await speaker.get('[data-panel-choice-trigger]').trigger('click');
+    await speaker.get('[data-speaker-option="speaker-2"]').trigger('click');
     expect(settings.changeSpeaker).toHaveBeenCalledWith('speaker-2');
-    await options.get<HTMLInputElement>('[data-input-volume]').setValue('40');
+
+    await control.get<HTMLInputElement>('[data-input-volume]').setValue('40');
     expect(settings.changeInputVolume).toHaveBeenCalledWith(0.4);
-    expect(options.findAll('[data-input-level] [data-lit]')).toHaveLength(12);
+    expect(control.findAll('[data-input-level] [data-lit]')).toHaveLength(12);
 
     await control.get('[data-media-menu-trigger]').trigger('click');
     expect(control.find('[data-media-options]').exists()).toBe(false);
     expect(settings.stopLevelMeter).toHaveBeenCalled();
   });
 
-  it('expands the camera row to the cameras and the quality choices', async () => {
+  it('expands the camera to its Source and Quality choices and Preview camera', async () => {
     const control = mountControl('video', false, false, 'row');
     await control.get('[data-media-menu-trigger]').trigger('click');
-    const options = control.get('[data-media-options]');
-    expect(options.findAll('[data-device-option]').map((option) => option.text())).toEqual([
+
+    const source = control.get('[data-media-source]');
+    expect(source.get('[data-panel-choice-value]').text()).toBe('Front camera');
+    await source.get('[data-panel-choice-trigger]').trigger('click');
+    expect(source.findAll('[data-device-option]').map((option) => option.text())).toEqual([
       'Front camera',
       'USB camera',
     ]);
-    expect(options.get('[data-quality-option="auto"]').attributes('aria-checked')).toBe('true');
-    await options.get('[data-quality-option="720p"]').trigger('click');
+
+    const quality = control.get('[data-media-quality]');
+    expect(quality.get('[data-panel-choice-trigger]').text()).toContain('Quality');
+    expect(quality.get('[data-panel-choice-value]').text()).toBe('Auto · 720p');
+    await quality.get('[data-panel-choice-trigger]').trigger('click');
+    await quality.get('[data-quality-option="720p"]').trigger('click');
     expect(settings.changeQuality).toHaveBeenCalledWith('720p');
+
+    await control.get('[data-preview-camera]').trigger('click');
+    expect(control.emitted('preview-camera')).toHaveLength(1);
   });
 
   it('fills the whole control, toggle and chevron, grey while on and red while off', () => {

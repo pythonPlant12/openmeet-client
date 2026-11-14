@@ -143,13 +143,13 @@ describe('MeetingInviteDialog on a phone', () => {
     const handle = wrapper.get('[data-invite-handle]');
     handle.element.dispatchEvent(press('pointerdown', 400));
     await flushPromises();
-    handle.element.dispatchEvent(press('pointerup', 300));
+    window.dispatchEvent(press('pointerup', 300));
     await flushPromises();
     expect(sheet().attributes('data-expanded')).toBe('true');
 
     handle.element.dispatchEvent(press('pointerdown', 300));
     await flushPromises();
-    handle.element.dispatchEvent(press('pointerup', 400));
+    window.dispatchEvent(press('pointerup', 400));
     await flushPromises();
     expect(sheet().attributes('data-expanded')).toBe('false');
   });
@@ -159,8 +159,23 @@ describe('MeetingInviteDialog on a phone', () => {
     const handle = wrapper.get('[data-invite-handle]');
     handle.element.dispatchEvent(press('pointerdown', 300));
     await flushPromises();
-    handle.element.dispatchEvent(press('pointerup', 400));
+    window.dispatchEvent(press('pointerup', 400));
     await flushPromises();
     expect(wrapper.emitted('update:open')).toEqual([[false]]);
+  });
+
+  it('follows a finger dragging it down, and slides back on a short drag', async () => {
+    const wrapper = mountSheet();
+    const sheet = () => wrapper.get<HTMLElement>('[data-meeting-invite]');
+    const top = wrapper.get('[data-invite-drag-area]');
+    top.element.dispatchEvent(press('pointerdown', 300));
+    window.dispatchEvent(press('pointermove', 315));
+    await flushPromises();
+    expect(sheet().element.style.transform).toBe('translateY(15px)');
+
+    window.dispatchEvent(press('pointerup', 315));
+    await flushPromises();
+    expect(sheet().element.style.transform).toBe('');
+    expect(wrapper.emitted('update:open')).toBeUndefined();
   });
 });

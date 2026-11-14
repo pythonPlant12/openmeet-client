@@ -1,22 +1,9 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core';
-import {
-  Bug,
-  Check,
-  ChevronRight,
-  Code,
-  LayoutGrid,
-  MessageSquare,
-  PhoneOff,
-  ScanEye,
-  ScanFace,
-  SquareUser,
-  UserRoundPlus,
-} from 'lucide-vue-next';
+import { PhoneOff, SquareUser } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { buildGitHubIssueUrl } from '@/lib/github-issue';
 import { swallowNextClick } from '@/lib/swallow-next-click';
 import { playHaptic } from '@/services/haptics';
 
@@ -24,20 +11,17 @@ import MeetingMediaControl from './MeetingMediaControl.vue';
 import MeetingScreenShareControl from './MeetingScreenShareControl.vue';
 
 // The phone call screen's bottom bar: camera, mic, share and leave in thumb reach. Its handle (or a swipe up on
-// the bar) reveals a panel with the rest of the controls and settings, which snaps open or closed. The panel
-// grows under the bar, so the bar rides up with the drag and stays on top of the card.
+// the bar) reveals a panel with the microphone and camera settings, which snaps open or closed. The panel grows
+// under the bar, so the bar rides up with the drag and stays on top of the card. Chat, invite, and layout live
+// outside it, in the top bar and on the tiles.
 defineProps<{
   audioAvailable: boolean;
   videoAvailable: boolean;
   isMuted: boolean;
   isVideoOff: boolean;
   canPresent: boolean;
-  viewMode: 'grid' | 'speaker';
-  /** The panel's Invite people row shows only where inviting is possible. */
-  canInvite: boolean;
   /** Your own tile shows in the call screen. */
   showOwnCamera?: boolean;
-  showConnectionStatus: boolean;
   /** The call could not get the microphone or camera; its button shows a warning that asks again. */
   audioWarning?: boolean;
   videoWarning?: boolean;
@@ -52,20 +36,11 @@ const emit = defineEmits<{
   (e: 'request-access', kind: 'audio' | 'video'): void;
   (e: 'start-screen-share', options?: { selectArea: boolean }): void;
   (e: 'stop-screen-share'): void;
-  (e: 'set-view-mode', mode: 'grid' | 'speaker'): void;
-  (e: 'toggle-stats'): void;
-  (e: 'toggle-chat'): void;
-  (e: 'invite'): void;
   (e: 'toggle-own-camera'): void;
 }>();
 
 const { t } = useI18n();
 const panelId = `call-controls-panel-${useId()}`;
-const reportUrl = buildGitHubIssueUrl('meeting');
-const layouts = computed(() => [
-  { mode: 'grid' as const, label: t('meeting.actions.grid'), icon: LayoutGrid },
-  { mode: 'speaker' as const, label: t('meeting.actions.speaker'), icon: ScanFace },
-]);
 
 /** A press that moves this far is a drag of the panel, not a tap. */
 const DRAG_THRESHOLD_PX = 6;
@@ -244,18 +219,6 @@ function onLeave() {
       >
         <div ref="panelContent" class="max-h-[55dvh] space-y-3 overflow-y-auto overscroll-contain px-3 pb-3">
           <div class="call-panel-group">
-            <button
-              type="button"
-              class="call-panel-row"
-              data-panel-row="chat"
-              @click="fromPanel(() => emit('toggle-chat'))"
-            >
-              <MessageSquare class="call-panel-row-icon" />
-              <span class="flex-1 text-left">{{ t('meeting.controls.showChat') }}</span>
-            </button>
-          </div>
-
-          <div class="call-panel-group">
             <MeetingMediaControl
               kind="audio"
               variant="row"
@@ -263,6 +226,9 @@ function onLeave() {
               :available="audioAvailable"
               @media-changed="emit('media-changed')"
             />
+          </div>
+
+          <div class="call-panel-group">
             <MeetingMediaControl
               kind="video"
               variant="row"
@@ -270,89 +236,31 @@ function onLeave() {
               :available="videoAvailable"
               @media-changed="emit('media-changed')"
               @preview-camera="fromPanel(() => emit('preview-camera'))"
-            />
-            <button
-              type="button"
-              class="call-panel-row"
-              data-panel-row="preview-camera"
-              @click="fromPanel(() => emit('preview-camera'))"
             >
-              <ScanEye class="call-panel-row-icon" />
-              <span class="flex-1 text-left">{{ t('meeting.controls.previewCamera') }}</span>
-            </button>
-          </div>
-
-          <div class="call-panel-group p-2">
-            <h3 class="px-1 pb-2 text-xs font-semibold text-harbor-muted">{{ t('meeting.actions.layout') }}</h3>
-            <div role="radiogroup" :aria-label="t('meeting.actions.layout')" class="grid grid-cols-2 gap-2">
-              <button
-                v-for="layout in layouts"
-                :key="layout.mode"
-                type="button"
-                role="radio"
-                :aria-checked="viewMode === layout.mode"
-                class="flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors"
-                :class="viewMode === layout.mode ? 'bg-harbor-line text-harbor-ink' : 'text-harbor-ink-soft'"
-                @click="emit('set-view-mode', layout.mode)"
-              >
-                <component :is="layout.icon" class="size-4" />{{ layout.label }}
-              </button>
-            </div>
-          </div>
-
-          <div class="call-panel-group">
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="showOwnCamera"
-              class="call-panel-row"
-              data-panel-row="own-camera"
-              @click="emit('toggle-own-camera')"
-            >
-              <SquareUser class="call-panel-row-icon" />
-              <span class="flex-1 text-left">{{ t('meeting.controls.showOwnCamera') }}</span>
-              <span
-                aria-hidden="true"
-                class="relative h-6 w-10 shrink-0 rounded-full transition-colors"
-                :class="showOwnCamera ? 'bg-harbor-accent' : 'bg-harbor-line'"
-              >
-                <span
-                  class="absolute top-0.5 size-5 rounded-full bg-white shadow-harbor-soft transition-[left]"
-                  :class="showOwnCamera ? 'left-[1.125rem]' : 'left-0.5'"
-                />
-              </span>
-            </button>
-          </div>
-
-          <div v-if="canInvite" class="call-panel-group">
-            <button
-              type="button"
-              class="call-panel-row"
-              data-panel-row="invite"
-              @click="fromPanel(() => emit('invite'))"
-            >
-              <UserRoundPlus class="call-panel-row-icon" />
-              <span class="flex-1 text-left">{{ t('meeting.controls.invitePeople') }}</span>
-              <ChevronRight class="size-4 text-harbor-icon" aria-hidden="true" />
-            </button>
-          </div>
-
-          <div class="call-panel-group">
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="showConnectionStatus"
-              class="call-panel-row"
-              data-dev-tools
-              @click="emit('toggle-stats')"
-            >
-              <Code class="call-panel-row-icon" />
-              <span class="flex-1 text-left">{{ t('meeting.actions.devTools') }}</span>
-              <Check v-if="showConnectionStatus" class="size-4" aria-hidden="true" />
-            </button>
-            <a :href="reportUrl" target="_blank" rel="noreferrer" class="call-panel-row">
-              <Bug class="call-panel-row-icon" />{{ t('meeting.actions.reportBug') }}
-            </a>
+              <template #extra>
+                <button
+                  type="button"
+                  role="switch"
+                  :aria-checked="showOwnCamera"
+                  class="call-choice"
+                  data-panel-row="own-camera"
+                  @click="emit('toggle-own-camera')"
+                >
+                  <SquareUser class="size-4 shrink-0 text-harbor-icon" aria-hidden="true" />
+                  <span class="flex-1 text-left">{{ t('meeting.controls.showOwnCamera') }}</span>
+                  <span
+                    aria-hidden="true"
+                    class="relative h-6 w-10 shrink-0 rounded-full transition-colors"
+                    :class="showOwnCamera ? 'bg-harbor-accent' : 'bg-harbor-ink/15'"
+                  >
+                    <span
+                      class="absolute top-0.5 size-5 rounded-full bg-white shadow-harbor-soft transition-[left]"
+                      :class="showOwnCamera ? 'left-[1.125rem]' : 'left-0.5'"
+                    />
+                  </span>
+                </button>
+              </template>
+            </MeetingMediaControl>
           </div>
         </div>
       </div>

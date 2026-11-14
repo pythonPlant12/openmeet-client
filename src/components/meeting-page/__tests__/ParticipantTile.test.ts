@@ -21,7 +21,6 @@ function mountTile(
     speaking?: boolean;
     participant?: typeof participant;
     avatarUrl?: string;
-    phone?: boolean;
     collapsed?: boolean;
   } = {},
 ) {
@@ -38,7 +37,6 @@ function mountTile(
       size,
       speaking: extra.speaking,
       avatarUrl: extra.avatarUrl,
-      phone: extra.phone,
       collapsed: extra.collapsed,
     },
     global: { plugins: [i18n] },
@@ -68,11 +66,8 @@ describe('ParticipantTile name tag', () => {
     expect(tile.find('[data-participant-badges]').exists()).toBe(false);
   });
 
-  it('sits bottom-left on desktop and on a phone', () => {
+  it('sits bottom-left', () => {
     expect(mountTile(null).get('[data-participant-name-tag]').attributes('data-align')).toBe('start');
-    expect(mountTile(null, 'grid', { phone: true }).get('[data-participant-name-tag]').attributes('data-align')).toBe(
-      'start',
-    );
   });
 
   it('shrinks to the mic-off icon while the call controls are hidden', () => {
@@ -83,7 +78,8 @@ describe('ParticipantTile name tag', () => {
   });
 
   it('hides an unmuted name tag while the call controls are hidden', () => {
-    expect(mountTile(null, 'grid', { collapsed: true }).find('[data-participant-name-tag]').exists()).toBe(false);
+    const tag = mountTile(null, 'grid', { collapsed: true }).find('[data-participant-name-tag]');
+    expect(tag.exists() && tag.isVisible()).toBe(false);
   });
 });
 
@@ -124,12 +120,13 @@ describe('ParticipantTile avatar', () => {
     expect(tile.get('[data-participant-avatar]').text()).toBe('AL');
   });
 
-  it('marks the pinned person with a badge that needs no hover', () => {
+  it('carries no pin badge or pin overlay, even for the pinned person', () => {
     const tile = mount(ParticipantTile, {
       props: { participant, isExpanded: true },
       global: { plugins: [createI18n({ legacy: false, locale: 'en', missingWarn: false })] },
     });
-    expect(tile.find('[data-participant-pinned]').exists()).toBe(true);
+    expect(tile.find('[data-participant-pinned]').exists()).toBe(false);
+    expect(tile.find('[data-participant-surface] svg').exists()).toBe(false);
   });
 });
 
@@ -180,7 +177,7 @@ describe('ParticipantTile interactions', () => {
   }
 
   async function openOptions(tile: ReturnType<typeof mountInteractive>) {
-    await tile.get('button[aria-label="Options for Ada Lovelace"]').trigger('click');
+    await tile.get('[data-participant-name-tag]').trigger('click');
     await flushPromises();
     return Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'));
   }
@@ -230,9 +227,10 @@ describe('ParticipantTile interactions', () => {
     expect(tile.emitted('toggleName')).toHaveLength(1);
   });
 
-  it("opens the person's menu from the name tag on a phone, with no options button", async () => {
-    const tile = mountInteractive({ phone: true });
+  it("opens the person's menu from the name tag, with no ⋯ or expand button on the tile", async () => {
+    const tile = mountInteractive();
     expect(tile.find('[data-participant-options]').exists()).toBe(false);
+    expect(tile.find('[data-participant-expand]').exists()).toBe(false);
 
     await tile.get('[data-participant-name-tag]').trigger('click');
     await flushPromises();
@@ -241,25 +239,9 @@ describe('ParticipantTile interactions', () => {
     expect(tile.emitted('click')).toBeUndefined();
   });
 
-  it('offers an expand button on a video tile that makes it full screen', async () => {
-    const stream = { getVideoTracks: () => [{}], getTracks: () => [] } as unknown as MediaStream;
-    const tile = mountInteractive({ participant: { ...participant, stream } });
-    await tile.get('[data-participant-expand]').trigger('click');
-    expect(tile.emitted('toggleFullscreen')).toHaveLength(1);
-    expect(tile.emitted('click')).toBeUndefined();
-  });
-
-  it('offers no expand button while the camera is off', () => {
-    expect(
-      mountInteractive({ participant: { ...participant, videoEnabled: false } })
-        .find('[data-participant-expand]')
-        .exists(),
-    ).toBe(false);
-  });
-
-  it('shows no options button when the tile has no actions', () => {
-    expect(
-      mountInteractive({ showActions: false }).find('button[aria-label="Options for Ada Lovelace"]').exists(),
-    ).toBe(false);
+  it('shows a plain name tag that opens nothing when the tile has no actions', () => {
+    const tile = mountInteractive({ showActions: false });
+    expect(tile.get('[data-participant-name-tag]').element.tagName).toBe('DIV');
+    expect(tile.find('button[aria-label="Options for Ada Lovelace"]').exists()).toBe(false);
   });
 });

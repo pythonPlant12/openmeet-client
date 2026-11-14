@@ -16,7 +16,7 @@ const MediaControl = {
   props: ['kind', 'off', 'available', 'warning', 'variant'],
   emits: ['toggle', 'request-access', 'preview-camera'],
   template:
-    '<button :data-stub-media="kind" :data-variant="variant" @click="$emit(warning ? \'request-access\' : \'toggle\')" />',
+    '<div><button :data-stub-media="kind" :data-variant="variant" @click="$emit(warning ? \'request-access\' : \'toggle\')" /><button v-if="variant === \'row\'" :data-stub-preview="kind" @click="$emit(\'preview-camera\')" /><slot name="extra" /></div>',
 };
 const ShareControl = { template: '<button data-stub-share />' };
 
@@ -29,9 +29,6 @@ function mountControls(props: Partial<InstanceType<typeof CallPhoneControls>['$p
       isMuted: false,
       isVideoOff: true,
       canPresent: false,
-      viewMode: 'grid',
-      canInvite: true,
-      showConnectionStatus: false,
       ...props,
     },
     global: {
@@ -149,13 +146,10 @@ describe('CallPhoneControls', () => {
     expect(wrapper.find('[data-controls-backdrop]').exists()).toBe(false);
   });
 
-  it('holds chat, devices, layout, invite, dev tools, and the bug report in the panel, but no participants', async () => {
+  it('holds only the microphone and camera settings in the panel', async () => {
     const wrapper = mountControls();
     await handle(wrapper).trigger('click');
     const panel = wrapper.get('[data-controls-panel]');
-
-    await panel.get('[data-panel-row="chat"]').trigger('click');
-    expect(wrapper.emitted('toggle-chat')).toHaveLength(1);
 
     expect(
       panel
@@ -165,29 +159,13 @@ describe('CallPhoneControls', () => {
       ['audio', 'row'],
       ['video', 'row'],
     ]);
-    await panel.get('[data-panel-row="preview-camera"]').trigger('click');
+    await panel.get('[data-stub-preview="video"]').trigger('click');
     expect(wrapper.emitted('preview-camera')).toHaveLength(1);
 
-    expect(panel.get('[role="radio"][aria-checked="true"]').text()).toContain('Grid view');
-    await panel
-      .findAll('[role="radio"]')
-      .find((radio) => radio.text().includes('Speaker view'))!
-      .trigger('click');
-    expect(wrapper.emitted('set-view-mode')).toEqual([['speaker']]);
-
-    await panel.get('[data-panel-row="invite"]').trigger('click');
-    expect(wrapper.emitted('invite')).toHaveLength(1);
-
-    expect(panel.find('[data-panel-participants]').exists()).toBe(false);
-
-    const devTools = panel.get('[data-dev-tools]');
-    expect(devTools.attributes('aria-checked')).toBe('false');
-    await devTools.trigger('click');
-    expect(wrapper.emitted('toggle-stats')).toHaveLength(1);
-
-    const report = panel.get<HTMLAnchorElement>('a[target="_blank"]');
-    expect(report.text()).toContain('Report a bug');
-    expect(report.element.href).toContain('Area%3A+meeting');
+    for (const gone of ['chat', 'invite']) expect(panel.find(`[data-panel-row="${gone}"]`).exists()).toBe(false);
+    expect(panel.find('[role="radiogroup"]').exists()).toBe(false);
+    expect(panel.find('[data-dev-tools]').exists()).toBe(false);
+    expect(panel.text()).not.toContain('Report a bug');
   });
 
   it('toggles showing your own camera from the panel', async () => {
@@ -197,10 +175,5 @@ describe('CallPhoneControls', () => {
     expect(toggle.attributes('aria-checked')).toBe('true');
     await toggle.trigger('click');
     expect(wrapper.emitted('toggle-own-camera')).toHaveLength(1);
-  });
-
-  it('leaves out the invite row where inviting is not possible', async () => {
-    const wrapper = mountControls({ canInvite: false });
-    expect(wrapper.find('[data-panel-row="invite"]').exists()).toBe(false);
   });
 });

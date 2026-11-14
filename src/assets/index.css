@@ -1726,7 +1726,9 @@
     --harbor-canvas: 22 25 27;
     --harbor-app: 17 20 22;
     --harbor-surface: 30 33 36;
-    --harbor-accent-soft: 21 64 61;
+    /* Teal reads poorly on the dark call screen, so its accent is a light grey. */
+    --harbor-accent: 209 215 219;
+    --harbor-accent-soft: 58 64 68;
     --harbor-danger: 217 137 123;
     --harbor-danger-strong: 196 81 61;
     --harbor-danger-soft: 64 34 29;
@@ -1834,11 +1836,6 @@
 
   .call-choice[aria-checked='true'] > svg {
     color: rgb(var(--harbor-accent));
-  }
-
-  /* Dark menus turn the accent grey; the volume slider and level meter keep the Harbor teal so they read as live. */
-  .call-volume {
-    --harbor-accent: 11 122 117;
   }
 
   /* A volume slider: a thin rounded track, filled up to the value, with a round white handle. The page sets
@@ -1965,6 +1962,38 @@
   .call-button-tall {
     height: calc(var(--meeting-control-size) + 0.5rem + 2px);
   }
+}
+
+/* Text fields on the dark call screen get a light border, since the shared field border nearly vanishes there.
+   Outside the layer, so it wins over the fields' own border utilities. */
+:is(
+    .call-screen-dark,
+    .meeting-immersive
+      :is(
+        [data-call-phone-controls],
+        [data-call-phone-top-bar],
+        .harbor-chat-panel,
+        [data-camera-preview],
+        [data-meeting-invite]
+      )
+  )
+  :is(input:not([type='range'], [type='checkbox'], [type='radio']), textarea) {
+  border-color: rgb(var(--harbor-ink) / 0.22);
+}
+
+:is(
+    .call-screen-dark,
+    .meeting-immersive
+      :is(
+        [data-call-phone-controls],
+        [data-call-phone-top-bar],
+        .harbor-chat-panel,
+        [data-camera-preview],
+        [data-meeting-invite]
+      )
+  )
+  :is(input:not([type='range'], [type='checkbox'], [type='radio']), textarea):focus {
+  border-color: rgb(var(--harbor-ink) / 0.4);
 }
 
 /* Chat parts written with plain white or a fixed gray follow the dark palette in full screen. Outside

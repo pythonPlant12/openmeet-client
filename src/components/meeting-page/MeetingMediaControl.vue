@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GaugeAnimated } from '@respeak/lucide-motion-vue';
-import { Check, ChevronDown, ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
+import { ChevronDown, ChevronUp, Mic, MicOff, ScanFace, TriangleAlert, Video, VideoOff } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -22,6 +22,7 @@ import { type MediaKind, useMeetingMediaSettings } from '@/composables/useMeetin
 import { VIDEO_QUALITY_OPTIONS } from '@/lib/video-quality';
 import { playHaptic } from '@/services/haptics';
 
+import CallPanelChoice from './CallPanelChoice.vue';
 import MeetingInputVolume from './MeetingInputVolume.vue';
 import MeetingQualityOptions from './MeetingQualityOptions.vue';
 
@@ -36,8 +37,8 @@ const props = defineProps<{
   warning?: boolean;
   /**
    * `split` (default): the toggle and the chevron that opens the device menu. `toggle`: the toggle alone, for the
-   * phone bar. `row`: a row in the phone controls panel that expands in place to the same choices, since phones
-   * get no context menus.
+   * phone bar. `row`: a row in the phone controls panel that expands in place, since phones get no context menus,
+   * to the source and the other settings, each its own expanding choice. Its `extra` slot adds rows to the end.
    */
   variant?: 'split' | 'toggle' | 'row';
 }>();
@@ -123,10 +124,22 @@ function onVolumeChange(percent: number) {
 }
 
 const isExpanded = ref(false);
-const activeDeviceLabel = computed(() => {
-  const index = devices.value.findIndex((device) => device.deviceId === activeId.value);
-  return index === -1 ? '' : deviceLabel(devices.value[index]!, index);
-});
+const deviceOptions = computed(() =>
+  devices.value.map((device, index) => ({ value: device.deviceId, label: deviceLabel(device, index) })),
+);
+const speakerOptions = computed(() =>
+  speakers.value.map((speaker, index) => ({
+    value: speaker.deviceId,
+    label: speaker.label || `${t('meeting.controls.speaker')} ${index + 1}`,
+  })),
+);
+const qualityOptions = computed(() =>
+  VIDEO_QUALITY_OPTIONS.map((option) => ({
+    value: option.value,
+    label: option.value === 'auto' ? qualityLabel.value : option.label,
+    description: option.description,
+  })),
+);
 
 function toggleExpanded() {
   isExpanded.value = !isExpanded.value;
@@ -154,99 +167,61 @@ onBeforeUnmount(stopLevelMeter);
         @click="toggleExpanded"
       >
         <component :is="isAudio ? Mic : Video" class="call-panel-row-icon" />
-        <span class="min-w-0 flex-1 text-left">
-          <span class="block">{{ t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera') }}</span>
-          <span v-if="activeDeviceLabel" class="block truncate text-xs font-normal text-harbor-muted">{{
-            activeDeviceLabel
-          }}</span>
-        </span>
+        <span class="flex-1 text-left">{{
+          t(isAudio ? 'meeting.controls.microphone' : 'meeting.controls.camera')
+        }}</span>
         <ChevronDown
           class="size-4 shrink-0 text-harbor-icon transition-transform duration-200"
           :class="{ 'rotate-180': isExpanded }"
           aria-hidden="true"
         />
       </button>
-      <div v-if="isExpanded" class="space-y-3 px-3 pb-3" data-media-options>
-        <p v-if="!devices.length" class="px-1 text-sm text-harbor-muted">
-          {{ t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras') }}
-        </p>
-        <div v-else role="radiogroup" :aria-label="menuLabel" class="call-choice-list">
-          <button
-            v-for="(device, index) in devices"
-            :key="device.deviceId"
-            type="button"
-            role="radio"
-            class="call-choice"
-            :aria-checked="device.deviceId === activeId"
-            :data-state="device.deviceId === activeId ? 'checked' : 'unchecked'"
+      <div v-if="isExpanded" class="px-3 pb-3" data-media-options>
+        <div class="call-choice-list">
+          <CallPanelChoice
+            :label="t('meeting.controls.source')"
+            :options="deviceOptions"
+            :value="activeId"
             :disabled="busy"
-            :data-device-option="device.deviceId"
-            @click="selectDevice(device.deviceId)"
-          >
-            <span class="min-w-0 flex-1 truncate text-left">{{ deviceLabel(device, index) }}</span>
-            <Check v-if="device.deviceId === activeId" class="size-4 shrink-0" aria-hidden="true" />
-          </button>
-        </div>
-
-        <template v-if="isAudio">
-          <template v-if="canChooseSpeaker && speakers.length">
-            <p class="px-1 text-xs font-semibold text-harbor-muted">{{ t('meeting.controls.speaker') }}</p>
-            <div role="radiogroup" :aria-label="t('meeting.controls.speaker')" class="call-choice-list">
-              <button
-                v-for="(speaker, index) in speakers"
-                :key="speaker.deviceId"
-                type="button"
-                role="radio"
-                class="call-choice"
-                :aria-checked="speaker.deviceId === speakerId"
-                :data-speaker-option="speaker.deviceId"
-                @click="selectSpeaker(speaker.deviceId)"
-              >
-                <span class="min-w-0 flex-1 truncate text-left">{{
-                  speaker.label || `${t('meeting.controls.speaker')} ${index + 1}`
-                }}</span>
-                <Check v-if="speaker.deviceId === speakerId" class="size-4 shrink-0" aria-hidden="true" />
-              </button>
-            </div>
-          </template>
-          <MeetingInputVolume
-            class="!px-1"
-            :volume-percent="volumePercent"
-            :level-percent="levelPercent"
-            @change="onVolumeChange"
+            :empty-text="t(isAudio ? 'meeting.controls.noMicrophones' : 'meeting.controls.noCameras')"
+            option-attribute="data-device-option"
+            data-media-source
+            @select="selectDevice"
           />
-        </template>
-
-        <template v-else>
-          <p class="px-1 text-xs font-semibold text-harbor-muted">{{ t('meeting.controls.quality') }}</p>
-          <div role="radiogroup" :aria-label="t('meeting.controls.quality')" class="call-choice-list">
-            <button
-              v-for="option in VIDEO_QUALITY_OPTIONS"
-              :key="option.value"
-              type="button"
-              role="radio"
-              class="call-choice"
-              :aria-checked="quality === option.value"
+          <template v-if="isAudio">
+            <CallPanelChoice
+              v-if="canChooseSpeaker && speakers.length"
+              :label="t('meeting.controls.speaker')"
+              :options="speakerOptions"
+              :value="speakerId"
+              option-attribute="data-speaker-option"
+              data-media-speaker
+              @select="selectSpeaker"
+            />
+            <MeetingInputVolume
+              class="!px-3.5 !py-3"
+              :volume-percent="volumePercent"
+              :level-percent="levelPercent"
+              @change="onVolumeChange"
+            />
+          </template>
+          <template v-else>
+            <CallPanelChoice
+              :label="t('meeting.controls.quality')"
+              :options="qualityOptions"
+              :value="quality"
               :disabled="busy"
-              :data-quality-option="option.value"
-              @click="changeQuality(option.value)"
-            >
-              <span class="min-w-0 flex-1 text-left">
-                <span class="block"
-                  >{{ option.label
-                  }}<span
-                    v-if="option.value === 'auto' && quality === 'auto' && sentHeight"
-                    class="font-normal text-harbor-muted"
-                  >
-                    · {{ sentHeight }}p</span
-                  ></span
-                >
-                <span class="block text-xs font-normal text-harbor-muted">{{ option.description }}</span>
-              </span>
-              <Check v-if="quality === option.value" class="size-4 shrink-0" aria-hidden="true" />
+              option-attribute="data-quality-option"
+              data-media-quality
+              @select="changeQuality"
+            />
+            <button type="button" class="call-choice" data-preview-camera @click="emit('preview-camera')">
+              <ScanFace class="size-4 shrink-0 text-harbor-icon" aria-hidden="true" />
+              <span class="flex-1 text-left">{{ t('meeting.controls.previewCamera') }}</span>
             </button>
-          </div>
-        </template>
+          </template>
+          <slot name="extra" />
+        </div>
       </div>
     </template>
 

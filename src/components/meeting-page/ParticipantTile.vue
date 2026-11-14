@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MaximizeAnimated, MinimizeAnimated, PinAnimated, PinOffAnimated } from '@respeak/lucide-motion-vue';
-import { Expand, Eye, EyeOff, MonitorUp, MoreHorizontal, Pin, PinOff } from 'lucide-vue-next';
+import { Eye, EyeOff, MonitorUp } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -27,7 +27,6 @@ interface Props {
   speaking?: boolean;
   size?: 'full' | 'sidebar' | 'mobile' | 'grid';
   isExpanded?: boolean;
-  showExpandIcon?: boolean;
   interactive?: boolean;
   /** Small strip tiles hide the name until it is asked for. */
   showNameTag?: boolean;
@@ -37,22 +36,19 @@ interface Props {
   dark?: boolean;
   /** Full screen's main tile runs edge to edge, without corners, border, or shadow. */
   bleed?: boolean;
-  /** The ⋯ button with pin, full screen, and the participant's options. */
+  /** The name tag opens a menu with pin, full screen, and the participant's options. */
   showActions?: boolean;
   /** This tile is the one shown in full screen, so its menu offers to leave full screen. */
   isFullscreen?: boolean;
-  /** The ⋯ menu can show or hide the name, for small tiles that hide it. */
+  /** The tile's menu can show or hide the name, for small tiles that hide it. */
   nameToggle?: boolean;
-  /** Phone call screens centre the name tag and open the person's menu from it instead of a ⋯ button. */
-  phone?: boolean;
-  /** The call controls are hidden, so the name tag shrinks to the mic-off icon and the expand button hides. */
+  /** The call controls are hidden, so the name tag shrinks to the mic-off icon. */
   collapsed?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   size: 'grid',
   isExpanded: false,
-  showExpandIcon: true,
   interactive: true,
   status: null,
   speaking: false,
@@ -63,7 +59,6 @@ const props = withDefaults(defineProps<Props>(), {
   showActions: true,
   isFullscreen: false,
   nameToggle: false,
-  phone: false,
   collapsed: false,
 });
 const { t } = useI18n();
@@ -152,15 +147,6 @@ const nameTagProps = computed(() => ({
   compact: isCompact.value,
   statusLabel: statusLabel.value,
 }));
-const showsExpand = computed(
-  () =>
-    props.showActions &&
-    !props.collapsed &&
-    !isCompact.value &&
-    !props.isFullscreen &&
-    !!props.participant.stream &&
-    props.participant.videoEnabled,
-);
 // "Appear offline" is a choice the person made; everyone else sees it as plain offline.
 const statusLabel = computed(() =>
   props.status === 'offline' ? t('meeting.participant.offline') : (statusOption.value?.label ?? ''),
@@ -296,7 +282,7 @@ onMounted(async () => {
       >
         <div
           :class="[
-            'flex items-center justify-center overflow-hidden rounded-full bg-harbor-accent font-bold text-white shadow-[0_8px_24px_rgba(16,47,53,0.25)]',
+            'flex items-center justify-center overflow-hidden rounded-full bg-harbor-accent font-bold text-harbor-app shadow-[0_8px_24px_rgba(16,47,53,0.25)]',
             size === 'sidebar' || size === 'mobile' ? 'w-12 h-12 text-xl' : 'w-28 h-28 text-4xl',
           ]"
         >
@@ -320,81 +306,20 @@ onMounted(async () => {
         }}</span>
         <span v-else class="sr-only">{{ t('meeting.participant.connecting') }}</span>
       </div>
-
-      <!-- The pinned person keeps a pin badge, so phones without hover still see who is pinned. -->
-      <div
-        v-if="isExpanded"
-        data-participant-pinned
-        :class="[
-          'meeting-glass-bubble absolute left-2 flex items-center justify-center rounded-full',
-          isCompact ? 'top-1 size-5' : 'top-4 size-7',
-        ]"
-      >
-        <Pin :class="isCompact ? 'size-3' : 'size-3.5'" aria-hidden="true" />
-      </div>
-
-      <!-- Hover Overlay with Pin Icon -->
-      <div
-        v-if="showExpandIcon"
-        class="absolute inset-0 hidden items-center justify-center rounded-[1.25rem] bg-black/0 transition-colors md:flex md:group-hover:bg-black/20"
-      >
-        <PinOff
-          v-if="isExpanded"
-          :class="[
-            'text-white opacity-0 group-hover:opacity-100 transition-opacity',
-            size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
-          ]"
-        />
-        <Pin
-          v-else
-          :class="[
-            'text-white opacity-0 group-hover:opacity-100 transition-opacity',
-            size === 'sidebar' || size === 'mobile' ? 'h-5 w-5' : 'h-8 w-8',
-          ]"
-        />
-      </div>
     </component>
 
-    <ParticipantNameTag v-if="showsNameTag && !(phone && showActions)" v-bind="nameTagProps" />
+    <ParticipantNameTag v-if="showsNameTag && !showActions" v-bind="nameTagProps" />
 
-    <!-- Expand: full screen for this tile, while its camera shows video. -->
-    <button
-      v-if="showsExpand"
-      type="button"
-      data-participant-expand
-      class="meeting-glass-bubble absolute right-2 top-2 z-10 flex size-8 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-faint"
-      :aria-label="t('meeting.participant.expand', { name: participant.name })"
-      @click.stop="emit('toggleFullscreen')"
-    >
-      <Expand class="size-4" aria-hidden="true" />
-    </button>
-
-    <!-- Per-person actions: a ⋯ button on hover on desktop; on a phone the name tag opens them. -->
+    <!-- Per-person actions open from the name tag; tiles carry no other buttons. -->
     <DropdownMenu v-if="showActions" v-model:open="isOptionsOpen" :modal="false">
       <DropdownMenuTrigger as-child>
         <ParticipantNameTag
-          v-if="phone"
           v-show="showsNameTag"
           v-bind="nameTagProps"
           as="button"
           :aria-label="t('meeting.participant.options', { name: participant.name })"
           @click.stop
         />
-        <button
-          v-else
-          type="button"
-          :class="[
-            'meeting-glass-bubble absolute flex items-center justify-center rounded-lg transition-opacity',
-            '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',
-            isCompact ? 'bottom-1.5 right-1.5 size-6' : 'bottom-2 right-2 size-8',
-            isOptionsOpen ? '[@media(hover:hover)]:opacity-100' : '',
-          ]"
-          data-participant-options
-          :aria-label="t('meeting.participant.options', { name: participant.name })"
-          @click.stop
-        >
-          <MoreHorizontal :class="isCompact ? 'size-3.5' : 'size-4'" />
-        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" :side-offset="6" class="w-60 max-w-[calc(100vw-1.5rem)]">
         <DropdownMenuItem @select="emit('togglePin')">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { Dialog, DialogDescription, DialogHeader, DialogTitle, HarborDialogContent } from '@/components/ui/dialog';
@@ -22,28 +22,77 @@ const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{ (event: 'access-updated', access: MeetingRoomAccess): void }>();
 const { t } = useI18n();
 
-/** A drag on the handle further than this grows or shrinks the sheet. */
+/** A drag on the sheet's top further than this grows, shrinks, or dismisses the sheet. */
 const HANDLE_DRAG_PX = 24;
+/** A flick down this fast (px/ms) dismisses the sheet however short it was. */
+const FLICK_VELOCITY = 0.5;
 const isExpanded = ref(false);
-let handleStartY: number | null = null;
+// How far the sheet follows a finger dragging it down; it slides back, or away, on release.
+const dragOffset = ref(0);
+const isDragging = ref(false);
+let drag: { startY: number; lastY: number; lastTime: number; velocity: number } | null = null;
 
-function onHandlePointerDown(event: PointerEvent) {
-  handleStartY = event.clientY;
+function onDragStart(event: PointerEvent) {
+  if (event.button !== 0) return;
+  drag = { startY: event.clientY, lastY: event.clientY, lastTime: event.timeStamp, velocity: 0 };
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd);
+  window.addEventListener('pointercancel', onDragEnd);
 }
 
-function onHandlePointerUp(event: PointerEvent) {
-  if (handleStartY === null) return;
-  const dy = event.clientY - handleStartY;
-  handleStartY = null;
-  if (dy < -HANDLE_DRAG_PX) isExpanded.value = true;
-  else if (dy > HANDLE_DRAG_PX) {
-    if (isExpanded.value) isExpanded.value = false;
-    else open.value = false;
-  } else isExpanded.value = !isExpanded.value;
+function onDragMove(event: PointerEvent) {
+  if (!drag) return;
+  const elapsed = event.timeStamp - drag.lastTime;
+  if (elapsed > 0) drag.velocity = (event.clientY - drag.lastY) / elapsed;
+  drag.lastY = event.clientY;
+  drag.lastTime = event.timeStamp;
+  const dy = event.clientY - drag.startY;
+  if (Math.abs(dy) > 4) isDragging.value = true;
+  dragOffset.value = Math.max(dy, 0);
+}
+
+function onDragEnd(event: PointerEvent) {
+  stopDragListeners();
+  if (!drag) return;
+  const dy = event.clientY - drag.startY;
+  const { velocity } = drag;
+  drag = null;
+  isDragging.value = false;
+  if (dy < -HANDLE_DRAG_PX) {
+    isExpanded.value = true;
+    dragOffset.value = 0;
+  } else if (dy > HANDLE_DRAG_PX || velocity > FLICK_VELOCITY) {
+    if (isExpanded.value && velocity <= FLICK_VELOCITY) {
+      isExpanded.value = false;
+      dragOffset.value = 0;
+    } else {
+      // The closing slide starts from where the finger left the sheet.
+      open.value = false;
+    }
+  } else {
+    dragOffset.value = 0;
+    const onHandle = event.target instanceof Element && !!event.target.closest('[data-invite-handle]');
+    if (Math.abs(dy) <= 4 && onHandle) isExpanded.value = !isExpanded.value;
+  }
+}
+
+function stopDragListeners() {
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragEnd);
+  window.removeEventListener('pointercancel', onDragEnd);
+}
+
+onBeforeUnmount(stopDragListeners);
+
+/** Keyboard presses on the handle toggle the height; pointer taps already did in `onDragEnd`. */
+function onHandleKey(event: MouseEvent) {
+  if (event.detail === 0) isExpanded.value = !isExpanded.value;
 }
 
 watch(open, (isOpen) => {
-  if (isOpen) isExpanded.value = false;
+  if (!isOpen) return;
+  isExpanded.value = false;
+  dragOffset.value = 0;
 });
 </script>
 
@@ -53,22 +102,30 @@ watch(open, (isOpen) => {
       side="bottom"
       hide-close
       overlay-class="bg-harbor-ink/30 backdrop-blur-md sm:bg-harbor-ink/30"
-      class="marketing-font flex flex-col gap-3 rounded-t-[1.75rem] border-0 bg-harbor-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 text-harbor-ink transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-      :class="isExpanded ? 'h-[92dvh]' : 'h-[62dvh]'"
+      class="marketing-font flex flex-col gap-3 rounded-t-[1.75rem] border-0 bg-harbor-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 text-harbor-ink"
+      :class="[
+        isExpanded ? 'h-[92dvh]' : 'h-[62dvh]',
+        isDragging
+          ? '!transition-none'
+          : 'transition-[height,transform] !duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+      ]"
+      :style="dragOffset ? { transform: `translateY(${dragOffset}px)` } : undefined"
       :data-expanded="isExpanded"
       data-meeting-invite
     >
-      <button
-        type="button"
-        class="flex h-6 w-full shrink-0 touch-none items-center justify-center"
-        :aria-label="t(isExpanded ? 'meeting.invite.shrink' : 'meeting.invite.expand')"
-        data-invite-handle
-        @pointerdown="onHandlePointerDown"
-        @pointerup="onHandlePointerUp"
-      >
-        <span aria-hidden="true" class="h-1 w-9 rounded-full bg-harbor-line" />
-      </button>
-      <SheetTitle class="text-center text-white font-semibold">{{ t('meeting.invite.title') }}</SheetTitle>
+      <!-- The sheet's top drags: down to dismiss it or shrink it, up to make it taller; a tap toggles its height. -->
+      <div class="shrink-0 touch-none select-none" data-invite-drag-area @pointerdown="onDragStart">
+        <button
+          type="button"
+          class="flex h-6 w-full items-center justify-center"
+          :aria-label="t(isExpanded ? 'meeting.invite.shrink' : 'meeting.invite.expand')"
+          data-invite-handle
+          @click="onHandleKey"
+        >
+          <span aria-hidden="true" class="h-1 w-9 rounded-full bg-harbor-line" />
+        </button>
+        <SheetTitle class="text-center text-white font-semibold">{{ t('meeting.invite.title') }}</SheetTitle>
+      </div>
       <SheetDescription class="sr-only">{{ t('meeting.invite.description') }}</SheetDescription>
       <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <MeetingInviteContent
