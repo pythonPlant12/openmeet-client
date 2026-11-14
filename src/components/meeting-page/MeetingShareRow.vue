@@ -47,7 +47,7 @@ const emailUrl = () => emailShareUrl(t('meeting.controls.shareTitle'), shareText
 
 <template>
   <div class="space-y-3">
-    <div class="flex gap-1 overflow-x-auto pb-1" data-share-row>
+    <div class="-mx-1 flex gap-1 overflow-x-auto border-b border-harbor-line pb-4" data-share-row>
       <button v-if="canShare" type="button" class="call-share-target" data-share-target="share" @click="shareLink">
         <span class="call-share-icon"><Share /></span>{{ t('meeting.invite.share') }}
       </button>

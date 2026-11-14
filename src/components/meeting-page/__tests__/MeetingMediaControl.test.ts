@@ -149,16 +149,21 @@ describe('MeetingMediaControl', () => {
     expect(control.get('[data-media-menu-trigger]').text()).toContain('Camera');
   });
 
-  it('shows a muted microphone or a camera that is off in red', () => {
-    const muted = mountControl('audio', true).get('[data-media-toggle]');
+  it('fills the whole control, toggle and chevron, grey while on and red while off', () => {
+    const mutedControl = mountControl('audio', true);
+    const muted = mutedControl.get('[data-media-toggle]');
     expect(muted.attributes('data-media-off')).toBe('true');
-    expect(muted.attributes('data-off')).toBe('true');
     expect(muted.attributes('aria-label')).toBe('Unmute microphone');
+    const mutedRoot = mutedControl.get('[data-media-control]');
+    expect(mutedRoot.classes()).toContain('call-media');
+    expect(mutedRoot.attributes('data-off')).toBe('true');
 
-    const cameraOn = mountControl('video').get('[data-media-toggle]');
-    expect(cameraOn.attributes('data-off')).toBe('false');
-    expect(cameraOn.attributes('data-active')).toBe('true');
-    expect(cameraOn.attributes('aria-label')).toBe('Turn camera off');
+    const cameraControl = mountControl('video');
+    const cameraRoot = cameraControl.get('[data-media-control]');
+    expect(cameraRoot.classes()).toContain('call-media');
+    expect(cameraRoot.attributes('data-off')).toBe('false');
+    expect(cameraControl.get('[data-media-toggle]').attributes('data-active')).toBeUndefined();
+    expect(cameraControl.get('[data-media-toggle]').attributes('aria-label')).toBe('Turn camera off');
   });
 
   it('opens the device menu from the chevron with a medium haptic', async () => {

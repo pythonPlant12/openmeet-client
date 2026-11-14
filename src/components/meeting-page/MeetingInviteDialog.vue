@@ -68,7 +68,7 @@ watch(open, (isOpen) => {
       >
         <span aria-hidden="true" class="h-1 w-9 rounded-full bg-harbor-line" />
       </button>
-      <SheetTitle class="text-center text-base font-semibold">{{ t('meeting.invite.title') }}</SheetTitle>
+      <SheetTitle class="text-center text-white font-semibold">{{ t('meeting.invite.title') }}</SheetTitle>
       <SheetDescription class="sr-only">{{ t('meeting.invite.description') }}</SheetDescription>
       <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <MeetingInviteContent
@@ -89,7 +89,7 @@ watch(open, (isOpen) => {
       data-meeting-invite
     >
       <DialogHeader>
-        <DialogTitle class="text-center">{{ t('meeting.invite.title') }}</DialogTitle>
+        <DialogTitle class="text-center text-harbor-ink">{{ t('meeting.invite.title') }}</DialogTitle>
         <DialogDescription class="sr-only">{{ t('meeting.invite.description') }}</DialogDescription>
       </DialogHeader>
       <MeetingInviteContent

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core';
-import { Check, Search, UserPlus } from 'lucide-vue-next';
+import { Check, Search } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -178,7 +178,7 @@ watch(policy, (current) => {
           maxlength="80"
           :placeholder="searchPlaceholder"
           aria-label="Search people to invite"
-          class="h-10 rounded-full border-0 bg-harbor-hover pl-9 text-sm shadow-harbor-around focus-visible:ring-0"
+          class="h-11 rounded-xl border border-harbor-line bg-harbor-canvas pl-9 text-sm focus-visible:ring-0"
         />
       </div>
       <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-harbor-muted" data-meeting-access-line>
@@ -213,11 +213,7 @@ watch(policy, (current) => {
           </Button>
         </div>
       </section>
-      <div
-        v-if="!guest"
-        class="min-h-24 rounded-2xl border border-harbor-line bg-harbor-surface"
-        data-invite-candidates
-      >
+      <div v-if="!guest" class="min-h-24 overflow-hidden rounded-2xl bg-harbor-hover" data-invite-candidates>
         <div v-if="isSearching && !candidates.length" class="flex justify-center py-8">
           <LoadingRipple class="size-6 text-harbor-accent" />
         </div>
@@ -228,13 +224,9 @@ watch(policy, (current) => {
           {{ emptyText }}
         </p>
         <ul v-else class="sm:max-h-72 sm:overflow-y-auto">
-          <li
-            v-for="candidate in candidates"
-            :key="candidate.id"
-            class="flex items-center gap-3 px-3 py-2.5 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-harbor-line"
-          >
+          <li v-for="(candidate, index) in candidates" :key="candidate.id" class="flex items-center gap-3 pl-3">
             <span
-              class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-xs font-semibold text-harbor-icon"
+              class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-xs font-semibold text-harbor-icon"
               ><img
                 v-if="candidate.avatarUrl && avatarCache.urls.value[candidate.avatarUrl]"
                 :src="avatarCache.urls.value[candidate.avatarUrl]"
@@ -242,32 +234,36 @@ watch(policy, (current) => {
                 class="size-full object-cover"
               /><template v-else>{{ initials(candidate.name) }}</template></span
             >
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm font-semibold">{{ candidate.name }}</span>
-              <span class="block truncate text-xs text-harbor-muted"
-                >@{{ candidate.nickname }}<template v-if="candidate.isFriend"> · Friend</template></span
+            <!-- The divider starts after the avatar, like a settings list. -->
+            <span
+              class="flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-3"
+              :class="{ 'border-t border-harbor-ink/10': index > 0 }"
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[15px] font-semibold">{{ candidate.name }}</span>
+                <span class="block truncate text-xs text-harbor-muted">@{{ candidate.nickname }}</span>
+              </span>
+              <Button
+                v-if="candidate.invited || invitedIds.has(candidate.id)"
+                variant="ghost"
+                size="sm"
+                disabled
+                class="h-8 shrink-0 rounded-lg px-3 text-sm font-semibold text-harbor-muted disabled:opacity-100 [&_svg]:text-harbor-accent"
+                ><Check class="size-4" />Invited</Button
               >
+              <Button
+                v-else
+                size="sm"
+                variant="secondary"
+                class="!h-8 min-w-[4.25rem] shrink-0 rounded-lg bg-harbor-ink/10 px-4 text-sm font-semibold text-harbor-ink hover:bg-harbor-ink/15"
+                :disabled="invitingId !== null"
+                :data-invite="candidate.id"
+                @click="invite(candidate)"
+              >
+                <LoadingRipple v-if="invitingId === candidate.id" size="sm" />
+                <template v-else>Invite</template>
+              </Button>
             </span>
-            <Button
-              v-if="candidate.invited || invitedIds.has(candidate.id)"
-              variant="ghost"
-              size="sm"
-              disabled
-              class="h-8 shrink-0 rounded-full px-3 text-xs font-semibold text-harbor-muted disabled:opacity-100 [&_svg]:text-harbor-accent"
-              ><Check class="size-4" />Invited</Button
-            >
-            <Button
-              v-else
-              size="sm"
-              variant="secondary"
-              class="!h-8 shrink-0 rounded-xl bg-harbor-hover px-3.5 text-xs font-semibold text-harbor-ink"
-              :disabled="invitingId !== null"
-              :data-invite="candidate.id"
-              @click="invite(candidate)"
-            >
-              <LoadingRipple v-if="invitingId === candidate.id" size="sm" />
-              <template v-else><UserPlus class="size-3.5" />Invite</template>
-            </Button>
           </li>
         </ul>
       </div>

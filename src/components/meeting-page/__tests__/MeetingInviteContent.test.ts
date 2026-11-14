@@ -74,6 +74,10 @@ describe('MeetingInviteContent', () => {
     await flushPromises();
 
     expect(api.listMeetingInvitationCandidates).toHaveBeenCalledWith(expect.any(String), 'room-1', '');
+    const row = wrapper.get('[data-invite-candidates] li');
+    expect(row.text()).toContain('Bob');
+    expect(row.text()).toContain('@bob');
+    expect(row.text()).not.toContain('Friend');
     await wrapper.get('[data-invite="bob"]').trigger('click');
     await flushPromises();
 

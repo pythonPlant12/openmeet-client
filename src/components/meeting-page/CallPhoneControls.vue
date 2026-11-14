@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onClickOutside, useElementSize } from '@vueuse/core';
+import { useElementSize } from '@vueuse/core';
 import {
   Bug,
   Check,
@@ -24,8 +24,8 @@ import MeetingMediaControl from './MeetingMediaControl.vue';
 import MeetingScreenShareControl from './MeetingScreenShareControl.vue';
 
 // The phone call screen's bottom bar: camera, mic, share and leave in thumb reach. Its handle (or a swipe up on
-// the bar) reveals a panel with the rest of the controls and settings, which snaps open or closed. While the
-// panel is open the bar moves to the top of the card, above the panel.
+// the bar) reveals a panel with the rest of the controls and settings, which snaps open or closed. The panel
+// grows under the bar, so the bar rides up with the drag and stays on top of the card.
 defineProps<{
   audioAvailable: boolean;
   videoAvailable: boolean;
@@ -88,8 +88,6 @@ function setOpen(open: boolean) {
 function toggleOpen() {
   setOpen(!isOpen.value);
 }
-
-onClickOutside(card, () => isOpen.value && setOpen(false), { ignore: ['[role="menu"]'] });
 
 let drag: { startY: number; startHeight: number; lastY: number; lastTime: number; velocity: number } | null = null;
 let isDragging = false;
@@ -164,6 +162,15 @@ function onLeave() {
 </script>
 
 <template>
+  <!-- While the panel is open, a tap anywhere else only closes it and presses nothing underneath. -->
+  <div
+    v-if="isOpen"
+    class="fixed inset-0 z-40 touch-none"
+    aria-hidden="true"
+    data-controls-backdrop
+    @pointerdown.prevent
+    @click="setOpen(false)"
+  />
   <div
     class="marketing-font pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-harbor-ink"
   >
@@ -187,9 +194,7 @@ function onLeave() {
       </button>
 
       <div
-        class="flex touch-none items-center justify-around gap-1 px-2 pb-2"
-        :class="isOpen ? 'order-2' : 'order-4'"
-        :data-position="isOpen ? 'top' : 'bottom'"
+        class="order-2 flex touch-none items-center justify-between px-4 pb-3"
         data-controls-bar
         @pointerdown="onPointerDown"
       >
@@ -221,7 +226,7 @@ function onLeave() {
         />
         <button
           type="button"
-          class="call-button call-button-leave"
+          class="call-button call-button-leave w-[var(--meeting-control-size)]"
           :aria-label="t('meeting.controls.endCall')"
           @click="onLeave"
         >

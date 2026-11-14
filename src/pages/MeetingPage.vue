@@ -99,6 +99,8 @@ const screenShare = useScreenShare();
 const meetingParticipants = computed<Participant[]>(() => {
   const byId = new Map(participantsArray.value.map((participant) => [participant.id, participant]));
   return participantsArray.value.map((participant) => {
+    // Your own mute shows as soon as you toggle it, before the call has synced it to your participant.
+    if (participant.isLocal && !participant.screenShareOf) return { ...participant, audioEnabled: !isMuted.value };
     if (!participant.screenShareOf) return participant;
     const presenter = byId.get(participant.screenShareOf);
     const name = t('meeting.screenShare.label', { name: presenter?.name ?? participant.name });

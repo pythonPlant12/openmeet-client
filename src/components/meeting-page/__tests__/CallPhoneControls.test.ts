@@ -121,11 +121,32 @@ describe('CallPhoneControls', () => {
     expect(haptics.playHaptic).toHaveBeenCalledTimes(2);
   });
 
-  it('moves the controls row to the top of the card while the panel is open', async () => {
+  it('keeps the controls row above the panel, so it rides up as the panel opens', async () => {
     const wrapper = mountControls();
-    expect(bar(wrapper).attributes('data-position')).toBe('bottom');
+    const order = () =>
+      Array.from(wrapper.get('[data-call-phone-controls]').element.children).map((child) =>
+        child.hasAttribute('data-controls-bar') ? 'bar' : child.hasAttribute('data-controls-panel') ? 'panel' : '',
+      );
+    expect(bar(wrapper).classes()).toContain('order-2');
+    expect(wrapper.get('[data-controls-panel]').classes()).toContain('order-3');
     await handle(wrapper).trigger('click');
-    expect(bar(wrapper).attributes('data-position')).toBe('top');
+    expect(bar(wrapper).classes()).toContain('order-2');
+    expect(order().filter(Boolean)).toEqual(['bar', 'panel']);
+  });
+
+  it('closes the open panel on a tap outside it, which presses nothing underneath', async () => {
+    const wrapper = mountControls();
+    expect(wrapper.find('[data-controls-backdrop]').exists()).toBe(false);
+    await handle(wrapper).trigger('click');
+
+    const backdrop = wrapper.get('[data-controls-backdrop]');
+    const pointerDown = new Event('pointerdown', { bubbles: true, cancelable: true });
+    backdrop.element.dispatchEvent(pointerDown);
+    expect(pointerDown.defaultPrevented).toBe(true);
+    await backdrop.trigger('click');
+
+    expect(handle(wrapper).attributes('aria-expanded')).toBe('false');
+    expect(wrapper.find('[data-controls-backdrop]').exists()).toBe(false);
   });
 
   it('holds chat, devices, layout, invite, dev tools, and the bug report in the panel, but no participants', async () => {

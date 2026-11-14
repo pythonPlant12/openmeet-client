@@ -125,7 +125,8 @@ onBeforeUnmount(stopLevelMeter);
 <template>
   <div
     class="group relative flex items-center"
-    :class="{ 'w-full': variant === 'row' }"
+    :class="variant === 'row' ? 'w-full' : 'call-media'"
+    :data-off="variant === 'row' ? undefined : off"
     :data-media-control="kind"
     :data-variant="variant ?? 'split'"
   >
@@ -136,7 +137,6 @@ onBeforeUnmount(stopLevelMeter);
       :disabled="!available && !warning"
       :aria-label="toggleLabel"
       :data-off="off"
-      :data-active="!isAudio && !off && available"
       :data-media-off="off"
       data-media-toggle
       @click="onToggle"
