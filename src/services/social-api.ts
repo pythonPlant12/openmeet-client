@@ -85,6 +85,8 @@ export interface CallSession {
   id: string;
   roomId: string;
   expiresAt: string;
+  /** True when the conversation already had a live call and this call joined it. */
+  joined: boolean;
 }
 
 export interface CallSessionJoinResponse {
