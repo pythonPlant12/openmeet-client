@@ -122,6 +122,21 @@ describe('GroupDetailsPanel', () => {
     expect(wrapper.emitted('chat-member')?.[0]?.[0]).toMatchObject({ id: 'sam' });
   });
 
+  it('rings the members who are in the group live call in place of their presence border', () => {
+    const wrapper = mountPanel({
+      members: [{ ...member('sam', 'Sam'), isOnline: true, status: 'available', inLiveCall: true }, member('pat', 'Pat')],
+    });
+    const samRow = wrapper.findAll('[data-swipeable-row]').find((row) => row.text().includes('Sam'))!;
+    const patRow = wrapper.findAll('[data-swipeable-row]').find((row) => row.text().includes('Pat'))!;
+    const samAvatar = samRow.get('.relative > span').element as HTMLElement;
+    const patAvatar = patRow.get('.relative > span').element as HTMLElement;
+
+    expect(samAvatar.classList).toContain('harbor-live-call-ring');
+    expect(samAvatar.classList).not.toContain('border-[#2DA58F]');
+    expect(samRow.find('[data-presence-dot]').exists()).toBe(true);
+    expect(patAvatar.classList).not.toContain('harbor-live-call-ring');
+  });
+
   it('frames participant avatars by status and keeps dots on the panel surface', () => {
     const wrapper = mountPanel({
       members: [{ ...member('sam', 'Sam'), isOnline: true, status: 'doNotDisturb' }, member('pat', 'Pat')],

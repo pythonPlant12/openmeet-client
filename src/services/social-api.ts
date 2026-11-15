@@ -281,6 +281,8 @@ export interface GroupMember {
   status: UserStatus | null;
   role: string;
   joinedAt: string;
+  /** Set by the workspace while this member is in the group's live call. */
+  inLiveCall?: boolean;
 }
 
 export interface GroupMembersPage {

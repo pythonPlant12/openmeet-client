@@ -566,7 +566,12 @@ watch(
                   <span class="relative shrink-0"
                     ><span
                       class="flex size-10 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar text-xs font-semibold text-harbor-accent"
-                      :class="['border-2', userStatusOption(member.isOnline ? member.status : 'offline').borderClass]"
+                      :class="[
+                          'border-2',
+                          member.inLiveCall
+                            ? 'harbor-live-call-ring'
+                            : userStatusOption(member.isOnline ? member.status : 'offline').borderClass,
+                        ]"
                       ><img
                         v-if="memberAvatarUrls[member.id]"
                         :src="memberAvatarUrls[member.id]"
