@@ -38,6 +38,43 @@ describe('WebRTC Machine', () => {
     actor.stop();
   });
 
+  it('collapses and expands the active call without leaving it, and keeps the call ids until it ends', async () => {
+    const actor = createTestActor();
+    actor.start();
+
+    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
+    await waitFor(actor, (state) => state.matches('mediaReady'));
+    actor.send({
+      type: 'JOIN_ROOM',
+      roomId: 'sfu-room-1',
+      participantName: 'Alice',
+      callSessionId: 'call-1',
+      conversationId: 'conversation-1',
+    });
+    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
+
+    expect(actor.getSnapshot().context.collapsed).toBe(false);
+    expect(actor.getSnapshot().context.callSessionId).toBe('call-1');
+    expect(actor.getSnapshot().context.conversationId).toBe('conversation-1');
+
+    actor.send({ type: 'COLLAPSE' });
+    expect(actor.getSnapshot().matches({ connected: 'inCall' })).toBe(true);
+    expect(actor.getSnapshot().context.collapsed).toBe(true);
+
+    actor.send({ type: 'EXPAND' });
+    expect(actor.getSnapshot().matches({ connected: 'inCall' })).toBe(true);
+    expect(actor.getSnapshot().context.collapsed).toBe(false);
+
+    actor.send({ type: 'COLLAPSE' });
+    actor.send({ type: 'LEAVE_ROOM' });
+    expect(actor.getSnapshot().matches('idle')).toBe(true);
+    expect(actor.getSnapshot().context.collapsed).toBe(false);
+    expect(actor.getSnapshot().context.callSessionId).toBeNull();
+    expect(actor.getSnapshot().context.conversationId).toBeNull();
+
+    actor.stop();
+  });
+
   it('keeps an active call alive through a transient disconnected connection state', async () => {
     const actor = createTestActor();
     actor.start();

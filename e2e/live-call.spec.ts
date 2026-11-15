@@ -62,6 +62,30 @@ test.describe('live call', () => {
       // Both are in one room: each sees the other's tile.
       await expect(alicePage.getByTestId('participant-tile')).toHaveCount(2, { timeout: 20_000 });
       await expect(bobPage.getByTestId('participant-tile')).toHaveCount(2, { timeout: 20_000 });
+
+      // Bob collapses the call: the dashboard shows the mini call with Alice, and Alice never sees him leave.
+      await bobPage.mouse.move(20, 20);
+      await bobPage.locator('[data-collapse-trigger]').click();
+      await expect(bobPage).toHaveURL(/\/dashboard/);
+      const miniCall = bobPage.locator('[data-mini-call]');
+      await expect(miniCall).toBeVisible();
+      await expect(miniCall.getByTestId('participant-tile')).toHaveCount(1);
+      await expect(miniCall).toContainText('Alice Live');
+      await expect(alicePage.getByTestId('participant-tile')).toHaveCount(2);
+
+      // Hovering the mini call reveals its controls; expanding returns to the call screen with everyone still
+      // there, and the mini call goes away.
+      await miniCall.hover();
+      await bobPage.locator('[data-mini-call-expand]').click();
+      await expect(bobPage).toHaveURL(new RegExp(aliceRoomUrl.pathname));
+      await expect(bobPage.getByTestId('participant-tile')).toHaveCount(2);
+      await expect(miniCall).toHaveCount(0);
+
+      // Browser Back collapses rather than ending the call.
+      await bobPage.goBack();
+      await expect(bobPage).toHaveURL(/\/dashboard/);
+      await expect(miniCall).toBeVisible();
+      await expect(alicePage.getByTestId('participant-tile')).toHaveCount(2);
     } finally {
       await Promise.all(contexts.map((context) => context.close().catch(() => undefined)));
     }

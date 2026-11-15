@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, MessageSquare, SwitchCamera, UserRoundPlus } from 'lucide-vue-next';
+import { ChevronDown, ChevronRight, MessageSquare, SwitchCamera, UserRoundPlus } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -8,10 +8,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import CallInviteMenuItems from './CallInviteMenuItems.vue';
 
 // The phone call screen's top bar: the room name, which opens the controls panel, then audio output, invite, the
-// camera flip while the camera is on, and chat. It sits below the notch; the collapse button joins it with the
-// mobile mini call (ADR 0001).
+// camera flip while the camera is on, and chat. It sits below the notch. For signed-in people the collapse
+// button on the left shrinks the call to the mini call (ADR 0001).
 const props = defineProps<{
   roomName: string;
+  /** Signed-in people can collapse the call; guests have no workspace to return to. */
+  canCollapse?: boolean;
   /** The camera flip shows only while your camera is on. */
   cameraOn?: boolean;
   meetingId: string;
@@ -23,6 +25,7 @@ const emit = defineEmits<{
   (e: 'toggle-chat'): void;
   (e: 'invite'): void;
   (e: 'open-panel'): void;
+  (e: 'collapse'): void;
   (e: 'flip-camera'): void;
 }>();
 const { t } = useI18n();
@@ -39,7 +42,17 @@ const chatAriaLabel = computed(() => {
     class="marketing-font pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-50 flex items-center gap-2 px-3 text-harbor-ink"
     data-call-phone-top-bar
   >
-    <div class="flex min-w-0 flex-1">
+    <div class="flex min-w-0 flex-1 items-center gap-2">
+      <button
+        v-if="canCollapse"
+        type="button"
+        class="call-button call-chip pointer-events-auto size-11 shrink-0"
+        :aria-label="t('meeting.controls.collapse')"
+        data-collapse-trigger
+        @click="emit('collapse')"
+      >
+        <ChevronDown />
+      </button>
       <button
         type="button"
         class="call-chip pointer-events-auto flex h-11 min-w-0 max-w-full items-center gap-1 pl-4 pr-2.5 text-sm font-semibold"

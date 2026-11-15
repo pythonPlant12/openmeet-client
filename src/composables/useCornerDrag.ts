@@ -54,7 +54,6 @@ export function useCornerDrag(options: CornerDragOptions) {
     // Keeps a held finger from also opening a menu, and the page from scrolling under the drag.
     event.preventDefault();
     const element = options.element.value;
-    element.setPointerCapture?.(event.pointerId);
     const area = options.area.value.getBoundingClientRect();
     const view = element.getBoundingClientRect();
     window.clearTimeout(snapTimer);
@@ -75,7 +74,14 @@ export function useCornerDrag(options: CornerDragOptions) {
     if (!drag || event.pointerId !== drag.pointerId) return;
     const x = event.clientX - drag.startX;
     const y = event.clientY - drag.startY;
-    if (offset.value || Math.hypot(x, y) > DRAG_THRESHOLD_PX) offset.value = { x, y };
+    if (offset.value) {
+      offset.value = { x, y };
+      return;
+    }
+    if (Math.hypot(x, y) <= DRAG_THRESHOLD_PX) return;
+    // The pointer is captured only once this is a drag: a tap on a button inside the picture stays a click.
+    options.element.value?.setPointerCapture?.(event.pointerId);
+    offset.value = { x, y };
   }
 
   async function end(event: PointerEvent) {

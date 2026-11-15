@@ -38,7 +38,7 @@ import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { loadCallSettings, needsCameraPreview, saveCallSettings } from '@/lib/call-settings';
 import { selectCallLayout } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
-import { followAudioOutput } from '@/services/audio-output';
+import { workspaceReturnRoute } from '@/lib/workspace-return';
 import { playHaptic } from '@/services/haptics';
 import { showSystemNotification } from '@/services/notifications';
 import { type MeetingRoomAccess, SocialApiError, type UserStatus, socialApi } from '@/services/social-api';
@@ -70,7 +70,14 @@ const {
   isInitializingMedia,
   localStream,
   participantsArray,
+  localParticipant,
   localParticipantId,
+  localParticipantName,
+  roomId: activeRoomId,
+  callSessionId: activeCallSessionId,
+  isConnected,
+  collapse,
+  expand,
   connectionState,
   iceConnectionState,
   connectionQuality,
@@ -502,7 +509,14 @@ watch(
       }
 
       if (shouldJoinRoom.value && pendingRoomId.value) {
-        joinRoom(pendingRoomId.value, participantName.value, joinPassword ?? undefined);
+        joinRoom(
+          pendingRoomId.value,
+          participantName.value,
+          joinPassword ?? undefined,
+          isConversationCall.value && conversationId.value
+            ? { callSessionId: meetingId.value, conversationId: conversationId.value }
+            : undefined,
+        );
         shouldJoinRoom.value = false;
       }
     }
@@ -540,9 +554,39 @@ watch(connectionQuality, (newQuality) => {
 
 let hasInitializedMeeting = false;
 
+// The route shows the call that is already active: the call screen expands over it without re-joining.
+const isActiveCallRoute = computed(
+  () =>
+    isConnected.value &&
+    (activeCallSessionId.value === meetingId.value || (!activeCallSessionId.value && activeRoomId.value === meetingId.value)),
+);
+
+function resumeActiveCall() {
+  sfuRoomId.value = activeRoomId.value;
+  participantName.value = localParticipantName.value;
+  showNameInput.value = false;
+  isMuted.value = !(localParticipant.value?.audioEnabled ?? true);
+  isVideoOff.value = !(localParticipant.value?.videoEnabled ?? false);
+  hasPlayedJoinedHaptic = true;
+  const service = getServices().webrtcService;
+  if (service) service.onLocalTrackLost = handleLocalTrackLost;
+  refreshMediaAvailability();
+  expand();
+}
+
 const initializeMeeting = async () => {
   if (hasInitializedMeeting) return;
   hasInitializedMeeting = true;
+
+  if (isAuthenticated.value && isActiveCallRoute.value) {
+    resumeActiveCall();
+    return;
+  }
+  // A different room while a call is active: that call ends first (the workspace asks before coming here).
+  if (isConnected.value) {
+    screenShare.stop();
+    endCall();
+  }
 
   if (isConversationCall.value) {
     const token = accessToken.value;
@@ -599,20 +643,18 @@ watch(isCheckingSession, (checking) => {
 // The call ID is kept from when the page opened: by unmount the route already shows the next page.
 const openedCallSessionId = isConversationCall.value ? meetingId.value : null;
 
+// Once the call is joined, the active call's owner (the app shell) stops the ringing when the call ends.
 function cancelRingingCall(keepalive = false) {
   const token = accessToken.value;
-  if (!openedCallSessionId || !token) return;
+  if (!openedCallSessionId || !token || activeCallSessionId.value === openedCallSessionId) return;
   socialApi
     .cancelCallSession(token, openedCallSessionId, { keepalive })
     .catch((error) => console.error('[MeetingRoom] Failed to stop the call ringing:', error));
 }
 
 const handlePageHide = () => cancelRingingCall(true);
-// The chosen speaker applies to every participant's audio as their media appears.
-let stopFollowingAudioOutput: (() => void) | null = null;
 
 onMounted(() => {
-  stopFollowingAudioOutput = followAudioOutput();
   window.addEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   window.addEventListener('pagehide', handlePageHide);
   window.addEventListener('keydown', handleFullscreenKeydown);
@@ -622,8 +664,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  stopFollowingAudioOutput?.();
-  screenShare.stop();
   window.clearTimeout(participantStatusTimer);
   window.removeEventListener('openmeet:close-meeting-chat', closeMeetingChat);
   window.removeEventListener('pagehide', handlePageHide);
@@ -635,8 +675,17 @@ onUnmounted(() => {
   window.dispatchEvent(new CustomEvent<boolean>('openmeet:meeting-call-chrome', { detail: false }));
   cancelRingingCall();
   window.dispatchEvent(new CustomEvent('openmeet:meeting-chat-state', { detail: false }));
-  endCall();
+  // Guests have no workspace to collapse into, so for them leaving the screen still ends the call.
+  if (!isAuthenticated.value) {
+    screenShare.stop();
+    endCall();
+  }
 });
+
+function handleCollapse() {
+  collapse();
+  void router.push(workspaceReturnRoute());
+}
 
 function closeMeetingChat() {
   isChatOpen.value = false;
@@ -1025,12 +1074,14 @@ const handleReconnect = () => {
         <CallPhoneTopBar
           v-if="usesPhoneChrome && showsControls"
           :room-name="roomName"
+          :can-collapse="isAuthenticated"
           :camera-on="!isVideoOff"
           :meeting-id="meetingId"
           :invite-mode="inviteMode"
           :is-chat-open="isChatOpen"
           :unread-count="unreadCount"
           @toggle-chat="handleToggleChat"
+          @collapse="handleCollapse"
           @open-panel="phoneControls?.open()"
           @flip-camera="flipCamera"
           @invite="isInviteOpen = true"
@@ -1042,9 +1093,11 @@ const handleReconnect = () => {
         <CallDesktopTopBar
           v-if="!usesPhoneChrome && showsControls"
           :room-name="roomName"
+          :can-collapse="isAuthenticated"
           :is-chat-open="isChatOpen"
           :unread-count="unreadCount"
           @toggle-chat="handleToggleChat"
+          @collapse="handleCollapse"
         />
       </Transition>
 

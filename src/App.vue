@@ -3,6 +3,7 @@ import { useMachine } from '@xstate/vue';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
+import ActiveCallHost from '@/components/layout/ActiveCallHost.vue';
 import IncomingCallBar from '@/components/layout/IncomingCallBar.vue';
 import TheNavbar from '@/components/layout/TheNavbar.vue';
 import { Toaster } from '@/components/ui/toast';
@@ -583,6 +584,7 @@ onUnmounted(() => {
       @decline="respondToRingingCall(false)"
     />
     <Toaster />
+    <ActiveCallHost />
 
     <RouterView v-slot="{ Component, route }">
       <Transition name="page-fade" mode="out-in">

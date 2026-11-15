@@ -52,6 +52,18 @@ export function useWebrtc() {
   const localParticipantId = computed(() => webrtcActor.snapshot.value.context.localParticipantId);
   const localParticipantName = computed(() => webrtcActor.snapshot.value.context.localParticipantName);
   const roomId = computed(() => webrtcActor.snapshot.value.context.roomId);
+  const callSessionId = computed(() => webrtcActor.snapshot.value.context.callSessionId as string | null);
+  const conversationId = computed(() => webrtcActor.snapshot.value.context.conversationId as string | null);
+  const collapsed = computed(() => webrtcActor.snapshot.value.context.collapsed as boolean);
+  /** The route of the active call's call screen: the call session for a conversation call, else the room. */
+  const activeCallRoute = computed(() => {
+    const id = callSessionId.value ?? roomId.value;
+    if (!id) return null;
+    return {
+      path: `/room/${id}`,
+      query: conversationId.value ? { conversation: conversationId.value } : {},
+    };
+  });
   const connectionState = computed(() => webrtcActor.snapshot.value.context.connectionState);
   const iceConnectionState = computed(() => webrtcActor.snapshot.value.context.iceConnectionState);
   const connectionQuality = computed(() => webrtcActor.snapshot.value.context.connectionQuality);
@@ -74,13 +86,21 @@ export function useWebrtc() {
     webrtcActor.send({ type: 'INIT_MEDIA', participantName, deviceConstraints });
   };
 
-  const joinRoom = (roomIdToJoin: string, participantName?: string, password?: string) => {
-    webrtcActor.send({ type: 'JOIN_ROOM', roomId: roomIdToJoin, participantName, password });
+  const joinRoom = (
+    roomIdToJoin: string,
+    participantName?: string,
+    password?: string,
+    call?: { callSessionId: string; conversationId: string },
+  ) => {
+    webrtcActor.send({ type: 'JOIN_ROOM', roomId: roomIdToJoin, participantName, password, ...call });
   };
 
   const leaveRoom = () => {
     webrtcActor.send({ type: 'LEAVE_ROOM' });
   };
+
+  const collapse = () => webrtcActor.send({ type: 'COLLAPSE' });
+  const expand = () => webrtcActor.send({ type: 'EXPAND' });
 
   const toggleParticipantAudio = (participantId: string, enabled: boolean) => {
     webrtcActor.send({ type: 'TOGGLE_AUDIO', participantId, enabled });
@@ -143,6 +163,10 @@ export function useWebrtc() {
     localParticipantId,
     localParticipantName,
     roomId,
+    callSessionId,
+    conversationId,
+    collapsed,
+    activeCallRoute,
     error,
     connectionState,
     iceConnectionState,
@@ -157,6 +181,8 @@ export function useWebrtc() {
     initMedia,
     joinRoom,
     leaveRoom,
+    collapse,
+    expand,
     toggleParticipantAudio,
     toggleParticipantVideo,
     sendChatMessage,
