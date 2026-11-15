@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Crop, MonitorOff, MonitorUp } from 'lucide-vue-next';
+import { GaugeAnimated } from '@respeak/lucide-motion-vue';
+import { MonitorOff, MonitorUp } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -16,21 +17,19 @@ import {
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useScreenShare } from '@/composables/useScreenShare';
+import { qualityMenuLabel } from '@/lib/video-quality';
 
 import MeetingQualityOptions from './MeetingQualityOptions.vue';
 
 defineProps<{ disabled?: boolean }>();
 const emit = defineEmits<{
   (event: 'start'): void;
-  (event: 'start-area'): void;
   (event: 'stop'): void;
   (event: 'open-change', open: boolean): void;
 }>();
 const { t } = useI18n();
-const { session, isStarting, canSelectArea, quality, sentHeight, setQuality } = useScreenShare();
-const qualityLabel = computed(() =>
-  quality.value === 'auto' ? `Auto${sentHeight.value ? ` · ${sentHeight.value}p` : ''}` : quality.value,
-);
+const { session, isStarting, quality, sentHeight, setQuality } = useScreenShare();
+const qualityLabel = computed(() => qualityMenuLabel(quality.value, sentHeight.value));
 </script>
 
 <template>
@@ -43,7 +42,6 @@ const qualityLabel = computed(() =>
           class="call-button"
           :aria-label="t(session ? 'meeting.controls.presenting' : 'meeting.controls.presentScreen')"
           :data-sharing="!!session"
-          :data-active="!!session"
           data-screen-share-button
         >
           <LoadingRipple v-if="isStarting" size="sm" />
@@ -61,22 +59,10 @@ const qualityLabel = computed(() =>
             <span class="block text-xs font-normal text-harbor-muted">{{ t('meeting.controls.presentHint') }}</span>
           </span>
         </DropdownMenuItem>
-        <DropdownMenuItem
-          v-if="!session && canSelectArea"
-          :disabled="isStarting"
-          data-start-presenting-area
-          @select="emit('start-area')"
-        >
-          <LiquidMenuIcon class="mr-2" :fallback="Crop" />
-          <span class="min-w-0">
-            <span class="block">{{ t('meeting.controls.presentArea') }}</span>
-            <span class="block text-xs font-normal text-harbor-muted">{{ t('meeting.controls.presentAreaHint') }}</span>
-          </span>
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            Screen quality
+          <DropdownMenuSubTrigger data-screen-quality-menu>
+            <LiquidMenuIcon class="text-harbor-ink" :animated="GaugeAnimated" />{{ t('meeting.controls.quality') }}
             <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{ qualityLabel }}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent class="meeting-menu marketing-font w-64">

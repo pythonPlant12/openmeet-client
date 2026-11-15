@@ -30,7 +30,7 @@ import {
 import { Expand } from '@/components/ui/expand';
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { type MediaKind, useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
-import { VIDEO_QUALITY_OPTIONS } from '@/lib/video-quality';
+import { VIDEO_QUALITY_OPTIONS, qualityMenuLabel } from '@/lib/video-quality';
 import { playHaptic } from '@/services/haptics';
 
 import CallPanelChoice from './CallPanelChoice.vue';
@@ -95,9 +95,7 @@ const toggleLabel = computed(() => {
 const menuLabel = computed(() =>
   t(isAudio.value ? 'meeting.controls.microphoneOptions' : 'meeting.controls.cameraOptions'),
 );
-const qualityLabel = computed(() =>
-  quality.value === 'auto' ? `Auto${sentHeight.value ? ` · ${sentHeight.value}p` : ''}` : quality.value,
-);
+const qualityLabel = computed(() => qualityMenuLabel(quality.value, sentHeight.value));
 const volumePercent = computed(() => Math.round(inputVolume.value * 100));
 const levelPercent = computed(() => Math.round(inputLevel.value * 100));
 

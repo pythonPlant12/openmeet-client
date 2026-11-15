@@ -18,7 +18,6 @@ import MeetingControls from '@/components/meeting-page/MeetingControls.vue';
 import MeetingEntryDialog, { type EntrySettings } from '@/components/meeting-page/MeetingEntryDialog.vue';
 import MeetingInviteDialog from '@/components/meeting-page/MeetingInviteDialog.vue';
 import MeetingPermissionSheet from '@/components/meeting-page/MeetingPermissionSheet.vue';
-import ScreenAreaPicker from '@/components/meeting-page/ScreenAreaPicker.vue';
 import VideoGrid from '@/components/meeting-page/VideoGrid.vue';
 import { Expand } from '@/components/ui/expand';
 import { menuIconMotionKey } from '@/components/ui/liquid-menu/motion';
@@ -364,10 +363,9 @@ watch(localParticipantId, (current, previous) => {
   if (previous && current !== previous) screenShare.stop();
 });
 
-async function handleStartScreenShare(options?: { selectArea: boolean }) {
+async function handleStartScreenShare() {
   if (!localParticipantId.value) return;
   await screenShare.start({
-    selectArea: options?.selectArea,
     roomId: sfuRoomId.value ?? meetingId.value,
     presenterId: localParticipantId.value,
     presenterName: participantName.value,
@@ -793,9 +791,10 @@ const handleToggleChat = () => {
 
 // Full screen works in grid and speaker view alike: only the media shows, on a near-black background, and on
 // desktop it also takes the whole display. The call controls (top bar, controls, and full name tags) hide after
-// 3 s without mouse movement on desktop, and on a long-press on the video area on a phone.
+// 3 s without mouse movement on desktop in full screen, and on a long-press on the video area on a phone. Out of
+// full screen on desktop they stay.
 const isFullscreen = ref(false);
-const callControls = useCallControlsVisibility(computed(() => !usesPhoneChrome.value));
+const callControls = useCallControlsVisibility(computed(() => !usesPhoneChrome.value && isFullscreen.value));
 const showsControls = callControls.shown;
 
 // Full screen starts with only the media. On desktop moving the mouse brings the controls back; on a phone a swipe up
@@ -1237,7 +1236,6 @@ const handleReconnect = () => {
             :video-warning="videoWarning"
             :invite-mode="inviteMode"
             :can-present="screenShare.isSupported"
-            :can-select-area="screenShare.canSelectArea"
             :is-presenting="!!screenShare.session.value"
             :participants="meetingParticipants"
             :pinned-participant-id="pinnedParticipantId"
@@ -1294,8 +1292,6 @@ const handleReconnect = () => {
       :access="meetingAccess"
       @access-updated="meetingAccess = $event"
     />
-
-    <ScreenAreaPicker />
 
     <!-- Connection Error Dialog -->
     <ConnectionErrorDialog
