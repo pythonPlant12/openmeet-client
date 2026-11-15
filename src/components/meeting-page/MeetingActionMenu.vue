@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { LayoutGridAnimated, PinAnimated, PinOffAnimated, UserRoundPlusAnimated } from '@respeak/lucide-motion-vue';
-import { Bug, Check, Code, Crop, MicOff, MonitorOff, MonitorUp, MoreVertical, ScanFace, Users } from 'lucide-vue-next';
+import {
+  GaugeAnimated,
+  LayoutGridAnimated,
+  PinAnimated,
+  PinOffAnimated,
+  UserRoundPlusAnimated,
+} from '@respeak/lucide-motion-vue';
+import { Bug, Check, Code, MicOff, MonitorOff, MonitorUp, MoreVertical, ScanFace, Users } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -24,11 +30,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
+import { useScreenShare } from '@/composables/useScreenShare';
 import { buildGitHubIssueUrl } from '@/lib/github-issue';
+import { qualityMenuLabel } from '@/lib/video-quality';
 import { playHaptic } from '@/services/haptics';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 import CallInviteMenuItems from './CallInviteMenuItems.vue';
+import MeetingQualityOptions from './MeetingQualityOptions.vue';
 
 // The desktop controls bar's ⋮ menu, home of the rarer call actions: screen share, invite, layout, pin
 // participant, participants, dev tools and report bug. With `context` it is instead the tile area's layout menu.
@@ -43,7 +52,6 @@ const props = withDefaults(
     inviteMode?: 'enabled' | 'signedOut' | 'hidden';
     /** Browsers without screen capture get no screen share items. */
     canPresent?: boolean;
-    canSelectArea?: boolean;
     isPresenting?: boolean;
     showConnectionStatus?: boolean;
   }>(),
@@ -52,7 +60,6 @@ const props = withDefaults(
     meetingId: '',
     inviteMode: 'hidden',
     canPresent: false,
-    canSelectArea: false,
     isPresenting: false,
     showConnectionStatus: false,
   },
@@ -62,7 +69,7 @@ const emit = defineEmits<{
   setViewMode: [mode: 'grid' | 'speaker'];
   togglePin: [participantId: string];
   invite: [];
-  startScreenShare: [options?: { selectArea: boolean }];
+  startScreenShare: [];
   stopScreenShare: [];
   toggleStats: [];
   openChange: [open: boolean];
@@ -76,6 +83,9 @@ const MenuItem = computed(() => (props.context ? ContextMenuItem : DropdownMenuI
 const MenuLabel = computed(() => (props.context ? ContextMenuLabel : DropdownMenuLabel));
 const MenuSeparator = computed(() => (props.context ? ContextMenuSeparator : DropdownMenuSeparator));
 const reportUrl = buildGitHubIssueUrl('meeting');
+// The screen share's quality, the same setting as in the share button's own menu.
+const screenShare = useScreenShare();
+const screenQualityLabel = computed(() => qualityMenuLabel(screenShare.quality.value, screenShare.sentHeight.value));
 // Screen shares are pinnable tiles, but only people are listed as participants.
 const people = computed(() => props.participants.filter((participant) => !participant.screenShareOf));
 
@@ -108,14 +118,25 @@ function handleOpenChange(open: boolean) {
             <DropdownMenuItem v-if="isPresenting" variant="danger" @select="emit('stopScreenShare')">
               <LiquidMenuIcon :fallback="MonitorOff" />{{ t('meeting.controls.stopPresenting') }}
             </DropdownMenuItem>
-            <template v-else>
-              <DropdownMenuItem @select="emit('startScreenShare')">
-                <LiquidMenuIcon :fallback="MonitorUp" />{{ t('meeting.controls.startPresenting') }}
-              </DropdownMenuItem>
-              <DropdownMenuItem v-if="canSelectArea" @select="emit('startScreenShare', { selectArea: true })">
-                <LiquidMenuIcon :fallback="Crop" />{{ t('meeting.controls.presentArea') }}
-              </DropdownMenuItem>
-            </template>
+            <DropdownMenuItem v-else @select="emit('startScreenShare')">
+              <LiquidMenuIcon :fallback="MonitorUp" />{{ t('meeting.controls.startPresenting') }}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger data-menu-screen-quality>
+                <LiquidMenuIcon :animated="GaugeAnimated" />{{ t('meeting.controls.quality') }}
+                <span class="ml-auto truncate pl-2 text-xs font-normal text-harbor-muted">{{
+                  screenQualityLabel
+                }}</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent class="meeting-menu marketing-font w-64">
+                <MeetingQualityOptions
+                  :quality="screenShare.quality.value"
+                  :sent-height="isPresenting ? screenShare.sentHeight.value : null"
+                  @select="screenShare.setQuality"
+                />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>

@@ -184,32 +184,59 @@ describe('VideoGrid layout', () => {
 });
 
 describe('VideoGrid strip on desktop', () => {
-  it('collapses the strip below the speaker and shows your own view as a corner picture', async () => {
+  it('keeps the stage one height under the strip, collapses the strip, and shows no corner picture', async () => {
     desktop();
     const wrapper = mountGrid({ participants: people(3), pinnedParticipantId: 'ada', viewMode: 'speaker' });
     expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'bob']);
-    expect(wrapper.find('[data-testid="self-picture"]').exists()).toBe(false);
+    const stage = wrapper.get('[data-testid="speaker-stage"]');
+    expect(stage.attributes('style')).toContain('calc(100% - 32px)');
+    expect(stage.classes()).toContain('items-start');
 
     await wrapper.get('[data-strip-toggle]').trigger('click');
     expect(wrapper.find('[data-testid="participant-strip"]').exists()).toBe(false);
-    expect(tileIds(wrapper, '[data-testid="self-picture"]')).toEqual(['me']);
+    expect(wrapper.find('[data-testid="self-picture"]').exists()).toBe(false);
+    expect(tileIds(wrapper, '[data-testid="meeting-video-canvas"]')).toEqual(['ada']);
+    expect(stage.attributes('style')).toContain('calc(100% - 32px)');
     expect(wrapper.emitted('togglePin')).toBeUndefined();
 
     await wrapper.get('[data-strip-toggle]').trigger('click');
     expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'bob']);
   });
 
-  it('shows no corner picture while you are the speaker', async () => {
+  it('collapses the floating strip in full screen while the controls show', async () => {
     desktop();
-    const wrapper = mountGrid({ participants: people(3), pinnedParticipantId: 'me', viewMode: 'speaker' });
+    const wrapper = mountGrid({
+      participants: people(3),
+      viewMode: 'speaker',
+      fullscreen: true,
+      controlsShown: true,
+    });
+    expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'bob']);
+    const stage = wrapper.get('[data-testid="speaker-stage"]');
+    expect(stage.attributes('style')).toContain('height: 100%');
+    expect(stage.classes()).toContain('items-center');
+
     await wrapper.get('[data-strip-toggle]').trigger('click');
+    expect(wrapper.find('[data-testid="participant-strip"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="self-picture"]').exists()).toBe(false);
+
+    await wrapper.setProps({ controlsShown: false });
+    expect(wrapper.find('[data-strip-toggle]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="participant-strip"]').exists()).toBe(false);
   });
 
   it('keeps the floating strip on a phone, with no toggle', () => {
     phone();
-    const wrapper = mountGrid({ participants: people(5) });
-    expect(wrapper.find('[data-strip-toggle]').exists()).toBe(false);
+    expect(
+      mountGrid({ participants: people(5) })
+        .find('[data-strip-toggle]')
+        .exists(),
+    ).toBe(false);
+    expect(
+      mountGrid({ participants: people(5), fullscreen: true })
+        .find('[data-strip-toggle]')
+        .exists(),
+    ).toBe(false);
   });
 });
 

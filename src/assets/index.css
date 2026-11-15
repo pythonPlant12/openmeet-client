@@ -663,6 +663,11 @@
   color: #e9edef !important;
 }
 
+/* Hints and values under an item title stay muted, so the title still leads. */
+.meeting-immersive .liquid-menu [role^='menuitem'] .text-harbor-muted {
+  color: rgb(var(--harbor-muted)) !important;
+}
+
 /* Dark menus redefine the palette, so token colors inside them turn light. */
 .meeting-immersive .liquid-menu {
   --harbor-ink: 233 237 239;
@@ -1695,11 +1700,22 @@
     }
   }
 
-  /* A medium that is live and worth noticing, such as a screen share, fills solid. */
+  /* A medium that is live and worth noticing, such as the open chat, fills solid. */
   .call-button[data-active='true'],
   .call-button[data-active='true']:hover {
     color: rgb(var(--harbor-surface));
     background-color: rgb(var(--harbor-ink));
+  }
+
+  /* A screen share in progress fills grey, like a microphone or camera that is on. */
+  .call-button[data-sharing='true'] {
+    background-color: rgb(var(--harbor-hover));
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .call-button[data-sharing='true']:not(:disabled):hover {
+      background-color: rgb(var(--harbor-line));
+    }
   }
 
   /* Leave uses fixed reds rather than the danger tokens, which dark scopes lighten for text. */

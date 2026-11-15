@@ -25,7 +25,6 @@ interface Props {
   inviteMode?: 'enabled' | 'signedOut' | 'hidden';
   /** Browsers without screen capture, such as most phones, get no present button. */
   canPresent?: boolean;
-  canSelectArea?: boolean;
   isPresenting?: boolean;
   /** Full screen shows the bar dark over the near-black stage. */
   dark?: boolean;
@@ -47,7 +46,7 @@ interface Emits {
   /** Preview camera was chosen in the camera menu. */
   (e: 'preview-camera'): void;
   (e: 'request-access', kind: 'audio' | 'video'): void;
-  (e: 'start-screen-share', options?: { selectArea: boolean }): void;
+  (e: 'start-screen-share'): void;
   (e: 'stop-screen-share'): void;
   (e: 'set-view-mode', mode: 'grid' | 'speaker'): void;
   (e: 'toggle-pin', participantId: string): void;
@@ -56,7 +55,6 @@ interface Emits {
 withDefaults(defineProps<Props>(), {
   inviteMode: 'hidden',
   canPresent: false,
-  canSelectArea: false,
   isPresenting: false,
   dark: false,
   fullscreen: false,
@@ -110,7 +108,6 @@ function onLeave() {
       <MeetingScreenShareControl
         v-if="canPresent"
         @start="emit('start-screen-share')"
-        @start-area="emit('start-screen-share', { selectArea: true })"
         @stop="emit('stop-screen-share')"
       />
 
@@ -122,13 +119,12 @@ function onLeave() {
           :meeting-id="meetingId"
           :invite-mode="inviteMode"
           :can-present="canPresent"
-          :can-select-area="canSelectArea"
           :is-presenting="isPresenting"
           :show-connection-status="showConnectionStatus"
           @set-view-mode="emit('set-view-mode', $event)"
           @toggle-pin="emit('toggle-pin', $event)"
           @invite="emit('invite')"
-          @start-screen-share="emit('start-screen-share', $event)"
+          @start-screen-share="emit('start-screen-share')"
           @stop-screen-share="emit('stop-screen-share')"
           @toggle-stats="emit('toggle-stats')"
         />

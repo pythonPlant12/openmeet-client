@@ -27,6 +27,10 @@ function save(key: string, quality: VideoQuality) {
   }
 }
 
+/** The quality menu's current value: the chosen level, or Auto with the height it sends right now. */
+export const qualityMenuLabel = (quality: VideoQuality, sentHeight: number | null) =>
+  quality === 'auto' ? `Auto${sentHeight ? ` · ${sentHeight}p` : ''}` : quality;
+
 /** The viewer's last camera choice; unknown or unavailable storage means auto. */
 export const loadVideoQuality = () => load(CAMERA_STORAGE_KEY);
 export const saveVideoQuality = (quality: VideoQuality) => save(CAMERA_STORAGE_KEY, quality);

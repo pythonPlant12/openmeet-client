@@ -204,15 +204,20 @@ const gridStyle = (participant: Participant) => {
     : { visibility: 'hidden' as const };
 };
 
-// Speaker view: the main video takes the whole stage. It fills it when it has the stage's orientation, and
-// otherwise fits inside at its own shape; everyone else sits in a strip (over its bottom edge on phones and in
-// full screen, below it on desktop).
+// Speaker view: the main video takes the whole stage. On a phone it fills it when it has the stage's orientation;
+// on desktop, and in full screen, it always shows whole at its own shape. Everyone else sits in a strip over
+// the stage's bottom edge.
 const stage = ref<HTMLElement | null>(null);
 const { width: stageWidth, height: stageHeight } = useElementSize(stage);
 const mainFills = computed(() => {
   const participant = speakerParticipant.value;
   if (!participant || participant.screenShareOf) return false;
-  return mainVideoFills(aspectOf(participant), stageWidth.value, stageHeight.value, !!props.fullscreen);
+  return mainVideoFills(
+    aspectOf(participant),
+    stageWidth.value,
+    stageHeight.value,
+    !!props.fullscreen || !isPhone.value,
+  );
 });
 const mainStyle = computed(() => {
   const participant = speakerParticipant.value;
@@ -230,27 +235,28 @@ const stripHeight = computed(() => {
   if (!aspectSum || available <= 0) return preferred;
   return Math.max(MIN_STRIP_TILE_HEIGHT, Math.min(preferred, Math.floor(available / aspectSum)));
 });
-// Desktop: the strip sits below the speaker rather than over the video, and a toggle collapses it. While it is
-// collapsed your own view stays as a small picture in the corner. Phones and full screen keep the floating strip.
+// Desktop: the strip floats over the bottom of the stage, as in full screen, and a toggle collapses it. Out of
+// full screen the stage runs from the top down to the toggle's row above the controls, whether the strip shows
+// or not, with the speaker whole at its top; showing the strip lays it over the speaker rather than shrinking
+// it. In full screen the toggle shows with the controls. Phones keep the floating strip with no toggle. A
+// collapsed strip hides everyone else, your own view included.
 const STRIP_TOGGLE_SPACE = 32;
+const hasStrip = computed(() => secondaryParticipants.value.length > 0);
+const stripCollapsible = computed(() => hasStrip.value && !isPhone.value);
 const isStripCollapsed = ref(false);
-const stripBelow = computed(() => !isPhone.value && !props.fullscreen && secondaryParticipants.value.length > 0);
-const showsStrip = computed(
-  () => secondaryParticipants.value.length > 0 && !(stripBelow.value && isStripCollapsed.value),
+const showsStrip = computed(() => hasStrip.value && !(stripCollapsible.value && isStripCollapsed.value));
+const showsStripToggle = computed(() => stripCollapsible.value && (!props.fullscreen || !!props.controlsShown));
+const windowedDesktopStage = computed(() => stripCollapsible.value && !props.fullscreen);
+const stageStyle = computed(() =>
+  windowedDesktopStage.value ? { height: `calc(100% - ${STRIP_TOGGLE_SPACE}px)` } : { height: '100%' },
 );
-const selfPicture = computed(() =>
-  stripBelow.value && isStripCollapsed.value
-    ? (secondaryParticipants.value.find((participant) => participant.isLocal && !participant.screenShareOf) ?? null)
-    : null,
-);
-const stageStyle = computed(() => {
-  if (!stripBelow.value) return { height: '100%' };
-  const below = isStripCollapsed.value ? STRIP_TOGGLE_SPACE : stripHeight.value + STRIP_GAP + STRIP_TOGGLE_SPACE;
-  return { height: `calc(100% - ${below}px)` };
+// The toggle sits 0.5rem above the strip (which sits 0.5rem above the controls in full screen while they show,
+// and 1.5rem up from the bottom otherwise), or where the strip was while it is collapsed.
+const stripToggleStyle = computed(() => {
+  const stripBottom = props.fullscreen ? 'calc(var(--call-bottom-chrome) + 0.5rem)' : '1.5rem';
+  if (isStripCollapsed.value) return { bottom: props.fullscreen ? stripBottom : '0.25rem' };
+  return { bottom: `calc(${stripBottom} + ${stripHeight.value}px + 0.5rem)` };
 });
-const stripToggleStyle = computed(() => ({
-  bottom: isStripCollapsed.value ? '0.25rem' : `calc(${stripHeight.value}px + 1.5rem)`,
-}));
 
 const stripStyle = (participant: Participant) => ({
   width: `${Math.floor(stripHeight.value * aspectOf(participant))}px`,
@@ -640,7 +646,8 @@ function toggleName(participantId: string) {
         <div v-else key="speaker" class="absolute inset-0" :class="fullscreen ? '' : 'p-2 sm:p-4'">
           <div
             ref="stage"
-            class="relative flex w-full items-center justify-center"
+            class="relative flex w-full justify-center"
+            :class="windowedDesktopStage ? 'items-start' : 'items-center'"
             :style="stageStyle"
             data-testid="speaker-stage"
           >
@@ -665,10 +672,8 @@ function toggleName(participantId: string) {
             />
           </div>
 
-          <!-- Everyone else: a strip over the bottom of the main video on phones and in full screen, below it on
-               desktop. It scrolls sideways when it does not fit. -->
           <button
-            v-if="stripBelow"
+            v-if="showsStripToggle"
             type="button"
             class="call-button call-chip absolute left-1/2 z-10 h-6 w-12 -translate-x-1/2 [&_svg]:!size-4"
             :style="stripToggleStyle"
@@ -681,24 +686,8 @@ function toggleName(participantId: string) {
             <ChevronDown v-else />
           </button>
 
-          <div
-            v-if="selfPicture"
-            class="absolute bottom-4 right-4 z-10 aspect-video w-52 rounded-[1.4rem] shadow-[0_10px_28px_rgba(0,0,0,0.35)] sm:bottom-6 sm:right-6"
-            data-testid="self-picture"
-          >
-            <ParticipantTile
-              :participant="selfPicture"
-              :avatar-url="participantAvatars?.[selfPicture.id]"
-              :speaking="isSpeaking(selfPicture)"
-              :collapsed="collapsesNameTags"
-              size="mobile"
-              fit="cover"
-              :show-name-tag="false"
-              :show-actions="false"
-              @aspect="setAspect(selfPicture.id, $event)"
-            />
-          </div>
-
+          <!-- Everyone else: a strip over the bottom of the stage, above the controls while they show in full
+               screen. It scrolls sideways, never up or down, when it does not fit. -->
           <div
             v-if="showsStrip"
             class="pointer-events-none absolute inset-x-0 flex justify-center px-3 transition-[bottom] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
@@ -709,7 +698,7 @@ function toggleName(participantId: string) {
             "
           >
             <div
-              class="pointer-events-auto max-w-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              class="pointer-events-auto max-w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               data-testid="participant-strip"
             >
               <div class="flex w-max gap-2" :style="{ height: `${stripHeight}px` }">

@@ -12,6 +12,7 @@ export interface MeetingAccessOption {
 
 // Meetings use the group access policies; the wording describes who may join the host's meeting.
 export const MEETING_ACCESS_OPTIONS: MeetingAccessOption[] = [
+  // TODO: Add translations to the meeting label
   { value: 'open', label: 'Open', description: 'Anyone with the link can join', icon: Globe },
   { value: 'friendsOnly', label: 'Friends', description: 'Only your friends can join', icon: UserCheck },
   {

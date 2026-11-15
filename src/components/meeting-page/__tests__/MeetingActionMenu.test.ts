@@ -102,19 +102,29 @@ describe('MeetingActionMenu', () => {
     expect(menu.querySelector('[data-menu-pin]')).toBeNull();
   });
 
-  it('starts and stops the screen share from its submenu', async () => {
-    const wrapper = mountMenu({ canSelectArea: true });
+  it('starts the screen share from its submenu, which also holds its quality', async () => {
+    const wrapper = mountMenu();
     const menu = await openMenu(wrapper);
     const submenu = await openSubmenu(menu.querySelector<HTMLElement>('[data-menu-screen-share]')!);
     const items = Array.from(submenu.querySelectorAll<HTMLElement>('[role="menuitem"]'));
 
-    expect(items.map((item) => item.textContent?.trim())).toEqual([
-      'Present a screen, window, or tab',
-      'Present part of a screen',
-    ]);
-    items[1]!.click();
+    expect(items.map((item) => item.textContent?.trim())).toEqual(['Present a screen, window, or tab', 'Quality Auto']);
+    expect(submenu.querySelector('[data-menu-screen-quality]')).not.toBeNull();
+    items[0]!.click();
     await flushPromises();
-    expect(wrapper.emitted('startScreenShare')).toEqual([[{ selectArea: true }]]);
+    expect(wrapper.emitted('startScreenShare')).toEqual([[]]);
+  });
+
+  it('shows Stop presenting while presenting', async () => {
+    const wrapper = mountMenu({ isPresenting: true });
+    const menu = await openMenu(wrapper);
+    const submenu = await openSubmenu(menu.querySelector<HTMLElement>('[data-menu-screen-share]')!);
+    const items = Array.from(submenu.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+
+    expect(items.map((item) => item.textContent?.trim())).toEqual(['Stop presenting', 'Quality Auto']);
+    items[0]!.click();
+    await flushPromises();
+    expect(wrapper.emitted('stopScreenShare')).toHaveLength(1);
   });
 
   it('pins from the pin submenu and lists the participants', async () => {

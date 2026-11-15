@@ -39,7 +39,7 @@ const emit = defineEmits<{
   (e: 'media-changed'): void;
   (e: 'preview-camera'): void;
   (e: 'request-access', kind: 'audio' | 'video'): void;
-  (e: 'start-screen-share', options?: { selectArea: boolean }): void;
+  (e: 'start-screen-share'): void;
   (e: 'stop-screen-share'): void;
   (e: 'toggle-own-camera'): void;
 }>();
@@ -231,7 +231,6 @@ function onLeave() {
         <MeetingScreenShareControl
           v-if="canPresent"
           @start="emit('start-screen-share')"
-          @start-area="emit('start-screen-share', { selectArea: true })"
           @stop="emit('stop-screen-share')"
         />
         <button

@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { cropVideoTrack } from '../screen-crop';
 import { ScreenShareSession } from '../screen-share';
 
 const webrtc = vi.hoisted(() => ({ useLocalStream: vi.fn(), createPeerConnection: vi.fn(), sendOffer: vi.fn() }));
-const crop = vi.hoisted(() => ({ stop: vi.fn(), track: { contentHint: '', kind: 'video' } }));
 
 vi.mock('../signaling', () => ({
   SignalingService: vi.fn(function SignalingService() {
@@ -16,7 +14,6 @@ vi.mock('../webrtc-sfu', () => ({
     return { ...webrtc, cleanup: vi.fn() };
   }),
 }));
-vi.mock('../screen-crop', () => ({ cropVideoTrack: vi.fn(() => crop) }));
 
 const options = {
   serverUrl: 'ws://localhost',
@@ -44,12 +41,6 @@ function capturedStream() {
 describe('ScreenShareSession', () => {
   beforeEach(() => {
     webrtc.createPeerConnection.mockReturnValue({});
-    vi.stubGlobal(
-      'MediaStream',
-      vi.fn(function MediaStream(tracks: unknown[]) {
-        return { tracks };
-      }),
-    );
   });
   afterEach(() => {
     vi.clearAllMocks();
@@ -60,53 +51,45 @@ describe('ScreenShareSession', () => {
     vi.stubGlobal('navigator', { mediaDevices: { getDisplayMedia: vi.fn().mockResolvedValue(stream) } });
   }
 
-  it('sends only the selected area with the captured sound', async () => {
-    const { stream, video, audio } = capturedStream();
-    stubCapture(stream);
-    const area = { x: 0.1, y: 0.2, width: 0.5, height: 0.4 };
-
-    const sent = await new ScreenShareSession().start({ ...options, chooseArea: async () => area });
-
-    expect(cropVideoTrack).toHaveBeenCalledWith(video, area);
-    expect(sent).toEqual({ tracks: [crop.track, audio] });
-    expect(webrtc.useLocalStream).toHaveBeenCalledWith(sent, 'auto');
-  });
-
-  it('sends the whole capture when everything is chosen', async () => {
-    const { stream } = capturedStream();
+  it('sends the captured screen with its sound, sharp for text', async () => {
+    const { stream, video } = capturedStream();
     stubCapture(stream);
 
-    const sent = await new ScreenShareSession().start({ ...options, chooseArea: async () => 'whole' });
+    const sent = await new ScreenShareSession().start(options);
 
-    expect(cropVideoTrack).not.toHaveBeenCalled();
     expect(sent).toBe(stream);
+    expect(video.contentHint).toBe('detail');
+    expect(webrtc.useLocalStream).toHaveBeenCalledWith(stream, 'auto');
+    expect(webrtc.sendOffer).toHaveBeenCalled();
   });
 
-  it('stops the capture without joining when the area picker is closed', async () => {
+  it('stops the capture once when the share ends', async () => {
     const { stream, video, audio } = capturedStream();
     stubCapture(stream);
     const session = new ScreenShareSession();
     const ended = vi.fn();
     session.onEnded = ended;
+    await session.start(options);
 
-    await expect(session.start({ ...options, chooseArea: async () => null })).rejects.toMatchObject({
-      name: 'NotAllowedError',
-    });
-    expect(video.stop).toHaveBeenCalled();
-    expect(audio.stop).toHaveBeenCalled();
-    expect(webrtc.useLocalStream).not.toHaveBeenCalled();
+    session.stop();
+    session.stop();
+
+    expect(video.stop).toHaveBeenCalledTimes(1);
+    expect(audio.stop).toHaveBeenCalledTimes(1);
+    expect(ended).toHaveBeenCalledTimes(1);
     expect(ended).toHaveBeenCalledWith('stopped');
   });
 
-  it('stops the crop and the capture when the share ends', async () => {
+  it('ends with an error and stops the capture when joining fails', async () => {
     const { stream, video } = capturedStream();
     stubCapture(stream);
+    webrtc.sendOffer.mockRejectedValueOnce(new Error('offer failed'));
     const session = new ScreenShareSession();
-    await session.start({ ...options, chooseArea: async () => ({ x: 0, y: 0, width: 0.5, height: 0.5 }) });
+    const ended = vi.fn();
+    session.onEnded = ended;
 
-    session.stop();
-
-    expect(crop.stop).toHaveBeenCalled();
+    await expect(session.start(options)).rejects.toThrow('offer failed');
     expect(video.stop).toHaveBeenCalled();
+    expect(ended).toHaveBeenCalledWith('error');
   });
 });
