@@ -23,7 +23,7 @@ test.use({
 
 test.describe('live call', () => {
   test('pressing call on a group with a live call joins it', async ({ browser, request, baseURL }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const unique = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
     const alice = await registerAccount(request, `alice_${unique}`, 'Alice Live');
     const bob = await registerAccount(request, `bob_${unique}`, 'Bob Live');
@@ -51,10 +51,11 @@ test.describe('live call', () => {
         timeout: 15_000,
       });
 
-      // Bob presses the same header button: he joins Alice's live call instead of seeing an error.
+      // Bob's header offers Join instead of the call buttons: he joins Alice's live call, with no error.
       await openConversation(bobPage, group.title);
       await expect(bobPage.locator('header [data-conversation-avatar]')).toHaveClass(/harbor-live-call-ring/);
-      await bobPage.getByRole('button', { name: 'Start a group audio call' }).click();
+      await expect(bobPage.getByRole('button', { name: 'Start a group audio call' })).toHaveCount(0);
+      await bobPage.getByRole('button', { name: 'Join call' }).click();
       await expect(bobPage).toHaveURL(/\/room\//, { timeout: 15_000 });
       expect(new URL(bobPage.url()).pathname).toBe(aliceRoomUrl.pathname);
       await expect(bobPage.getByText('Could not start call.')).toHaveCount(0);
@@ -86,6 +87,17 @@ test.describe('live call', () => {
       await expect(bobPage).toHaveURL(/\/dashboard/);
       await expect(miniCall).toBeVisible();
       await expect(alicePage.getByTestId('participant-tile')).toHaveCount(2);
+
+      // The group's chat header offers Return to call for the active call, and its picture opens a menu.
+      await openConversation(bobPage, group.title);
+      await bobPage.locator('header [data-conversation-picture]').click();
+      await expect(bobPage.getByRole('menuitem', { name: 'Group info' })).toBeVisible();
+      await expect(bobPage.getByRole('menuitem', { name: 'Return to call' })).toBeVisible();
+      await bobPage.keyboard.press('Escape');
+      await bobPage.locator('header').getByRole('button', { name: 'Return to call' }).click();
+      await expect(bobPage).toHaveURL(new RegExp(aliceRoomUrl.pathname));
+      await expect(bobPage.getByTestId('participant-tile')).toHaveCount(2);
+      await expect(miniCall).toHaveCount(0);
     } finally {
       await Promise.all(contexts.map((context) => context.close().catch(() => undefined)));
     }

@@ -29,6 +29,7 @@ import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useCallHistory } from '@/composables/useCallHistory';
 import { useIncomingCalls } from '@/composables/useIncomingCalls';
+import { useWebrtc } from '@/composables/useWebrtc';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useOwnProfile } from '@/composables/useOwnProfile';
 import { formatListTime } from '@/lib/list-time';
@@ -480,6 +481,12 @@ const contactProfilePendingRequest = computed(() =>
     : null,
 );
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
+// The active call (ADR 0001): a live call that is yours offers Return to call, which expands the call screen.
+const { callSessionId: activeCallSessionId, activeCallRoute, expand: expandActiveCall } = useWebrtc();
+function returnToActiveCall() {
+  expandActiveCall();
+  if (activeCallRoute.value) void router.push(activeCallRoute.value);
+}
 
 function beginGroupMutation(groupId: string) {
   return acquireGroupMutation(activeGroupMutations, groupId);
@@ -2541,6 +2548,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         :loading-older="isLoadingOlderMessages"
         :sending="isSendingMessage"
         :call-active="isCallLaunchActive"
+        :active-call-session-id="activeCallSessionId"
         :notification-warning="showNotificationPermissionWarning"
         :can-request-notification-permission="canRequestNotificationPermission"
         :is-desktop="isDesktop"
@@ -2567,6 +2575,8 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         "
         @profile="openSelectedContactProfile"
         @group-info="openGroupProfile()"
+        @join="startSelectedConversationCall()"
+        @return-to-call="returnToActiveCall"
         @call="startSelectedConversationCall"
         @scroll-top="handleMessageScroll"
         @load-unread="loadUnreadMessage"

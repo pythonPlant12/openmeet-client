@@ -1,4 +1,4 @@
-import { enableAutoUnmount, mount } from '@vue/test-utils';
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ChatPane from '@/components/dashboard-page/chat/ChatPane.vue';
@@ -152,6 +152,65 @@ describe('ChatPane', () => {
       selectedTitle: 'Team',
     });
     expect(avatarOf(group).classList).toContain('harbor-live-call-ring');
+  });
+
+  it('offers Join while the conversation has a live call I am not in, and Return to call while it is mine', async () => {
+    const friend = { id: 'friend-1', name: 'Friend', nickname: 'friend', email: 'friend@example.com', isOnline: true };
+    const live = { ...conversation, liveCall: { id: 'call-1', memberIds: ['friend-1'] } };
+
+    const join = mountPane({ conversation: live, selectedFriend: friend });
+    expect(join.find('button[aria-label="Start a video call"]').exists()).toBe(false);
+    expect(join.find('button[aria-label="Start an audio call"]').exists()).toBe(false);
+    await join.get('button[aria-label="Join call"]').trigger('click');
+    expect(join.emitted('join')).toHaveLength(1);
+
+    const mine = mountPane({ conversation: live, selectedFriend: friend, activeCallSessionId: 'call-1' });
+    expect(mine.find('button[aria-label="Join call"]').exists()).toBe(false);
+    await mine.get('button[aria-label="Return to call"]').trigger('click');
+    expect(mine.emitted('return-to-call')).toHaveLength(1);
+
+    const quiet = mountPane({ conversation, selectedFriend: friend });
+    expect(quiet.find('button[aria-label="Start a video call"]').exists()).toBe(true);
+    expect(quiet.find('button[aria-label="Join call"]').exists()).toBe(false);
+  });
+
+  it('opens a two-item menu from the header picture during a live call, and Profile directly otherwise', async () => {
+    const friend = { id: 'friend-1', name: 'Friend', nickname: 'friend', email: 'friend@example.com', isOnline: true };
+    const quiet = mountPane({ conversation, selectedFriend: friend }, { attachTo: document.body });
+    await quiet.get('header [data-conversation-picture]').trigger('click');
+    expect(quiet.emitted('profile')).toHaveLength(1);
+    quiet.unmount();
+
+    const live = mountPane(
+      { conversation: { ...conversation, liveCall: { id: 'call-1', memberIds: ['friend-1'] } }, selectedFriend: friend },
+      { attachTo: document.body },
+    );
+    await live.get('header [data-conversation-picture]').trigger('click');
+    await flushPromises();
+    expect(live.emitted('profile')).toBeUndefined();
+    const items = () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    expect(items().map((item) => item.textContent?.trim())).toEqual(['Profile', 'Join call']);
+    items()[1]!.click();
+    await flushPromises();
+    expect(live.emitted('join')).toHaveLength(1);
+    live.unmount();
+
+    const group = mountPane(
+      {
+        conversation: { ...groupConversation, liveCall: { id: 'call-2', memberIds: ['ada'] } },
+        selectedIsGroup: true,
+        selectedTitle: 'Team',
+        activeCallSessionId: 'call-2',
+      },
+      { attachTo: document.body },
+    );
+    await group.get('header [data-conversation-picture]').trigger('click');
+    await flushPromises();
+    expect(items().map((item) => item.textContent?.trim())).toEqual(['Group info', 'Return to call']);
+    items()[0]!.click();
+    await flushPromises();
+    expect(group.emitted('group-info')).toHaveLength(1);
+    group.unmount();
   });
 
   it('pads the header for the status bar and the composer for the home indicator, except while typing', async () => {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useElementSize, useMediaQuery } from '@vueuse/core';
-import { ArrowLeft, CircleUserRound, Ellipsis, MessageCircleMore, Phone, UsersRound, Video, X } from 'lucide-vue-next';
+import { ArrowLeft, CircleUserRound, Ellipsis, MessageCircleMore, Phone, PhoneCall, PhoneIncoming, UsersRound, Video, X } from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -39,6 +39,8 @@ const props = defineProps<{
   canRequestNotificationPermission: boolean;
   isDesktop: boolean;
   prefersReducedMotion: boolean;
+  /** The active call's call session, so a live call that is yours offers Return to call instead of Join. */
+  activeCallSessionId?: string | null;
   shouldAnimate: (message: ConversationMessage) => boolean;
   isLocal: (message: ConversationMessage) => boolean;
   formatTime: (value: string) => string;
@@ -59,6 +61,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'back'): void;
   (event: 'profile'): void;
+  (event: 'join'): void;
+  (event: 'return-to-call'): void;
   (event: 'group-info'): void;
   (event: 'call', options: { video: boolean }): void;
   (event: 'scroll-top'): void;
@@ -75,6 +79,28 @@ const emit = defineEmits<{
 
 // The header picture rings while the conversation's call is live (see the live call rules).
 const liveCallRing = computed(() => !!props.conversation && showsLiveCallRing(props.conversation));
+// A live call replaces the call buttons with Join, or Return to call when it is the active call, and turns the
+// header picture into a two-item menu.
+const liveCallState = computed<'joinable' | 'mine' | null>(() => {
+  const live = props.conversation?.liveCall;
+  if (!live) return null;
+  return live.id === props.activeCallSessionId ? 'mine' : 'joinable';
+});
+const isPictureMenuOpen = ref(false);
+function setPictureMenuOpen(open: boolean) {
+  isPictureMenuOpen.value = open && !!liveCallState.value;
+}
+function openDetails() {
+  if (props.selectedIsGroup) emit('group-info');
+  else emit('profile');
+}
+function handlePictureClick() {
+  if (!liveCallState.value) openDetails();
+}
+function handleLiveCallAction() {
+  if (liveCallState.value === 'mine') emit('return-to-call');
+  else emit('join');
+}
 const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
 const attachments = defineModel<File[]>('attachments', { default: () => [] });
@@ -212,12 +238,20 @@ defineExpose({
               @click="emit('back')"
             >
               <ArrowLeft class="size-5" /></button
-            ><button
-              v-if="selectedFriend && !pendingFriend"
-              type="button"
-              class="pointer-events-auto flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-1 pl-1 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-              @click="emit('profile')"
+            ><DropdownMenu
+              v-if="(selectedFriend && !pendingFriend) || selectedIsGroup"
+              :open="isPictureMenuOpen"
+              :modal="false"
+              @update:open="setPictureMenuOpen"
             >
+              <DropdownMenuTrigger as-child>
+                <button
+                  type="button"
+                  data-conversation-picture
+                  class="pointer-events-auto flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-1 pl-1 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
+                  @click="handlePictureClick"
+                >
+                  <template v-if="selectedFriend && !pendingFriend && !selectedIsGroup">
               <span class="relative shrink-0"
                 ><span
                   data-conversation-avatar
@@ -248,13 +282,9 @@ defineExpose({
                   selectedTitle
                 }}</span
                 ><span class="sr-only">{{ directConversationLabel }}</span></span
-              ></button
-            ><button
-              v-else-if="selectedIsGroup"
-              type="button"
-              class="pointer-events-auto flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-1 pl-1 pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
-              @click="emit('group-info')"
-            >
+              >
+                  </template>
+                  <template v-else>
               <span
                 data-conversation-avatar
                 class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
@@ -268,7 +298,20 @@ defineExpose({
                 }}</span
                 ><span class="sr-only">{{ groupConversationLabel }}</span></span
               >
-            </button>
+                  </template>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" :side-offset="8" class="min-w-52">
+                <DropdownMenuItem @select="openDetails">
+                  <UsersRound v-if="selectedIsGroup" /><CircleUserRound v-else />
+                  {{ selectedIsGroup ? 'Group info' : 'Profile' }}
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="handleLiveCallAction">
+                  <PhoneCall v-if="liveCallState === 'mine'" /><PhoneIncoming v-else />
+                  {{ liveCallState === 'mine' ? 'Return to call' : 'Join call' }}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div v-else class="pointer-events-auto flex min-w-0 items-center gap-3">
               <span
                 class="flex size-10 shrink-0 items-center justify-center rounded-full bg-harbor-avatar text-harbor-icon"
@@ -286,24 +329,47 @@ defineExpose({
               data-chat-actions
               class="harbor-round-group pointer-events-auto ml-auto shrink-0"
             >
+              <template v-if="!liveCallState">
+                <button
+                  type="button"
+                  class="size-10"
+                  :aria-label="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
+                  :title="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
+                  :disabled="callActive"
+                  @click="emit('call', { video: true })"
+                >
+                  <Video class="size-5" /></button
+                ><button
+                  type="button"
+                  class="size-10"
+                  :aria-label="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
+                  :title="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
+                  :disabled="callActive"
+                  @click="emit('call', { video: false })"
+                >
+                  <Phone class="size-[1.125rem]" />
+                </button>
+              </template>
               <button
+                v-else-if="liveCallState === 'joinable'"
                 type="button"
                 class="size-10"
-                :aria-label="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
-                :title="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
+                aria-label="Join call"
+                title="Join call"
                 :disabled="callActive"
-                @click="emit('call', { video: true })"
+                @click="emit('join')"
               >
-                <Video class="size-5" /></button
-              ><button
+                <PhoneIncoming class="size-5" />
+              </button>
+              <button
+                v-else
                 type="button"
                 class="size-10"
-                :aria-label="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
-                :title="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
-                :disabled="callActive"
-                @click="emit('call', { video: false })"
+                aria-label="Return to call"
+                title="Return to call"
+                @click="emit('return-to-call')"
               >
-                <Phone class="size-[1.125rem]" />
+                <PhoneCall class="size-5" />
               </button>
               <DropdownMenu :modal="false">
                 <DropdownMenuTrigger as-child>
@@ -320,13 +386,19 @@ defineExpose({
                     <CircleUserRound />
                     See profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: true })">
-                    <Video />
-                    Video call
-                  </DropdownMenuItem>
-                  <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: false })">
-                    <Phone />
-                    Audio call
+                  <template v-if="!liveCallState">
+                    <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: true })">
+                      <Video />
+                      Video call
+                    </DropdownMenuItem>
+                    <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: false })">
+                      <Phone />
+                      Audio call
+                    </DropdownMenuItem>
+                  </template>
+                  <DropdownMenuItem v-else @select="handleLiveCallAction">
+                    <PhoneCall v-if="liveCallState === 'mine'" /><PhoneIncoming v-else />
+                    {{ liveCallState === 'mine' ? 'Return to call' : 'Join call' }}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
