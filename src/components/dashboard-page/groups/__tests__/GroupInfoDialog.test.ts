@@ -304,4 +304,40 @@ describe('GroupInfoDialog', () => {
         .exists(),
     ).toBe(true);
   });
+
+  it('rings the members who are in the group live call', () => {
+    const wrapper = mountDialog({
+      members: [
+        {
+          id: 'friend-1',
+          name: 'Friend',
+          nickname: 'friend_1',
+          avatarUrl: null,
+          isOnline: true,
+          status: 'available',
+          role: 'member',
+          joinedAt: '',
+          inLiveCall: true,
+        },
+        {
+          id: 'member-1',
+          name: 'Member',
+          nickname: 'member_1',
+          avatarUrl: null,
+          isOnline: true,
+          status: 'available',
+          role: 'member',
+          joinedAt: '',
+        },
+      ],
+    });
+    const [inCallRow, otherRow] = wrapper.findAll('[data-swipeable-row]');
+    const inCallAvatar = inCallRow!.get('.relative > span').element as HTMLElement;
+    const otherAvatar = otherRow!.get('.relative > span').element as HTMLElement;
+
+    expect(inCallAvatar.classList).toContain('harbor-live-call-ring');
+    expect(inCallAvatar.classList).not.toContain('border-[#2DA58F]');
+    expect(otherAvatar.classList).toContain('border-[#2DA58F]');
+    expect(otherAvatar.classList).not.toContain('harbor-live-call-ring');
+  });
 });

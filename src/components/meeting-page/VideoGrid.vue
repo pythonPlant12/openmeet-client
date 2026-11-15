@@ -5,8 +5,8 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { useCallFormFactor } from '@/composables/useCallFormFactor';
+import { useCornerDrag } from '@/composables/useCornerDrag';
 import {
-  type Corner,
   DEFAULT_TILE_ASPECT,
   type MeetingViewMode,
   PHONE_GRID_PAGE_SIZE,
@@ -14,7 +14,6 @@ import {
   fitTilesInRows,
   gridCells,
   mainVideoFills,
-  nearestCorner,
   pagedGridCells,
   selectCallLayout,
 } from '@/lib/meeting-layout';
@@ -78,8 +77,6 @@ const SELF_VIEW_MIN_WIDTH = 88;
 const SELF_VIEW_MAX_WIDTH = 144;
 const SELF_VIEW_ASPECT = 3 / 4;
 const SELF_VIEW_INSET = 12;
-/** Moving the self view further than this is a drag, not a tap. */
-const DRAG_THRESHOLD_PX = 6;
 
 const isWide = useMediaQuery('(min-width: 768px)');
 const formFactor = useCallFormFactor();
@@ -263,25 +260,17 @@ const stripStyle = (participant: Participant) => ({
 });
 
 // Phone 1:1: the other person fills the area and your own view is a small picture in a corner. Dragging it
-// moves it with the finger; letting go snaps it to the nearest corner.
+// moves it with the finger; letting go snaps it to the nearest corner. A drag is not a tap: the click that
+// follows must not pin.
 const selfViewArea = ref<HTMLElement | null>(null);
+const selfViewElement = ref<HTMLElement | null>(null);
 const { width: selfAreaWidth, height: selfAreaHeight } = useElementSize(selfViewArea);
-const selfViewCorner = ref<Corner>('bottom-right');
+const selfViewDrag = useCornerDrag({ element: selfViewElement, area: selfViewArea, onDragEnd: swallowNextClick });
+const selfViewCorner = selfViewDrag.corner;
 const selfViewWidth = computed(() =>
   Math.round(Math.min(SELF_VIEW_MAX_WIDTH, Math.max(SELF_VIEW_MIN_WIDTH, selfAreaWidth.value * SELF_VIEW_WIDTH_SHARE))),
 );
 const selfViewHeight = computed(() => Math.round(selfViewWidth.value / SELF_VIEW_ASPECT));
-let selfViewDrag: {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  /** Centre of the self view at the start, relative to the area. */
-  centerX: number;
-  centerY: number;
-  areaWidth: number;
-  areaHeight: number;
-} | null = null;
-const selfViewOffset = ref<{ x: number; y: number } | null>(null);
 // In full screen the corner picture covers the whole screen's corners, so it keeps clear of the notch and the
 // home indicator, and, while the controls show, sits below the top bar and above the controls (and a phone's
 // "Add people" card), sliding with them.
@@ -300,56 +289,15 @@ const selfViewStyle = computed(() => {
     vertical === 'top'
       ? selfViewEdges.value.top
       : `calc(${selfAreaHeight.value - selfViewHeight.value}px - ${selfViewEdges.value.bottom})`;
-  const offset = selfViewOffset.value;
   return {
     left: `${left}px`,
     top,
     width: `${selfViewWidth.value}px`,
     height: `${selfViewHeight.value}px`,
-    transform: offset ? `translate(${offset.x}px, ${offset.y}px)` : undefined,
+    ...selfViewDrag.style.value,
   };
 });
 
-function startSelfViewDrag(event: PointerEvent) {
-  if (event.button !== 0 || !selfViewArea.value) return;
-  // Keeps a held finger from also opening the layout menu, and the page from scrolling under the drag.
-  event.preventDefault();
-  const element = event.currentTarget as HTMLElement;
-  element.setPointerCapture?.(event.pointerId);
-  const area = selfViewArea.value.getBoundingClientRect();
-  const view = element.getBoundingClientRect();
-  selfViewDrag = {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    centerX: view.left - area.left + view.width / 2,
-    centerY: view.top - area.top + view.height / 2,
-    areaWidth: area.width,
-    areaHeight: area.height,
-  };
-}
-function moveSelfView(event: PointerEvent) {
-  if (!selfViewDrag || event.pointerId !== selfViewDrag.pointerId) return;
-  const x = event.clientX - selfViewDrag.startX;
-  const y = event.clientY - selfViewDrag.startY;
-  if (selfViewOffset.value || Math.hypot(x, y) > DRAG_THRESHOLD_PX) selfViewOffset.value = { x, y };
-}
-function endSelfViewDrag(event: PointerEvent) {
-  const drag = selfViewDrag;
-  if (!drag || event.pointerId !== drag.pointerId) return;
-  selfViewDrag = null;
-  const offset = selfViewOffset.value;
-  if (!offset) return;
-  selfViewOffset.value = null;
-  selfViewCorner.value = nearestCorner(
-    drag.centerX + offset.x,
-    drag.centerY + offset.y,
-    drag.areaWidth,
-    drag.areaHeight,
-  );
-  // A drag is not a tap: the click that follows must not pin.
-  if (event.type === 'pointerup') swallowNextClick();
-}
 
 // One tap on a tile acts on that person (see `tapTile`); a double tap anywhere toggles full screen. The single tap waits
 // a moment so a double tap does not also pin. Keyboard presses (no pointer detail) act at once. A touch held
@@ -615,16 +563,16 @@ function toggleName(participantId: string) {
             />
             <div
               v-if="selfViewSelf"
+              ref="selfViewElement"
               class="absolute z-10 touch-none select-none rounded-[1.4rem] shadow-[0_10px_28px_rgba(0,0,0,0.35)]"
-              :class="selfViewOffset ? '' : 'meeting-self-view-snap'"
               :style="selfViewStyle"
               data-testid="self-view"
               :data-corner="selfViewCorner"
               :title="t('meeting.participant.selfView')"
-              @pointerdown="startSelfViewDrag"
-              @pointermove="moveSelfView"
-              @pointerup="endSelfViewDrag"
-              @pointercancel="endSelfViewDrag"
+              @pointerdown="selfViewDrag.start"
+              @pointermove="selfViewDrag.move"
+              @pointerup="selfViewDrag.end"
+              @pointercancel="selfViewDrag.end"
             >
               <ParticipantTile
                 :participant="selfViewSelf"
@@ -746,12 +694,6 @@ function toggleName(participantId: string) {
     box-shadow 0.3s;
 }
 
-.meeting-self-view-snap {
-  transition:
-    left 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    top 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 .meeting-layout-enter-active,
 .meeting-layout-leave-active {
   transition: opacity 0.2s ease;
@@ -768,7 +710,6 @@ function toggleName(participantId: string) {
 
 @media (prefers-reduced-motion: reduce) {
   .meeting-grid-tile,
-  .meeting-self-view-snap,
   .meeting-layout-enter-active,
   .meeting-layout-leave-active {
     transition: none;

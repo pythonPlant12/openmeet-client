@@ -322,4 +322,43 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.emitted('remove')).toHaveLength(1);
     expect(playHaptic).toHaveBeenCalledWith('warning');
   });
+
+  it('rings the picture only while there is a direct live call with this person', () => {
+    const profile = {
+      id: 'friend-1',
+      name: 'Alex Smith',
+      nickname: 'alex',
+      email: 'alex@example.com',
+      avatarUrl: null,
+      status: 'available' as const,
+      statusMessage: '',
+      createdAt: '',
+      lastSeenAt: null,
+      isOnline: true,
+      relationship: 'friend' as const,
+    };
+    const mountProfile = (inLiveCall: boolean) =>
+      mount(ContactProfileDialog, {
+        props: {
+          open: true,
+          confirmationOpen: false,
+          profile,
+          profileFriend: null,
+          loading: false,
+          error: '',
+          removingId: null,
+          opening: null,
+          callActive: false,
+          avatarUrls: {},
+          avatarLoading: false,
+          formatDate: () => 'Unavailable',
+          inLiveCall,
+        },
+        global: { stubs },
+      });
+
+    expect(mountProfile(true).get('[data-profile-avatar]').classes()).toContain('harbor-live-call-ring');
+    expect(mountProfile(true).get('[data-profile-avatar]').classes()).not.toContain('border-[#2DA58F]');
+    expect(mountProfile(false).get('[data-profile-avatar]').classes()).toContain('border-[#2DA58F]');
+  });
 });

@@ -20,6 +20,7 @@ const conversation: Conversation = {
   messageCount: 3,
   unreadCount: 0,
   markedUnread: true,
+  liveCall: null,
   createdAt: '2026-10-04T12:00:00Z',
   updatedAt: '2026-10-04T12:00:00Z',
 };
@@ -113,6 +114,40 @@ describe('ConversationsSidebar', () => {
     expect(offlineAvatar.classList).toContain('border-2');
     expect(offlineAvatar.classList).toContain('border-harbor-waveform');
     expect(offline.find('[data-presence-dot]').exists()).toBe(false);
+  });
+
+  it('rings the picture for a live call the viewer may see, in place of the presence border', () => {
+    const avatarOf = (wrapper: ReturnType<typeof mountSidebar>) =>
+      wrapper.get('[data-conversation-avatar]').element as HTMLElement;
+
+    // A group with people in its call.
+    const liveGroup = mountSidebar({
+      conversations: [
+        { ...conversation, kind: 'group', title: 'Team', otherUserId: null, liveCall: { id: 'call-1', memberIds: ['ada'] } },
+      ],
+    });
+    expect(avatarOf(liveGroup).classList).toContain('harbor-live-call-ring');
+
+    // A friend who is in a direct call with me: the ring replaces the presence border, the dot stays.
+    const liveDirect = mountSidebar({
+      conversations: [{ ...conversation, liveCall: { id: 'call-2', memberIds: ['friend-1'] } }],
+    });
+    expect(avatarOf(liveDirect).classList).toContain('harbor-live-call-ring');
+    expect(avatarOf(liveDirect).classList).not.toContain('border-[#2DA58F]');
+    expect(liveDirect.find('[data-presence-dot]').exists()).toBe(true);
+
+    // Waiting alone in a call the friend has not entered rings nothing; nor does a group call nobody entered.
+    const waiting = mountSidebar({
+      conversations: [{ ...conversation, liveCall: { id: 'call-3', memberIds: ['me'] } }],
+    });
+    expect(avatarOf(waiting).classList).not.toContain('harbor-live-call-ring');
+    expect(avatarOf(waiting).classList).toContain('border-[#2DA58F]');
+    const emptyGroup = mountSidebar({
+      conversations: [
+        { ...conversation, kind: 'group', title: 'Team', otherUserId: null, liveCall: { id: 'call-4', memberIds: [] } },
+      ],
+    });
+    expect(avatarOf(emptyGroup).classList).not.toContain('harbor-live-call-ring');
   });
 
   it('swipes left to Profile and Delete for direct chats, and Info only for group creators', async () => {

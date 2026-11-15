@@ -18,6 +18,9 @@ const initialContext: SFUContext = {
   localParticipantName: '',
   roomId: null,
   roomPassword: null,
+  callSessionId: null,
+  conversationId: null,
+  collapsed: false,
   connectionState: null,
   iceConnectionState: null,
   connectionQuality: 'good',
@@ -53,6 +56,17 @@ export const webrtcMachine = setup({
     setRoomId: assign({
       roomId: (_, params: { roomId: string; password?: string }) => params.roomId,
       roomPassword: (_, params: { roomId: string; password?: string }) => params.password ?? null,
+    }),
+
+    setCallIds: assign({
+      callSessionId: (_, params: { callSessionId?: string; conversationId?: string }) =>
+        params.callSessionId ?? null,
+      conversationId: (_, params: { callSessionId?: string; conversationId?: string }) =>
+        params.conversationId ?? null,
+    }),
+
+    setCollapsed: assign({
+      collapsed: (_, params: { collapsed: boolean }) => params.collapsed,
     }),
 
     setLocalParticipant: assign({
@@ -293,6 +307,9 @@ export const webrtcMachine = setup({
       localParticipantName: '',
       roomId: null,
       roomPassword: null,
+      callSessionId: null,
+      conversationId: null,
+      collapsed: false,
       connectionState: null,
       iceConnectionState: null,
       connectionQuality: 'good',
@@ -366,6 +383,10 @@ export const webrtcMachine = setup({
           target: 'connected',
           actions: [
             { type: 'setRoomId', params: ({ event }) => ({ roomId: event.roomId, password: event.password }) },
+            {
+              type: 'setCallIds',
+              params: ({ event }) => ({ callSessionId: event.callSessionId, conversationId: event.conversationId }),
+            },
             { type: 'setParticipantName', params: ({ event }) => ({ name: event.participantName }) },
           ],
         },
@@ -391,6 +412,9 @@ export const webrtcMachine = setup({
       },
       // Events handled at parent level (available in both child states)
       on: {
+        // The call screen collapses to the mini call and back; the call itself runs on (ADR 0001).
+        COLLAPSE: { actions: [{ type: 'setCollapsed', params: { collapsed: true } }] },
+        EXPAND: { actions: [{ type: 'setCollapsed', params: { collapsed: false } }] },
         SIGNALING_LOST: {
           actions: [
             { type: 'setReconnecting', params: { reconnecting: true } },

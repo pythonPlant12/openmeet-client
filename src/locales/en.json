@@ -413,6 +413,7 @@
       "shareText": "Join my video call: {link}",
       "shareTitle": "Join my video call",
       "moreControls": "More controls",
+      "collapse": "Back to chats",
       "audioOutput": "Audio output",
       "showChat": "Show chat",
       "showOwnCamera": "Show my own camera",
@@ -521,7 +522,13 @@
       "goHome": "Go Home",
       "reconnect": "Reconnect"
     },
-    "callTitle": "Call"
+    "callTitle": "Call",
+    "miniCall": {
+      "expand": "Return to call",
+      "mute": "Mute microphone",
+      "unmute": "Unmute microphone",
+      "leave": "Leave call"
+    }
   },
   "errors": {
     "generic": "An error occurred",

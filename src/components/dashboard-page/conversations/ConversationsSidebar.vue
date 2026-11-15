@@ -35,6 +35,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { ListHeading, ListRow } from '@/components/ui/list-row';
+import { showsLiveCallRing } from '@/lib/live-call';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { RoundButton } from '@/components/ui/round-button';
@@ -430,13 +431,15 @@ onBeforeUnmount(clearLongPress);
                           : !!conversation.otherUserId && isFriendAvatarLoading(conversation.otherUserId)
                       "
                       :class="
-                        conversation.kind === 'direct'
-                          ? [
-                              'border-2',
-                              userStatusOption(isDirectOnline(conversation) ? directStatus(conversation) : 'offline')
-                                .borderClass,
-                            ]
-                          : []
+                        showsLiveCallRing(conversation)
+                          ? ['border-2', 'harbor-live-call-ring']
+                          : conversation.kind === 'direct'
+                            ? [
+                                'border-2',
+                                userStatusOption(isDirectOnline(conversation) ? directStatus(conversation) : 'offline')
+                                  .borderClass,
+                              ]
+                            : []
                       "
                       ><UsersRound v-if="conversation.kind === 'group'" /><template v-else>{{
                         directInitials(conversation)

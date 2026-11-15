@@ -3,6 +3,7 @@ import { useMachine } from '@xstate/vue';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { RouterView, useRouter } from 'vue-router';
 
+import ActiveCallHost from '@/components/layout/ActiveCallHost.vue';
 import IncomingCallBar from '@/components/layout/IncomingCallBar.vue';
 import TheNavbar from '@/components/layout/TheNavbar.vue';
 import { Toaster } from '@/components/ui/toast';
@@ -20,6 +21,8 @@ import {
 import { type SocialAlert, type SocialEventResource, socialEventsService } from '@/services/social-events';
 import { SystemAlerts } from '@/services/system-alerts';
 import { startSystemBarSync } from '@/services/system-bars';
+
+import { askToLeaveActiveCall } from '@/lib/leave-call-prompt';
 
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
@@ -82,6 +85,11 @@ const isAnsweringCall = ref(false);
 async function respondToRingingCall(accept: boolean) {
   const ringing = ringingCall.value;
   if (!ringing || isAnsweringCall.value) return;
+  // Accepting a ring while in a call means leaving that call: the person decides first (ADR 0001).
+  if (accept && webrtcActor.snapshot.value.matches('connected')) {
+    if (!(await askToLeaveActiveCall())) return;
+    webrtcActor.send({ type: 'LEAVE_ROOM' });
+  }
   isAnsweringCall.value = true;
   try {
     await (accept ? acceptIncomingCall(ringing) : declineIncomingCall(ringing));
@@ -583,6 +591,7 @@ onUnmounted(() => {
       @decline="respondToRingingCall(false)"
     />
     <Toaster />
+    <ActiveCallHost />
 
     <RouterView v-slot="{ Component, route }">
       <Transition name="page-fade" mode="out-in">

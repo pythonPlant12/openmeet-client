@@ -29,9 +29,12 @@ import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useCallHistory } from '@/composables/useCallHistory';
 import { useIncomingCalls } from '@/composables/useIncomingCalls';
+import { useWebrtc } from '@/composables/useWebrtc';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useOwnProfile } from '@/composables/useOwnProfile';
 import { formatListTime } from '@/lib/list-time';
+import { askToLeaveActiveCall } from '@/lib/leave-call-prompt';
+import { leavesActiveCall, showsLiveCallRing } from '@/lib/live-call';
 import { callAgainTargets } from '@/lib/meetings';
 import {
   type ConversationActivity,
@@ -419,10 +422,20 @@ const peopleResultAvatarUrls = computed(() =>
   ),
 );
 // Statuses are only visible between friends, so the friends list is the live source for participants too.
+// The shown group's live call rings the members who are in it.
+const shownGroupLiveMemberIds = computed(() => {
+  const shownGroupId = groupInfo.value?.id;
+  if (!shownGroupId) return new Set<string>();
+  const group = conversations.value.find((conversation) => conversation.id === shownGroupId);
+  return new Set(group?.liveCall?.memberIds ?? []);
+});
 const groupMembersWithPresence = computed(() =>
   groupMembers.value.map((member) => {
     const friend = friendById.value.get(member.id);
-    return friend ? { ...member, isOnline: friend.isOnline, status: friend.status ?? member.status } : member;
+    const inLiveCall = shownGroupLiveMemberIds.value.has(member.id);
+    return friend
+      ? { ...member, isOnline: friend.isOnline, status: friend.status ?? member.status, inLiveCall }
+      : { ...member, inLiveCall };
   }),
 );
 const visibleFriends = computed(() =>
@@ -469,6 +482,33 @@ const contactProfilePendingRequest = computed(() =>
     : null,
 );
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
+// The active call (ADR 0001): a live call that is yours offers Return to call, which expands the call screen.
+const {
+  callSessionId: activeCallSessionId,
+  roomId: activeRoomId,
+  isConnected: isActiveCallConnected,
+  activeCallRoute,
+  expand: expandActiveCall,
+  leaveRoom: leaveActiveCall,
+} = useWebrtc();
+function returnToActiveCall() {
+  expandActiveCall();
+  if (activeCallRoute.value) void router.push(activeCallRoute.value);
+}
+// Before a call on another conversation is started or joined on the server, the person decides whether to
+// leave the active call; a conversation whose live call is the active call simply returns to it.
+async function leaveActiveCallFor(conversation: Conversation): Promise<boolean> {
+  const active = {
+    connected: isActiveCallConnected.value,
+    callSessionId: activeCallSessionId.value,
+    roomId: activeRoomId.value,
+  };
+  const target = conversation.liveCall?.id ?? `new-call-for-${conversation.id}`;
+  if (!leavesActiveCall(active, target)) return true;
+  if (!(await askToLeaveActiveCall())) return false;
+  leaveActiveCall();
+  return true;
+}
 
 function beginGroupMutation(groupId: string) {
   return acquireGroupMutation(activeGroupMutations, groupId);
@@ -515,11 +555,16 @@ function userInitials(name?: string | null) {
   );
 }
 
-const contactProfileConversationId = computed(
+const contactProfileConversation = computed(
   () =>
     conversations.value.find(
       (conversation) => conversation.kind === 'direct' && conversation.otherUserId === contactProfile.value?.id,
-    )?.id ?? null,
+    ) ?? null,
+);
+const contactProfileConversationId = computed(() => contactProfileConversation.value?.id ?? null);
+// A Profile rings only for a direct live call with that person, never for their calls with others.
+const contactProfileInLiveCall = computed(
+  () => !!contactProfileConversation.value && showsLiveCallRing(contactProfileConversation.value),
 );
 
 function formatProfileDate(value: string | null) {
@@ -1650,6 +1695,8 @@ async function handleConversationsUpdated() {
 
 function handleCallsUpdated() {
   void refreshBadges();
+  // Live call rings follow who is in each call, which the calls event announces.
+  void refreshConversationWorkspace();
   if (callsPanel.value !== 'collapsed') void callHistory.load({ quiet: true });
 }
 
@@ -2346,6 +2393,11 @@ watch(
 async function startConversationCall(conversation: Conversation, options?: { video: boolean }) {
   const token = accessToken.value;
   if (!token || startingCallConversationId.value) return;
+  if (conversation.liveCall && conversation.liveCall.id === activeCallSessionId.value) {
+    returnToActiveCall();
+    return;
+  }
+  if (!(await leaveActiveCallFor(conversation))) return;
 
   clearFeedback();
   const request = ++callLaunchRequest;
@@ -2523,6 +2575,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         :loading-older="isLoadingOlderMessages"
         :sending="isSendingMessage"
         :call-active="isCallLaunchActive"
+        :active-call-session-id="activeCallSessionId"
         :notification-warning="showNotificationPermissionWarning"
         :can-request-notification-permission="canRequestNotificationPermission"
         :is-desktop="isDesktop"
@@ -2549,6 +2602,8 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         "
         @profile="openSelectedContactProfile"
         @group-info="openGroupProfile()"
+        @join="startSelectedConversationCall()"
+        @return-to-call="returnToActiveCall"
         @call="startSelectedConversationCall"
         @scroll-top="handleMessageScroll"
         @load-unread="loadUnreadMessage"
@@ -2697,6 +2752,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       :avatar-loading="isContactProfileAvatarLoading"
       :format-date="formatProfileDate"
       :shared-conversation-id="contactProfileConversationId"
+      :in-live-call="contactProfileInLiveCall"
       :access-token="accessToken ?? undefined"
       :current-user-id="currentUser?.id"
       @update:open="setContactProfileDialogOpen"

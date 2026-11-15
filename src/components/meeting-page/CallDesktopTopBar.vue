@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { MessageSquare } from 'lucide-vue-next';
+import { ChevronDown, MessageSquare } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-// The desktop call screen's top row: the room name on the left and the chat on the right.
+// The desktop call screen's top row: the collapse button (signed-in only, ADR 0001) and the room name on the
+// left and the chat on the right.
 const props = defineProps<{
   roomName: string;
+  canCollapse?: boolean;
   isChatOpen: boolean;
   unreadCount: number;
 }>();
-const emit = defineEmits<{ (e: 'toggle-chat'): void }>();
+const emit = defineEmits<{ (e: 'toggle-chat'): void; (e: 'collapse'): void }>();
 const { t } = useI18n();
 
 const chatAriaLabel = computed(() => {
@@ -24,11 +26,23 @@ const chatAriaLabel = computed(() => {
     class="marketing-font pointer-events-none fixed inset-x-0 top-5 z-50 flex items-center justify-between gap-4 px-6 text-harbor-ink"
     data-call-desktop-top-bar
   >
-    <span
-      class="call-chip pointer-events-auto flex h-[var(--meeting-control-size)] min-w-0 max-w-[50%] items-center truncate px-4 text-sm font-semibold"
-      data-room-name
-      >{{ roomName }}</span
-    >
+    <div class="flex min-w-0 max-w-[50%] items-center gap-3">
+      <button
+        v-if="canCollapse"
+        type="button"
+        class="call-button call-chip pointer-events-auto shrink-0"
+        :aria-label="t('meeting.controls.collapse')"
+        data-collapse-trigger
+        @click="emit('collapse')"
+      >
+        <ChevronDown />
+      </button>
+      <span
+        class="call-chip pointer-events-auto flex h-[var(--meeting-control-size)] min-w-0 items-center truncate px-4 text-sm font-semibold"
+        data-room-name
+        >{{ roomName }}</span
+      >
+    </div>
     <button
       type="button"
       class="call-button call-chip pointer-events-auto relative"

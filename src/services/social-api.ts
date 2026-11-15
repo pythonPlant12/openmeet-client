@@ -85,6 +85,8 @@ export interface CallSession {
   id: string;
   roomId: string;
   expiresAt: string;
+  /** True when the conversation already had a live call and this call joined it. */
+  joined: boolean;
 }
 
 export interface CallSessionJoinResponse {
@@ -230,6 +232,13 @@ export interface Conversation {
   markedUnread: boolean;
   createdAt: string;
   updatedAt: string;
+  /** The conversation's live call, which any member can join, with the users connected to it. */
+  liveCall: LiveCall | null;
+}
+
+export interface LiveCall {
+  id: string;
+  memberIds: string[];
 }
 
 export interface CreateGroupRequest {
@@ -272,6 +281,8 @@ export interface GroupMember {
   status: UserStatus | null;
   role: string;
   joinedAt: string;
+  /** Set by the workspace while this member is in the group's live call. */
+  inLiveCall?: boolean;
 }
 
 export interface GroupMembersPage {

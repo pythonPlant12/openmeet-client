@@ -48,6 +48,8 @@ const props = defineProps<{
   avatarUrls: Record<string, string>;
   avatarLoading: boolean;
   formatDate: (value: string | null) => string;
+  /** True while there is a direct live call between the viewer and this person: the picture rings. */
+  inLiveCall?: boolean;
   /** The direct chat with this person, whose shared media the profile lists. */
   sharedConversationId?: string | null;
   accessToken?: string;
@@ -207,7 +209,10 @@ async function copyNickname(nickname: string) {
             type="button"
             data-profile-avatar
             class="harbor-ghost-action flex size-28 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar p-0"
-            :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
+            :class="[
+              'border-2',
+              inLiveCall ? 'harbor-live-call-ring' : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
+            ]"
             :aria-label="`View ${profile.name}'s profile picture`"
             @click="isAvatarPreviewOpen = true"
           >
@@ -221,7 +226,10 @@ async function copyNickname(nickname: string) {
             v-else-if="profile.avatarUrl && avatarLoading"
             data-profile-avatar
             class="flex size-28 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar"
-            :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
+            :class="[
+              'border-2',
+              inLiveCall ? 'harbor-live-call-ring' : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
+            ]"
           >
             <LoadingRipple class="size-6 text-harbor-accent" />
           </span>
@@ -229,7 +237,10 @@ async function copyNickname(nickname: string) {
             v-else
             data-profile-avatar
             class="flex size-28 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar text-3xl font-semibold text-harbor-accent"
-            :class="['border-2', userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass]"
+            :class="[
+              'border-2',
+              inLiveCall ? 'harbor-live-call-ring' : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
+            ]"
             >{{ initials(profile.name) }}</span
           >
           <span

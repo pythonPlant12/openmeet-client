@@ -29,6 +29,11 @@ export interface SFUContext {
   roomId: string | null;
   /** Password of a password-protected room, kept so a reconnect can rejoin. */
   roomPassword: string | null;
+  /** For a call started from a conversation: its call session and conversation, which the room route needs. */
+  callSessionId: string | null;
+  conversationId: string | null;
+  /** The call screen is collapsed: the call runs on behind the workspace and shows as the mini call. */
+  collapsed: boolean;
 
   // Connection state
   connectionState: RTCPeerConnectionState | null;
@@ -53,8 +58,17 @@ export interface SFUContext {
 // User-initiated events
 export type SFUUserEvents =
   | { type: 'INIT_MEDIA'; participantName?: string; deviceConstraints?: DeviceConstraints }
-  | { type: 'JOIN_ROOM'; roomId: string; participantName?: string; password?: string }
+  | {
+      type: 'JOIN_ROOM';
+      roomId: string;
+      participantName?: string;
+      password?: string;
+      callSessionId?: string;
+      conversationId?: string;
+    }
   | { type: 'LEAVE_ROOM' }
+  | { type: 'COLLAPSE' }
+  | { type: 'EXPAND' }
   | { type: 'TOGGLE_AUDIO'; participantId: string; enabled: boolean }
   | { type: 'TOGGLE_VIDEO'; participantId: string; enabled: boolean }
   | { type: 'SEND_CHAT_MESSAGE'; message: string; replyToId?: number }
