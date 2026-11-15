@@ -42,8 +42,18 @@ test.describe('live call', () => {
       await expect(alicePage.getByTestId('participant-tile')).toHaveCount(1, { timeout: 20_000 });
       const aliceRoomUrl = new URL(alicePage.url());
 
+      // Bob's list rings the group's picture while Alice is in the call, without a reload.
+      const bobGroupRow = bobPage
+        .getByRole('navigation', { name: 'Persistent conversations' })
+        .locator('[data-conversation-row]', { hasText: group.title })
+        .first();
+      await expect(bobGroupRow.locator('[data-conversation-avatar]')).toHaveClass(/harbor-live-call-ring/, {
+        timeout: 15_000,
+      });
+
       // Bob presses the same header button: he joins Alice's live call instead of seeing an error.
       await openConversation(bobPage, group.title);
+      await expect(bobPage.locator('header [data-conversation-avatar]')).toHaveClass(/harbor-live-call-ring/);
       await bobPage.getByRole('button', { name: 'Start a group audio call' }).click();
       await expect(bobPage).toHaveURL(/\/room\//, { timeout: 15_000 });
       expect(new URL(bobPage.url()).pathname).toBe(aliceRoomUrl.pathname);

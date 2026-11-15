@@ -28,6 +28,7 @@ const group: Conversation = {
   messageCount: 0,
   unreadCount: 0,
   markedUnread: false,
+  liveCall: null,
   createdAt: '2026-10-03T12:00:00Z',
   updatedAt: '2026-10-03T12:00:00Z',
 };

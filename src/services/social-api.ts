@@ -232,6 +232,13 @@ export interface Conversation {
   markedUnread: boolean;
   createdAt: string;
   updatedAt: string;
+  /** The conversation's live call, which any member can join, with the users connected to it. */
+  liveCall: LiveCall | null;
+}
+
+export interface LiveCall {
+  id: string;
+  memberIds: string[];
 }
 
 export interface CreateGroupRequest {

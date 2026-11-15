@@ -17,6 +17,7 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { userStatusOption } from '@/config/user-status.config';
 import type { Conversation, ConversationMessage, Friend, GifSearchResult, GroupMember } from '@/services/social-api';
+import { showsLiveCallRing } from '@/lib/live-call';
 import { coverScreenTop } from '@/services/system-bars';
 
 const props = defineProps<{
@@ -71,6 +72,9 @@ const emit = defineEmits<{
   (event: 'load-gif-preview', gif: GifSearchResult): void;
   (event: 'select-gif', gif: GifSearchResult): void;
 }>();
+
+// The header picture rings while the conversation's call is live (see the live call rules).
+const liveCallRing = computed(() => !!props.conversation && showsLiveCallRing(props.conversation));
 const content = defineModel<string>('content', { required: true });
 const replyTo = defineModel<ConversationMessage | null>('replyTo', { default: null });
 const attachments = defineModel<File[]>('attachments', { default: () => [] });
@@ -216,10 +220,13 @@ defineExpose({
             >
               <span class="relative shrink-0"
                 ><span
+                  data-conversation-avatar
                   class="flex size-10 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
                   :class="[
                     'border-2',
-                    userStatusOption(selectedFriend.isOnline ? selectedFriend.status : 'offline').borderClass,
+                    liveCallRing
+                      ? 'harbor-live-call-ring'
+                      : userStatusOption(selectedFriend.isOnline ? selectedFriend.status : 'offline').borderClass,
                   ]"
                   ><img
                     v-if="friendAvatarUrls[selectedFriend.id]"
@@ -249,7 +256,9 @@ defineExpose({
               @click="emit('group-info')"
             >
               <span
+                data-conversation-avatar
                 class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
+                :class="liveCallRing ? 'border-2 harbor-live-call-ring' : ''"
                 ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><LoadingRipple
                   v-else-if="conversation && isGroupAvatarLoading(conversation.id)"
                   class="size-4" /><UsersRound v-else class="size-5" /></span

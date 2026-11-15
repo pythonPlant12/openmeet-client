@@ -1650,6 +1650,8 @@ async function handleConversationsUpdated() {
 
 function handleCallsUpdated() {
   void refreshBadges();
+  // Live call rings follow who is in each call, which the calls event announces.
+  void refreshConversationWorkspace();
   if (callsPanel.value !== 'collapsed') void callHistory.load({ quiet: true });
 }
 

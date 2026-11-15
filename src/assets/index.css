@@ -33,6 +33,10 @@
     --harbor-danger: 196 81 61;
     --harbor-danger-strong: 169 67 50;
     --harbor-danger-soft: 255 240 234;
+    /* The live call ring: purple to red to yellow around a picture while its call is live. */
+    --harbor-live-call-start: 124 58 237;
+    --harbor-live-call-mid: 224 51 91;
+    --harbor-live-call-end: 245 184 46;
     --harbor-shadow-soft: 0 1px 2px rgb(var(--harbor-ink) / 0.06), 0 4px 14px rgb(var(--harbor-ink) / 0.08);
     --harbor-shadow-raised: 0 1px 2px rgb(var(--harbor-ink) / 0.08), 0 6px 18px rgb(var(--harbor-ink) / 0.12);
     /* Even on every side, for fields such as the search pills. */
@@ -2086,4 +2090,20 @@
   [data-meeting-invite].call-invite-sheet[data-state] {
     animation-duration: 1ms;
   }
+}
+
+/* A picture in a live call: the gradient ring takes the place of the presence border. The disc behind the
+   picture keeps the avatar colour, so only the border changes. Pair with `border-2`. */
+.harbor-live-call-ring {
+  border-color: transparent;
+  background-image:
+    linear-gradient(rgb(var(--harbor-avatar)), rgb(var(--harbor-avatar))),
+    linear-gradient(
+      135deg,
+      rgb(var(--harbor-live-call-start)),
+      rgb(var(--harbor-live-call-mid)),
+      rgb(var(--harbor-live-call-end))
+    );
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
 }

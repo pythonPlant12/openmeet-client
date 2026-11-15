@@ -17,6 +17,7 @@ const conversation: Conversation = {
   messageCount: 1,
   unreadCount: 0,
   markedUnread: false,
+  liveCall: null,
   createdAt: '2026-10-02T12:00:00Z',
   updatedAt: '2026-10-02T12:00:00Z',
 };
@@ -119,6 +120,38 @@ describe('ChatPane', () => {
     expect(avatar.classList).toContain('border-2');
     expect(avatar.classList).toContain('border-harbor-waveform');
     expect(wrapper.find('[data-presence-dot]').exists()).toBe(false);
+  });
+
+  it('rings the header picture while the conversation has a live call', () => {
+    const friend = {
+      id: 'friend-1',
+      name: 'Friend',
+      nickname: 'friend',
+      email: 'friend@example.com',
+      isOnline: true,
+      status: 'available',
+    };
+    const avatarOf = (wrapper: ReturnType<typeof mountPane>) =>
+      wrapper.get('header [data-conversation-avatar]').element as HTMLElement;
+
+    const direct = mountPane({
+      conversation: { ...conversation, liveCall: { id: 'call-1', memberIds: ['friend-1'] } },
+      selectedFriend: friend,
+    });
+    expect(avatarOf(direct).classList).toContain('harbor-live-call-ring');
+    expect(avatarOf(direct).classList).not.toContain('border-[#2DA58F]');
+    expect(direct.find('[data-presence-dot]').exists()).toBe(true);
+
+    const quiet = mountPane({ conversation, selectedFriend: friend });
+    expect(avatarOf(quiet).classList).not.toContain('harbor-live-call-ring');
+    expect(avatarOf(quiet).classList).toContain('border-[#2DA58F]');
+
+    const group = mountPane({
+      conversation: { ...groupConversation, liveCall: { id: 'call-2', memberIds: ['ada'] } },
+      selectedIsGroup: true,
+      selectedTitle: 'Team',
+    });
+    expect(avatarOf(group).classList).toContain('harbor-live-call-ring');
   });
 
   it('pads the header for the status bar and the composer for the home indicator, except while typing', async () => {
