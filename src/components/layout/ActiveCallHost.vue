@@ -3,11 +3,14 @@ import { useEventListener } from '@vueuse/core';
 import { computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import MiniCall from '@/components/meeting-page/MiniCall.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { saveCallSettings } from '@/lib/call-settings';
+import { answerLeaveCallPrompt, askToLeaveActiveCall, leaveCallPrompt } from '@/lib/leave-call-prompt';
+import { leavesActiveCall } from '@/lib/live-call';
 import { lastWorkspaceRoute } from '@/lib/workspace-return';
 import { followAudioOutput } from '@/services/audio-output';
 import { socialApi } from '@/services/social-api';
@@ -23,6 +26,7 @@ const {
   isConnected,
   collapsed,
   callSessionId,
+  roomId,
   activeCallRoute,
   participantsArray,
   localParticipant,
@@ -40,6 +44,22 @@ const screenShare = useScreenShare();
 router.beforeEach((to, from) => {
   if (from.name === 'meeting' && to.name !== 'meeting' && isAuthenticated.value && isConnected.value) collapse();
 });
+// Only one active call at a time: opening a different room (a Join button, a menu item, an accepted ring, a
+// room link, Call again) first asks whether to leave the current call. Returning to the active call never asks.
+router.beforeEach(async (to) => {
+  if (to.name !== 'meeting' || !isAuthenticated.value) return;
+  const targetId = String(to.params.id ?? '');
+  const active = { connected: isConnected.value, callSessionId: callSessionId.value, roomId: roomId.value };
+  if (!leavesActiveCall(active, targetId)) return;
+  if (!(await askToLeaveActiveCall())) return false;
+  endActiveCall();
+});
+
+/** Ends the active call; the screen share stops with it (see the connection watch). */
+function endActiveCall() {
+  screenShare.stop();
+  leaveRoom();
+}
 router.afterEach((to) => {
   if (to.name !== 'meeting') lastWorkspaceRoute.value = to.fullPath;
 });
@@ -104,12 +124,21 @@ function handleMute() {
 }
 
 function handleLeave() {
-  screenShare.stop();
-  leaveRoom();
+  endActiveCall();
 }
 </script>
 
 <template>
+  <ConfirmDialog
+    :open="!!leaveCallPrompt"
+    title="Leave current call?"
+    description="You'll leave the call you are in and join the other one."
+    action-label="Leave and join"
+    cancel-label="Cancel"
+    @update:open="(open) => !open && answerLeaveCallPrompt(false)"
+    @confirm="answerLeaveCallPrompt(true)"
+    @cancel="answerLeaveCallPrompt(false)"
+  />
   <MiniCall
     v-if="showsMiniCall"
     :participants="miniParticipants"

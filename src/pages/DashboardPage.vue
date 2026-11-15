@@ -33,7 +33,8 @@ import { useWebrtc } from '@/composables/useWebrtc';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useOwnProfile } from '@/composables/useOwnProfile';
 import { formatListTime } from '@/lib/list-time';
-import { showsLiveCallRing } from '@/lib/live-call';
+import { askToLeaveActiveCall } from '@/lib/leave-call-prompt';
+import { leavesActiveCall, showsLiveCallRing } from '@/lib/live-call';
 import { callAgainTargets } from '@/lib/meetings';
 import {
   type ConversationActivity,
@@ -482,10 +483,31 @@ const contactProfilePendingRequest = computed(() =>
 );
 const isCallLaunchActive = computed(() => startingCallConversationId.value !== null);
 // The active call (ADR 0001): a live call that is yours offers Return to call, which expands the call screen.
-const { callSessionId: activeCallSessionId, activeCallRoute, expand: expandActiveCall } = useWebrtc();
+const {
+  callSessionId: activeCallSessionId,
+  roomId: activeRoomId,
+  isConnected: isActiveCallConnected,
+  activeCallRoute,
+  expand: expandActiveCall,
+  leaveRoom: leaveActiveCall,
+} = useWebrtc();
 function returnToActiveCall() {
   expandActiveCall();
   if (activeCallRoute.value) void router.push(activeCallRoute.value);
+}
+// Before a call on another conversation is started or joined on the server, the person decides whether to
+// leave the active call; a conversation whose live call is the active call simply returns to it.
+async function leaveActiveCallFor(conversation: Conversation): Promise<boolean> {
+  const active = {
+    connected: isActiveCallConnected.value,
+    callSessionId: activeCallSessionId.value,
+    roomId: activeRoomId.value,
+  };
+  const target = conversation.liveCall?.id ?? `new-call-for-${conversation.id}`;
+  if (!leavesActiveCall(active, target)) return true;
+  if (!(await askToLeaveActiveCall())) return false;
+  leaveActiveCall();
+  return true;
 }
 
 function beginGroupMutation(groupId: string) {
@@ -2371,6 +2393,11 @@ watch(
 async function startConversationCall(conversation: Conversation, options?: { video: boolean }) {
   const token = accessToken.value;
   if (!token || startingCallConversationId.value) return;
+  if (conversation.liveCall && conversation.liveCall.id === activeCallSessionId.value) {
+    returnToActiveCall();
+    return;
+  }
+  if (!(await leaveActiveCallFor(conversation))) return;
 
   clearFeedback();
   const request = ++callLaunchRequest;

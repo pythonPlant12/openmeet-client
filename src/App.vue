@@ -22,6 +22,8 @@ import { type SocialAlert, type SocialEventResource, socialEventsService } from 
 import { SystemAlerts } from '@/services/system-alerts';
 import { startSystemBarSync } from '@/services/system-bars';
 
+import { askToLeaveActiveCall } from '@/lib/leave-call-prompt';
+
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
 import { AuthEventType } from './xstate/machines/auth/types';
@@ -83,6 +85,11 @@ const isAnsweringCall = ref(false);
 async function respondToRingingCall(accept: boolean) {
   const ringing = ringingCall.value;
   if (!ringing || isAnsweringCall.value) return;
+  // Accepting a ring while in a call means leaving that call: the person decides first (ADR 0001).
+  if (accept && webrtcActor.snapshot.value.matches('connected')) {
+    if (!(await askToLeaveActiveCall())) return;
+    webrtcActor.send({ type: 'LEAVE_ROOM' });
+  }
   isAnsweringCall.value = true;
   try {
     await (accept ? acceptIncomingCall(ringing) : declineIncomingCall(ringing));

@@ -29,6 +29,11 @@ test.describe('live call', () => {
     const bob = await registerAccount(request, `bob_${unique}`, 'Bob Live');
     await makeFriends(request, alice, bob);
     const group = await createGroup(request, alice, [bob.id], `Live call ${unique}`);
+    // A direct chat is listed once it has a message.
+    const opened = (await (await social(request, bob, 'post', `/conversations/direct/${alice.id}`)).json()) as {
+      conversation: { id: string };
+    };
+    await social(request, bob, 'post', `/conversations/${opened.conversation.id}/messages`, { content: 'hi' });
 
     const contexts: BrowserContext[] = [];
     try {
@@ -98,6 +103,25 @@ test.describe('live call', () => {
       await expect(bobPage).toHaveURL(new RegExp(aliceRoomUrl.pathname));
       await expect(bobPage.getByTestId('participant-tile')).toHaveCount(2);
       await expect(miniCall).toHaveCount(0);
+
+      // Starting a different call asks first. Cancel keeps the group call; Leave and join ends it and joins.
+      await bobPage.goBack();
+      await expect(miniCall).toBeVisible();
+      await openConversation(bobPage, 'Alice Live');
+      await bobPage.getByRole('button', { name: 'Start an audio call' }).click();
+      const prompt = bobPage.getByRole('dialog').filter({ hasText: 'Leave current call?' });
+      await expect(prompt).toBeVisible();
+      await prompt.getByRole('button', { name: 'Cancel' }).click();
+      await expect(prompt).toHaveCount(0);
+      await expect(miniCall).toBeVisible();
+      await expect(alicePage.getByTestId('participant-tile')).toHaveCount(2);
+
+      await bobPage.getByRole('button', { name: 'Start an audio call' }).click();
+      await prompt.getByRole('button', { name: 'Leave and join' }).click();
+      await expect(bobPage).toHaveURL(/\/room\//, { timeout: 15_000 });
+      expect(new URL(bobPage.url()).pathname).not.toBe(aliceRoomUrl.pathname);
+      await expect(bobPage.getByTestId('participant-tile')).toHaveCount(1, { timeout: 20_000 });
+      await expect(alicePage.getByTestId('participant-tile')).toHaveCount(1, { timeout: 20_000 });
     } finally {
       await Promise.all(contexts.map((context) => context.close().catch(() => undefined)));
     }
