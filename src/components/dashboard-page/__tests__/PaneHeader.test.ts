@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 
 import PaneHeader from '@/components/dashboard-page/PaneHeader.vue';
@@ -54,5 +54,40 @@ describe('PaneHeader search', () => {
     const wrapper = mount(PaneHeader, { props: { title: 'Calls' } });
     expect(wrapper.find('[data-pane-search]').exists()).toBe(false);
     expect(wrapper.get('h1').text()).toBe('Calls');
+  });
+
+  function pressOutside(pointerType: string) {
+    const row = document.createElement('button');
+    const opened = vi.fn();
+    row.addEventListener('click', opened);
+    document.body.appendChild(row);
+    const press = new MouseEvent('pointerdown', { bubbles: true });
+    Object.defineProperty(press, 'pointerType', { value: pointerType });
+    row.dispatchEvent(press);
+    row.click();
+    row.remove();
+    return opened;
+  }
+
+  it('on a phone, a tap outside only closes the focused search', async () => {
+    const wrapper = mountHeader();
+    const input = wrapper.get<HTMLInputElement>('input').element;
+    input.focus();
+    await wrapper.vm.$nextTick();
+
+    const opened = pressOutside('touch');
+
+    expect(document.activeElement).not.toBe(input);
+    expect(opened).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('with a mouse, a click outside goes through at once', async () => {
+    const wrapper = mountHeader();
+    wrapper.get<HTMLInputElement>('input').element.focus();
+    await wrapper.vm.$nextTick();
+
+    expect(pressOutside('mouse')).toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

@@ -833,7 +833,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
     <!-- The composer sits on the home indicator area, so it pads for it with a little room to spare, except while
          typing: the keyboard covers that area then, and the padding would only leave a gap above it. -->
     <div
-      class="bg-harbor-canvas px-2 pt-2 sm:px-4"
+      class="bg-harbor-canvas px-3 pt-2 sm:px-4"
       :class="isComposerFocused ? 'pb-2.5' : 'pb-[max(0.625rem,calc(env(safe-area-inset-bottom)+0.375rem))]'"
       data-composer-bar
       @focusin="isComposerFocused = opensKeyboard($event.target)"

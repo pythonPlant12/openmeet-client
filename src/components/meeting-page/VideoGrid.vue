@@ -26,6 +26,8 @@ import ParticipantTile from './ParticipantTile.vue';
 
 const props = defineProps<{
   activeSpeakerId: string | null;
+  /** Everyone talking right now; each of them gets the speaking border. */
+  speakingIds?: ReadonlySet<string>;
   participants: Participant[];
   pinnedParticipantId: string | null;
   /** The person's layout choice; null follows the automatic layout for the call's size and form factor. */
@@ -129,7 +131,7 @@ const selfViewSelf = computed(() =>
   layout.value.kind === 'self-view' ? (byId.value.get(layout.value.selfId) ?? null) : null,
 );
 const isSpeaking = (participant: Participant) =>
-  props.participants.length > 1 && props.activeSpeakerId === participant.id;
+  props.participants.length > 1 && !!props.speakingIds?.has(participant.id);
 const isTileFullscreen = (participant: Participant) =>
   !!props.fullscreen && props.pinnedParticipantId === participant.id;
 

@@ -8,8 +8,9 @@ import en from '@/locales/en.json';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
 const activeSpeakerId = ref<string | null>(null);
+const speakingIds = ref<ReadonlySet<string>>(new Set());
 vi.mock('@/composables/useActiveSpeaker', () => ({
-  useActiveSpeaker: () => ({ activeSpeakerId, resumeAudioAnalysis: vi.fn().mockResolvedValue(undefined) }),
+  useActiveSpeaker: () => ({ activeSpeakerId, speakingIds, resumeAudioAnalysis: vi.fn().mockResolvedValue(undefined) }),
 }));
 
 function person(id: string, overrides: Partial<Participant> = {}): Participant {
@@ -40,11 +41,13 @@ function mountMiniCall(participants: Participant[], props: Record<string, unknow
   });
 }
 
-const shownId = (wrapper: ReturnType<typeof mountMiniCall>) => wrapper.get('[data-tile]').attributes('data-participant-id');
+const shownId = (wrapper: ReturnType<typeof mountMiniCall>) =>
+  wrapper.get('[data-tile]').attributes('data-participant-id');
 
 describe('MiniCall', () => {
   beforeEach(() => {
     activeSpeakerId.value = null;
+    speakingIds.value = new Set();
   });
   afterEach(() => {
     vi.clearAllMocks();
@@ -56,6 +59,7 @@ describe('MiniCall', () => {
     expect(shownId(wrapper)).toBe('ada');
 
     activeSpeakerId.value = 'bob';
+    speakingIds.value = new Set(['bob']);
     await nextTick();
     expect(shownId(wrapper)).toBe('bob');
     expect(wrapper.get('[data-tile]').attributes('data-speaking')).toBe('true');
@@ -65,6 +69,7 @@ describe('MiniCall', () => {
     await nextTick();
     expect(shownId(wrapper)).toBe('bob');
     activeSpeakerId.value = null;
+    speakingIds.value = new Set();
     await nextTick();
     expect(shownId(wrapper)).toBe('bob');
     expect(wrapper.get('[data-tile]').attributes('data-speaking')).toBe('false');
@@ -109,9 +114,11 @@ describe('MiniCall', () => {
     expect(wrapper.emitted('expand')).toHaveLength(1);
 
     expect(wrapper.find('[data-mini-call-conversation]').exists()).toBe(false);
-    expect(mountMiniCall([person('me', { isLocal: true })], { isMuted: true }).get('[data-mini-call-mute]').attributes('aria-label')).toBe(
-      'Unmute microphone',
-    );
+    expect(
+      mountMiniCall([person('me', { isLocal: true })], { isMuted: true })
+        .get('[data-mini-call-mute]')
+        .attributes('aria-label'),
+    ).toBe('Unmute microphone');
   });
 
   it('reveals the controls on a touch press without expanding, and hides them again', async () => {
@@ -122,11 +129,15 @@ describe('MiniCall', () => {
       expect(root.attributes('data-controls-shown')).toBe('false');
 
       const tile = wrapper.get('[data-mini-call-tile]').element;
-      tile.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch', button: 0 }));
+      tile.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, pointerType: 'touch', button: 0 }),
+      );
       vi.advanceTimersByTime(400);
       await nextTick();
       expect(root.attributes('data-controls-shown')).toBe('true');
-      tile.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch', button: 0 }));
+      tile.dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, pointerId: 1, pointerType: 'touch', button: 0 }),
+      );
       tile.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await nextTick();
       // The press that revealed the controls is not a tap.
@@ -153,16 +164,31 @@ describe('MiniCall', () => {
         return { left: 0, top: 0, width: 390, height: 700, right: 390, bottom: 700, x: 0, y: 0 } as DOMRect;
       }
       const corner = corners[(this.dataset.corner as keyof typeof corners) ?? 'bottom-right'];
-      return { left: corner.left, top: corner.top, width: 116, height: 144, right: 0, bottom: 0, x: 0, y: 0 } as DOMRect;
+      return {
+        left: corner.left,
+        top: corner.top,
+        width: 116,
+        height: 144,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+      } as DOMRect;
     });
     try {
       const wrapper = mountMiniCall([person('me', { isLocal: true }), person('ada')]);
       const root = wrapper.get('[data-mini-call]');
       expect(root.attributes('data-corner')).toBe('bottom-right');
 
-      root.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0, clientX: 300, clientY: 600 }));
-      root.element.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, button: 0, clientX: 40, clientY: 60 }));
-      root.element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, button: 0, clientX: 40, clientY: 60 }));
+      root.element.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0, clientX: 300, clientY: 600 }),
+      );
+      root.element.dispatchEvent(
+        new PointerEvent('pointermove', { bubbles: true, pointerId: 1, button: 0, clientX: 40, clientY: 60 }),
+      );
+      root.element.dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, pointerId: 1, button: 0, clientX: 40, clientY: 60 }),
+      );
       root.element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await nextTick();
       await nextTick();

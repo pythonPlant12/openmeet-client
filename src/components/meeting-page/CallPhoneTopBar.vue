@@ -8,14 +8,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import CallInviteMenuItems from './CallInviteMenuItems.vue';
 
 // The phone call screen's top bar: the room name, which opens the controls panel, then audio output, invite, the
-// camera flip while the camera is on, and chat. It sits below the notch. For signed-in people the collapse
-// button on the left shrinks the call to the mini call (ADR 0001).
+// camera flip while the camera is on and a back camera exists, and chat. It sits below the notch. For signed-in
+// people the collapse button on the left shrinks the call to the mini call (ADR 0001).
 const props = defineProps<{
   roomName: string;
   /** Signed-in people can collapse the call; guests have no workspace to return to. */
   canCollapse?: boolean;
-  /** The camera flip shows only while your camera is on. */
-  cameraOn?: boolean;
+  /** The camera flip shows only while your camera is on and the device has a back camera. */
+  canFlipCamera?: boolean;
   meetingId: string;
   inviteMode: 'enabled' | 'signedOut' | 'hidden';
   isChatOpen: boolean;
@@ -87,7 +87,7 @@ const chatAriaLabel = computed(() => {
         </DropdownMenuContent>
       </DropdownMenu>
       <button
-        v-if="cameraOn"
+        v-if="canFlipCamera"
         type="button"
         class="call-button call-chip size-11"
         :aria-label="t('meeting.controls.flipCamera')"

@@ -1,4 +1,4 @@
-import { type Ref, onMounted, onUnmounted, ref, watch } from 'vue';
+import { type Ref, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import { getServices } from '@/xstate/machines/webrtc/actors';
 import type { Participant } from '@/xstate/machines/webrtc/types';
@@ -65,6 +65,38 @@ export function createActiveSpeakerDetector(options: ActiveSpeakerOptions = {}) 
   };
 }
 
+interface SpeakingOptions {
+  releaseMs?: number;
+  threshold?: number;
+}
+
+/**
+ * Everyone talking right now, for the speaking borders. Unlike the one active speaker that picks the layout, any
+ * number of people can talk at once. A person counts as speaking from the first sample their voice passes the
+ * threshold, and stops after a short silence, so pauses between words do not blink the border.
+ */
+export function createSpeakingTracker(options: SpeakingOptions = {}) {
+  const releaseMs = options.releaseMs ?? 600;
+  const threshold = options.threshold ?? 0.012;
+  const lastHeard = new Map<string, number>();
+
+  return {
+    update(levels: Map<string, number>, now = Date.now()): ReadonlySet<string> {
+      for (const [participantId, level] of levels) if (level > threshold) lastHeard.set(participantId, now);
+      const speaking = new Set<string>();
+      for (const [participantId, heardAt] of lastHeard) {
+        if (!levels.has(participantId) || now - heardAt > releaseMs) lastHeard.delete(participantId);
+        else speaking.add(participantId);
+      }
+      return speaking;
+    },
+  };
+}
+
+function sameIds(a: ReadonlySet<string>, b: ReadonlySet<string>) {
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
 interface AudioAnalyserEntry {
   analyser: AnalyserNode;
   data: Uint8Array<ArrayBuffer>;
@@ -74,9 +106,18 @@ interface AudioAnalyserEntry {
 
 export function useActiveSpeaker(participants: Ref<Participant[]>, options: ActiveSpeakerOptions = {}) {
   const activeSpeakerId = ref<string | null>(null);
-  const detector = createActiveSpeakerDetector(options);
+  const speakingIds = shallowRef<ReadonlySet<string>>(new Set());
+  // Levels are read often so a speaking border lights up quickly. The layout's speaker still needs about 0.8 s of
+  // voice to take over and 1.6 s of silence to let go, so the main tile does not jump between people talking over
+  // each other.
+  const pollMs = options.pollMs ?? 150;
+  const detector = createActiveSpeakerDetector({
+    attackSamples: Math.ceil(800 / pollMs),
+    releaseSamples: Math.ceil(1_600 / pollMs),
+    ...options,
+  });
+  const speakingTracker = createSpeakingTracker();
   const analysers = new Map<string, AudioAnalyserEntry>();
-  const pollMs = options.pollMs ?? 400;
   let audioContext: AudioContext | null = null;
   let isSampling = false;
   let stopped = false;
@@ -148,7 +189,10 @@ export function useActiveSpeaker(participants: Ref<Participant[]>, options: Acti
           .find((level): level is number => typeof level === 'number');
         participantLevels.set(participant.id, statsLevel ?? fallbackLevel(participant));
       }
-      if (!stopped) activeSpeakerId.value = detector.update(participantLevels);
+      if (stopped) return;
+      activeSpeakerId.value = detector.update(participantLevels);
+      const speaking = speakingTracker.update(participantLevels);
+      if (!sameIds(speaking, speakingIds.value)) speakingIds.value = speaking;
     } finally {
       isSampling = false;
     }
@@ -160,6 +204,7 @@ export function useActiveSpeaker(participants: Ref<Participant[]>, options: Acti
     timer = setInterval(() => {
       void sample().catch(() => {
         activeSpeakerId.value = detector.update(new Map());
+        speakingIds.value = speakingTracker.update(new Map());
       });
     }, pollMs);
   });
@@ -169,5 +214,5 @@ export function useActiveSpeaker(participants: Ref<Participant[]>, options: Acti
     cleanupAnalysers();
   });
 
-  return { activeSpeakerId, resumeAudioAnalysis };
+  return { activeSpeakerId, speakingIds, resumeAudioAnalysis };
 }

@@ -50,10 +50,10 @@ describe('CallPhoneTopBar', () => {
     expect(wrapper.emitted('open-panel')).toHaveLength(1);
   });
 
-  it('offers the camera flip only while the camera is on', async () => {
-    expect(mountBar({ cameraOn: false }).find('[data-flip-camera]').exists()).toBe(false);
+  it('offers the camera flip only when the camera can flip', async () => {
+    expect(mountBar({ canFlipCamera: false }).find('[data-flip-camera]').exists()).toBe(false);
 
-    const wrapper = mountBar({ cameraOn: true });
+    const wrapper = mountBar({ canFlipCamera: true });
     await wrapper.get('[data-flip-camera]').trigger('click');
     expect(wrapper.emitted('flip-camera')).toHaveLength(1);
   });

@@ -47,8 +47,8 @@ const { default: MeetingCameraPreview } = await import('@/components/meeting-pag
 
 enableAutoUnmount(afterEach);
 
-function track(deviceId: string) {
-  return { kind: 'video', deviceId, stop: vi.fn(), getSettings: () => ({ deviceId }) };
+function track(deviceId: string, facingMode?: string) {
+  return { kind: 'video', deviceId, label: '', stop: vi.fn(), getSettings: () => ({ deviceId, facingMode }) };
 }
 
 // The dialog reports a tap outside the way the real one does, through update:open.
@@ -96,7 +96,7 @@ describe('MeetingCameraPreview', () => {
     vi.stubGlobal(
       'MediaStream',
       vi.fn(function MediaStream(tracks: unknown[]) {
-        return { tracks, getTracks: () => tracks };
+        return { tracks, getTracks: () => tracks, getVideoTracks: () => tracks };
       }),
     );
   });
@@ -180,6 +180,17 @@ describe('MeetingCameraPreview', () => {
     expect(getUserMedia).not.toHaveBeenCalled();
     await wrapper.get('[data-camera-preview-confirm]').trigger('click');
     expect(wrapper.emitted('confirm')).toEqual([[null]]);
+  });
+
+  it('mirrors the selfie camera but not the back camera', async () => {
+    const wrapper = mountPreview();
+    await flushPromises();
+    expect(wrapper.get('[data-preview-video]').classes()).toContain('-scale-x-100');
+
+    calls.liveCamera = track('back-cam', 'environment');
+    const live = mountPreview(true);
+    await flushPromises();
+    expect(live.get('[data-preview-video]').classes()).not.toContain('-scale-x-100');
   });
 
   it('fills the screen on a phone, and a tap on the video shows the whole picture and back', async () => {

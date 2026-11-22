@@ -2443,9 +2443,10 @@ async function startConversationCall(conversation: Conversation, options?: { vid
         : 'h-full max-sm:[--sidebar-bottom-inset:calc(var(--liquid-bar-bottom)+var(--liquid-bar-height)+12px)]'
     "
   >
+    <!-- The page itself fades in (App.vue), so the workspace only settles into place. -->
     <motion.div
-      :initial="{ opacity: 0, y: 10 }"
-      :animate="{ opacity: 1, y: 0 }"
+      :initial="{ y: 10 }"
+      :animate="{ y: 0 }"
       :transition="{ duration: 0.35 }"
       class="relative mx-auto h-full max-w-[1600px] overflow-hidden bg-white sm:rounded-[1.75rem] sm:border sm:border-harbor-line sm:shadow-[0_20px_70px_rgba(17,27,33,0.08)] lg:grid lg:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]"
     >

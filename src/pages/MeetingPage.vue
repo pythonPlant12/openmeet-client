@@ -36,6 +36,7 @@ import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { loadCallSettings, needsCameraPreview, saveCallSettings } from '@/lib/call-settings';
+import { hasBackCamera, localCameraFacing, localCameraMirrored } from '@/lib/camera-facing';
 import { selectCallLayout } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
 import { workspaceReturnRoute } from '@/lib/workspace-return';
@@ -93,13 +94,14 @@ const {
   leaveRoom: endCall,
   toggleParticipantAudio,
   toggleParticipantVideo,
+  sendLocalMediaState,
   setCameraEnabled,
   sendChatMessage,
   sendChatReaction,
   retry,
 } = useWebrtc();
 
-const { activeSpeakerId, resumeAudioAnalysis } = useActiveSpeaker(participantsArray);
+const { activeSpeakerId, speakingIds, resumeAudioAnalysis } = useActiveSpeaker(participantsArray);
 useConnectionHaptics(isReconnecting, connectionState);
 const screenShare = useScreenShare();
 // Screen shares join as their own participants. Your own share is shown from the local capture, since the
@@ -532,6 +534,9 @@ watch(
         toggleParticipantAudio(localParticipantId.value, audioEnabled);
         toggleParticipantVideo(localParticipantId.value, videoEnabled);
         pendingInitialMediaState.value = null;
+      } else if (!localCameraMirrored.value) {
+        // The room takes every camera to be mirrored until told otherwise, such as for a phone's back camera.
+        sendLocalMediaState();
       }
 
       void recordMeetingHistory();
@@ -876,17 +881,51 @@ function toggleOwnCamera() {
   saveCallSettings({ showOwnCamera: showOwnCamera.value });
 }
 
-// The top bar's camera flip moves to the next camera, such as from the front to the back camera of a phone.
+// The top bar's camera flip turns between the selfie camera and the back camera of a phone. It shows only where a
+// back camera exists; the camera list has names and facings once the camera is allowed, so it is read again when
+// the camera turns on or a camera comes or goes.
 const cameraSettings = useMeetingMediaSettings('video');
+const canFlipCamera = computed(
+  () => localCameraFacing.value === 'environment' || hasBackCamera(cameraSettings.devices.value),
+);
+watch(
+  () => hasJoined.value && !isVideoOff.value,
+  (cameraOn) => {
+    if (cameraOn) void cameraSettings.refresh();
+  },
+  { immediate: true },
+);
+useEventListener(
+  () => navigator.mediaDevices,
+  'devicechange',
+  () => void cameraSettings.refresh(),
+);
+
+// Others show your camera the way you see it, so turning to or from the back camera tells the room.
+watch(localCameraMirrored, () => {
+  if (state.value === 'inCall') sendLocalMediaState();
+});
+
+let isFlippingCamera = false;
 async function flipCamera() {
-  await cameraSettings.refresh();
-  const cameras = cameraSettings.devices.value;
-  if (cameras.length < 2) return;
-  const current = cameras.findIndex((camera) => camera.deviceId === cameraSettings.activeId.value);
-  const next = cameras[(current + 1) % cameras.length];
-  if (next && (await cameraSettings.changeDevice(next.deviceId))) {
-    playHaptic('light');
+  const service = getServices().webrtcService;
+  if (!service || isFlippingCamera) return;
+  isFlippingCamera = true;
+  try {
+    const issue = await service.flipCamera();
     refreshMediaAvailability();
+    if (issue === 'denied') {
+      permissionSheetKind.value = 'video';
+      isPermissionSheetOpen.value = true;
+    } else if (issue) {
+      toast({ title: t('meeting.controls.flipCameraFailed'), variant: 'destructive' });
+    } else {
+      playHaptic('light');
+      const cameraId = service.getActiveDeviceId('video');
+      if (cameraId) saveCallSettings({ cameraId });
+    }
+  } finally {
+    isFlippingCamera = false;
   }
 }
 
@@ -1075,7 +1114,7 @@ const handleReconnect = () => {
           v-if="usesPhoneChrome && showsControls"
           :room-name="roomName"
           :can-collapse="isAuthenticated"
-          :camera-on="!isVideoOff"
+          :can-flip-camera="!isVideoOff && canFlipCamera"
           :meeting-id="meetingId"
           :invite-mode="inviteMode"
           :is-chat-open="isChatOpen"
@@ -1226,6 +1265,7 @@ const handleReconnect = () => {
       <div v-else class="flex-1 flex flex-col">
         <VideoGrid
           :active-speaker-id="activeSpeakerId"
+          :speaking-ids="speakingIds"
           :participants="meetingParticipants"
           :pinned-participant-id="pinnedParticipantId"
           :participant-statuses="participantStatuses"

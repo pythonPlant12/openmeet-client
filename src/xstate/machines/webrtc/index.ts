@@ -1,6 +1,7 @@
 import { assign, setup } from 'xstate';
 
 import { i18n } from '@/i18n';
+import { localCameraMirrored } from '@/lib/camera-facing';
 import type { SignalingChatReaction } from '@/services/signaling';
 import type { DeviceConstraints } from '@/services/webrtc-sfu';
 
@@ -59,10 +60,8 @@ export const webrtcMachine = setup({
     }),
 
     setCallIds: assign({
-      callSessionId: (_, params: { callSessionId?: string; conversationId?: string }) =>
-        params.callSessionId ?? null,
-      conversationId: (_, params: { callSessionId?: string; conversationId?: string }) =>
-        params.conversationId ?? null,
+      callSessionId: (_, params: { callSessionId?: string; conversationId?: string }) => params.callSessionId ?? null,
+      conversationId: (_, params: { callSessionId?: string; conversationId?: string }) => params.conversationId ?? null,
     }),
 
     setCollapsed: assign({
@@ -170,7 +169,10 @@ export const webrtcMachine = setup({
     }),
 
     updateMediaState: assign({
-      participants: ({ context }, params: { participantId: string; audioEnabled: boolean; videoEnabled: boolean }) => {
+      participants: (
+        { context },
+        params: { participantId: string; audioEnabled: boolean; videoEnabled: boolean; videoMirrored?: boolean },
+      ) => {
         const participant = context.participants.get(params.participantId);
         if (!participant || participant.isLocal) return context.participants;
 
@@ -179,6 +181,7 @@ export const webrtcMachine = setup({
           ...participant,
           audioEnabled: params.audioEnabled,
           videoEnabled: params.videoEnabled,
+          videoMirrored: params.videoMirrored ?? true,
         });
         return newParticipants;
       },
@@ -251,7 +254,11 @@ export const webrtcMachine = setup({
         });
 
         // Notify server
-        getSignalingService()?.sendMediaStateChanged(params.enabled, participant.videoEnabled);
+        getSignalingService()?.sendMediaStateChanged(
+          params.enabled,
+          participant.videoEnabled,
+          localCameraMirrored.value,
+        );
 
         return newParticipants;
       },
@@ -273,7 +280,11 @@ export const webrtcMachine = setup({
         });
 
         // Notify server
-        getSignalingService()?.sendMediaStateChanged(participant.audioEnabled, params.enabled);
+        getSignalingService()?.sendMediaStateChanged(
+          participant.audioEnabled,
+          params.enabled,
+          localCameraMirrored.value,
+        );
 
         return newParticipants;
       },
@@ -473,6 +484,7 @@ export const webrtcMachine = setup({
                 participantId: event.participantId,
                 audioEnabled: event.audioEnabled,
                 videoEnabled: event.videoEnabled,
+                videoMirrored: event.videoMirrored,
               }),
             },
           ],

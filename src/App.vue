@@ -580,7 +580,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="isAuthenticated ? 'h-[100dvh] overflow-hidden bg-harbor-app' : 'min-h-screen bg-harbor-surface'">
+  <div
+    class="relative"
+    :class="isAuthenticated ? 'h-[100dvh] overflow-hidden bg-harbor-app' : 'min-h-screen bg-harbor-surface'"
+  >
     <TheNavbar />
     <IncomingCallBar
       v-if="isAuthenticated && ringingCall"
@@ -594,7 +597,7 @@ onUnmounted(() => {
     <ActiveCallHost />
 
     <RouterView v-slot="{ Component, route }">
-      <Transition name="page-fade" mode="out-in">
+      <Transition name="page-fade">
         <div :key="route.path" :class="route.meta.isAuthPage ? '' : 'h-full sm:pt-[84px]'">
           <component :is="Component" />
         </div>

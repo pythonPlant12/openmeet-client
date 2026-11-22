@@ -1,4 +1,5 @@
 import { i18n } from '@/i18n';
+import { type CameraFacing, cameraFacingOf, setLocalCameraFacing } from '@/lib/camera-facing';
 
 import { resolveReachableTurnUrl } from './dev-networking';
 import { MicInput } from './mic-input';
@@ -151,6 +152,8 @@ export class WebRTCServiceSFU {
   private micInput: MicInput | null = null;
   private inputVolume = 1;
   private mediaIssues: Partial<Record<MediaKind, MediaIssue>> = {};
+  /** The camera a flip is replacing; its end during the flip is not a lost camera. */
+  private flippingCamera: MediaStreamTrack | null = null;
   /** Called when the microphone or camera stops on its own, such as a revoked permission or an unplugged device. */
   onLocalTrackLost: ((kind: MediaKind) => void) | null = null;
   private readonly videoQualityController: SenderQualityController;
@@ -344,12 +347,13 @@ export class WebRTCServiceSFU {
 
   /** A track ends on its own when its permission is revoked or its device goes away; the app's own stop does not. */
   private watchTrack(track: MediaStreamTrack) {
+    if (track.kind === 'video') setLocalCameraFacing(cameraFacingOf(track));
     track.addEventListener('ended', () => void this.handleTrackLost(track), { once: true });
   }
 
   private async handleTrackLost(track: MediaStreamTrack) {
     const stream = this.localStream;
-    if (!stream?.getTracks().includes(track)) return;
+    if (track === this.flippingCamera || !stream?.getTracks().includes(track)) return;
     const kind = track.kind as MediaKind;
     console.warn(`[WebRTCServiceSFU] Local ${kind} track ended`);
     stream.removeTrack(track);
@@ -653,6 +657,75 @@ export class WebRTCServiceSFU {
     } catch (error) {
       console.error('[WebRTCServiceSFU] Failed to open the camera:', error);
       throw new Error(i18n.global.t('errors.mediaAccess', { message: mediaErrorMessage(error) }));
+    }
+  }
+
+  /**
+   * Turns the camera to the other side of the phone: to the back camera from the selfie camera, and back again. The
+   * browser opens that side's default camera, so a phone with several back lenses uses its main one, and it asks for
+   * permission when that camera has none yet. Like a device switch, the new camera goes on the same sender. Returns
+   * why the camera did not turn, or null once it did.
+   */
+  async flipCamera(): Promise<MediaIssue | null> {
+    const previous = this.localStream?.getVideoTracks()[0];
+    if (!previous || previous.readyState !== 'live') return 'unavailable';
+    const facing: CameraFacing = cameraFacingOf(previous) === 'environment' ? 'user' : 'environment';
+    const previousId = previous.getSettings().deviceId;
+    const constraints = captureConstraints(CAMERA_LEVELS, this.videoQuality);
+    const open = (video: MediaTrackConstraints) =>
+      navigator.mediaDevices.getUserMedia({ video }).then((stream) => stream.getVideoTracks()[0]!);
+    const openOtherSide = () => open({ ...constraints, facingMode: { exact: facing } });
+    // Read again after each await: the phone may have ended the camera meanwhile.
+    const previousEnded = () => previous.readyState === 'ended';
+
+    // iOS ends the current camera as soon as another one opens. That end is part of the flip, not a lost camera,
+    // so the camera stays on for everyone.
+    this.flippingCamera = previous;
+    try {
+      let replacement: MediaStreamTrack | null = null;
+      let issue: MediaIssue | null = null;
+      try {
+        replacement = await openOtherSide();
+      } catch (error) {
+        console.warn('[WebRTCServiceSFU] Could not flip the camera:', error);
+        issue = mediaIssueOf(error);
+        // Many phones cannot run the front and back cameras at once, so the current one stops for a second try.
+        if (error instanceof DOMException && error.name === 'NotReadableError') {
+          previous.stop();
+          try {
+            replacement = await openOtherSide();
+            issue = null;
+          } catch (retryError) {
+            console.warn('[WebRTCServiceSFU] Could not flip the camera after stopping it:', retryError);
+            issue = mediaIssueOf(retryError);
+          }
+        }
+      }
+      // A flip that failed after the current camera stopped opens that camera again.
+      if (!replacement && previousEnded()) {
+        replacement = await open({ ...constraints, ...(previousId ? { deviceId: { exact: previousId } } : {}) }).catch(
+          () => null,
+        );
+      }
+      if (!replacement) {
+        this.flippingCamera = null;
+        if (previousEnded()) await this.handleTrackLost(previous);
+        return issue ?? 'unavailable';
+      }
+
+      // A camera that was on stays on with the other side.
+      replacement.enabled = previous.enabled;
+      await this.localSender('video', previous)?.replaceTrack(replacement);
+      this.localStream?.removeTrack(previous);
+      previous.stop();
+      this.localStream?.addTrack(replacement);
+      this.watchTrack(replacement);
+      delete this.mediaIssues.video;
+      await this.videoQualityController.apply();
+      if (!issue) console.log('[WebRTCServiceSFU] Flipped the camera:', cameraFacingOf(replacement) ?? facing);
+      return issue;
+    } finally {
+      this.flippingCamera = null;
     }
   }
 
