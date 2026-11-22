@@ -280,13 +280,8 @@ describe('ParticipantTile video', () => {
     setLocalCameraFacing(null);
   });
 
-  it("shows another person's camera the way they see it", () => {
-    const remote = (videoMirrored?: boolean) =>
-      mountTile(null, 'grid', { participant: { ...participant, stream, videoMirrored } as typeof participant })
-        .get('[data-testid="participant-video"]')
-        .classes();
-    expect(remote()).toContain('-scale-x-100');
-    expect(remote(true)).toContain('-scale-x-100');
-    expect(remote(false)).not.toContain('-scale-x-100');
+  it("never mirrors another person's camera", () => {
+    const remote = mountTile(null, 'grid', { participant: { ...participant, stream } as typeof participant });
+    expect(remote.get('[data-testid="participant-video"]').classes()).not.toContain('-scale-x-100');
   });
 });

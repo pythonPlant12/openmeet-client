@@ -298,7 +298,8 @@ test.describe('multi-participant media', () => {
   });
 
   test.describe('with a front and a back camera', () => {
-    test("the other person sees the sender's camera the way the sender sees it", async ({ browser, baseURL }) => {
+    // Like other video calls: only your own preview of the selfie camera is mirrored; others see every camera as it is.
+    test('mirrors only your own selfie preview, never what the other person sees', async ({ browser, baseURL }) => {
       test.setTimeout(180_000);
 
       const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'camera-mirror-e2e', 'stun+turn', {
@@ -322,7 +323,7 @@ test.describe('multi-participant media', () => {
         await waitForAllConnections(session.pages);
         await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
         await expect(ownVideo).toHaveClass(mirrored);
-        await expect(senderOnReceiver).toHaveClass(mirrored);
+        await expect(senderOnReceiver).not.toHaveClass(mirrored);
 
         await switchOwnDevice(sender, 'video');
         await expect(ownVideo).not.toHaveClass(mirrored);
@@ -330,7 +331,7 @@ test.describe('multi-participant media', () => {
 
         await switchOwnDevice(sender, 'video');
         await expect(ownVideo).toHaveClass(mirrored);
-        await expect(senderOnReceiver).toHaveClass(mirrored);
+        await expect(senderOnReceiver).not.toHaveClass(mirrored);
       } finally {
         test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
         await closeContexts(session.contexts);
@@ -588,7 +589,10 @@ async function joinParticipants(
     }
     if (initScript) await context.addInitScript(initScript);
     if (knownName) {
-      await context.addInitScript((name: string) => sessionStorage.setItem('participantName', name), `User ${index + 1}`);
+      await context.addInitScript(
+        (name: string) => sessionStorage.setItem('participantName', name),
+        `User ${index + 1}`,
+      );
     }
 
     await context.addInitScript((mode: NetworkMode) => {

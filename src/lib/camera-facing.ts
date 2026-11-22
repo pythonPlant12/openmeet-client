@@ -40,11 +40,12 @@ export function hasBackCamera(cameras: MediaDeviceInfo[]): boolean {
   return !known && cameras.length > 1;
 }
 
-// The side the camera you send looks out of. Your camera is mirrored only for the selfie camera, so it moves like a
-// mirror; the back camera shows the scene the right way round. Everyone in the call shows it the same way.
+// The side the camera you send looks out of. Like other video calls, only your own preview of the selfie camera is
+// mirrored, so it moves like a mirror; the back camera shows the scene the right way round. Others always see the
+// camera as it is, never mirrored.
 const localFacing = ref<CameraFacing | null>(null);
 export const localCameraFacing = readonly(localFacing);
-/** Everyone else shows your camera the same way, so this goes to the room with your media state. */
+/** Whether your own preview of your camera is mirrored. */
 export const localCameraMirrored = computed(() => localFacing.value !== 'environment');
 
 export function setLocalCameraFacing(facing: CameraFacing | null) {

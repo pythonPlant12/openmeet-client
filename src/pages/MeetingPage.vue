@@ -36,7 +36,7 @@ import { useScreenShare } from '@/composables/useScreenShare';
 import { useWebrtc } from '@/composables/useWebrtc';
 import { MEETING_ACCESS_ERRORS } from '@/config/meeting-access.config';
 import { loadCallSettings, needsCameraPreview, saveCallSettings } from '@/lib/call-settings';
-import { hasBackCamera, localCameraFacing, localCameraMirrored } from '@/lib/camera-facing';
+import { hasBackCamera, localCameraFacing } from '@/lib/camera-facing';
 import { selectCallLayout } from '@/lib/meeting-layout';
 import { loadVideoQuality } from '@/lib/video-quality';
 import { workspaceReturnRoute } from '@/lib/workspace-return';
@@ -94,7 +94,6 @@ const {
   leaveRoom: endCall,
   toggleParticipantAudio,
   toggleParticipantVideo,
-  sendLocalMediaState,
   setCameraEnabled,
   sendChatMessage,
   sendChatReaction,
@@ -184,10 +183,8 @@ const { height: addPeopleRowHeight } = useElementSize(addPeopleRow, undefined, {
 const phoneControlsHeight = computed(() => {
   const measured = phoneControls.value?.restingHeight ?? 0;
   const tray = measured > 0 ? `${measured}px` : 'calc(var(--meeting-control-size) + 2.25rem)';
-  // Full screen lifts the bar by 0.25rem (see CallPhoneControls).
-  const lift = isFullscreen.value ? ' + 0.25rem' : '';
-  // The bar's gap to the screen bottom, as CallPhoneControls pads it: 0.5rem, and 0.5rem above the home indicator.
-  return `calc(max(0.5rem, calc(env(safe-area-inset-bottom) + 0.5rem)) + ${tray}${lift})`;
+  // The bar's gap to the screen bottom, as CallPhoneControls pads it: 18px, or 0.5rem above the home indicator.
+  return `calc(max(1.125rem, calc(env(safe-area-inset-bottom) + 0.5rem)) + ${tray})`;
 });
 const callAreaStyle = computed(() =>
   usesPhoneChrome.value
@@ -534,9 +531,6 @@ watch(
         toggleParticipantAudio(localParticipantId.value, audioEnabled);
         toggleParticipantVideo(localParticipantId.value, videoEnabled);
         pendingInitialMediaState.value = null;
-      } else if (!localCameraMirrored.value) {
-        // The room takes every camera to be mirrored until told otherwise, such as for a phone's back camera.
-        sendLocalMediaState();
       }
 
       void recordMeetingHistory();
@@ -900,11 +894,6 @@ useEventListener(
   'devicechange',
   () => void cameraSettings.refresh(),
 );
-
-// Others show your camera the way you see it, so turning to or from the back camera tells the room.
-watch(localCameraMirrored, () => {
-  if (state.value === 'inCall') sendLocalMediaState();
-});
 
 let isFlippingCamera = false;
 async function flipCamera() {
@@ -1286,7 +1275,7 @@ const handleReconnect = () => {
           <div
             v-if="showsAddPeople"
             ref="addPeopleRow"
-            class="pointer-events-none fixed inset-x-0 bottom-[var(--call-controls-height)] z-40 flex justify-center px-2 pb-2"
+            class="pointer-events-none fixed inset-x-0 bottom-[var(--call-controls-height)] z-40 flex justify-center px-4 pb-2"
           >
             <CallAddPeopleCard alone @invite="isInviteOpen = true" />
           </div>
@@ -1304,7 +1293,6 @@ const handleReconnect = () => {
             :show-own-camera="showOwnCamera"
             :audio-warning="audioWarning"
             :video-warning="videoWarning"
-            :fullscreen="isFullscreen"
             @toggle-mute="handleToggleMute"
             @toggle-video="handleToggleVideo"
             @request-access="handleRequestAccess"

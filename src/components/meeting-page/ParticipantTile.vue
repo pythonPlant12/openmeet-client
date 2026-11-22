@@ -204,12 +204,9 @@ const innerRadiusStyle = computed(() =>
 
 // Screens are never cropped or mirrored, so their text stays whole and readable.
 const isScreen = computed(() => !!props.participant.screenShareOf);
-// A selfie camera shows like a mirror, so moving left moves the picture left; a phone's back camera shows the scene
-// the right way round. Everyone in the call sees a camera the way its sender sees it.
-const isMirrored = computed(() => {
-  if (isScreen.value) return false;
-  return props.participant.isLocal ? localCameraMirrored.value : props.participant.videoMirrored !== false;
-});
+// Like other video calls, only your own selfie camera shows like a mirror, so moving left moves the picture left.
+// A phone's back camera, and everyone else's camera, show the right way round, as the camera sees it.
+const isMirrored = computed(() => props.participant.isLocal && !isScreen.value && localCameraMirrored.value);
 const objectFitClass = computed(() => {
   if (isScreen.value) return 'object-contain';
   if (props.fit) return props.fit === 'cover' ? 'object-cover' : 'object-contain';
