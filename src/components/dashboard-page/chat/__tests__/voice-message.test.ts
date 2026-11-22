@@ -9,6 +9,7 @@ import {
   levelFromTimeDomain,
   recordedVoiceMessageDetails,
   rememberVoiceMessageDetails,
+  stableSenderAvatars,
   storedWaveformLevels,
   voiceMessageFile,
   waveformBars,
@@ -71,5 +72,15 @@ describe('voice messages', () => {
     expect(replyAttachmentLabel({ attachmentFileName: 'voice-message-20261011-135407.webm', attachmentCount: 1 })).toBe(
       'Voice message',
     );
+  });
+
+  it('returns the same avatar object for equal avatars, so message rows can skip re-rendering', () => {
+    const stable = stableSenderAvatars();
+    const first = stable({ url: '/avatars/ada.jpg', initials: 'AL' });
+
+    expect(stable({ url: '/avatars/ada.jpg', initials: 'AL' })).toBe(first);
+    expect(stable({ url: '/avatars/ada-new.jpg', initials: 'AL' })).not.toBe(first);
+    expect(stable({ initials: 'AL' })).not.toBe(first);
+    expect(stable(undefined)).toBeUndefined();
   });
 });

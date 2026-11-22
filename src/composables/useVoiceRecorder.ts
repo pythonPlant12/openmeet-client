@@ -31,8 +31,6 @@ type AudioContextConstructor = typeof AudioContext;
 
 /**
  * Microphone recording for voice messages, with a live loudness level for the waveform.
- * Call `prepare()` inside the pointer handler that starts the gesture: iOS only lets audio run when
- * the audio context starts from a user gesture, and the recording itself starts after a hold delay.
  *
  * Per-frame values go to `onFrame` instead of reactive state: re-rendering the recorder on every
  * frame made its animations stutter in the iOS web view.
@@ -66,15 +64,21 @@ export function useVoiceRecorder(options: {
   // Cancelling during the microphone prompt invalidates the start that is still waiting for it.
   let generation = 0;
 
-  function prepare() {
-    if (context) return;
+  /**
+   * The audio context only measures the level for the waveform, so it opens once the microphone is open.
+   * Running before then, it made iOS rebuild the audio session while the microphone started, which
+   * doubled that start (about 0.4 s to 0.9 s on an iPhone) and froze the web view for all of it.
+   * A page that is capturing may start audio outside a gesture.
+   */
+  function openAudioContext() {
     const Context = (window.AudioContext ??
       (window as unknown as { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext) as
       | AudioContextConstructor
       | undefined;
-    if (!Context) return;
-    context = new Context();
-    void context.resume().catch(() => undefined);
+    if (!Context) return null;
+    const opened = new Context();
+    void opened.resume().catch(() => undefined);
+    return opened;
   }
 
   /**
@@ -103,7 +107,6 @@ export function useVoiceRecorder(options: {
    * `false` when the recording was cancelled first, and rejects when the microphone cannot open.
    */
   function start() {
-    prepare();
     openMicrophone();
     const startGeneration = generation;
     clockStartedAt = performance.now();
@@ -128,6 +131,7 @@ export function useVoiceRecorder(options: {
       recorder.start(250);
       audioStartedAt = performance.now();
       audioLevelOffset = levels.length;
+      context = openAudioContext();
       if (context) {
         source = context.createMediaStreamSource(nextStream);
         analyser = context.createAnalyser();
@@ -237,5 +241,5 @@ export function useVoiceRecorder(options: {
 
   onBeforeUnmount(cancel);
 
-  return { elapsedSeconds, recording, prepare, openMicrophone, start, stop, cancel };
+  return { elapsedSeconds, recording, openMicrophone, start, stop, cancel };
 }

@@ -149,6 +149,32 @@ describe('VoiceRecorder', () => {
     expect(wrapper.emitted('send')).toHaveLength(1);
   });
 
+  // On iOS an audio context running while the microphone starts doubled that start and froze the page.
+  it('opens the audio context for the waveform only once the microphone is open', async () => {
+    const contexts: string[] = [];
+    class FakeAudioContext {
+      constructor() {
+        contexts.push('opened');
+      }
+      resume = vi.fn(async () => undefined);
+      close = vi.fn(async () => undefined);
+      createMediaStreamSource = () => ({ connect: vi.fn(), disconnect: vi.fn() });
+      createAnalyser = () => ({ fftSize: 0 });
+    }
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    let openMicrophone: (stream: MediaStream) => void = () => undefined;
+    getUserMedia.mockImplementationOnce(() => new Promise<MediaStream>((resolve) => (openMicrophone = resolve)));
+    const wrapper = mountRecorder();
+    await holdUntilRecording(wrapper);
+
+    expect(contexts).toHaveLength(0);
+
+    openMicrophone({ getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream);
+    await flushPromises();
+    expect(contexts).toHaveLength(1);
+    wrapper.unmount();
+  });
+
   it('records while held and sends the voice message on release', async () => {
     const wrapper = mountRecorder();
     await holdUntilRecording(wrapper);

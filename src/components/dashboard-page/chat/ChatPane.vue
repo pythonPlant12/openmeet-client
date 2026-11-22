@@ -125,8 +125,10 @@ const messagesTop = computed(() =>
 let edgeSwipeDistance = 0;
 let edgeSwipe: { pointerId: number; startX: number; startY: number; axis: 'x' | 'y' | null } | null = null;
 // Mobile back gesture: a right swipe anywhere in the chat goes back, except on messages that can be
-// quoted, where the same swipe starts a reply. Fields stay excluded so text selection keeps working.
-const BACK_SWIPE_EXCLUDED = '[data-repliable="true"], textarea, input, button, a, [data-reaction-picker]';
+// quoted, where the same swipe starts a reply. Fields stay excluded so text selection keeps working, and
+// sliders (a voice message's waveform) so dragging them right moves the slider instead of going back.
+const BACK_SWIPE_EXCLUDED =
+  '[data-repliable="true"], textarea, input, button, a, [role="slider"], [data-reaction-picker]';
 const EDGE_SWIPE_BACK_DISTANCE = 96;
 const initial = computed(() => (props.prefersReducedMotion ? false : { opacity: 0, x: 16 }));
 const exit = computed(() => (props.prefersReducedMotion ? undefined : { opacity: 0, x: -16 }));

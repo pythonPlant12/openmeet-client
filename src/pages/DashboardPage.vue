@@ -75,6 +75,7 @@ import {
   type UserSearchResult,
   socialApi,
 } from '@/services/social-api';
+import { coverScreenTop } from '@/services/system-bars';
 import { cookieUtils } from '@/utils';
 
 const router = useRouter();
@@ -389,6 +390,12 @@ let isUnmounted = false;
 
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
 const isDesktop = useMediaQuery('(min-width: 1024px)');
+// On a phone the workspace always reaches under the status bar, and the sidebar pads for it. An open chat covers
+// that area too, so covering it only while a chat was open resized the app's web view on every open and back,
+// which made the list and the chat jump in the middle of their transitions.
+const isPhoneLayout = useMediaQuery('(max-width: 639px)');
+watch(isPhoneLayout, (phone) => coverScreenTop('dashboard', phone), { immediate: true });
+onBeforeUnmount(() => coverScreenTop('dashboard', false));
 const showNotificationPermissionWarning = computed(
   () =>
     (notificationPermission.value === 'default' || notificationPermission.value === 'denied') &&
@@ -2443,7 +2450,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       class="relative mx-auto h-full max-w-[1600px] overflow-hidden bg-white sm:rounded-[1.75rem] sm:border sm:border-harbor-line sm:shadow-[0_20px_70px_rgba(17,27,33,0.08)] lg:grid lg:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]"
     >
       <aside
-        class="flex h-full min-h-0 flex-col bg-white transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-r lg:border-harbor-line"
+        class="flex h-full min-h-0 flex-col bg-white transition-[opacity,transform] max-sm:pt-[env(safe-area-inset-top)] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:border-r lg:border-harbor-line"
         :class="
           hasSelectedConversation
             ? 'pointer-events-none absolute inset-0 -translate-x-3 opacity-0 lg:static lg:translate-x-0 lg:opacity-100 lg:pointer-events-auto'

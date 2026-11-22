@@ -201,3 +201,23 @@ export interface SenderAvatar {
   url?: string;
   initials: string;
 }
+
+// Plenty for every sender in a chat; past it, the cache starts over instead of growing all session.
+const MAX_STABLE_AVATARS = 256;
+
+/**
+ * Returns the same object for every equal avatar. A chat re-renders on each keystroke and when a
+ * recording starts, and its message rows skip that work only while their props stay the same objects.
+ */
+export function stableSenderAvatars() {
+  const avatars = new Map<string, SenderAvatar>();
+  return (avatar: SenderAvatar | undefined) => {
+    if (!avatar) return undefined;
+    const key = `${avatar.url ?? ''}\n${avatar.initials}`;
+    const known = avatars.get(key);
+    if (known) return known;
+    if (avatars.size >= MAX_STABLE_AVATARS) avatars.clear();
+    avatars.set(key, avatar);
+    return avatar;
+  };
+}

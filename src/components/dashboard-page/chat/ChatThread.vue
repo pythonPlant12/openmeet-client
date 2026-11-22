@@ -40,6 +40,7 @@ import {
   canRecordVoice,
   isAudioAttachment,
   isVoiceMessageFileName,
+  stableSenderAvatars,
 } from './voice-message';
 
 // The message list and composer shared by conversations and the meeting chat.
@@ -136,6 +137,14 @@ let pendingBottomScroll: ScrollBehavior | null = null;
 const composerCaret = ref(0);
 // Typing on a phone brings up the keyboard over the home indicator area (see the composer's padding).
 const isComposerFocused = ref(false);
+// Only a field that opens the keyboard counts. iOS also focuses a tapped button, such as the voice message's
+// send button; dropping the padding for it moved the bar under the finger, so that tap missed the button.
+function opensKeyboard(target: EventTarget | null) {
+  return (
+    (target instanceof HTMLTextAreaElement || (target instanceof HTMLInputElement && target.type === 'text')) &&
+    !target.readOnly
+  );
+}
 const commandSelection = ref(0);
 const mentionSelection = ref(0);
 const gifSelection = ref(0);
@@ -143,6 +152,7 @@ const mentionMenuDismissed = ref(false);
 let gifSearchTimer: number | undefined;
 
 const voiceRecorderActive = ref(false);
+const stableSenderAvatar = stableSenderAvatars();
 const MAX_ATTACHMENTS = 10;
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
@@ -480,13 +490,26 @@ function countMessagesBelowView() {
   return hidden;
 }
 
+// The jump to unread messages only helps while the first of them is out of view, or not loaded yet.
+function isMessageOutOfView(sequence: number) {
+  const element = pane.value;
+  const target = element?.querySelector(`[data-message-sequence="${sequence}"]`);
+  if (!element || !target) return true;
+  const view = element.getBoundingClientRect();
+  // A floating header covers the top of the history, as tall as the history's top padding.
+  const viewTop = view.top + (props.overlayHeader ? parseFloat(getComputedStyle(element).paddingTop) || 0 : 0);
+  const message = target.getBoundingClientRect();
+  return message.bottom <= viewTop || message.top >= view.bottom;
+}
+
 function updateScrollState() {
   scrollFrame = undefined;
   const element = pane.value;
   if (!element) return;
   wasNearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_DISTANCE;
   showJumpToLatest.value = !wasNearBottom && countMessagesBelowView() > JUMP_TO_LATEST_THRESHOLD;
-  showJumpToUnread.value = wasNearBottom && props.unreadStartSequence !== null;
+  const unreadStart = props.unreadStartSequence;
+  showJumpToUnread.value = wasNearBottom && unreadStart !== null && isMessageOutOfView(unreadStart);
 }
 
 function isNearBottom() {
@@ -680,9 +703,11 @@ watch(
   { immediate: true },
 );
 
+// After the render, so the first unread message is in the DOM to measure.
 watch(
   () => props.unreadStartSequence,
   () => updateScrollState(),
+  { flush: 'post' },
 );
 
 watch(attachments, (nextAttachments) => {
@@ -769,7 +794,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
               :is-attachment-loading="isAttachmentLoading"
               :has-attachment-error="hasAttachmentError"
               :load-attachment="loadAttachment"
-              :sender-avatar="senderAvatar?.(message)"
+              :sender-avatar="stableSenderAvatar(senderAvatar?.(message))"
               @reply="startReply(message)"
               @react="(emoji) => react(message, emoji)"
               @open-reactions="reactionPickerSequence = message.sequence"
@@ -811,7 +836,7 @@ defineExpose({ scrollToBottom, getScrollState, isNearBottom, restoreScroll, focu
       class="bg-harbor-canvas px-2 pt-2 sm:px-4"
       :class="isComposerFocused ? 'pb-2.5' : 'pb-[max(0.625rem,calc(env(safe-area-inset-bottom)+0.375rem))]'"
       data-composer-bar
-      @focusin="isComposerFocused = true"
+      @focusin="isComposerFocused = opensKeyboard($event.target)"
       @focusout="isComposerFocused = false"
     >
       <p v-if="footerNote" class="mb-2 text-xs text-harbor-muted">{{ footerNote }}</p>

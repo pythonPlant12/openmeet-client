@@ -33,11 +33,7 @@ const decodeFailed = ref(false);
 const playback = useVoicePlayback(toRef(props, 'url'), durationMs);
 // The badge turns teal once the message has been played from this device.
 const hasPlayed = computed(() => playback.playing.value || playback.positionMs.value > 0);
-const clock = computed(() =>
-  formatVoiceDuration(
-    playback.playing.value || playback.positionMs.value ? playback.positionMs.value : durationMs.value,
-  ),
-);
+const clock = computed(() => formatVoiceDuration(playback.clockMs.value));
 
 watch(
   () => props.url,
@@ -110,6 +106,7 @@ function togglePlayback() {
         played-class="bg-harbor-accent"
         unplayed-class="bg-harbor-waveform"
         @seek="playback.seek"
+        @scrub="playback.scrub"
       />
       <p
         class="absolute inset-x-0 top-full flex items-baseline justify-between gap-2 text-[0.6875rem] leading-none tabular-nums text-harbor-muted"
