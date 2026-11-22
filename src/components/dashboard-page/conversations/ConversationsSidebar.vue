@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
   Check,
   ChevronDown,
@@ -35,13 +34,14 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { ListHeading, ListRow } from '@/components/ui/list-row';
-import { showsLiveCallRing } from '@/lib/live-call';
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { RoundButton } from '@/components/ui/round-button';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { useHorizontalSwipe } from '@/composables/useHorizontalSwipe';
+import { usePaneTitleSwap } from '@/composables/usePaneTitleSwap';
 import { userStatusOption } from '@/config/user-status.config';
+import { showsLiveCallRing } from '@/lib/live-call';
 import { playHaptic } from '@/services/haptics';
 import type { Conversation, DirectMessageRequest, GroupInvitation, UserStatus } from '@/services/social-api';
 
@@ -99,32 +99,9 @@ const query = defineModel<string>('query', { required: true });
 const filter = defineModel<ChatFilter>('filter', { required: true });
 const view = computed(() => CHAT_FILTER_VIEWS[filter.value]);
 const headerRef = ref<HTMLElement | null>(null);
-const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-// The header shows one chat view at a time: the old title blurs out, the title and the search placeholder
-// change together at the peak of the blur, and the new title blurs in. A timer of the blur's length makes
-// the swap, so the header changes even where the animation never runs.
-const TITLE_BLUR_SECONDS = 0.2;
-const TITLE_BLURRED = { opacity: 0, filter: 'blur(6px)' };
-const TITLE_CLEAR = { opacity: 1, filter: 'blur(0px)' };
-const shownFilter = ref(filter.value);
+// The header shows one chat view at a time and blurs between them (see usePaneTitleSwap).
+const { shown: shownFilter, titleMotion } = usePaneTitleSwap(filter);
 const shownView = computed(() => CHAT_FILTER_VIEWS[shownFilter.value]);
-const titleBlurred = ref(false);
-const { start: swapTitleAtPeakBlur } = useTimeoutFn(
-  () => {
-    shownFilter.value = filter.value;
-    titleBlurred.value = false;
-  },
-  TITLE_BLUR_SECONDS * 1000,
-  { immediate: false },
-);
-watch(filter, (next) => {
-  if (prefersReducedMotion.value) {
-    shownFilter.value = next;
-    return;
-  }
-  titleBlurred.value = true;
-  swapTitleAtPeakBlur();
-});
 
 // Views the user picks tick once; changes from the parent stay silent.
 function switchView(next: ChatFilter) {
@@ -218,13 +195,7 @@ onBeforeUnmount(clearLongPress);
       @search-blur="handleSearchBlur"
     >
       <template #title
-        ><motion.span
-          :initial="false"
-          :animate="titleBlurred ? TITLE_BLURRED : TITLE_CLEAR"
-          :transition="{ duration: TITLE_BLUR_SECONDS, ease: 'easeOut' }"
-          class="inline-block"
-          >{{ shownView.title }}</motion.span
-        ></template
+        ><motion.span v-bind="titleMotion" class="inline-block">{{ shownView.title }}</motion.span></template
       >
       <template #badge
         ><SectionBadge :count="badge" singular="conversation needs attention" plural="conversations need attention"

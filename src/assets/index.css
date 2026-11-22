@@ -441,83 +441,54 @@
   background: rgb(255 255 255 / 0.95);
 }
 
-/* Primary actions are plain white pills like the chat header's buttons: no teal fill, only the surface and a soft
-   shadow. Destructive actions are drops of red glass: a top-left sheen, a rim light, and a soft inner shade. Use them through the `accent` and `danger` tones of `Button` and
-   `RoundButton`, never by hand. Hover darkens only on pointer devices; touch gets the darker fill while pressed. */
+/* Primary and destructive actions are plain white pills like the chat header's buttons: no coloured fill, only the
+   surface and a soft shadow. A destructive action differs only in its red text and icon. Use them through the
+   `accent` and `danger` tones of `Button` and `RoundButton`, never by hand. Hover lifts only on pointer devices; touch
+   gets the gray fill while pressed. */
+.liquid-glass-primary,
 .liquid-glass-danger {
-  color: #fff;
-  -webkit-backdrop-filter: blur(8px) saturate(1.4);
-  backdrop-filter: blur(8px) saturate(1.4);
-  text-shadow: 0 1px 1px rgb(17 27 33 / 0.25);
+  background: rgb(var(--harbor-surface));
+  box-shadow: var(--harbor-shadow-soft);
   transition:
     background 0.2s,
     box-shadow 0.2s,
+    color 0.2s,
     opacity 0.15s,
     transform 0.15s;
 }
 
 .liquid-glass-primary {
   color: rgb(var(--harbor-ink));
-  background: rgb(var(--harbor-surface));
-  box-shadow: var(--harbor-shadow-soft);
-  transition:
-    background 0.2s,
-    box-shadow 0.2s,
-    opacity 0.15s,
-    transform 0.15s;
 }
 
 .liquid-glass-danger {
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0) 55%),
-    linear-gradient(180deg, rgb(var(--harbor-danger) / 0.82), rgb(var(--harbor-danger-strong) / 0.92));
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.7),
-    inset 0 -2px 6px rgb(17 27 33 / 0.3),
-    inset 0 0 0 1px rgb(255 255 255 / 0.22),
-    0 6px 16px -6px rgb(var(--harbor-danger) / 0.6);
+  color: rgb(var(--harbor-danger-strong));
 }
 
 .liquid-glass-primary:not(:disabled):active,
 .liquid-glass-danger:not(:disabled):active {
+  background: rgb(var(--harbor-hover));
   transform: scale(0.97);
 }
 
-.liquid-glass-primary:not(:disabled):active {
-  background: rgb(var(--harbor-hover));
-}
-
-.liquid-glass-danger:not(:disabled):active {
-  background:
-    radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
-    linear-gradient(180deg, rgb(var(--harbor-danger-strong) / 0.9), rgb(var(--harbor-danger-strong) / 0.98));
-}
-
 @media (hover: hover) and (pointer: fine) {
-  .liquid-glass-primary:not(:disabled):hover {
-    color: rgb(var(--harbor-ink));
+  .liquid-glass-primary:not(:disabled):hover,
+  .liquid-glass-danger:not(:disabled):hover {
     background: rgb(var(--harbor-app));
     box-shadow: var(--harbor-shadow-raised);
   }
 
+  .liquid-glass-primary:not(:disabled):hover {
+    color: rgb(var(--harbor-ink));
+  }
+
   .liquid-glass-danger:not(:disabled):hover {
-    color: #fff;
-    background:
-      radial-gradient(120% 140% at 30% 0%, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%),
-      linear-gradient(180deg, rgb(var(--harbor-danger-strong) / 0.9), rgb(var(--harbor-danger-strong) / 0.98));
+    color: rgb(var(--harbor-danger-strong));
   }
 }
 
-/* Over the near-black stage the sheen and rim dim and the coloured glow turns into a plain dark shadow. Dark
-   scopes may lighten the danger tokens for text, so the red glass keeps the light palette's reds for its fill. */
-:is(.meeting-immersive, .meeting-controls-dark, .liquid-surface[data-tone='dark']) .liquid-glass-danger {
-  box-shadow:
-    inset 0 1px 1px rgb(255 255 255 / 0.35),
-    inset 0 -2px 6px rgb(0 0 0 / 0.35),
-    inset 0 0 0 1px rgb(255 255 255 / 0.14),
-    0 6px 16px -6px rgb(0 0 0 / 0.7);
-}
-
+/* Dark scopes may lighten the danger tokens for text on the dark stage, but this pill stays white, so it keeps the
+   light palette's reds. */
 :is(.meeting-immersive, .meeting-controls-dark, .liquid-surface[data-tone='dark']) .liquid-glass-danger {
   --harbor-danger: 196 81 61;
   --harbor-danger-strong: 169 67 50;
@@ -1310,7 +1281,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  /* The glass tones (`accent`, `danger`) keep their own hover from `.liquid-glass-*`. */
+  /* The `accent` and `danger` tones keep their own hover from `.liquid-glass-*`. */
   .harbor-round-button:not(:disabled):not(.liquid-glass-primary, .liquid-glass-danger):hover {
     color: rgb(var(--harbor-ink));
     background: rgb(var(--harbor-app));
@@ -1322,9 +1293,10 @@
     box-shadow: none;
   }
 
+  /* Destructive buttons stay white and only darken their red; they never take a red fill. */
   .harbor-round-button[data-tone='destructive']:not(:disabled):hover {
     color: rgb(var(--harbor-danger-strong));
-    background: rgb(var(--harbor-danger-soft));
+    background: rgb(var(--harbor-app));
   }
 
   .harbor-round-button[data-tone='plain']:not(:disabled):hover {
@@ -1355,6 +1327,15 @@
 
 /* Pill buttons: the round button's white surface and shadow with a label, for actions in details, profiles,
    and confirmations. The text stays ink and the icon gray; only destructive pills turn a dimmed red. */
+/* A list's last row has no line under it. A row ends its run when the next element is not another row, such as a
+   heading, a message, or the end of the list. A row inside a wrapper (`data-list-item`, such as a swipeable row) is
+   judged by its wrapper instead, since inside the wrapper it is always the last child. */
+[data-list-row]:not([data-list-item] [data-list-row]):not(:has(+ :is([data-list-row], [data-list-item])))
+  [data-list-row-divider],
+[data-list-item]:not(:has(+ :is([data-list-row], [data-list-item]))) [data-list-row-divider] {
+  border-bottom-color: transparent;
+}
+
 .harbor-pill-button {
   height: 2.75rem;
   border-radius: 999px;
@@ -1469,7 +1450,7 @@
 
   .harbor-round-group > button[data-tone='destructive']:not(:disabled):hover {
     color: rgb(var(--harbor-danger-strong));
-    background: rgb(var(--harbor-danger-soft));
+    background: rgb(var(--harbor-app));
   }
 }
 

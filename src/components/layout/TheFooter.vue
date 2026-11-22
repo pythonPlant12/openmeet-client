@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ArrowUpRight, Github, Video } from 'lucide-vue-next';
+import { ArrowUpRight, Github } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 
+import logoUrl from '@/assets/logo.svg';
 import SplitText from '@/components/marketing/SplitText.vue';
 import { useTheme } from '@/composables/useTheme';
 
@@ -21,13 +22,7 @@ const footerLinks = [
     <div class="mx-auto grid max-w-7xl gap-10 py-12 md:grid-cols-[1.4fr_0.8fr_0.8fr] md:py-14">
       <div class="max-w-md">
         <div class="flex items-center gap-2.5">
-          <span
-            class="relative flex size-9 items-center justify-center rounded-xl bg-[#0B7A75] text-white"
-            aria-hidden="true"
-          >
-            <Video class="size-5" :stroke-width="2.25" />
-            <span class="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-[#5AC878]" />
-          </span>
+          <img :src="logoUrl" alt="" class="size-9 shrink-0" aria-hidden="true" />
           <SplitText as="span" :text="theme.branding.companyName" class="text-lg font-semibold" />
         </div>
         <SplitText as="p" :text="t('footer.description')" :delay="80" class="mt-5 text-base leading-7 text-[#61777B]" />

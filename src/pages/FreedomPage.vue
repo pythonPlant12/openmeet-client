@@ -9,8 +9,8 @@ const { t } = useI18n();
 </script>
 
 <template>
-  <div class="marketing-font flex min-h-[calc(100svh-60px)] flex-col bg-[#FBFCF8] text-[#102F35]">
-    <main class="flex-1 px-5 py-12 sm:px-8 sm:py-20 lg:px-12 lg:py-24">
+  <div class="marketing-font flex sm:-mt-[84px] min-h-[calc(100svh-60px)] flex-col bg-[#FBFCF8] text-[#102F35]">
+    <main class="flex-1 px-5 pb-12 pt-24 sm:px-8 sm:pb-20 sm:pt-[164px] lg:px-12 lg:pb-24 lg:pt-[180px]">
       <section v-reveal class="mx-auto grid max-w-7xl overflow-hidden rounded-[2.5rem] bg-[#E6F4F1] lg:grid-cols-2">
         <div class="flex flex-col justify-center p-8 sm:p-12 lg:p-16">
           <span class="flex size-12 items-center justify-center rounded-2xl bg-white text-[#0B7A75] shadow-sm">

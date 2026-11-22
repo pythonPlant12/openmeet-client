@@ -22,8 +22,9 @@ const props = withDefaults(
 
 <template>
   <!-- One list entry: avatar, title with a time or detail on the right, and a gray second line. A line under the
-       text separates rows; it starts after the avatar. Pointer devices reveal the `actions` slot on hover. -->
-  <div class="group/row relative" :data-actions-visible="actionsVisible || undefined">
+       text separates rows; it starts after the avatar, and the last row of a list has none (see
+       [data-list-row-divider] in index.css). Pointer devices reveal the `actions` slot on hover. -->
+  <div data-list-row class="group/row relative" :data-actions-visible="actionsVisible || undefined">
     <component
       :is="as"
       v-bind="$attrs"
@@ -38,7 +39,7 @@ const props = withDefaults(
       "
     >
       <span v-if="$slots.avatar" class="shrink-0 py-2.5"><slot name="avatar" /></span
-      ><span class="min-w-0 flex-1 self-stretch border-b border-harbor-line py-2.5"
+      ><span data-list-row-divider class="min-w-0 flex-1 self-stretch border-b border-harbor-line py-2.5"
         ><span class="flex items-baseline gap-2"
           ><span class="min-w-0 flex-1 truncate text-base font-semibold leading-6"><slot /></span
           ><span

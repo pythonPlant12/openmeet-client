@@ -38,17 +38,28 @@ function mountSidebar(props: Record<string, unknown> = {}) {
       groups,
       groupAvatarUrls: {},
       isGroupAvatarLoading: () => false,
+      groupResults: [],
+      groupResultAvatarUrls: {},
+      isSearchingGroups: false,
+      isLoadingMoreGroups: false,
+      hasMoreGroupResults: false,
       ...props,
     },
     global: { stubs: { LoadingRipple: { template: '<span />' } } },
   });
 }
 
-// motion-v watches visibility for its animations; jsdom has no IntersectionObserver.
+// motion-v watches visibility for its animations; jsdom has no IntersectionObserver. The stub keeps each callback,
+// so a test can bring the end of the group results into view.
+let intersectionCallbacks: IntersectionObserverCallback[] = [];
 beforeEach(() => {
+  intersectionCallbacks = [];
   vi.stubGlobal(
     'IntersectionObserver',
     class {
+      constructor(callback: IntersectionObserverCallback) {
+        intersectionCallbacks.push(callback);
+      }
       observe() {}
       unobserve() {}
       disconnect() {}
@@ -56,7 +67,19 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => vi.clearAllMocks());
+const otherGroup = {
+  id: 'g9',
+  title: 'Design club',
+  groupCode: 'DeS1gnClub000000000000',
+  avatarUrl: null,
+  accessPolicy: 'password' as const,
+  memberCount: 12,
+};
+
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
 
 describe('FriendsSidebar', () => {
   it('shows incoming friend requests beside the title, also while collapsed', () => {
@@ -163,8 +186,14 @@ describe('FriendsSidebar', () => {
   });
 
   it('switches to the groups view with its own search and Create group', async () => {
+    vi.useFakeTimers();
     const wrapper = mountSidebar({ query: '' });
     await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    // Like the Chats pane, the old title blurs out before the new title and placeholder show together.
+    await vi.advanceTimersByTimeAsync(180);
+    expect(wrapper.get('h1').text()).toContain('Friends');
+    expect(wrapper.get('input').attributes('placeholder')).toBe('Search friends');
+    await vi.advanceTimersByTimeAsync(20);
     expect(wrapper.get('h1').text()).toContain('Groups');
     expect(wrapper.get('input').attributes('placeholder')).toBe('Search groups');
     expect(wrapper.findAll('[data-group-row]').map((row) => row.text())).toEqual([
@@ -185,6 +214,70 @@ describe('FriendsSidebar', () => {
       expect.stringContaining('Design team'),
     ]);
     expect(wrapper.emitted('update:query')).toBeUndefined();
+  });
+
+  it('searches groups the user is not in, shows their code and size, and opens one to join', async () => {
+    const wrapper = mountSidebar({ query: '', groupResults: [otherGroup] });
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    await wrapper.get('input').setValue('design');
+
+    expect(wrapper.emitted('update:groupQuery')).toEqual([['design']]);
+    expect(wrapper.get('[data-other-groups]').text()).toContain('Other groups');
+    const result = wrapper.get('[data-group-result]');
+    expect(result.text()).toContain('Design club');
+    expect(result.text()).toContain('#DeS1gnClub000000000000 · 12 members');
+    expect(result.find('[aria-label="Password required"]').exists()).toBe(true);
+    await result.trigger('click');
+    expect(wrapper.emitted('open-group-result')).toEqual([[otherGroup]]);
+  });
+
+  it('puts matching joined groups under their own heading above other groups', async () => {
+    const wrapper = mountSidebar({ query: '', groupResults: [otherGroup] });
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    await wrapper.get('input').setValue('design');
+
+    expect(wrapper.get('[data-joined-groups]').text()).toBe('Joined groups');
+    expect(wrapper.findAll('[data-group-row]').map((row) => row.text())).toEqual([
+      expect.stringContaining('Design team'),
+    ]);
+    // Other groups keep a clear gap from the joined ones above them.
+    expect(wrapper.get('[data-other-groups]').classes()).toContain('pt-6');
+  });
+
+  it('shows matching friends and other people under their own headings', () => {
+    const friend = { id: 'f1', name: 'Sam Friend', nickname: 'samf', email: 'sam@example.com', isOnline: false };
+    const wrapper = mountSidebar({ friends: [friend] });
+    expect(wrapper.get('[data-search-friends]').text()).toBe('Friends');
+    expect(wrapper.get('[data-other-people]').text()).toBe('Other people');
+    expect(wrapper.get('[data-other-people]').classes()).toContain('pt-6');
+    expect(mountSidebar().find('[data-search-friends]').exists()).toBe(false);
+  });
+
+  it('asks for two characters before searching other groups, ignoring a leading #', async () => {
+    const wrapper = mountSidebar({ query: '' });
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    await wrapper.get('input').setValue('#a');
+    expect(wrapper.text()).toContain('Keep typing to search groups you are not in.');
+    expect(wrapper.find('[data-other-groups]').exists()).toBe(false);
+  });
+
+  it('loads the next page of other groups when the end of the list comes into view', async () => {
+    const wrapper = mountSidebar({ query: '', groupResults: [otherGroup], hasMoreGroupResults: true });
+    await wrapper.get('button[aria-label="Show groups"]').trigger('click');
+    await wrapper.get('input').setValue('design');
+
+    for (const callback of intersectionCallbacks) {
+      callback(
+        [{ isIntersecting: true, target: document.createElement('div') } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    }
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted('load-more-groups')).toHaveLength(1);
+
+    await wrapper.setProps({ isLoadingMoreGroups: true });
+    await wrapper.setProps({ isLoadingMoreGroups: false, hasMoreGroupResults: false });
+    expect(wrapper.emitted('load-more-groups')).toHaveLength(1);
   });
 
   it('opens a group from the groups view and switches back to friends', async () => {

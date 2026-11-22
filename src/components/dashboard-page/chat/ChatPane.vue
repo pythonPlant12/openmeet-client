@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { useElementSize, useMediaQuery } from '@vueuse/core';
-import { ArrowLeft, CircleUserRound, Ellipsis, MessageCircleMore, Phone, PhoneCall, PhoneIncoming, UsersRound, Video, X } from 'lucide-vue-next';
+import {
+  ArrowLeft,
+  CircleUserRound,
+  Ellipsis,
+  MessageCircleMore,
+  Phone,
+  PhoneCall,
+  PhoneIncoming,
+  UsersRound,
+  X,
+} from 'lucide-vue-next';
 import { AnimatePresence, motion } from 'motion-v';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -16,8 +26,8 @@ import {
 import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { userStatusOption } from '@/config/user-status.config';
-import type { Conversation, ConversationMessage, Friend, GifSearchResult, GroupMember } from '@/services/social-api';
 import { showsLiveCallRing } from '@/lib/live-call';
+import type { Conversation, ConversationMessage, Friend, GifSearchResult, GroupMember } from '@/services/social-api';
 import { coverScreenTop } from '@/services/system-bars';
 
 const props = defineProps<{
@@ -64,7 +74,7 @@ const emit = defineEmits<{
   (event: 'join'): void;
   (event: 'return-to-call'): void;
   (event: 'group-info'): void;
-  (event: 'call', options: { video: boolean }): void;
+  (event: 'call'): void;
   (event: 'scroll-top'): void;
   (event: 'load-unread', sequence: number): void;
   (event: 'send'): void;
@@ -254,52 +264,56 @@ defineExpose({
                   @click="handlePictureClick"
                 >
                   <template v-if="selectedFriend && !pendingFriend && !selectedIsGroup">
-              <span class="relative shrink-0"
-                ><span
-                  data-conversation-avatar
-                  class="flex size-10 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
-                  :class="[
-                    'border-2',
-                    liveCallRing
-                      ? 'harbor-live-call-ring'
-                      : userStatusOption(selectedFriend.isOnline ? selectedFriend.status : 'offline').borderClass,
-                  ]"
-                  ><img
-                    v-if="friendAvatarUrls[selectedFriend.id]"
-                    :src="friendAvatarUrls[selectedFriend.id]"
-                    alt=""
-                    class="size-full object-cover"
-                  /><LoadingRipple v-else-if="isFriendAvatarLoading(selectedFriend.id)" class="size-4" /><span
-                    v-else
-                    class="text-xs font-semibold"
-                    >{{ initials(selectedFriend.name) }}</span
-                  ></span
-                ><PresenceDot
-                  surface="directMessages"
-                  :online="selectedFriend.isOnline"
-                  :status="selectedFriend.status"
-                  class="size-3 border-2 border-white" /></span
-              ><span class="min-w-0"
-                ><span id="conversation-title" class="block truncate text-base font-semibold text-harbor-ink">{{
-                  selectedTitle
-                }}</span
-                ><span class="sr-only">{{ directConversationLabel }}</span></span
-              >
+                    <span class="relative shrink-0"
+                      ><span
+                        data-conversation-avatar
+                        class="flex size-10 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
+                        :class="[
+                          'border-2',
+                          liveCallRing
+                            ? 'harbor-live-call-ring'
+                            : userStatusOption(selectedFriend.isOnline ? selectedFriend.status : 'offline').borderClass,
+                        ]"
+                        ><img
+                          v-if="friendAvatarUrls[selectedFriend.id]"
+                          :src="friendAvatarUrls[selectedFriend.id]"
+                          alt=""
+                          class="size-full object-cover"
+                        /><LoadingRipple v-else-if="isFriendAvatarLoading(selectedFriend.id)" class="size-4" /><span
+                          v-else
+                          class="text-xs font-semibold"
+                          >{{ initials(selectedFriend.name) }}</span
+                        ></span
+                      ><PresenceDot
+                        surface="directMessages"
+                        :online="selectedFriend.isOnline"
+                        :status="selectedFriend.status"
+                        class="size-3 border-2 border-white" /></span
+                    ><span class="min-w-0"
+                      ><span id="conversation-title" class="block truncate text-base font-semibold text-harbor-ink">{{
+                        selectedTitle
+                      }}</span
+                      ><span class="sr-only">{{ directConversationLabel }}</span></span
+                    >
                   </template>
                   <template v-else>
-              <span
-                data-conversation-avatar
-                class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
-                :class="liveCallRing ? 'border-2 harbor-live-call-ring' : ''"
-                ><img v-if="groupAvatarUrl" :src="groupAvatarUrl" alt="" class="size-full object-cover" /><LoadingRipple
-                  v-else-if="conversation && isGroupAvatarLoading(conversation.id)"
-                  class="size-4" /><UsersRound v-else class="size-5" /></span
-              ><span class="min-w-0"
-                ><span id="conversation-title" class="block truncate text-base font-semibold text-harbor-ink">{{
-                  selectedTitle
-                }}</span
-                ><span class="sr-only">{{ groupConversationLabel }}</span></span
-              >
+                    <span
+                      data-conversation-avatar
+                      class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-harbor-avatar text-harbor-icon"
+                      :class="liveCallRing ? 'border-2 harbor-live-call-ring' : ''"
+                      ><img
+                        v-if="groupAvatarUrl"
+                        :src="groupAvatarUrl"
+                        alt=""
+                        class="size-full object-cover" /><LoadingRipple
+                        v-else-if="conversation && isGroupAvatarLoading(conversation.id)"
+                        class="size-4" /><UsersRound v-else class="size-5" /></span
+                    ><span class="min-w-0"
+                      ><span id="conversation-title" class="block truncate text-base font-semibold text-harbor-ink">{{
+                        selectedTitle
+                      }}</span
+                      ><span class="sr-only">{{ groupConversationLabel }}</span></span
+                    >
                   </template>
                 </button>
               </DropdownMenuTrigger>
@@ -335,19 +349,10 @@ defineExpose({
                 <button
                   type="button"
                   class="size-10"
-                  :aria-label="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
-                  :title="selectedIsGroup ? 'Start a group video call' : 'Start a video call'"
+                  :aria-label="selectedIsGroup ? 'Start a group call' : 'Start a call'"
+                  title="Call"
                   :disabled="callActive"
-                  @click="emit('call', { video: true })"
-                >
-                  <Video class="size-5" /></button
-                ><button
-                  type="button"
-                  class="size-10"
-                  :aria-label="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
-                  :title="selectedIsGroup ? 'Start a group audio call' : 'Start an audio call'"
-                  :disabled="callActive"
-                  @click="emit('call', { video: false })"
+                  @click="emit('call')"
                 >
                   <Phone class="size-[1.125rem]" />
                 </button>
@@ -388,16 +393,10 @@ defineExpose({
                     <CircleUserRound />
                     See profile
                   </DropdownMenuItem>
-                  <template v-if="!liveCallState">
-                    <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: true })">
-                      <Video />
-                      Video call
-                    </DropdownMenuItem>
-                    <DropdownMenuItem :disabled="callActive" @select="emit('call', { video: false })">
-                      <Phone />
-                      Audio call
-                    </DropdownMenuItem>
-                  </template>
+                  <DropdownMenuItem v-if="!liveCallState" :disabled="callActive" @select="emit('call')">
+                    <Phone />
+                    Call
+                  </DropdownMenuItem>
                   <DropdownMenuItem v-else @select="handleLiveCallAction">
                     <PhoneCall v-if="liveCallState === 'mine'" /><PhoneIncoming v-else />
                     {{ liveCallState === 'mine' ? 'Return to call' : 'Join call' }}

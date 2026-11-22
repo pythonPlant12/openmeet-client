@@ -132,7 +132,7 @@ function focusCancel(event: Event) {
             v-else
             data-confirm-dialog-action
             type="button"
-            :variant="tone"
+            :variant="tone === 'danger' ? 'pill-danger' : tone"
             size="pill"
             :class="isPhone && 'w-full'"
             :disabled="busy"

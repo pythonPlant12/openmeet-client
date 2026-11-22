@@ -42,7 +42,7 @@ test.describe('live call', () => {
 
       // Alice starts the group call from the chat header and enters the room.
       await openConversation(alicePage, group.title);
-      await alicePage.getByRole('button', { name: 'Start a group audio call' }).click();
+      await alicePage.getByRole('button', { name: 'Start a group call' }).click();
       await expect(alicePage).toHaveURL(/\/room\//, { timeout: 15_000 });
       await expect(alicePage.getByTestId('participant-tile')).toHaveCount(1, { timeout: 20_000 });
       const aliceRoomUrl = new URL(alicePage.url());
@@ -59,7 +59,7 @@ test.describe('live call', () => {
       // Bob's header offers Join instead of the call buttons: he joins Alice's live call, with no error.
       await openConversation(bobPage, group.title);
       await expect(bobPage.locator('header [data-conversation-avatar]')).toHaveClass(/harbor-live-call-ring/);
-      await expect(bobPage.getByRole('button', { name: 'Start a group audio call' })).toHaveCount(0);
+      await expect(bobPage.getByRole('button', { name: 'Start a group call' })).toHaveCount(0);
       await bobPage.getByRole('button', { name: 'Join call' }).click();
       await expect(bobPage).toHaveURL(/\/room\//, { timeout: 15_000 });
       expect(new URL(bobPage.url()).pathname).toBe(aliceRoomUrl.pathname);
@@ -108,7 +108,7 @@ test.describe('live call', () => {
       await bobPage.goBack();
       await expect(miniCall).toBeVisible();
       await openConversation(bobPage, 'Alice Live');
-      await bobPage.getByRole('button', { name: 'Start an audio call' }).click();
+      await bobPage.getByRole('button', { name: 'Start a call' }).click();
       const prompt = bobPage.getByRole('dialog').filter({ hasText: 'Leave current call?' });
       await expect(prompt).toBeVisible();
       await prompt.getByRole('button', { name: 'Cancel' }).click();
@@ -116,7 +116,7 @@ test.describe('live call', () => {
       await expect(miniCall).toBeVisible();
       await expect(alicePage.getByTestId('participant-tile')).toHaveCount(2);
 
-      await bobPage.getByRole('button', { name: 'Start an audio call' }).click();
+      await bobPage.getByRole('button', { name: 'Start a call' }).click();
       await prompt.getByRole('button', { name: 'Leave and join' }).click();
       await expect(bobPage).toHaveURL(/\/room\//, { timeout: 15_000 });
       expect(new URL(bobPage.url()).pathname).not.toBe(aliceRoomUrl.pathname);

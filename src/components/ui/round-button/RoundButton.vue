@@ -17,7 +17,7 @@ const SIZES: Record<RoundButtonSize, string> = {
   lg: 'size-12 [&_svg]:size-6',
 };
 
-// Filled tones are glass drops, shared with the filled `Button` variants.
+// The `accent` and `danger` tones are white pills shared with the `Button` variants; `danger` has red text.
 const GLASS: Partial<Record<RoundButtonTone, string>> = {
   accent: 'liquid-glass-primary',
   danger: 'liquid-glass-danger',
