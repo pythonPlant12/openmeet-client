@@ -9,10 +9,14 @@ const { t } = useI18n();
 </script>
 
 <template>
-  <div class="marketing-font flex min-h-[calc(100svh-60px)] flex-col bg-[#FBFCF8] text-[#102F35]">
+  <div class="marketing-font flex sm:-mt-[84px] min-h-[calc(100svh-60px)] flex-col bg-[#FBFCF8] text-[#102F35]">
     <main class="flex-1">
-      <section class="relative overflow-hidden px-5 py-20 sm:px-8 sm:py-28 lg:px-12 lg:py-32">
-        <div class="pointer-events-none absolute -left-52 top-20 size-[30rem] rounded-full bg-[#CDE9E4]/60 blur-3xl" />
+      <section
+        class="relative overflow-hidden px-5 pb-20 pt-24 sm:px-8 sm:pb-28 sm:pt-[196px] lg:px-12 lg:pb-32 lg:pt-[212px]"
+      >
+        <div
+          class="pointer-events-none absolute -left-52 top-20 sm:top-[164px] size-[30rem] rounded-full bg-[#CDE9E4]/60 blur-3xl"
+        />
         <div class="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2 lg:gap-20">
           <div v-reveal class="relative min-h-[28rem] overflow-hidden rounded-[2.5rem] sm:min-h-[36rem]">
             <img

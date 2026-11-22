@@ -21,6 +21,7 @@ import FriendsSidebar from '@/components/dashboard-page/friends/FriendsSidebar.v
 import AcceptGroupInvitationDialog from '@/components/dashboard-page/groups/AcceptGroupInvitationDialog.vue';
 import CreateGroupDialog from '@/components/dashboard-page/groups/CreateGroupDialog.vue';
 import GroupInfoDialog from '@/components/dashboard-page/groups/GroupInfoDialog.vue';
+import GroupPasswordDialog from '@/components/dashboard-page/groups/GroupPasswordDialog.vue';
 import JoinGroupDialog from '@/components/dashboard-page/groups/JoinGroupDialog.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { toast } from '@/components/ui/toast';
@@ -29,11 +30,11 @@ import { useAuth } from '@/composables/useAuth';
 import { useAvatarCache } from '@/composables/useAvatarCache';
 import { useCallHistory } from '@/composables/useCallHistory';
 import { useIncomingCalls } from '@/composables/useIncomingCalls';
-import { useWebrtc } from '@/composables/useWebrtc';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
 import { useOwnProfile } from '@/composables/useOwnProfile';
-import { formatListTime } from '@/lib/list-time';
+import { useWebrtc } from '@/composables/useWebrtc';
 import { askToLeaveActiveCall } from '@/lib/leave-call-prompt';
+import { formatListTime } from '@/lib/list-time';
 import { leavesActiveCall, showsLiveCallRing } from '@/lib/live-call';
 import { callAgainTargets } from '@/lib/meetings';
 import {
@@ -68,6 +69,7 @@ import {
   type GroupInfo,
   type GroupInvitation,
   type GroupMember,
+  type GroupSearchResult,
   type MeetingPerson,
   type MeetingSession,
   type MessageReaction,
@@ -144,6 +146,19 @@ const peopleSearchQuery = ref('');
 const isPeopleSearchOpen = ref(false);
 const peopleSearchResults = ref<UserSearchResult[]>([]);
 const isSearchingUsers = ref(false);
+// The Contacts groups search also finds groups the user is not in, one page at a time.
+const groupSearchQuery = ref('');
+const groupSearchResults = ref<GroupSearchResult[]>([]);
+const groupSearchNextOffset = ref<number | null>(null);
+const isSearchingGroups = ref(false);
+const isLoadingMoreGroups = ref(false);
+// A search result's Group info may join the group; a password group's checked password is kept for the join.
+const groupInfoJoin = ref<{ groupId: string; password?: string } | null>(null);
+const isJoiningGroupFromInfo = ref(false);
+const groupPasswordTarget = ref<GroupSearchResult | null>(null);
+const searchGroupPassword = ref('');
+const groupPasswordError = ref('');
+const isCheckingGroupPassword = ref(false);
 const selectedConversation = ref<Conversation | null>(null);
 const pendingDirectFriend = ref<Friend | null>(null);
 const isLoading = ref(true);
@@ -371,6 +386,8 @@ const dismissedNotificationPermission = ref(readDismissedNotificationPermission(
 let hasStartedDashboard = false;
 let friendSearchRequest = 0;
 let peopleSearchTimer: number | undefined;
+let groupSearchRequest = 0;
+let groupSearchTimer: number | undefined;
 let friendRefreshRequest = 0;
 let friendRefreshPending = false;
 let conversationRefreshRequest = 0;
@@ -423,6 +440,14 @@ const newPeopleSearchResults = computed(() => peopleSearchResults.value.filter((
 const peopleResultAvatarUrls = computed(() =>
   Object.fromEntries(
     newPeopleSearchResults.value.flatMap((result) => {
+      const url = result.avatarUrl ? memberAvatarCache.urls.value[result.avatarUrl] : undefined;
+      return url ? [[result.id, url]] : [];
+    }),
+  ),
+);
+const groupResultAvatarUrls = computed(() =>
+  Object.fromEntries(
+    groupSearchResults.value.flatMap((result) => {
       const url = result.avatarUrl ? memberAvatarCache.urls.value[result.avatarUrl] : undefined;
       return url ? [[result.id, url]] : [];
     }),
@@ -1305,6 +1330,133 @@ watch(peopleSearchQuery, (query, _, onCleanup) => {
   });
 });
 
+// A new query starts a new search; earlier pages and late answers for the old query are dropped.
+watch(groupSearchQuery, (query, _, onCleanup) => {
+  const normalizedQuery = query.trim();
+  const request = ++groupSearchRequest;
+  groupSearchResults.value = [];
+  groupSearchNextOffset.value = null;
+  isLoadingMoreGroups.value = false;
+
+  if (normalizedQuery.replace(/^#/, '').replace(/\s/g, '').length < 2) {
+    isSearchingGroups.value = false;
+    return;
+  }
+
+  const token = accessToken.value;
+  if (!token) return;
+
+  isSearchingGroups.value = true;
+  groupSearchTimer = window.setTimeout(async () => {
+    try {
+      const page = await socialApi.searchGroups(token, normalizedQuery);
+      if (request !== groupSearchRequest) return;
+      groupSearchResults.value = page.results;
+      groupSearchNextOffset.value = page.nextOffset;
+    } catch (error) {
+      console.error('[Dashboard] Failed to find groups:', error);
+      if (request === groupSearchRequest) feedbackError.value = 'Could not search groups.';
+    } finally {
+      if (request === groupSearchRequest) isSearchingGroups.value = false;
+    }
+  }, 500);
+  onCleanup(() => {
+    if (groupSearchTimer) window.clearTimeout(groupSearchTimer);
+  });
+});
+
+async function loadMoreGroupResults() {
+  const token = accessToken.value;
+  const offset = groupSearchNextOffset.value;
+  if (!token || offset === null || isSearchingGroups.value || isLoadingMoreGroups.value) return;
+  const request = groupSearchRequest;
+  isLoadingMoreGroups.value = true;
+  try {
+    const page = await socialApi.searchGroups(token, groupSearchQuery.value.trim(), offset);
+    if (request !== groupSearchRequest) return;
+    groupSearchResults.value = [...groupSearchResults.value, ...page.results];
+    groupSearchNextOffset.value = page.nextOffset;
+  } catch (error) {
+    console.error('[Dashboard] Failed to load more groups:', error);
+    if (request !== groupSearchRequest) return;
+    // Stop paging, so the still-visible end of the list does not retry in a loop.
+    groupSearchNextOffset.value = null;
+    feedbackError.value = 'Could not load more groups.';
+  } finally {
+    if (request === groupSearchRequest) isLoadingMoreGroups.value = false;
+  }
+}
+
+// A group found by search opens its Group info with Join. A password group first asks only for its password; the
+// server lists friends-only and friends-of-friends groups only to people their friendship rule lets join.
+function openGroupSearchResult(result: GroupSearchResult) {
+  if (result.accessPolicy === 'password') {
+    groupPasswordTarget.value = result;
+    searchGroupPassword.value = '';
+    groupPasswordError.value = '';
+    return;
+  }
+  groupInfoJoin.value = { groupId: result.id };
+  openNonMemberGroupInfo(result.id);
+}
+
+function setGroupPasswordDialogOpen(open: boolean) {
+  if (open || isCheckingGroupPassword.value) return;
+  groupPasswordTarget.value = null;
+  searchGroupPassword.value = '';
+  groupPasswordError.value = '';
+}
+
+async function submitGroupPassword() {
+  const token = accessToken.value;
+  const target = groupPasswordTarget.value;
+  const password = searchGroupPassword.value;
+  if (!token || !target || !password || isCheckingGroupPassword.value) return;
+  isCheckingGroupPassword.value = true;
+  groupPasswordError.value = '';
+  try {
+    const info = await socialApi.unlockGroupInfo(token, target.id, password);
+    if (groupPasswordTarget.value !== target) return;
+    groupPasswordTarget.value = null;
+    searchGroupPassword.value = '';
+    // Joining sends the password again, so it stays only while this Group info is open.
+    groupInfoJoin.value = { groupId: target.id, password };
+    openNonMemberGroupInfo(target.id, info);
+  } catch (error) {
+    console.error('[Dashboard] Failed to check group password:', error);
+    if (groupPasswordTarget.value === target) {
+      groupPasswordError.value =
+        error instanceof SocialApiError && error.status === 403
+          ? 'That password is not right.'
+          : 'Could not check the password. Try again.';
+    }
+  } finally {
+    isCheckingGroupPassword.value = false;
+  }
+}
+
+async function joinGroupFromInfo() {
+  const token = accessToken.value;
+  const target = groupInfoJoin.value;
+  const info = groupInfo.value;
+  if (!token || !target || info?.id !== target.groupId || isJoiningGroupFromInfo.value) return;
+  isJoiningGroupFromInfo.value = true;
+  try {
+    const conversation = await socialApi.joinGroup(token, target.groupId, target.password);
+    addConversation(conversation);
+    groupSearchResults.value = groupSearchResults.value.filter(({ id }) => id !== target.groupId);
+    setGroupProfileDialogOpen(false);
+    selectConversation(conversation);
+    feedbackMessage.value = 'Group joined.';
+    void refreshConversationWorkspace();
+  } catch (error) {
+    console.error('[Dashboard] Failed to join group from its info:', error);
+    feedbackError.value = error instanceof SocialApiError ? error.message : 'Could not join this group.';
+  } finally {
+    isJoiningGroupFromInfo.value = false;
+  }
+}
+
 watch([feedbackError, feedbackMessage], ([error, message]) => {
   if (!error && !message) return;
 
@@ -1396,6 +1548,10 @@ watch(newPeopleSearchResults, (results) => {
   void memberAvatarCache.ensure(results.flatMap((result) => (result.avatarUrl ? [result.avatarUrl] : [])));
 });
 
+watch(groupSearchResults, (results) => {
+  void memberAvatarCache.ensure(results.flatMap((result) => (result.avatarUrl ? [result.avatarUrl] : [])));
+});
+
 watch(groupMembers, (members) => {
   void memberAvatarCache.ensure(
     members.flatMap((member) => (member.avatarUrl && !friendAvatarUrls.value[member.id] ? [member.avatarUrl] : [])),
@@ -1425,6 +1581,7 @@ function setContactRemoveConfirmationOpen(open: boolean) {
 
 function setGroupProfileDialogOpen(open: boolean) {
   isGroupProfileDialogOpen.value = open;
+  if (!open) groupInfoJoin.value = null;
 }
 
 // Management dialogs stack above Group info, so cancelling one returns to it. Group info closes only
@@ -1542,6 +1699,13 @@ function openGroupProfile(conversation?: Conversation) {
 }
 
 function openGroupInvitationInfo(invitation: GroupInvitation) {
+  groupInfoJoin.value = null;
+  openNonMemberGroupInfo(invitation.groupId);
+}
+
+// Group info for a group the user is not in, from an invitation or the Contacts groups search. `unlocked` is info a
+// password check already returned, so it shows at once.
+function openNonMemberGroupInfo(groupId: string, unlocked?: GroupInfo) {
   const token = accessToken.value;
   if (!token) return;
 
@@ -1552,8 +1716,7 @@ function openGroupInvitationInfo(invitation: GroupInvitation) {
   groupProfileError.value = '';
   isGroupProfileLoading.value = true;
   isGroupProfileDialogOpen.value = true;
-  void socialApi
-    .getGroupInfo(token, invitation.groupId)
+  void (unlocked ? Promise.resolve(unlocked) : socialApi.getGroupInfo(token, groupId))
     .then((info) => {
       if (!shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) return;
       groupInfo.value = info;
@@ -1563,7 +1726,7 @@ function openGroupInvitationInfo(invitation: GroupInvitation) {
       );
     })
     .catch((error) => {
-      console.error('[Dashboard] Failed to load invited group info:', error);
+      console.error('[Dashboard] Failed to load group info:', error);
       if (shouldApplyDashboardRequest(request, groupProfileRequest, isUnmounted)) {
         groupProfileError.value = 'Could not load group details. Try again.';
       }
@@ -1721,6 +1884,8 @@ onBeforeUnmount(() => {
   window.dispatchEvent(new CustomEvent<string | null>('openmeet:active-conversation', { detail: null }));
   friendSearchRequest += 1;
   window.clearTimeout(peopleSearchTimer);
+  groupSearchRequest += 1;
+  window.clearTimeout(groupSearchTimer);
   friendAvatarRequest += 1;
   groupAvatarRequest += 1;
   contactProfileRequest += 1;
@@ -2114,17 +2279,17 @@ async function joinGroupByCode() {
   }
 }
 
-async function startSelectedConversationCall(options?: { video: boolean }) {
+async function startSelectedConversationCall() {
   const conversation = selectedConversation.value;
   if (!conversation || pendingDirectFriend.value) return;
-  await startConversationCall(conversation, options);
+  await startConversationCall(conversation);
 }
 
-async function startContactProfileCall(options?: { video: boolean }) {
+async function startContactProfileCall() {
   const friend = contactProfileFriend.value;
   if (!friend) return;
   setContactProfileDialogOpen(false);
-  await startFriendCall(friend, options);
+  await startFriendCall(friend);
 }
 
 // Profile info's Chat opens the direct chat with the person, in place of the profile.
@@ -2152,18 +2317,18 @@ function openGroupInfoChat() {
   selectConversation(conversation);
 }
 
-async function startGroupInfoCall(options?: { video: boolean }) {
+async function startGroupInfoCall() {
   const conversation = groupInfoConversation();
   if (!conversation || isCallLaunchActive.value) return;
   setGroupProfileDialogOpen(false);
-  await startConversationCall(conversation, options);
+  await startConversationCall(conversation);
 }
 
-async function startFriendCall(friend: Friend, options?: { video: boolean }) {
+async function startFriendCall(friend: Friend) {
   if (isCallLaunchActive.value) return;
   const conversation = await openFriendConversation(friend);
   if (!conversation) return;
-  await startConversationCall(conversation, options);
+  await startConversationCall(conversation);
 }
 
 // Swipe actions: read state updates optimistically and rolls back if the server rejects it.
@@ -2397,7 +2562,7 @@ watch(
   },
 );
 
-async function startConversationCall(conversation: Conversation, options?: { video: boolean }) {
+async function startConversationCall(conversation: Conversation) {
   const token = accessToken.value;
   if (!token || startingCallConversationId.value) return;
   if (conversation.liveCall && conversation.liveCall.id === activeCallSessionId.value) {
@@ -2414,7 +2579,7 @@ async function startConversationCall(conversation: Conversation, options?: { vid
     if (!shouldApplyDashboardRequest(request, callLaunchRequest, isUnmounted)) return;
     await router.push({
       path: `/room/${callSession.id}`,
-      query: { conversation: conversation.id, ...(options?.video === false ? { video: 'off' } : {}) },
+      query: { conversation: conversation.id },
     });
   } catch (error) {
     if (!shouldApplyDashboardRequest(request, callLaunchRequest, isUnmounted)) return;
@@ -2529,11 +2694,19 @@ async function startConversationCall(conversation: Conversation, options?: { vid
           :results="newPeopleSearchResults"
           :result-avatar-urls="peopleResultAvatarUrls"
           :search-open="isPeopleSearchOpen"
+          v-model:group-query="groupSearchQuery"
           :groups="groupConversations"
           :group-avatar-urls="groupAvatarUrls"
           :is-group-avatar-loading="isGroupAvatarLoading"
+          :group-results="groupSearchResults"
+          :group-result-avatar-urls="groupResultAvatarUrls"
+          :is-searching-groups="isSearchingGroups"
+          :is-loading-more-groups="isLoadingMoreGroups"
+          :has-more-group-results="groupSearchNextOffset !== null"
           @update:search-open="setPeopleSearchOpen"
           @open-group="selectConversation"
+          @open-group-result="openGroupSearchResult"
+          @load-more-groups="loadMoreGroupResults"
           @create-group="setCreateGroupDialogOpen(true)"
           @open="openFriendConversation"
           @profile="(friend) => openContactProfile(friend.id, friend.name)"
@@ -2734,8 +2907,20 @@ async function startConversationCall(conversation: Conversation, options?: { vid
       :change-friendship="changeMemberFriendship"
       @load-more-members="loadMoreGroupMembers"
       @chat-member="openMemberChat"
+      :joinable="groupInfoJoin !== null && groupInfoJoin.groupId === groupInfo?.id"
+      :joining="isJoiningGroupFromInfo"
       @chat="openGroupInfoChat"
       @call="startGroupInfoCall"
+      @join="joinGroupFromInfo"
+    />
+    <GroupPasswordDialog
+      v-model:password="searchGroupPassword"
+      :open="groupPasswordTarget !== null"
+      :group-title="groupPasswordTarget?.title ?? ''"
+      :checking="isCheckingGroupPassword"
+      :error="groupPasswordError"
+      @update:open="setGroupPasswordDialogOpen"
+      @submit="submitGroupPassword"
     />
     <AcceptGroupInvitationDialog
       :open="activeGroupInvitation !== null"

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { UserRoundCheckAnimated, UsersRoundAnimated } from '@respeak/lucide-motion-vue';
-import { useMediaQuery } from '@vueuse/core';
+import { useIntersectionObserver, useMediaQuery } from '@vueuse/core';
 import {
   Check,
   CircleUserRound,
   Ellipsis,
+  LockKeyhole,
   MessageCircle,
   Phone,
   Plus,
@@ -14,9 +15,11 @@ import {
   UsersRound,
   X,
 } from 'lucide-vue-next';
+import { motion } from 'motion-v';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 import PaneHeader from '@/components/dashboard-page/PaneHeader.vue';
+import PaneViewSwitch from '@/components/dashboard-page/PaneViewSwitch.vue';
 import SectionBadge from '@/components/dashboard-page/SectionBadge.vue';
 import { Avatar } from '@/components/ui/avatar';
 import {
@@ -32,9 +35,10 @@ import { LoadingRipple } from '@/components/ui/loading';
 import { PresenceDot } from '@/components/ui/presence-dot';
 import { RoundButton } from '@/components/ui/round-button';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { usePaneTitleSwap } from '@/composables/usePaneTitleSwap';
 import { userStatusOption } from '@/config/user-status.config';
 import { playHaptic } from '@/services/haptics';
-import type { Conversation, Friend, FriendRequest, UserSearchResult } from '@/services/social-api';
+import type { Conversation, Friend, FriendRequest, GroupSearchResult, UserSearchResult } from '@/services/social-api';
 
 const props = defineProps<{
   activeContextMenuId: string | null;
@@ -60,6 +64,12 @@ const props = defineProps<{
   groups: Conversation[];
   groupAvatarUrls: Record<string, string>;
   isGroupAvatarLoading: (groupId: string) => boolean;
+  /** Groups the user is not in that match the groups search, loaded one page at a time. */
+  groupResults: GroupSearchResult[];
+  groupResultAvatarUrls: Record<string, string>;
+  isSearchingGroups: boolean;
+  isLoadingMoreGroups: boolean;
+  hasMoreGroupResults: boolean;
 }>();
 const emit = defineEmits<{
   (event: 'update:searchOpen', value: boolean): void;
@@ -74,16 +84,56 @@ const emit = defineEmits<{
   (event: 'context-open', id: string, open: boolean): void;
   (event: 'context-activate', id: string): void;
   (event: 'open-group', group: Conversation): void;
+  (event: 'open-group-result', group: GroupSearchResult): void;
+  (event: 'load-more-groups'): void;
   (event: 'create-group'): void;
 }>();
 const query = defineModel<string>('query', { required: true });
 const SWIPE_ACTION_WIDTH = 80;
 const hasHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 const input = ref<InstanceType<typeof PaneHeader> | null>(null);
-// The pane lists friends or the user's groups; the white header button switches between them.
+// The pane lists friends or the user's groups; the white header button switches between them, with the icon of the
+// view it leads to: groups, or friends (the friend badge's icon).
+const CONTACT_VIEWS = {
+  friends: {
+    title: 'Friends',
+    searchLabel: 'Search friends',
+    switchLabel: 'Show groups',
+    switchIcon: UsersRoundAnimated,
+  },
+  groups: {
+    title: 'Groups',
+    searchLabel: 'Search groups',
+    switchLabel: 'Show friends',
+    switchIcon: UserRoundCheckAnimated,
+  },
+} as const;
 const view = ref<'friends' | 'groups'>('friends');
+// Like the Chats pane, the title blurs between the views (see usePaneTitleSwap).
+const { shown: shownView, titleMotion } = usePaneTitleSwap(view);
 // The groups view has its own search, so switching views never starts or clears a people search.
-const groupQuery = ref('');
+const groupQuery = defineModel<string>('groupQuery', { default: '' });
+// Like people search, groups outside the user's own are searched from two characters, ignoring a code's leading #.
+const groupSearchActive = computed(() => groupQuery.value.trim().replace(/^#/, '').replace(/\s/g, '').length >= 2);
+// The next page of other groups loads whenever the end of the list is in view. A short page leaves the end visible
+// without a new intersection, so the check also runs after every load.
+const groupResultsEnd = ref<HTMLElement | null>(null);
+const groupResultsEndVisible = ref(false);
+useIntersectionObserver(groupResultsEnd, ([entry]) => {
+  groupResultsEndVisible.value = entry?.isIntersecting ?? false;
+});
+watch(
+  () =>
+    [
+      groupResultsEndVisible.value,
+      props.hasMoreGroupResults,
+      props.isLoadingMoreGroups,
+      props.isSearchingGroups,
+    ] as const,
+  ([visible, hasMore, loadingMore, searching]) => {
+    if (visible && hasMore && !loadingMore && !searching) emit('load-more-groups');
+  },
+);
 const headerQuery = computed({
   get: () => (view.value === 'friends' ? query.value : groupQuery.value),
   set: (value: string) => {
@@ -180,24 +230,26 @@ onBeforeUnmount(clearLongPress);
     <PaneHeader
       ref="input"
       v-model:query="headerQuery"
-      :title="view === 'friends' ? 'Friends' : 'Groups'"
-      :search-label="view === 'friends' ? 'Search friends' : 'Search groups'"
+      :title="CONTACT_VIEWS[shownView].title"
+      :search-label="CONTACT_VIEWS[shownView].searchLabel"
       :search-id="view === 'friends' ? 'people-search' : 'group-search'"
       heading-id="friends-heading"
       @search-focus="handleSearchFocus"
       @search-blur="handleSearchBlur"
     >
+      <template #title
+        ><motion.span v-bind="titleMotion" class="inline-block">{{
+          CONTACT_VIEWS[shownView].title
+        }}</motion.span></template
+      >
       <template #badge><SectionBadge :count="badge" singular="friend request" plural="friend requests" /></template>
       <template #trailing>
-        <RoundButton
-          :aria-label="view === 'friends' ? 'Show groups' : 'Show friends'"
-          :title="view === 'friends' ? 'Show groups' : 'Show friends'"
+        <PaneViewSwitch
+          :view-key="view"
+          :icon="CONTACT_VIEWS[view].switchIcon"
+          :label="CONTACT_VIEWS[view].switchLabel"
           @click="toggleView"
-        >
-          <!-- The icon of the view the button leads to: groups, or friends (the friend badge's icon). -->
-          <UsersRoundAnimated v-if="view === 'friends'" :size="20" :stroke-width="1.9" aria-hidden="true" />
-          <UserRoundCheckAnimated v-else :size="20" :stroke-width="1.9" aria-hidden="true" />
-        </RoundButton>
+        />
       </template>
     </PaneHeader>
     <div
@@ -215,6 +267,10 @@ onBeforeUnmount(clearLongPress);
             Create group
             <template #subtitle>Start a new group chat</template>
           </ListRow>
+          <!-- While other groups are searched, the user's own matches sit under their own heading above them. -->
+          <ListHeading v-if="groupSearchActive && filteredGroups.length" data-joined-groups class="pt-5"
+            >Joined groups</ListHeading
+          >
           <ListRow v-for="group in filteredGroups" :key="group.id" data-group-row @click="emit('open-group', group)">
             <template #avatar
               ><Avatar :src="groupAvatarUrls[group.id]" :loading="isGroupAvatarLoading(group.id)"><UsersRound /></Avatar
@@ -222,9 +278,58 @@ onBeforeUnmount(clearLongPress);
             {{ group.title }}
             <template v-if="group.groupCode" #subtitle>#{{ group.groupCode }}</template>
           </ListRow>
-          <p v-if="!filteredGroups.length" class="px-3 py-8 text-center text-sm text-harbor-muted">
-            {{ groupQuery ? 'No groups match your search.' : 'You are not in any groups yet.' }}
+          <p
+            v-if="!groupQuery.trim() && !filteredGroups.length"
+            class="px-3 py-8 text-center text-sm text-harbor-muted"
+          >
+            You are not in any groups yet.
           </p>
+          <template v-else-if="groupQuery.trim()">
+            <p v-if="!groupSearchActive" class="px-3 py-2 text-sm text-harbor-muted">
+              Keep typing to search groups you are not in.
+            </p>
+            <template v-else>
+              <ListHeading data-other-groups :class="filteredGroups.length ? 'pt-6' : 'pt-1'">Other groups</ListHeading>
+              <div v-if="isSearchingGroups" class="flex h-16 items-center justify-center">
+                <LoadingRipple class="size-5 text-harbor-icon" />
+                <span class="sr-only">Searching groups</span>
+              </div>
+              <template v-else>
+                <ListRow
+                  v-for="result in groupResults"
+                  :key="result.id"
+                  data-group-result
+                  :aria-label="`Join ${result.title}`"
+                  @click="emit('open-group-result', result)"
+                >
+                  <template #avatar
+                    ><Avatar :src="groupResultAvatarUrls[result.id]"><UsersRound /></Avatar
+                  ></template>
+                  {{ result.title }}
+                  <template #subtitle
+                    >#{{ result.groupCode }} · {{ result.memberCount }}
+                    {{ result.memberCount === 1 ? 'member' : 'members' }}</template
+                  >
+                  <template v-if="result.accessPolicy === 'password'" #trailing
+                    ><span
+                      role="img"
+                      aria-label="Password required"
+                      title="Password required"
+                      class="flex size-6 shrink-0 items-center justify-center rounded-full bg-harbor-hover text-harbor-icon"
+                      ><LockKeyhole class="size-3.5" /></span
+                  ></template>
+                </ListRow>
+                <p v-if="!groupResults.length" class="px-3 py-6 text-center text-sm text-harbor-muted">
+                  {{ filteredGroups.length ? 'No other groups match your search.' : 'No groups match your search.' }}
+                </p>
+                <div v-if="isLoadingMoreGroups" class="flex h-12 items-center justify-center">
+                  <LoadingRipple class="size-5 text-harbor-icon" />
+                  <span class="sr-only">Loading more groups</span>
+                </div>
+                <div ref="groupResultsEnd" class="h-px" aria-hidden="true" />
+              </template>
+            </template>
+          </template>
         </template>
         <template v-else>
           <template v-if="peopleSearchActive || (query.trim() && query.replace(/\s/g, '').length < 2)">
@@ -236,6 +341,8 @@ onBeforeUnmount(clearLongPress);
               <span class="sr-only">Searching people</span>
             </div>
             <template v-else>
+              <!-- Like the groups search: matching friends first, then people outside the friend list. -->
+              <ListHeading v-if="friends.length" data-search-friends class="pt-1">Friends</ListHeading>
               <ListRow v-for="friend in friends" :key="friend.id" @click="emit('open', friend)">
                 <template #avatar
                   ><Avatar
@@ -255,7 +362,8 @@ onBeforeUnmount(clearLongPress);
                     ><UserCheck class="size-3.5" /></span
                 ></template>
               </ListRow>
-              <div v-for="result in results" :key="result.id" data-people-result>
+              <ListHeading data-other-people :class="friends.length ? 'pt-6' : 'pt-1'">Other people</ListHeading>
+              <div v-for="result in results" :key="result.id" data-people-result data-list-item>
                 <ListRow :aria-label="`View ${result.name}'s profile`" @click="emit('open-result', result)">
                   <template #avatar
                     ><Avatar :src="resultAvatarUrls[result.id]" :initials="initials(result.name)"
@@ -274,8 +382,8 @@ onBeforeUnmount(clearLongPress);
                   >
                 </ListRow>
               </div>
-              <p v-if="!friends.length && !results.length" class="px-3 py-6 text-center text-sm text-harbor-muted">
-                No registered accounts found.
+              <p v-if="!results.length" class="px-3 py-6 text-center text-sm text-harbor-muted">
+                {{ friends.length ? 'No other people match your search.' : 'No registered accounts found.' }}
               </p>
             </template>
           </template>

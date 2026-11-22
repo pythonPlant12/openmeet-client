@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import {
+  ArrowRightAnimated,
   CirclePlusAnimated,
+  CodeAnimated,
+  HeartHandshakeAnimated,
+  LightbulbAnimated,
   LogInAnimated,
   LogOutAnimated,
   MessageSquareAnimated,
@@ -9,17 +13,13 @@ import {
 } from '@respeak/lucide-motion-vue';
 import { useMediaQuery, useTimeoutFn } from '@vueuse/core';
 import {
-  ArrowRight,
   Check,
   ChevronDown,
   ChevronRight,
   CircleUserRound,
-  Code2,
   Container,
   Copy,
   Github,
-  HeartHandshake,
-  Lightbulb,
   LogOut,
   Menu,
   ServerCog,
@@ -33,6 +33,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
+import logoUrl from '@/assets/logo.svg';
 import AccountMenuContent from '@/components/layout/AccountMenuContent.vue';
 import LiquidTabBar, { type LiquidTab } from '@/components/layout/LiquidTabBar.vue';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { useAuth } from '@/composables/useAuth';
 import { useMeetingNavigation } from '@/composables/useMeetingNavigation';
@@ -265,19 +267,19 @@ const whyOpenMeetItems = computed(() => [
     title: t('nav.technologies.title'),
     description: t('nav.technologies.description'),
     path: '/technologies',
-    icon: Code2,
+    icon: CodeAnimated,
   },
   {
     title: t('nav.idea.title'),
     description: t('nav.idea.description'),
     path: '/idea',
-    icon: Lightbulb,
+    icon: LightbulbAnimated,
   },
   {
     title: t('nav.freedom.title'),
     description: t('nav.freedom.description'),
     path: '/freedom',
-    icon: HeartHandshake,
+    icon: HeartHandshakeAnimated,
   },
 ]);
 
@@ -962,6 +964,20 @@ watch(mobileAccountActionsRef, (element, previous) => {
     v-if="showDesktopLiquidBar && !isHiddenForMeeting"
     class="marketing-font pointer-events-none fixed inset-x-0 top-3 z-[1030] flex justify-center px-4 text-harbor-ink"
   >
+    <!-- The signed-in bar has no brand tab, so the logo sits in the top left corner, level with the bar. Its left
+         edge lines up with the dashboard's chat list avatars: the workspace card starts 1.25rem in (centred once it
+         reaches its 1600px width), and an avatar sits 21px inside it (border, list, and row padding). Phones show
+         the workspace tabs at the bottom and leave this out. -->
+    <RouterLink
+      v-if="showWorkspaceTabs"
+      :to="homePath"
+      data-workspace-logo
+      :aria-label="branding.appName"
+      :title="branding.appName"
+      class="pointer-events-auto absolute left-[calc(max(1.25rem,(100vw_-_1600px)_/_2)_+_21px)] top-1/2 -translate-y-1/2 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
+    >
+      <img :src="logoUrl" alt="" class="size-9" />
+    </RouterLink>
     <LiquidTabBar
       class="pointer-events-auto"
       size="sm"
@@ -975,13 +991,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
     >
       <template #item-home="{ attrs }">
         <RouterLink :to="homePath" v-bind="attrs" @click="handleBrandNavigation">
-          <span
-            class="liquid-glass-primary relative flex size-7 items-center justify-center rounded-[0.65rem]"
-            aria-hidden="true"
-          >
-            <Video class="size-4" :stroke-width="2.25" />
-            <span class="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-white bg-harbor-faint" />
-          </span>
+          <img :src="logoUrl" alt="" class="size-7 shrink-0" aria-hidden="true" />
           <span class="text-base font-semibold tracking-[-0.03em] text-harbor-ink">{{ branding.appName }}</span>
         </RouterLink>
       </template>
@@ -1016,13 +1026,13 @@ watch(mobileAccountActionsRef, (element, previous) => {
                 <span
                   class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-harbor-hover text-harbor-icon"
                 >
-                  <component :is="item.icon" class="size-5" />
+                  <LiquidMenuIcon :animated="item.icon" :size="20" />
                 </span>
                 <span class="min-w-0 flex-1">
                   <strong class="block text-sm">{{ item.title }}</strong>
                   <span class="mt-0.5 block text-xs leading-5 text-harbor-muted">{{ item.description }}</span>
                 </span>
-                <ArrowRight class="size-4 text-harbor-faint" />
+                <LiquidMenuIcon :animated="ArrowRightAnimated" class="text-harbor-faint" />
               </DropdownMenuItem>
             </div>
           </DropdownMenuContent>
@@ -1112,13 +1122,22 @@ watch(mobileAccountActionsRef, (element, previous) => {
               <span class="liquid-tab-label">{{ t('nav.account') }}</span>
             </button>
           </DropdownMenuTrigger>
+          <!-- Like the mobile account sheet: you, your status, and Settings. The bar has its own Start meeting tab. -->
           <AccountMenuContent
             :nickname="nickname"
             :own-status="ownStatus"
             :is-nickname-copied="isNicknameCopied"
+            :workspace-links="false"
+            :profile-link="false"
             @copy-nickname="copyNickname"
             @set-status="setOwnStatus"
-          />
+          >
+            <template #actions>
+              <DropdownMenuItem data-account-settings @select="handleGoToPage('/account')">
+                <Settings class="size-4 text-harbor-icon" />{{ t('nav.settings') }}
+              </DropdownMenuItem>
+            </template>
+          </AccountMenuContent>
         </DropdownMenu>
       </template>
     </LiquidTabBar>
@@ -1165,15 +1184,7 @@ watch(mobileAccountActionsRef, (element, previous) => {
               class="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle"
               @click="handleBrandNavigation"
             >
-              <span
-                class="liquid-glass-primary relative flex size-9 items-center justify-center rounded-xl"
-                aria-hidden="true"
-              >
-                <Video class="size-5" :stroke-width="2.25" />
-                <span
-                  class="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-harbor-faint"
-                />
-              </span>
+              <img :src="logoUrl" alt="" class="size-9 shrink-0" aria-hidden="true" />
               <span class="text-lg font-semibold tracking-[-0.03em]">{{ branding.appName }}</span>
             </RouterLink>
 

@@ -272,13 +272,23 @@ describe('GroupInfoDialog', () => {
     ]);
   });
 
+  it('offers Join group to a non-member who found the group by search', async () => {
+    const outsider = { ...groupInfo, isMember: false, role: null, canJoin: true, accessPolicy: 'open' as const };
+    const found = mountDialog({ info: outsider, members: [], joinable: true });
+    await found.get('[data-join-group]').trigger('click');
+    expect(found.emitted('join')).toHaveLength(1);
+    // Members never see it, and neither does a group opened from elsewhere, such as an invitation.
+    expect(mountDialog({ joinable: true }).find('[data-join-group]').exists()).toBe(false);
+    expect(mountDialog({ info: outsider, members: [] }).find('[data-join-group]').exists()).toBe(false);
+  });
+
   it('puts Call and Chat at the top right, with the rest under ⋯ and leaving or deleting in red', async () => {
     const owner = mountDialog({ info: { ...groupInfo, role: 'creator', memberCount: 3 } });
     const actions = owner.get('[data-info-page-actions]');
     await actions.get('[data-start-call]').trigger('click');
     await actions.get('[data-open-chat]').trigger('click');
-    await actions.get('[data-start-video-call]').trigger('click');
-    expect(owner.emitted('call')).toEqual([[{ video: false }], [{ video: true }]]);
+    expect(actions.find('[data-start-video-call]').exists()).toBe(false);
+    expect(owner.emitted('call')).toEqual([[]]);
     expect(owner.emitted('chat')).toHaveLength(1);
     expect(actions.get('[data-quit-group]').attributes('data-variant')).toBe('danger');
     expect(actions.get('[data-remove-group]').attributes('data-variant')).toBe('danger');

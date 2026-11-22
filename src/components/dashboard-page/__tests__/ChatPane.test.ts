@@ -163,8 +163,7 @@ describe('ChatPane', () => {
     const live = { ...conversation, liveCall: { id: 'call-1', memberIds: ['friend-1'] } };
 
     const join = mountPane({ conversation: live, selectedFriend: friend });
-    expect(join.find('button[aria-label="Start a video call"]').exists()).toBe(false);
-    expect(join.find('button[aria-label="Start an audio call"]').exists()).toBe(false);
+    expect(join.find('button[aria-label="Start a call"]').exists()).toBe(false);
     await join.get('button[aria-label="Join call"]').trigger('click');
     expect(join.emitted('join')).toHaveLength(1);
 
@@ -174,7 +173,7 @@ describe('ChatPane', () => {
     expect(mine.emitted('return-to-call')).toHaveLength(1);
 
     const quiet = mountPane({ conversation, selectedFriend: friend });
-    expect(quiet.find('button[aria-label="Start a video call"]').exists()).toBe(true);
+    expect(quiet.find('button[aria-label="Start a call"]').exists()).toBe(true);
     expect(quiet.find('button[aria-label="Join call"]').exists()).toBe(false);
   });
 
@@ -243,7 +242,7 @@ describe('ChatPane', () => {
     expect(bar.classes().join(' ')).toContain('env(safe-area-inset-bottom)');
   });
 
-  it('starts video and audio calls from the header actions', async () => {
+  it('starts a call from the one header call action, with no video call', async () => {
     const wrapper = mountPane({
       conversation,
       selectedFriend: {
@@ -256,9 +255,10 @@ describe('ChatPane', () => {
       },
     });
 
-    await wrapper.get('[aria-label="Start a video call"]').trigger('click');
-    await wrapper.get('[aria-label="Start an audio call"]').trigger('click');
-    expect(wrapper.emitted('call')).toEqual([[{ video: true }], [{ video: false }]]);
+    // Every call starts with the camera off, so there is one Call action and no separate video call.
+    expect(wrapper.find('[aria-label="Start a video call"]').exists()).toBe(false);
+    await wrapper.get('[aria-label="Start a call"]').trigger('click');
+    expect(wrapper.emitted('call')).toEqual([[]]);
   });
 
   it("shows the sender's avatar beside a voice message", () => {

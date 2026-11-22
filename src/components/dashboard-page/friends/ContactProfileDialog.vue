@@ -10,7 +10,6 @@ import {
   Phone,
   UserPlus,
   UserX,
-  Video,
   X,
 } from 'lucide-vue-next';
 import { ref } from 'vue';
@@ -23,7 +22,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingRipple } from '@/components/ui/loading';
@@ -64,7 +62,7 @@ const copiedNickname = ref(false);
 const emit = defineEmits<{
   (event: 'update:open', value: boolean): void;
   (event: 'update:confirmationOpen', value: boolean): void;
-  (event: 'call', options: { video: boolean }): void;
+  (event: 'call'): void;
   (event: 'chat'): void;
   (event: 'remove'): void;
   (event: 'add-friend'): void;
@@ -146,9 +144,9 @@ async function copyNickname(nickname: string) {
           class="size-10"
           data-start-call
           :disabled="opening !== null || callActive"
-          aria-label="Start an audio call"
+          aria-label="Start a call"
           title="Call"
-          @click="emit('call', { video: false })"
+          @click="emit('call')"
         >
           <Phone class="size-[1.125rem]" /></button
         ><button
@@ -169,14 +167,6 @@ async function copyNickname(nickname: string) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" :side-offset="8" class="min-w-52">
-            <DropdownMenuItem
-              data-start-video-call
-              :disabled="opening !== null || callActive"
-              @select="emit('call', { video: true })"
-            >
-              <Video />Video call
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="danger"
               data-remove-friend
@@ -211,7 +201,9 @@ async function copyNickname(nickname: string) {
             class="harbor-ghost-action flex size-28 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar p-0"
             :class="[
               'border-2',
-              inLiveCall ? 'harbor-live-call-ring' : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
+              inLiveCall
+                ? 'harbor-live-call-ring'
+                : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
             ]"
             :aria-label="`View ${profile.name}'s profile picture`"
             @click="isAvatarPreviewOpen = true"
@@ -228,7 +220,9 @@ async function copyNickname(nickname: string) {
             class="flex size-28 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar"
             :class="[
               'border-2',
-              inLiveCall ? 'harbor-live-call-ring' : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
+              inLiveCall
+                ? 'harbor-live-call-ring'
+                : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
             ]"
           >
             <LoadingRipple class="size-6 text-harbor-accent" />
@@ -239,7 +233,9 @@ async function copyNickname(nickname: string) {
             class="flex size-28 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar text-3xl font-semibold text-harbor-accent"
             :class="[
               'border-2',
-              inLiveCall ? 'harbor-live-call-ring' : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
+              inLiveCall
+                ? 'harbor-live-call-ring'
+                : userStatusOption(profile.isOnline ? profile.status : 'offline').borderClass,
             ]"
             >{{ initials(profile.name) }}</span
           >

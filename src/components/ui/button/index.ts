@@ -9,10 +9,11 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground shadow hover:bg-primary/90',
-        destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90',
+        destructive: 'liquid-glass-danger',
         outline: 'border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
-        // The primary action is a white pill like the chat header's buttons; a destructive one is red glass.
+        // The primary action is a white pill like the chat header's buttons; a destructive one is the same white pill
+        // with red text. No variant paints a red fill.
         accent: 'liquid-glass-primary',
         danger: 'liquid-glass-danger',
         ghost: 'harbor-ghost-action',
@@ -33,7 +34,7 @@ export const buttonVariants = cva(
         'icon-lg': 'size-10',
       },
     },
-    compoundVariants: [{ variant: ['accent', 'danger'], class: 'rounded-full' }],
+    compoundVariants: [{ variant: ['accent', 'danger', 'destructive'], class: 'rounded-full' }],
     defaultVariants: {
       variant: 'default',
       size: 'default',

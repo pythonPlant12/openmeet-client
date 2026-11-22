@@ -19,7 +19,6 @@ import {
   UserPlus,
   UserRound,
   UsersRound,
-  Video,
 } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 
@@ -72,6 +71,9 @@ const props = defineProps<{
   changeFriendship: (member: GroupMember, change: FriendshipChange) => Promise<boolean>;
   accessLabel: (policy: GroupInfo['accessPolicy']) => string;
   formatDate: (value: string | null) => string;
+  /** Set for a group found by search that the user may join: shows Join group under the group's name. */
+  joinable?: boolean;
+  joining?: boolean;
 }>();
 const copiedGroupId = ref(false);
 const avatarInput = ref<HTMLInputElement | null>(null);
@@ -94,8 +96,9 @@ const emit = defineEmits<{
   (event: 'refresh'): void;
   (event: 'load-more-members'): void;
   (event: 'chat-member', member: GroupMember): void;
-  (event: 'call', options: { video: boolean }): void;
+  (event: 'call'): void;
   (event: 'chat'): void;
+  (event: 'join'): void;
 }>();
 
 const pendingFriendChange = ref<PendingFriendshipChange | null>(null);
@@ -331,9 +334,9 @@ watch(
           type="button"
           class="size-10"
           data-start-call
-          aria-label="Start a group audio call"
+          aria-label="Start a group call"
           title="Call"
-          @click="emit('call', { video: false })"
+          @click="emit('call')"
         >
           <Phone class="size-[1.125rem]" /></button
         ><button
@@ -353,9 +356,6 @@ watch(
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" :side-offset="8" class="min-w-52">
-            <DropdownMenuItem data-start-video-call @select="emit('call', { video: true })">
-              <Video />Video call
-            </DropdownMenuItem>
             <template v-if="canManage(info.role)">
               <DropdownMenuItem data-add-members @select="emit('add-members')">
                 <UserPlus />{{ groupAddActionLabel(info.accessPolicy) }}
@@ -363,8 +363,8 @@ watch(
               <DropdownMenuItem data-group-security @select="emit('group-settings')">
                 <LockKeyhole />Security
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
             </template>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               v-if="info.role !== 'creator' || info.memberCount > 1"
               variant="danger"
@@ -445,6 +445,18 @@ watch(
           <h3 class="truncate text-3xl font-semibold leading-tight tracking-[-0.03em]">{{ info.title }}</h3>
           <p class="mt-1 text-base text-harbor-muted">#{{ info.groupCode }}</p>
         </div>
+        <Button
+          v-if="joinable && !info.isMember && info.canJoin"
+          data-join-group
+          type="button"
+          variant="accent"
+          size="pill"
+          class="w-full max-w-xs"
+          :disabled="joining"
+          @click="emit('join')"
+        >
+          <LoadingRipple v-if="joining" size="sm" />{{ joining ? 'Joining...' : 'Join group' }}
+        </Button>
         <input ref="avatarInput" type="file" accept="image/*" class="sr-only" @change="uploadAvatar" />
       </section>
       <section class="grid gap-4 rounded-[1.4rem] bg-harbor-app p-4 text-sm sm:grid-cols-3">
@@ -567,11 +579,11 @@ watch(
                     ><span
                       class="flex size-10 items-center justify-center overflow-hidden rounded-[28%] bg-harbor-avatar text-xs font-semibold text-harbor-accent"
                       :class="[
-                          'border-2',
-                          member.inLiveCall
-                            ? 'harbor-live-call-ring'
-                            : userStatusOption(member.isOnline ? member.status : 'offline').borderClass,
-                        ]"
+                        'border-2',
+                        member.inLiveCall
+                          ? 'harbor-live-call-ring'
+                          : userStatusOption(member.isOnline ? member.status : 'offline').borderClass,
+                      ]"
                       ><img
                         v-if="memberAvatarUrls[member.id]"
                         :src="memberAvatarUrls[member.id]"

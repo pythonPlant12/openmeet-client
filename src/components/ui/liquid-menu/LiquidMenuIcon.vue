@@ -9,7 +9,7 @@ import { menuIconMotionKey } from './motion';
  * `animated` takes an icon from @respeak/lucide-motion-vue; icons the library lacks pass a static lucide icon
  * as `fallback`, which gets a short CSS bounce on the same triggers.
  */
-defineProps<{ animated?: Component; fallback?: Component }>();
+withDefaults(defineProps<{ animated?: Component; fallback?: Component; size?: number }>(), { size: 16 });
 
 const supportsHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
@@ -22,7 +22,7 @@ const animates = computed(() => motionAllowed && !prefersReducedMotion.value);
   <component
     :is="animated"
     v-if="animated"
-    :size="16"
+    :size="size"
     :stroke-width="2"
     :animate-on-hover="supportsHover && animates"
     :animate-on-tap="animates"
@@ -33,7 +33,8 @@ const animates = computed(() => motionAllowed && !prefersReducedMotion.value);
   <component
     :is="fallback"
     v-else-if="fallback"
-    :class="['size-4 shrink-0', { 'liquid-menu-static-icon': animates }]"
+    :size="size"
+    :class="['shrink-0', { 'liquid-menu-static-icon': animates }]"
     aria-hidden="true"
   />
 </template>

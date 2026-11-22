@@ -654,8 +654,8 @@ defineExpose({
             <span class="text-center text-[11px] leading-4">{{ addActionLabel }}</span>
           </Button>
           <Button
-            variant="ghost"
-            class="h-auto min-h-20 flex-col gap-2 rounded-2xl bg-harbor-danger-soft px-2 py-3 text-harbor-danger-strong hover:bg-harbor-danger/25"
+            variant="danger"
+            class="h-auto min-h-20 flex-col gap-2 !rounded-2xl px-2 py-3"
             :disabled="!canQuit || mutationBusy"
             :title="canQuit ? 'Quit group' : 'You are the only member. Remove the group instead.'"
             @click="setQuitOpen(true)"
@@ -850,12 +850,7 @@ defineExpose({
           >
             <Settings class="size-4" /> Group settings
           </Button>
-          <Button
-            v-if="canManage"
-            variant="ghost"
-            class="w-full rounded-full bg-harbor-danger-soft text-harbor-danger-strong hover:bg-harbor-danger/25"
-            @click="setDeleteOpen(true)"
-          >
+          <Button v-if="canManage" variant="danger" class="w-full" @click="setDeleteOpen(true)">
             <Trash2 class="size-4" /> Delete group
           </Button>
         </section>

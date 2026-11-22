@@ -103,10 +103,10 @@ describe('ContactProfileDialog', () => {
     expect(wrapper.text()).not.toContain('Online');
     expect(wrapper.text()).toContain('“Building OpenMeet”');
     expect(wrapper.text()).toContain('alex@example.com');
-    // Call and Chat sit in the header pill; video call and Remove friend (in red) are under ⋯.
-    expect(wrapper.find('[data-info-page-actions] [aria-label="Start an audio call"]').exists()).toBe(true);
+    // Call and Chat sit in the header pill; Remove friend (in red) is under ⋯. There is no separate video call.
+    expect(wrapper.find('[data-info-page-actions] [aria-label="Start a call"]').exists()).toBe(true);
     expect(wrapper.find('[data-info-page-actions] [data-open-chat]').exists()).toBe(true);
-    expect(wrapper.find('[aria-label="Profile actions"] [data-start-video-call]').text()).toContain('Video call');
+    expect(wrapper.find('[aria-label="Profile actions"] [data-start-video-call]').exists()).toBe(false);
     expect(wrapper.get('[aria-label="Profile actions"] [data-remove-friend]').attributes('data-variant')).toBe(
       'danger',
     );

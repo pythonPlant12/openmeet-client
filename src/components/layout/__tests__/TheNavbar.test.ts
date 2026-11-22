@@ -113,7 +113,11 @@ vi.mock('@respeak/lucide-motion-vue', async () => {
     });
 
   return {
+    ArrowRightAnimated: iconStub('arrow-right'),
     CirclePlusAnimated: iconStub('circle-plus'),
+    CodeAnimated: iconStub('code'),
+    HeartHandshakeAnimated: iconStub('heart-handshake'),
+    LightbulbAnimated: iconStub('lightbulb'),
     LogInAnimated: iconStub('log-in'),
     LogOutAnimated: iconStub('log-out'),
     MessageSquareAnimated: iconStub('message-square'),
@@ -287,6 +291,27 @@ describe('TheNavbar', () => {
     const tab = wrapper.get('[data-tab="friends"]');
     expect(tab.get('svg').attributes('data-icon')).toBe('users-round');
     expect(tab.text()).toContain('nav.contacts');
+  });
+
+  it('shows the logo in the top left corner of the signed-in bar on tablets and desktops, not on phones', async () => {
+    auth.authenticated = true;
+    social.getCurrentUserProfile.mockResolvedValue({ avatarUrl: null, nickname: 'ada_l', status: 'available' });
+
+    for (const desktop of [true, false]) {
+      media.desktop = desktop;
+      media.mobile = false;
+      const { wrapper } = await mountNavbar('/dashboard');
+      await flushPromises();
+      expect(wrapper.get('[data-workspace-logo]').attributes('href')).toBe('/dashboard');
+      wrapper.unmount();
+    }
+
+    media.desktop = false;
+    media.mobile = true;
+    const phone = await mountNavbar('/dashboard');
+    await flushPromises();
+    expect(phone.wrapper.find('[data-workspace-logo]').exists()).toBe(false);
+    phone.wrapper.unmount();
   });
 
   it('uses a persistent profile trigger and bottom sheet for authenticated phones', async () => {
@@ -479,8 +504,13 @@ describe('TheNavbar', () => {
 
     expect(wrapper.get('[data-tab="account"] .liquid-tab-avatar')).toBeDefined();
     expect(wrapper.text()).toContain('A deliberately long participant name');
-    expect(wrapper.text()).toContain('common.dashboard');
-    expect(wrapper.text()).toContain('nav.friends');
+    // The desktop account menu matches the mobile account sheet: the name row is not a link, and Settings opens the
+    // account page. The bar keeps its own meeting tab, so the menu has no meeting action.
+    expect(wrapper.text()).not.toContain('common.dashboard');
+    expect(wrapper.text()).not.toContain('nav.friends');
+    expect(wrapper.get('[data-account-profile]').attributes('role')).toBeUndefined();
+    expect(wrapper.get('[data-account-settings]').text()).toContain('nav.settings');
+    expect(wrapper.find('[data-account-start-meeting]').exists()).toBe(false);
 
     media.desktop = false;
     const mobile = await mountNavbar('/room/meeting-id');

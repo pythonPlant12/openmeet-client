@@ -36,7 +36,12 @@ const router = createRouter({
       path: '/',
       name: 'landing',
       component: landingComponent,
-      meta: { requiresAuth: false, showMarketingNav: showLandingPage, isAuthPage: !showLandingPage },
+      meta: {
+        requiresAuth: false,
+        showMarketingNav: showLandingPage,
+        isAuthPage: !showLandingPage,
+        isPublicPage: true,
+      },
     },
     {
       path: '/login',
@@ -48,19 +53,19 @@ const router = createRouter({
       path: '/technologies',
       name: 'technologies',
       component: TechnologiesPage,
-      meta: { requiresAuth: false, showMarketingNav: true },
+      meta: { requiresAuth: false, showMarketingNav: true, isPublicPage: true },
     },
     {
       path: '/idea',
       name: 'idea',
       component: IdeaPage,
-      meta: { requiresAuth: false, showMarketingNav: true },
+      meta: { requiresAuth: false, showMarketingNav: true, isPublicPage: true },
     },
     {
       path: '/freedom',
       name: 'freedom',
       component: FreedomPage,
-      meta: { requiresAuth: false, showMarketingNav: true },
+      meta: { requiresAuth: false, showMarketingNav: true, isPublicPage: true },
     },
     {
       path: '/register',
@@ -84,6 +89,7 @@ const router = createRouter({
       path: '/room',
       name: 'room-index',
       component: NotFoundPage,
+      meta: { isPublicPage: true },
     },
     {
       path: '/room/:id',
@@ -95,6 +101,7 @@ const router = createRouter({
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: NotFoundPage,
+      meta: { isPublicPage: true },
     },
   ],
 });

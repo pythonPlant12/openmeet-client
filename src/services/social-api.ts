@@ -272,6 +272,21 @@ export interface GroupInfo {
   canJoin: boolean;
 }
 
+/** A group the user is not in, found by name or group code. Only open and password groups are discoverable. */
+export interface GroupSearchResult {
+  id: string;
+  title: string;
+  groupCode: string;
+  avatarUrl: string | null;
+  accessPolicy: GroupAccessPolicy;
+  memberCount: number;
+}
+
+export interface GroupSearchPage {
+  results: GroupSearchResult[];
+  nextOffset: number | null;
+}
+
 export interface GroupMember {
   id: string;
   name: string;
@@ -805,6 +820,19 @@ export const socialApi = {
 
   getGroupInfo(accessToken: string, groupId: string) {
     return request<GroupInfo>(`/conversations/groups/${groupId}/info`, accessToken);
+  },
+
+  searchGroups(accessToken: string, query: string, offset = 0) {
+    const params = new URLSearchParams({ query, offset: String(offset) });
+    return request<GroupSearchPage>(`/conversations/groups/search?${params.toString()}`, accessToken);
+  },
+
+  /** Checks a password group's password and returns its info, before the person joins it. */
+  unlockGroupInfo(accessToken: string, groupId: string, password: string) {
+    return request<GroupInfo>(`/conversations/groups/${groupId}/unlock`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
   },
 
   getGroupInfoByCode(accessToken: string, code: string) {

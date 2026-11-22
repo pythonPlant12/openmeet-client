@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMachine } from '@xstate/vue';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
-import { RouterView, useRouter } from 'vue-router';
+import { RouterView, useRoute, useRouter } from 'vue-router';
 
 import ActiveCallHost from '@/components/layout/ActiveCallHost.vue';
 import IncomingCallBar from '@/components/layout/IncomingCallBar.vue';
@@ -10,6 +10,7 @@ import { Toaster } from '@/components/ui/toast';
 import { toast } from '@/components/ui/toast/store';
 import { type IncomingCall, incomingCallsKey } from '@/composables/useIncomingCalls';
 import { i18n } from '@/i18n';
+import { askToLeaveActiveCall } from '@/lib/leave-call-prompt';
 import type { NotificationAction } from '@/services/native-notifications';
 import { showSystemNotification } from '@/services/notifications';
 import {
@@ -22,14 +23,13 @@ import { type SocialAlert, type SocialEventResource, socialEventsService } from 
 import { SystemAlerts } from '@/services/system-alerts';
 import { startSystemBarSync } from '@/services/system-bars';
 
-import { askToLeaveActiveCall } from '@/lib/leave-call-prompt';
-
 import { cookieUtils } from './utils';
 import { authMachine } from './xstate/machines/auth';
 import { AuthEventType } from './xstate/machines/auth/types';
 import { webrtcMachine } from './xstate/machines/webrtc';
 
 const router = useRouter();
+const route = useRoute();
 
 const authActor = useMachine(authMachine, {
   input: {
@@ -41,6 +41,9 @@ const authActor = useMachine(authMachine, {
 
 const webrtcActor = useMachine(webrtcMachine);
 const isAuthenticated = computed(() => authActor.snapshot.value.value === 'authenticated');
+// The signed-in workspace is a fixed full-screen app, so its viewport never scrolls. Public pages, such as the landing
+// and marketing pages, keep page scrolling for signed-in visitors too.
+const locksViewport = computed(() => isAuthenticated.value && !route.meta.isPublicPage);
 
 function setAuthenticatedViewportLock(locked: boolean) {
   document.documentElement.classList.toggle('authenticated-viewport', locked);
@@ -551,7 +554,7 @@ watch(
   { immediate: true },
 );
 
-watch(isAuthenticated, setAuthenticatedViewportLock, { immediate: true });
+watch(locksViewport, setAuthenticatedViewportLock, { immediate: true });
 
 let stopSystemBarSync = () => {};
 
@@ -582,7 +585,7 @@ onUnmounted(() => {
 <template>
   <div
     class="relative"
-    :class="isAuthenticated ? 'h-[100dvh] overflow-hidden bg-harbor-app' : 'min-h-screen bg-harbor-surface'"
+    :class="locksViewport ? 'h-[100dvh] overflow-hidden bg-harbor-app' : 'min-h-screen bg-harbor-surface'"
   >
     <TheNavbar />
     <IncomingCallBar

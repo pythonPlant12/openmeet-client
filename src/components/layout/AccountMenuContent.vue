@@ -18,7 +18,9 @@ import { USER_STATUS_OPTIONS, userStatusOption } from '@/config/user-status.conf
 import type { UserStatus } from '@/services/social-api';
 import { AuthEventType } from '@/xstate/machines/auth/types';
 
-// The signed-in user's account menu, shared by the navbar avatar and the dashboard account card.
+// The signed-in user's account menu, shared by the navbar avatar and the dashboard account card. The navbar
+// turns off the workspace links and the profile link and fills the `actions` slot with its own Settings item, so its
+// menu matches the mobile account sheet.
 const props = withDefaults(
   defineProps<{
     nickname: string | null;
@@ -26,8 +28,11 @@ const props = withDefaults(
     isNicknameCopied: boolean;
     side?: 'top' | 'right' | 'bottom' | 'left';
     align?: 'start' | 'center' | 'end';
+    workspaceLinks?: boolean;
+    /** Whether the name row opens the account page; without it the row only shows the name and the copy button. */
+    profileLink?: boolean;
   }>(),
-  { side: 'bottom', align: 'end' },
+  { side: 'bottom', align: 'end', workspaceLinks: true, profileLink: true },
 );
 const emit = defineEmits<{
   (event: 'copy-nickname'): void;
@@ -48,7 +53,12 @@ const isAuthBusy = computed(
 
 <template>
   <DropdownMenuContent :side="side" :align="align" :side-offset="12" class="marketing-font min-w-52">
-    <DropdownMenuItem @select="router.push('/account')">
+    <component
+      :is="profileLink ? DropdownMenuItem : 'div'"
+      data-account-profile
+      :class="profileLink ? undefined : 'harbor-menu-item flex cursor-default items-center'"
+      v-on="profileLink ? { select: () => router.push('/account') } : {}"
+    >
       <span class="min-w-0 flex-1">
         <span class="block truncate font-semibold">{{ accountName }}</span>
         <button
@@ -66,13 +76,15 @@ const isAuthBusy = computed(
           <Copy v-else class="size-3 shrink-0" />
         </button>
       </span>
-    </DropdownMenuItem>
-    <DropdownMenuItem @select="router.push('/dashboard')">
-      {{ t('common.dashboard') }}
-    </DropdownMenuItem>
-    <DropdownMenuItem @select="router.push({ path: '/dashboard', query: { panel: 'friends' } })">
-      {{ t('nav.friends') }}
-    </DropdownMenuItem>
+    </component>
+    <template v-if="workspaceLinks">
+      <DropdownMenuItem @select="router.push('/dashboard')">
+        {{ t('common.dashboard') }}
+      </DropdownMenuItem>
+      <DropdownMenuItem @select="router.push({ path: '/dashboard', query: { panel: 'friends' } })">
+        {{ t('nav.friends') }}
+      </DropdownMenuItem>
+    </template>
     <DropdownMenuSub>
       <DropdownMenuSubTrigger data-status-submenu>
         <span class="size-2.5 shrink-0 rounded-full" :class="ownStatusOption.dotClass" />
@@ -91,11 +103,13 @@ const isAuthBusy = computed(
         </DropdownMenuItem>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
-    <DropdownMenuSeparator />
-    <DropdownMenuItem :disabled="isAuthBusy" @select="send({ type: AuthEventType.LOGOUT })">
-      <LoadingRipple v-if="isLoggingOut" size="sm" />
-      <LogOut v-else class="size-4" />
-      {{ t('common.logOut') }}
-    </DropdownMenuItem>
+    <slot name="actions">
+      <DropdownMenuSeparator />
+      <DropdownMenuItem :disabled="isAuthBusy" @select="send({ type: AuthEventType.LOGOUT })">
+        <LoadingRipple v-if="isLoggingOut" size="sm" />
+        <LogOut v-else class="size-4" />
+        {{ t('common.logOut') }}
+      </DropdownMenuItem>
+    </slot>
   </DropdownMenuContent>
 </template>

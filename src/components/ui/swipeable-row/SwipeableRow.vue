@@ -279,6 +279,7 @@ defineExpose({ close });
   <div
     ref="root"
     data-swipeable-row
+    data-list-item
     class="relative touch-pan-y"
     :class="[clipHorizontally ? 'harbor-clip-x' : 'overflow-hidden', { 'select-none': isDragging }]"
     @pointerdown="onPointerDown"
