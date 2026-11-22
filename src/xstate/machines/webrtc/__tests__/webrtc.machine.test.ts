@@ -280,32 +280,6 @@ describe('WebRTC Machine', () => {
     actor.stop();
   });
 
-  it("shows another person's camera mirrored unless they report their back camera", async () => {
-    const actor = createTestActor();
-    actor.start();
-    actor.send({ type: 'INIT_MEDIA', participantName: 'Alice' });
-    await waitFor(actor, (state) => state.matches('mediaReady'));
-    actor.send({ type: 'JOIN_ROOM', roomId: 'room-1', participantName: 'Alice' });
-    await waitFor(actor, (state) => state.matches({ connected: 'inCall' }));
-    actor.send({ type: 'PARTICIPANT_JOINED', participantId: 'participant-2', participantName: 'Bob' });
-    const bob = () => actor.getSnapshot().context.participants.get('participant-2');
-
-    actor.send({
-      type: 'MEDIA_STATE_CHANGED',
-      participantId: 'participant-2',
-      audioEnabled: true,
-      videoEnabled: true,
-      videoMirrored: false,
-    });
-    expect(bob()?.videoMirrored).toBe(false);
-
-    // An older client sends no mirror state; it mirrors its own camera.
-    actor.send({ type: 'MEDIA_STATE_CHANGED', participantId: 'participant-2', audioEnabled: true, videoEnabled: true });
-    expect(bob()?.videoMirrored).toBe(true);
-
-    actor.stop();
-  });
-
   it('loads room chat history before appending live messages', async () => {
     const actor = createTestActor();
     actor.start();

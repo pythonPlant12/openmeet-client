@@ -25,11 +25,6 @@ defineProps<{
   /** The call could not get the microphone or camera; its button shows a warning that asks again. */
   audioWarning?: boolean;
   videoWarning?: boolean;
-  /**
-   * Full screen sits the bar 0.25rem higher, so it clears the screen's edge with a little more room. Over the home
-   * indicator area (the OpenMeet app) the bar always keeps 0.5rem above the indicator.
-   */
-  fullscreen?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -168,13 +163,9 @@ function onLeave() {
 
 <template>
   <div
-    class="marketing-font pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-2 text-harbor-ink"
-    :class="
-      fullscreen
-        ? 'pb-[calc(max(0.5rem,calc(env(safe-area-inset-bottom)+0.5rem))+0.25rem)]'
-        : 'pb-[max(0.5rem,calc(env(safe-area-inset-bottom)+0.5rem))]'
-    "
+    class="marketing-font pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(1.125rem,calc(env(safe-area-inset-bottom)+0.5rem))] text-harbor-ink"
   >
+    <!-- 16px from the sides and 18px from the bottom, or 0.5rem above the home indicator where that is higher. -->
     <!-- While the panel is open, a tap anywhere else only closes it and presses nothing underneath. -->
     <div
       v-if="isOpen"

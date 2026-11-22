@@ -39,7 +39,7 @@ const chatAriaLabel = computed(() => {
 
 <template>
   <div
-    class="marketing-font pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-50 flex items-center gap-2 px-3 text-harbor-ink"
+    class="marketing-font pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-50 flex items-center gap-2 px-4 text-harbor-ink"
     data-call-phone-top-bar
   >
     <div class="flex min-w-0 flex-1 items-center gap-2">

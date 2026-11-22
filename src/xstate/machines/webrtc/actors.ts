@@ -121,7 +121,6 @@ export const joinRoomActor = fromCallback<SFUEvents, JoinRoomInput>(({ sendBack,
         participantId: message.participantId,
         audioEnabled: message.audioEnabled,
         videoEnabled: message.videoEnabled,
-        videoMirrored: message.videoMirrored,
       });
     }
   });
