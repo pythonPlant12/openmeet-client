@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useEventListener } from '@vueuse/core';
 import { Search, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+
+import { swallowNextClick } from '@/lib/swallow-next-click';
 
 const props = defineProps<{
   title: string;
@@ -13,6 +16,7 @@ const emit = defineEmits<{ 'search-focus': []; 'search-blur': [] }>();
 const query = defineModel<string>('query', { default: '' });
 
 const input = ref<HTMLInputElement | null>(null);
+const field = ref<HTMLElement | null>(null);
 const focused = ref(false);
 // The field stays open while it is focused or holds a query, so results never lose their search.
 const expanded = computed(() => focused.value || query.value !== '');
@@ -26,6 +30,20 @@ function handleBlur() {
   focused.value = false;
   emit('search-blur');
 }
+
+// On a phone the first tap outside a focused search only closes it and its keyboard, so the tap does not also open
+// the chat or person under the finger. A mouse click outside works at once, as on desktop.
+useEventListener(
+  document,
+  'pointerdown',
+  (event: PointerEvent) => {
+    if (!focused.value || event.pointerType === 'mouse') return;
+    if (event.target instanceof Node && field.value?.contains(event.target)) return;
+    input.value?.blur();
+    swallowNextClick();
+  },
+  { capture: true },
+);
 
 function clear() {
   query.value = '';
@@ -48,6 +66,7 @@ defineExpose({ focus: (options?: FocusOptions) => input.value?.focus(options) })
     <div class="relative flex h-11 items-center justify-between gap-2">
       <div v-if="props.searchLabel" class="relative z-[1] h-11 min-w-0 flex-1">
         <label
+          ref="field"
           data-pane-search
           :data-expanded="String(expanded)"
           class="absolute inset-y-0 left-0 flex cursor-text items-center overflow-hidden rounded-full bg-harbor-surface shadow-harbor-around transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"

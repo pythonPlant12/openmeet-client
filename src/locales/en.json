@@ -417,7 +417,8 @@
       "audioOutput": "Audio output",
       "showChat": "Show chat",
       "showOwnCamera": "Show my own camera",
-      "flipCamera": "Switch camera"
+      "flipCamera": "Switch camera",
+      "flipCameraFailed": "Could not switch the camera"
     },
     "invite": {
       "title": "Invite people",

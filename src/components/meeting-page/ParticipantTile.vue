@@ -15,6 +15,7 @@ import {
 import LiquidMenuIcon from '@/components/ui/liquid-menu/LiquidMenuIcon.vue';
 import { LoadingRipple } from '@/components/ui/loading';
 import { userStatusOption } from '@/config/user-status.config';
+import { localCameraMirrored } from '@/lib/camera-facing';
 import type { UserStatus } from '@/services/social-api';
 import type { Participant } from '@/xstate/machines/webrtc/types';
 
@@ -203,6 +204,12 @@ const innerRadiusStyle = computed(() =>
 
 // Screens are never cropped or mirrored, so their text stays whole and readable.
 const isScreen = computed(() => !!props.participant.screenShareOf);
+// A selfie camera shows like a mirror, so moving left moves the picture left; a phone's back camera shows the scene
+// the right way round. Everyone in the call sees a camera the way its sender sees it.
+const isMirrored = computed(() => {
+  if (isScreen.value) return false;
+  return props.participant.isLocal ? localCameraMirrored.value : props.participant.videoMirrored !== false;
+});
 const objectFitClass = computed(() => {
   if (isScreen.value) return 'object-contain';
   if (props.fit) return props.fit === 'cover' ? 'object-cover' : 'object-contain';
@@ -319,7 +326,7 @@ onMounted(async () => {
           innerRadiusClass,
           surfaceClass,
           objectFitClass,
-          { hidden: !showsVideo, '-scale-x-100': participant.isLocal && !isScreen },
+          { hidden: !showsVideo, '-scale-x-100': isMirrored },
         ]"
         :style="innerRadiusStyle"
       />

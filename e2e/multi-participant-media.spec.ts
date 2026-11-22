@@ -297,6 +297,47 @@ test.describe('multi-participant media', () => {
     });
   });
 
+  test.describe('with a front and a back camera', () => {
+    test("the other person sees the sender's camera the way the sender sees it", async ({ browser, baseURL }) => {
+      test.setTimeout(180_000);
+
+      const session = await joinParticipants(browser, baseURL!, twoParticipantCount, 'camera-mirror-e2e', 'stun+turn', {
+        // The second fake camera stands in for a phone's back camera, the first for its selfie camera.
+        initScript: () => {
+          const settings = MediaStreamTrack.prototype.getSettings;
+          MediaStreamTrack.prototype.getSettings = function (this: MediaStreamTrack) {
+            const result = settings.call(this);
+            if (this.kind !== 'video' || !/fake_device/i.test(this.label)) return result;
+            return { ...result, facingMode: /fake_device_1/i.test(this.label) ? 'environment' : 'user' };
+          };
+        },
+      });
+      const [sender, receiver] = session.pages;
+      const ownVideo = sender.locator('[data-testid="participant-video"][data-participant-local="true"]');
+      const senderOnReceiver = receiver.locator(remoteVideoSelector);
+      const mirrored = /(^|\s)-scale-x-100(\s|$)/;
+
+      try {
+        await waitForParticipantCount(session.pages, twoParticipantCount);
+        await waitForAllConnections(session.pages);
+        await waitForHtmlVideoPlayback(session.pages, twoParticipantCount);
+        await expect(ownVideo).toHaveClass(mirrored);
+        await expect(senderOnReceiver).toHaveClass(mirrored);
+
+        await switchOwnDevice(sender, 'video');
+        await expect(ownVideo).not.toHaveClass(mirrored);
+        await expect(senderOnReceiver).not.toHaveClass(mirrored);
+
+        await switchOwnDevice(sender, 'video');
+        await expect(ownVideo).toHaveClass(mirrored);
+        await expect(senderOnReceiver).toHaveClass(mirrored);
+      } finally {
+        test.info().annotations.push({ type: 'diagnostics', description: summarizeDiagnostics(session.diagnostics) });
+        await closeContexts(session.contexts);
+      }
+    });
+  });
+
   test('transmits and renders audio/video for every participant', async ({ browser, baseURL }) => {
     test.setTimeout(180_000);
 
@@ -522,7 +563,8 @@ async function joinParticipants(
     knownName = false,
     turnOnMedia = true,
     listenOnly = [],
-  }: { knownName?: boolean; turnOnMedia?: boolean; listenOnly?: number[] } = {},
+    initScript,
+  }: { knownName?: boolean; turnOnMedia?: boolean; listenOnly?: number[]; initScript?: () => void } = {},
 ): Promise<ParticipantSession> {
   const roomUrl =
     process.env.PLAYWRIGHT_ROOM_URL ?? process.env.OPENMEET_ROOM_URL ?? `${baseURL}/room/${roomPrefix}-${Date.now()}`;
@@ -544,6 +586,7 @@ async function joinParticipants(
             : query(descriptor);
       });
     }
+    if (initScript) await context.addInitScript(initScript);
     if (knownName) {
       await context.addInitScript((name: string) => sessionStorage.setItem('participantName', name), `User ${index + 1}`);
     }

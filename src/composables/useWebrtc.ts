@@ -1,8 +1,9 @@
 import { computed, inject } from 'vue';
 
+import { localCameraMirrored } from '@/lib/camera-facing';
 import type { VideoQuality } from '@/services/video-quality';
 import type { DeviceConstraints } from '@/services/webrtc-sfu';
-import { getServices } from '@/xstate/machines/webrtc/actors';
+import { getServices, getSignalingService } from '@/xstate/machines/webrtc/actors';
 import type { ChatMessage, Participant } from '@/xstate/machines/webrtc/types';
 
 // Type for the full useMachine return object
@@ -110,6 +111,17 @@ export function useWebrtc() {
     webrtcActor.send({ type: 'TOGGLE_VIDEO', participantId, enabled });
   };
 
+  /** Tells the room your media state again, such as when your camera turns between mirrored and not. */
+  const sendLocalMediaState = () => {
+    const participant = localParticipant.value;
+    if (!participant) return;
+    getSignalingService()?.sendMediaStateChanged(
+      participant.audioEnabled,
+      participant.videoEnabled,
+      localCameraMirrored.value,
+    );
+  };
+
   const retry = () => {
     webrtcActor.send({ type: 'RETRY' });
   };
@@ -185,6 +197,7 @@ export function useWebrtc() {
     expand,
     toggleParticipantAudio,
     toggleParticipantVideo,
+    sendLocalMediaState,
     sendChatMessage,
     sendChatReaction,
     switchDevice,

@@ -70,11 +70,7 @@ let ignoreGestureClick = false;
 
 const recording = computed(() => state.value === 'holding' || state.value === 'locked');
 const previewLevels = computed(() => preview.value?.levels ?? []);
-const previewClock = computed(() =>
-  formatVoiceDuration(
-    playback.playing.value || playback.positionMs.value ? playback.positionMs.value : previewDuration.value,
-  ),
-);
+const previewClock = computed(() => formatVoiceDuration(playback.clockMs.value));
 // Every part of the recorder is rendered up front and only shown or hidden with CSS: creating them
 // when a press starts, together with opening the microphone, stuttered in the iOS web view. The
 // transitions touch opacity and transform only, which stay on the compositor.
@@ -183,8 +179,6 @@ function onPointerDown(event: PointerEvent) {
   };
   ignoreGestureClick = true;
   state.value = 'pressing';
-  // iOS starts audio only from inside a gesture handler, so the context opens with pointer-down.
-  recorder.prepare();
   recorder.openMicrophone();
   prepareHaptics();
   if (startsImmediately) void beginRecording(false);
@@ -245,7 +239,6 @@ function onButtonClick(event: MouseEvent) {
   }
   // Keyboard activation has no hold, so it starts a locked recording.
   if (state.value === 'idle' && event.detail === 0 && !props.disabled && !finishing) {
-    recorder.prepare();
     void beginRecording(true);
   }
 }
@@ -449,6 +442,7 @@ onBeforeUnmount(() => {
           unplayed-class="bg-harbor-waveform"
           class="h-6"
           @seek="playback.seek"
+          @scrub="playback.scrub"
         />
         <span class="shrink-0 text-xs font-semibold tabular-nums text-harbor-ink-soft">{{ previewClock }}</span>
       </div>

@@ -42,7 +42,7 @@ const emit = defineEmits<{ (e: 'expand'): void; (e: 'mute'): void; (e: 'leave'):
 const { t } = useI18n();
 
 const participants = toRef(props, 'participants');
-const { activeSpeakerId } = useActiveSpeaker(participants);
+const { activeSpeakerId, speakingIds } = useActiveSpeaker(participants);
 const others = computed(() => props.participants.filter((participant) => !participant.isLocal));
 const lastSpeakerId = ref<string | null>(null);
 watch(activeSpeakerId, (id) => {
@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
           :participant="shown"
           :status="statuses?.[shown.id]"
           :avatar-url="avatarUrls?.[shown.id]"
-          :speaking="!!activeSpeakerId && shown.id === activeSpeakerId"
+          :speaking="speakingIds.has(shown.id)"
           :interactive="false"
           :show-actions="false"
           dark

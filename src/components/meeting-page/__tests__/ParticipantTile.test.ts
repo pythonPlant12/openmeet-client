@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
 import ParticipantTile from '@/components/meeting-page/ParticipantTile.vue';
+import { setLocalCameraFacing } from '@/lib/camera-facing';
 import type { UserStatus } from '@/services/social-api';
 
 const participant = {
@@ -264,5 +265,28 @@ describe('ParticipantTile video', () => {
     await flushPromises();
     expect(wrapper.get<HTMLVideoElement>('[data-testid="participant-video"]').element.srcObject).toBeNull();
     expect(wrapper.find('[data-participant-avatar]').exists()).toBe(true);
+  });
+
+  it("mirrors your own selfie camera but not a phone's back camera", async () => {
+    const own = { ...participant, isLocal: true, stream } as typeof participant;
+    setLocalCameraFacing('user');
+    const wrapper = mountTile(null, 'grid', { participant: own });
+    const video = () => wrapper.get('[data-testid="participant-video"]');
+    expect(video().classes()).toContain('-scale-x-100');
+
+    setLocalCameraFacing('environment');
+    await flushPromises();
+    expect(video().classes()).not.toContain('-scale-x-100');
+    setLocalCameraFacing(null);
+  });
+
+  it("shows another person's camera the way they see it", () => {
+    const remote = (videoMirrored?: boolean) =>
+      mountTile(null, 'grid', { participant: { ...participant, stream, videoMirrored } as typeof participant })
+        .get('[data-testid="participant-video"]')
+        .classes();
+    expect(remote()).toContain('-scale-x-100');
+    expect(remote(true)).toContain('-scale-x-100');
+    expect(remote(false)).not.toContain('-scale-x-100');
   });
 });

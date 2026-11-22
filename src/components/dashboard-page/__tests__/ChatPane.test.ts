@@ -54,7 +54,10 @@ const groupMember: GroupMember = {
 
 enableAutoUnmount(afterEach);
 
-function mountPane(props: Record<string, unknown> = {}, options: { attachTo?: Element } = {}) {
+function mountPane(
+  props: Record<string, unknown> = {},
+  { mixins, ...options }: { attachTo?: Element; mixins?: Record<string, unknown>[] } = {},
+) {
   return mount(ChatPane, {
     ...options,
     props: {
@@ -88,6 +91,7 @@ function mountPane(props: Record<string, unknown> = {}, options: { attachTo?: El
         EmojiPickerButton: { template: '<div />' },
         LoadingRipple: { template: '<span data-loading />' },
       },
+      mixins,
     },
   });
 }
@@ -182,7 +186,10 @@ describe('ChatPane', () => {
     quiet.unmount();
 
     const live = mountPane(
-      { conversation: { ...conversation, liveCall: { id: 'call-1', memberIds: ['friend-1'] } }, selectedFriend: friend },
+      {
+        conversation: { ...conversation, liveCall: { id: 'call-1', memberIds: ['friend-1'] } },
+        selectedFriend: friend,
+      },
       { attachTo: document.body },
     );
     await live.get('header [data-conversation-picture]').trigger('click');
@@ -219,9 +226,20 @@ describe('ChatPane', () => {
     const bar = wrapper.get('[data-composer-bar]');
     expect(bar.classes().join(' ')).toContain('env(safe-area-inset-bottom)');
 
-    await bar.trigger('focusin');
+    await bar.get('textarea').trigger('focusin');
     expect(bar.classes()).toContain('pb-2.5');
-    await bar.trigger('focusout');
+    await bar.get('textarea').trigger('focusout');
+    expect(bar.classes().join(' ')).toContain('env(safe-area-inset-bottom)');
+  });
+
+  // iOS focuses a tapped button. If that dropped the padding, the bar moved under the finger and the tap
+  // missed, so a locked voice message needed a second tap to send.
+  it('keeps the home indicator padding when a composer button takes focus', async () => {
+    const wrapper = mountPane({ conversation });
+    const bar = wrapper.get('[data-composer-bar]');
+
+    await bar.get('[aria-label="Add an attachment"]').trigger('focusin');
+
     expect(bar.classes().join(' ')).toContain('env(safe-area-inset-bottom)');
   });
 
@@ -264,6 +282,32 @@ describe('ChatPane', () => {
     });
 
     expect(wrapper.get('[data-voice-avatar] img').attributes('src')).toBe('/avatars/friend.jpg');
+  });
+
+  it('does not re-render the message rows when only the composer changes', async () => {
+    let rowUpdates = 0;
+    const wrapper = mountPane(
+      {
+        conversation,
+        messages: [message, reply],
+        // A new object on every call, as the dashboard builds it.
+        senderAvatar: () => ({ url: '/avatars/friend.jpg', initials: 'F' }),
+      },
+      {
+        mixins: [
+          {
+            updated(this: { $options: { __name?: string } }) {
+              if (this.$options.__name === 'ChatMessage') rowUpdates += 1;
+            },
+          },
+        ],
+      },
+    );
+
+    await wrapper.setProps({ content: 'Typing' });
+    await wrapper.setProps({ content: '' });
+
+    expect(rowUpdates).toBe(0);
   });
 
   it('quotes a message in the composer and cancels the reply', async () => {
@@ -469,6 +513,31 @@ describe('ChatPane', () => {
     expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' }));
   });
 
+  it('offers the jump to unread messages only while the first of them is out of view', async () => {
+    const unread = { ...message, sequence: 2 };
+    const wrapper = mountPane(
+      { conversation, messages: [message, unread], unreadStartSequence: unread.sequence },
+      { attachTo: document.body },
+    );
+    const pane = wrapper.get('[aria-label="Message history"]').element as HTMLElement;
+    const unreadMessage = wrapper.get('[data-message-sequence="2"]').element as HTMLElement;
+    pane.getBoundingClientRect = () => ({ top: 0, bottom: 300 }) as DOMRect;
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 300 });
+    Object.defineProperty(pane, 'clientHeight', { configurable: true, value: 300 });
+    const scrollWith = async (top: number) => {
+      unreadMessage.getBoundingClientRect = () => ({ top, bottom: top + 40 }) as DOMRect;
+      pane.dispatchEvent(new Event('scroll'));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await wrapper.vm.$nextTick();
+    };
+
+    await scrollWith(120);
+    expect(wrapper.find('[data-jump-to-latest]').exists()).toBe(false);
+
+    await scrollWith(-80);
+    expect(wrapper.get('[data-jump-to-latest]').attributes('aria-label')).toBe('Go to unread messages');
+  });
+
   it('asks the parent to load an unread boundary outside loaded history', async () => {
     const wrapper = mountPane(
       { conversation, messages: [message], unreadStartSequence: 99 },
@@ -542,6 +611,52 @@ describe('ChatPane', () => {
     bubble.dispatchEvent(pointer('pointerup', 220));
 
     expect(wrapper.emitted('back')).toBeUndefined();
+  });
+
+  it('scrubs my own voice message instead of going back when its waveform is dragged right', async () => {
+    const voice: ConversationMessage = {
+      ...reply,
+      replyTo: null,
+      reactions: [],
+      content: '',
+      attachments: [
+        {
+          id: 'voice-1',
+          fileName: 'voice-message.webm',
+          contentType: 'audio/webm',
+          byteSize: 2048,
+          url: '/attachments/voice-1',
+          voice: { durationMs: 4_000, waveform: [0, 128, 255] },
+        },
+      ],
+    };
+    const wrapper = mountPane({
+      conversation,
+      messages: [voice],
+      isLocal: () => true,
+      attachmentUrls: { '/attachments/voice-1': 'blob:voice-1' },
+    });
+    const waveform = wrapper.get('[data-voice-waveform][role="slider"]').element as HTMLElement;
+    waveform.getBoundingClientRect = () => ({ left: 0, width: 300 }) as DOMRect;
+    const pointer = (type: string, clientX: number) =>
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 6,
+        pointerType: 'touch',
+        button: 0,
+        clientX,
+        clientY: 100,
+      });
+
+    waveform.dispatchEvent(pointer('pointerdown', 30));
+    waveform.dispatchEvent(pointer('pointermove', 120));
+    waveform.dispatchEvent(pointer('pointermove', 240));
+    waveform.dispatchEvent(pointer('pointerup', 240));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted('back')).toBeUndefined();
+    expect(wrapper.text()).toContain('0:03');
   });
 
   it('goes back to the conversation list when the chat body is swiped right on mobile', async () => {

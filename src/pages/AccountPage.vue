@@ -304,9 +304,11 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
+      <!-- The page itself fades in (App.vue), so the content only settles into place; a second fade would flash
+           the empty white page first. -->
       <motion.div
-        :initial="{ opacity: 0, y: 12 }"
-        :animate="{ opacity: 1, y: 0 }"
+        :initial="{ y: 12 }"
+        :animate="{ y: 0 }"
         :transition="{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }"
         class="mx-auto -mt-12 max-w-3xl space-y-8 px-4 pb-10 max-sm:pb-[calc(2.5rem+var(--liquid-bar-bottom)+var(--liquid-bar-height))] sm:px-6"
       >
@@ -368,7 +370,6 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <p v-if="isLoadingProfile" class="text-center text-sm text-harbor-muted">{{ t('common.loading') }}</p>
         <form class="space-y-6" @submit.prevent="handleProfileSave">
           <section class="grid gap-5 rounded-[1.4rem] bg-harbor-app p-4 sm:grid-cols-2 sm:p-5">
             <div class="space-y-2">
@@ -402,7 +403,9 @@ onBeforeUnmount(() => {
           </section>
 
           <section class="space-y-5 rounded-[1.4rem] bg-harbor-app p-4 sm:p-5">
-            <fieldset v-if="status" class="space-y-2" data-account-status>
+            <!-- The status shows while the profile loads, with nothing chosen yet, so the page does not jump when it
+                 arrives. The name, nickname, and email come from the session at once, so they need no loading line. -->
+            <fieldset v-if="status || isLoadingProfile" class="space-y-2" data-account-status>
               <legend class="text-sm font-medium text-harbor-ink-soft">{{ t('nav.status') }}</legend>
               <div class="flex flex-wrap gap-2" role="radiogroup" :aria-label="t('nav.status')">
                 <button
@@ -411,7 +414,7 @@ onBeforeUnmount(() => {
                   type="button"
                   role="radio"
                   :aria-checked="option.value === status"
-                  :disabled="isUpdatingStatus"
+                  :disabled="!status || isUpdatingStatus"
                   class="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-harbor-subtle disabled:opacity-60"
                   :class="
                     option.value === status

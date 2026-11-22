@@ -213,14 +213,26 @@
   }
 }
 
-/* Each page phase is 180ms; App.vue's out-in mode runs leave before enter. */
+/* The new page fades in over the old one, which stays fully shown underneath until the new page covers it, so a
+   route change never passes through an empty screen. The old page leaves the layout while it waits. */
 .page-fade-enter-active,
 .page-fade-leave-active {
   transition: opacity 180ms ease;
 }
 
-.page-fade-enter-from,
-.page-fade-leave-to {
+.page-fade-enter-active {
+  position: relative;
+  z-index: 1;
+}
+
+.page-fade-leave-active {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.page-fade-enter-from {
   opacity: 0;
 }
 
@@ -984,29 +996,22 @@
   }
 }
 
+/* Only the transform animates, so the sheet stays smooth while the page under it changes route. */
 @keyframes harbor-mobile-account-sheet-in {
   from {
     transform: scaleX(0.12) scaleY(0.06);
-    border-radius: 1.5rem;
-    opacity: 1;
   }
   to {
     transform: scaleX(1) scaleY(1);
-    border-radius: 1.75rem;
-    opacity: 1;
   }
 }
 
 @keyframes harbor-mobile-account-sheet-out {
   from {
     transform: scaleX(1) scaleY(1);
-    border-radius: 1.75rem;
-    opacity: 1;
   }
   to {
     transform: scaleX(0.12) scaleY(0.06);
-    border-radius: 1.5rem;
-    opacity: 1;
   }
 }
 
@@ -1955,6 +1960,53 @@
   .call-volume-slider:focus-visible::-webkit-slider-thumb {
     outline: 2px solid rgb(var(--harbor-subtle));
     outline-offset: 2px;
+  }
+
+  /* The volume as a percentage over the slider's thumb, which it follows; the slider shows it while it is set. */
+  .call-volume-value {
+    pointer-events: none;
+    position: absolute;
+    bottom: calc(100% + 0.375rem);
+    left: calc(0.5625rem + (100% - 1.125rem) * var(--value, 0));
+    z-index: 1;
+    min-width: 2.75rem;
+    transform: translate(-50%, 0.125rem);
+    border-radius: 0.5rem;
+    background: #111b21;
+    padding: 0.25rem 0.5rem;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1rem;
+    text-align: center;
+    opacity: 0;
+    box-shadow: 0 8px 20px rgb(17 27 33 / 0.18);
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease;
+  }
+
+  /* A small point under the label aims at the thumb. */
+  .call-volume-value::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    border: 0.3125rem solid transparent;
+    border-top-color: #111b21;
+    transform: translateX(-50%);
+  }
+
+  .call-volume-value[data-shown] {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .call-volume-value {
+      transition: none;
+    }
   }
 
   /* The invite's share targets: a round grey icon over a short label, in a row that scrolls sideways. */

@@ -46,7 +46,14 @@ export type SignalingMessage =
   | { type: 'participantJoined'; participantId: string; participantName: string; screenShareOf?: string | null }
   | { type: 'participantLeft'; participantId: string }
   | { type: 'streamOwner'; streamId: string; participantId: string; participantName: string }
-  | { type: 'mediaStateChanged'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
+  | {
+      type: 'mediaStateChanged';
+      participantId: string;
+      audioEnabled: boolean;
+      videoEnabled: boolean;
+      /** Whether the sender sees their own camera mirrored; absent from older clients, which mirror it. */
+      videoMirrored?: boolean;
+    }
   | ({ type: 'chatMessage'; replyToId?: number } & SignalingChatMessage)
   | { type: 'chatReaction'; messageId: number; emoji: string }
   | { type: 'chatReactionsChanged'; messageId: number; reactions: SignalingChatReaction[] }
@@ -206,12 +213,13 @@ export class SignalingService {
     });
   }
 
-  sendMediaStateChanged(audioEnabled: boolean, videoEnabled: boolean): void {
+  sendMediaStateChanged(audioEnabled: boolean, videoEnabled: boolean, videoMirrored: boolean): void {
     this.send({
       type: 'mediaStateChanged',
       participantId: '', // Server will fill this in
       audioEnabled,
       videoEnabled,
+      videoMirrored,
     });
   }
 

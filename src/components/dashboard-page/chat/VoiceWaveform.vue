@@ -5,7 +5,8 @@ import { playHaptic } from '@/services/haptics';
 
 import { waveformBars } from './voice-message';
 
-// Bars of a voice message. Bars before `progress` use the played color; dragging seeks.
+// Bars of a voice message. Bars before `progress` use the played color. Like a video scrubber, a drag
+// moves only the thumb and the played bars; the audio seeks once, on release, so scrubbing stays silent.
 // With `levels`, the waveform draws as many thin bars as its width fits, so wide screens show more
 // detail instead of thicker bars. With `bars`, it stretches exactly those bars across its width.
 const props = withDefaults(
@@ -23,10 +24,16 @@ const props = withDefaults(
   }>(),
   { bars: undefined, levels: undefined, progress: 0, seekable: false, label: 'Voice message position', playing: false },
 );
-const emit = defineEmits<{ (event: 'seek', fraction: number): void }>();
+const emit = defineEmits<{
+  (event: 'seek', fraction: number): void;
+  /** The position under the finger while dragging, then `null` once the drag ends. */
+  (event: 'scrub', fraction: number | null): void;
+}>();
 
 const track = ref<HTMLElement | null>(null);
 let seekingPointer: number | null = null;
+const dragProgress = ref<number | null>(null);
+const shownProgress = computed(() => dragProgress.value ?? props.progress);
 
 // Each fitted bar is 2px wide with a 2px gap.
 const FITTED_BAR_PITCH = 4;
@@ -41,11 +48,6 @@ const visibleBars = computed(() => {
     : FALLBACK_BAR_COUNT;
   return waveformBars(props.levels, count);
 });
-const activeBarIndex = computed(() =>
-  visibleBars.value.length
-    ? Math.min(visibleBars.value.length - 1, Math.floor(props.progress * visibleBars.value.length))
-    : -1,
-);
 
 watch(
   [track, fitted],
@@ -75,16 +77,35 @@ function onPointerDown(event: PointerEvent) {
   seekingPointer = event.pointerId;
   track.value?.setPointerCapture?.(event.pointerId);
   playHaptic('selection');
-  emit('seek', fractionAt(event.clientX));
+  scrubTo(fractionAt(event.clientX));
 }
 
 function onPointerMove(event: PointerEvent) {
   if (seekingPointer !== event.pointerId) return;
-  emit('seek', fractionAt(event.clientX));
+  scrubTo(fractionAt(event.clientX));
 }
 
-function onPointerEnd(event: PointerEvent) {
-  if (seekingPointer === event.pointerId) seekingPointer = null;
+function scrubTo(fraction: number) {
+  dragProgress.value = fraction;
+  emit('scrub', fraction);
+}
+
+function onPointerUp(event: PointerEvent) {
+  if (seekingPointer !== event.pointerId) return;
+  const fraction = dragProgress.value;
+  endDrag();
+  if (fraction !== null) emit('seek', fraction);
+}
+
+// A cancelled drag (a system gesture, a lost capture) leaves the audio where it was.
+function onPointerCancel(event: PointerEvent) {
+  if (seekingPointer === event.pointerId) endDrag();
+}
+
+function endDrag() {
+  seekingPointer = null;
+  dragProgress.value = null;
+  emit('scrub', null);
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -97,41 +118,48 @@ function onKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
+  <!-- When seekable, a taller hit area (::before) keeps the thin bars easy to grab with a finger. -->
   <div
     ref="track"
     data-voice-waveform
-    class="relative flex h-7 min-w-0 flex-1 items-center gap-[2px]"
-    :class="[seekable ? 'cursor-pointer touch-none' : undefined, { 'justify-between': fitted }]"
+    class="group relative flex h-7 min-w-0 flex-1 items-center gap-[2px]"
+    :class="[
+      seekable
+        ? `cursor-pointer touch-none before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']`
+        : undefined,
+      { 'justify-between': fitted },
+    ]"
     :role="seekable ? 'slider' : 'img'"
     :tabindex="seekable ? 0 : undefined"
     :aria-label="label"
     :aria-valuemin="seekable ? 0 : undefined"
     :aria-valuemax="seekable ? 100 : undefined"
-    :aria-valuenow="seekable ? Math.round(progress * 100) : undefined"
+    :aria-valuenow="seekable ? Math.round(shownProgress * 100) : undefined"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
-    @pointerup="onPointerEnd"
-    @pointercancel="onPointerEnd"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerCancel"
+    @lostpointercapture="onPointerCancel"
     @keydown="onKeydown"
   >
     <span
       v-for="(bar, index) in visibleBars"
       :key="index"
-      class="rounded-full transition-[background-color,transform] duration-75"
+      class="rounded-full transition-colors duration-75"
       :class="[
         fitted ? 'w-[2px] shrink-0' : 'min-w-[2px] flex-1',
-        (index + 0.5) / visibleBars.length <= progress ? playedClass : unplayedClass,
-        { 'scale-y-110': playing && index === activeBarIndex },
+        (index + 0.5) / visibleBars.length <= shownProgress ? playedClass : unplayedClass,
       ]"
       :style="{ height: `${Math.round(bar * 100)}%` }"
     />
+    <!-- The thumb follows the audio every frame, so only its size animates: it grows while held. -->
     <span
-      v-if="playing"
-      data-voice-playhead
+      v-if="seekable || playing"
+      data-voice-thumb
       aria-hidden="true"
-      class="pointer-events-none absolute inset-y-0 z-10 w-0.5 -translate-x-1/2 rounded-full"
-      :class="playedClass"
-      :style="{ left: `${Math.min(100, Math.max(0, progress * 100))}%` }"
+      class="pointer-events-none absolute top-1/2 z-10 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform duration-150 ease-out motion-reduce:transition-none [@media(hover:hover)]:group-hover:scale-125"
+      :class="[playedClass, { 'scale-125': dragProgress !== null }]"
+      :style="{ left: `${Math.min(100, Math.max(0, shownProgress * 100))}%` }"
     />
   </div>
 </template>

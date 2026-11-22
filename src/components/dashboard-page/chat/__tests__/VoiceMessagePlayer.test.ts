@@ -31,6 +31,24 @@ describe('VoiceMessagePlayer', () => {
     expect(wrapper.text()).toContain('0:03');
   });
 
+  it('shows the time under the finger while the waveform is dragged', async () => {
+    const wrapper = mount(VoiceMessagePlayer, {
+      props: {
+        attachment: { ...attachment, voice: { durationMs: 4_000, waveform: [0, 128, 255] } },
+        url: 'blob:voice-1',
+        loading: false,
+        error: false,
+      },
+    });
+    const waveform = wrapper.findComponent({ name: 'VoiceWaveform' });
+
+    await waveform.vm.$emit('scrub', 0.5);
+    expect(wrapper.text()).toContain('0:02');
+
+    await waveform.vm.$emit('scrub', null);
+    expect(wrapper.text()).toContain('0:04');
+  });
+
   it('decodes older voice messages that have no stored waveform', async () => {
     const decode = vi
       .spyOn(voiceMessage, 'decodeVoiceMessage')

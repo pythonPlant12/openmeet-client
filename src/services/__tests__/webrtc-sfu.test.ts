@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { localCameraFacing } from '@/lib/camera-facing';
+
 import type { SignalingService } from '../signaling';
 import { WebRTCServiceSFU } from '../webrtc-sfu';
 
 class FakeTrack extends EventTarget {
   enabled = true;
   readyState: MediaStreamTrackState = 'live';
+  label = '';
   constructor(
     readonly kind: 'audio' | 'video',
     private deviceId: string,
+    private facingMode?: string,
   ) {
     super();
   }
@@ -16,7 +20,7 @@ class FakeTrack extends EventTarget {
     this.readyState = 'ended';
   });
   getSettings() {
-    return { deviceId: this.deviceId, height: 720 };
+    return { deviceId: this.deviceId, height: 720, ...(this.facingMode ? { facingMode: this.facingMode } : {}) };
   }
   applyConstraints = vi.fn(async () => {});
 }
@@ -245,6 +249,127 @@ describe('WebRTCServiceSFU camera', () => {
     await service.setCameraEnabled(false);
 
     expect(service.hasCamera()).toBe(true);
+  });
+
+  describe('flip', () => {
+    const facingOf = (constraints: MediaStreamConstraints) =>
+      ((constraints.video as MediaTrackConstraints).facingMode as { exact: string } | undefined)?.exact;
+
+    beforeEach(() => {
+      camera = new FakeTrack('video', 'front-cam', 'user');
+      getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+        if (constraints.audio) return new FakeStream([microphone, camera]);
+        const facing = facingOf(constraints);
+        return new FakeStream([new FakeTrack('video', facing === 'environment' ? 'back-cam' : 'front-cam', facing)]);
+      });
+    });
+
+    it("opens the back camera's default lens on the same sender and stops mirroring", async () => {
+      const service = await startCall();
+      expect(localCameraFacing.value).toBe('user');
+
+      expect(await service.flipCamera()).toBeNull();
+
+      expect(getUserMedia).toHaveBeenLastCalledWith({
+        video: expect.objectContaining({ facingMode: { exact: 'environment' } }),
+      });
+      expect(camera.stop).toHaveBeenCalled();
+      const back = service.getLocalStream()!.getVideoTracks()[0] as unknown as FakeTrack;
+      expect(back.getSettings().deviceId).toBe('back-cam');
+      expect(videoSender().track).toBe(back);
+      expect(peerConnection.createOffer).not.toHaveBeenCalled();
+      expect(localCameraFacing.value).toBe('environment');
+    });
+
+    it('turns back to the selfie camera on the next flip', async () => {
+      const service = await startCall();
+      await service.flipCamera();
+
+      await service.flipCamera();
+
+      expect(getUserMedia).toHaveBeenLastCalledWith({
+        video: expect.objectContaining({ facingMode: { exact: 'user' } }),
+      });
+      expect(service.getActiveDeviceId('video')).toBe('front-cam');
+      expect(localCameraFacing.value).toBe('user');
+    });
+
+    it('keeps the current camera when the back camera is refused', async () => {
+      const service = await startCall();
+      getUserMedia.mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'));
+
+      expect(await service.flipCamera()).toBe('denied');
+
+      expect(camera.stop).not.toHaveBeenCalled();
+      expect(service.getLocalStream()!.getVideoTracks()).toEqual([camera]);
+      expect(videoSender().track).toBe(camera);
+      expect(localCameraFacing.value).toBe('user');
+    });
+
+    it('stops the current camera first on a phone that cannot run both at once', async () => {
+      const service = await startCall();
+      getUserMedia.mockRejectedValueOnce(new DOMException('busy', 'NotReadableError'));
+
+      expect(await service.flipCamera()).toBeNull();
+
+      expect(camera.stop).toHaveBeenCalled();
+      expect(service.getActiveDeviceId('video')).toBe('back-cam');
+      expect(service.getLocalStream()!.getVideoTracks()).toHaveLength(1);
+    });
+
+    // iOS ends the camera that is running as soon as another one opens, and fires its ended event.
+    function endCurrentCameraOnOpen(result: () => Promise<FakeStream>) {
+      getUserMedia.mockImplementationOnce(async () => {
+        camera.readyState = 'ended';
+        camera.dispatchEvent(new Event('ended'));
+        return result();
+      });
+    }
+
+    it('keeps the camera on when the phone ends the selfie camera to open the back one', async () => {
+      const service = await startCall();
+      const lost = vi.fn();
+      service.onLocalTrackLost = lost;
+      endCurrentCameraOnOpen(async () => new FakeStream([new FakeTrack('video', 'back-cam', 'environment')]));
+
+      expect(await service.flipCamera()).toBeNull();
+      await Promise.resolve();
+
+      expect(lost).not.toHaveBeenCalled();
+      expect(service.isCameraOn()).toBe(true);
+      expect(service.getActiveDeviceId('video')).toBe('back-cam');
+      expect((videoSender().track as FakeTrack).getSettings().deviceId).toBe('back-cam');
+    });
+
+    it('opens the selfie camera again when the phone ended it and the back camera is refused', async () => {
+      const service = await startCall();
+      const lost = vi.fn();
+      service.onLocalTrackLost = lost;
+      endCurrentCameraOnOpen(async () => {
+        throw new DOMException('denied', 'NotAllowedError');
+      });
+
+      expect(await service.flipCamera()).toBe('denied');
+
+      expect(lost).not.toHaveBeenCalled();
+      expect(service.isCameraOn()).toBe(true);
+      expect(service.getActiveDeviceId('video')).toBe('front-cam');
+    });
+
+    it('reopens the current camera when the other side still cannot open', async () => {
+      const service = await startCall();
+      getUserMedia
+        .mockRejectedValueOnce(new DOMException('busy', 'NotReadableError'))
+        .mockRejectedValueOnce(new DOMException('busy', 'NotReadableError'));
+
+      expect(await service.flipCamera()).toBe('unavailable');
+
+      expect(getUserMedia).toHaveBeenLastCalledWith({
+        video: expect.objectContaining({ deviceId: { exact: 'front-cam' } }),
+      });
+      expect(service.getActiveDeviceId('video')).toBe('front-cam');
+      expect(service.isCameraOn()).toBe(true);
+    });
   });
 });
 

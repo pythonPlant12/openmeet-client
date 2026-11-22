@@ -10,6 +10,8 @@ export interface Participant {
   stream: MediaStream | null;
   audioEnabled: boolean;
   videoEnabled: boolean;
+  /** Whether the camera shows mirrored, the way its sender sees it; a remote camera is mirrored unless told not. */
+  videoMirrored?: boolean;
   /** Set when this participant is someone's screen share rather than a person. */
   screenShareOf?: string | null;
 }
@@ -81,7 +83,13 @@ export type SFUSignalingEvents =
   | { type: 'PARTICIPANT_JOINED'; participantId: string; participantName: string; screenShareOf?: string | null }
   | { type: 'PARTICIPANT_LEFT'; participantId: string }
   | { type: 'STREAM_OWNER'; streamId: string; participantId: string; participantName: string }
-  | { type: 'MEDIA_STATE_CHANGED'; participantId: string; audioEnabled: boolean; videoEnabled: boolean }
+  | {
+      type: 'MEDIA_STATE_CHANGED';
+      participantId: string;
+      audioEnabled: boolean;
+      videoEnabled: boolean;
+      videoMirrored?: boolean;
+    }
   | ({ type: 'CHAT_MESSAGE_RECEIVED' } & ChatMessage)
   | { type: 'CHAT_HISTORY_RECEIVED'; messages: ChatMessage[] }
   | { type: 'CHAT_REACTIONS_CHANGED'; messageId: number; reactions: SignalingChatReaction[] }

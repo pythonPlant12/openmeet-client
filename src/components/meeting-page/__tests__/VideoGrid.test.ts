@@ -160,6 +160,20 @@ describe('VideoGrid layout', () => {
     expect(tileIds(wrapper, '[data-testid="participant-strip"]')).toEqual(['me', 'ada', 'bob', 'dee']);
   });
 
+  it('borders everyone speaking at once in the grid', () => {
+    desktop();
+    const wrapper = mountGrid({
+      participants: people(3),
+      activeSpeakerId: 'ada',
+      speakingIds: new Set(['ada', 'bob']),
+    });
+    const speaking = wrapper
+      .findAll('[data-testid="participant-tile"]')
+      .filter((tile) => tile.attributes('data-speaking') === 'true')
+      .map((tile) => tile.attributes('data-participant-id'));
+    expect(speaking).toEqual(['ada', 'bob']);
+  });
+
   it('shows a grid that fits the window on desktop', () => {
     desktop();
     const wrapper = mountGrid({ participants: people(2) });

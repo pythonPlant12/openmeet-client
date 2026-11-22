@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { LoadingRipple } from '@/components/ui/loading';
 import { useMeetingMediaSettings } from '@/composables/useMeetingMediaSettings';
 import { saveCallSettings } from '@/lib/call-settings';
+import { cameraFacingOf } from '@/lib/camera-facing';
 import { CAMERA_LEVELS, captureConstraints } from '@/services/video-quality';
 import { getServices } from '@/xstate/machines/webrtc/actors';
 
@@ -35,6 +36,8 @@ const previewStream = shallowRef<MediaStream | null>(null);
 const isLoading = ref(false);
 // On a phone the video fills the screen (cropped) until a tap shows all of it.
 const fillsScreen = ref(true);
+// Like your tile in the call, the preview is a mirror except for a phone's back camera.
+const isMirrored = computed(() => cameraFacingOf(previewStream.value?.getVideoTracks()[0]) !== 'environment');
 let ownedTrack: MediaStreamTrack | null = null;
 let request = 0;
 // The camera the preview is still opening, so a quick confirm waits for it instead of sending nothing.
@@ -179,8 +182,8 @@ onBeforeUnmount(() => {
           autoplay
           playsinline
           muted
-          class="size-full -scale-x-100"
-          :class="!phone || fillsScreen ? 'object-cover' : 'object-contain'"
+          class="size-full"
+          :class="[!phone || fillsScreen ? 'object-cover' : 'object-contain', { '-scale-x-100': isMirrored }]"
           :data-fit="phone ? (fillsScreen ? 'cover' : 'contain') : undefined"
           data-preview-video
           @click="phone && (fillsScreen = !fillsScreen)"

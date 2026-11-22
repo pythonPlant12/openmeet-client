@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import { type Ref, computed, onBeforeUnmount, ref, watch } from 'vue';
 
 import { claimVoicePlayback, releaseVoicePlayback } from '@/components/dashboard-page/chat/voice-message';
 
@@ -12,7 +12,14 @@ export function useVoicePlayback(url: Ref<string | undefined>, durationMs: Ref<n
   let audio: HTMLAudioElement | null = null;
   let frame: number | undefined;
 
+  // Where a drag on the waveform would seek to; the audio itself only moves once the drag ends.
+  const scrubMs = ref<number | null>(null);
+
   const progress = computed(() => (durationMs.value > 0 ? Math.min(1, positionMs.value / durationMs.value) : 0));
+  /** The clock: the scrub position while dragging, the playback position once started, else the length. */
+  const clockMs = computed(
+    () => scrubMs.value ?? (playing.value || positionMs.value ? positionMs.value : durationMs.value),
+  );
 
   function element() {
     if (audio || !url.value) return audio;
@@ -72,6 +79,10 @@ export function useVoicePlayback(url: Ref<string | undefined>, durationMs: Ref<n
     if (player) player.currentTime = positionMs.value / 1000;
   }
 
+  function scrub(fraction: number | null) {
+    scrubMs.value = fraction === null ? null : Math.min(1, Math.max(0, fraction)) * durationMs.value;
+  }
+
   function reset() {
     stopFollowing();
     if (audio) {
@@ -83,10 +94,11 @@ export function useVoicePlayback(url: Ref<string | undefined>, durationMs: Ref<n
     audio = null;
     playing.value = false;
     positionMs.value = 0;
+    scrubMs.value = null;
   }
 
   watch(url, reset);
   onBeforeUnmount(reset);
 
-  return { playing, positionMs, progress, toggle, seek, reset };
+  return { playing, positionMs, progress, clockMs, toggle, seek, scrub, reset };
 }
